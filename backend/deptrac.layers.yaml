@@ -1,0 +1,31 @@
+# Domain may depend on nothing (not even Illuminate); that is the load-bearing rule.
+deptrac:
+  paths:
+    - ./app
+  layers:
+    - name: Presentation
+      collectors:
+        - { type: directory, value: 'app/Modules/[^/]+/Presentation/.*' }
+    - name: Application
+      collectors:
+        - { type: directory, value: 'app/Modules/[^/]+/Application/.*' }
+    - name: Domain
+      collectors:
+        - { type: directory, value: 'app/Modules/[^/]+/Domain/.*' }
+    - name: Infrastructure
+      collectors:
+        - { type: directory, value: 'app/Modules/[^/]+/Infrastructure/.*' }
+    - name: SharedContracts
+      collectors:
+        - { type: classLike, value: '^App\\Support\\.*' }
+    - name: Framework
+      collectors:
+        - { type: classLike, value: '^Illuminate\\.*' }
+        - { type: classLike, value: '^Symfony\\.*' }
+        - { type: classLike, value: '^Laravel\\.*' }
+  ruleset:
+    Presentation: [Application, Domain, Framework, SharedContracts]
+    Application: [Domain, Infrastructure, Framework, SharedContracts]
+    Infrastructure: [Domain, Framework, SharedContracts]
+    Domain: ~
+    SharedContracts: [Framework]

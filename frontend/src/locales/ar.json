@@ -1,0 +1,159 @@
+{
+  "common": {
+    "close": "إغلاق",
+    "save": "حفظ",
+    "prev": "السابق",
+    "next": "التالي",
+    "pageOf": "صفحة {{page}} من {{total}}",
+    "tooMany": "أكثر من 100 صف، يتم عرض أول 100 فقط."
+  },
+  "app": {
+    "name": "سمارت تكنولوجي HRMS"
+  },
+  "nav": {
+    "main": "التنقل الرئيسي",
+    "open": "فتح القائمة",
+    "employees": "الموظفون",
+    "sites": "المواقع",
+    "residences": "محال الإقامة",
+    "fares": "الأجرة"
+  },
+  "toggle": {
+    "language": "اللغة",
+    "theme": "المظهر",
+    "light": "الوضع الفاتح",
+    "dark": "الوضع الداكن"
+  },
+  "page": {
+    "employees": "الموظفون",
+    "sites": "المواقع",
+    "residences": "محال الإقامة",
+    "fares": "أجرة المواصلات"
+  },
+  "notFound": {
+    "title": "الصفحة غير موجودة",
+    "back": "العودة إلى الموظفين"
+  },
+  "skip": "تخطي إلى المحتوى",
+  "employee": {
+    "add": "إضافة موظف",
+    "search": "بحث بالاسم أو الرقم القومي أو الكود",
+    "allTypes": "كل الأنواع",
+    "code": "الكود",
+    "name_ar": "الاسم بالعربية",
+    "name_en": "الاسم بالإنجليزية",
+    "fingerprint_name": "اسم البصمة",
+    "gender": "النوع",
+    "national_id": "الرقم القومي",
+    "insurance_no": "رقم التأمين",
+    "phone": "الهاتف",
+    "address": "العنوان",
+    "department": "القسم",
+    "residence": "محل الإقامة",
+    "hire_date": "تاريخ التعيين",
+    "contract_end_date": "نهاية العقد",
+    "termination_date": "تاريخ إنهاء الخدمة",
+    "termination_reason": "سبب إنهاء الخدمة",
+    "hr_notes": "ملاحظات الموارد البشرية",
+    "pay_method": "طريقة الدفع",
+    "bank_account": "الحساب البنكي",
+    "type": "نوع الموظف",
+    "identity": "البيانات الشخصية",
+    "placement": "التعيين",
+    "pay": "الأجر"
+  },
+  "pay": {
+    "salary": "المرتب",
+    "raise": "العلاوة",
+    "insured_basic": "الأساسي التأميني",
+    "daily_wage": "الأجر اليومي",
+    "shift_start": "بداية الوردية",
+    "shift_end": "نهاية الوردية"
+  },
+  "change": {
+    "add": "إضافة تغيير",
+    "effective_from": "ساري من",
+    "sameType": "اختر نوعًا مختلفًا عن النوع الساري في هذا التاريخ."
+  },
+  "history": {
+    "types": "سجل تغيير النوع",
+    "pay": "سجل تغيير الأجر",
+    "documents": "المستندات"
+  },
+  "document": {
+    "received_at": "تاريخ الاستلام",
+    "expires_at": "تاريخ الانتهاء",
+    "note": "ملاحظة"
+  },
+  "enum": {
+    "type": {
+      "office": "موظف مثبت شركة",
+      "engineer": "مهندس",
+      "permanent_worker": "عامل مثبت",
+      "day_laborer": "عامل باليومية"
+    },
+    "gender": {
+      "male": "ذكر",
+      "female": "أنثى"
+    },
+    "pay_method": {
+      "cash": "نقدي",
+      "bank": "بنكي"
+    },
+    "document": {
+      "national_id_copy": "صورة البطاقة",
+      "work_stub": "عقب عمل",
+      "criminal_record": "فيش وتشبيه",
+      "qualification": "المؤهل",
+      "birth_certificate": "شهادة الميلاد",
+      "insurance_form_6": "استمارة 6 تأمينات",
+      "photos": "صور شخصية",
+      "military_status": "موقف التجنيد",
+      "other": "أخرى"
+    },
+    "site_kind": {
+      "work": "موقع عمل",
+      "leave": "إجازة"
+    },
+    "leave_code": {
+      "friday": "الجمعة",
+      "official_holiday": "إجازة رسمية",
+      "sick": "مرضي",
+      "rest": "راحة",
+      "absent": "غياب",
+      "other": "أخرى"
+    },
+    "allowance_mode": {
+      "none": "بدون",
+      "share_of_wage": "نسبة من الأجر",
+      "fixed": "مبلغ ثابت"
+    }
+  },
+  "site": {
+    "add": "إضافة موقع",
+    "edit": "تعديل",
+    "kind": "نوع الموقع",
+    "allKinds": "كل الأنواع",
+    "leave_code": "كود الإجازة",
+    "active": "نشط",
+    "allActive": "الكل",
+    "inactive": "غير نشط",
+    "outside_alexandria": "خارج الإسكندرية",
+    "allowances": "بدلات",
+    "allowanceHistory": "سجل البدلات",
+    "mode": "نمط البدل",
+    "value": "القيمة",
+    "addRule": "إضافة",
+    "yes": "نعم",
+    "no": "لا"
+  },
+  "residence": {
+    "add": "إضافة محل إقامة"
+  },
+  "fare": {
+    "amount": "الأجرة",
+    "add": "إضافة أجرة",
+    "tooMany": "عدد الأجور أكبر من 100، قد لا تظهر كل الأجور في الجدول.",
+    "residence": "محل الإقامة"
+  }
+}
