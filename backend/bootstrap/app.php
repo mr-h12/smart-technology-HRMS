@@ -2,10 +2,12 @@
 
 use App\Http\Middleware\AddRequestId;
 use App\Support\Http\ApiEnvelope;
+use Illuminate\Auth\AuthenticationException;
 use Illuminate\Database\Eloquent\ModelNotFoundException;
 use Illuminate\Foundation\Application;
 use Illuminate\Foundation\Configuration\Exceptions;
 use Illuminate\Foundation\Configuration\Middleware;
+use Illuminate\Http\Exceptions\HttpResponseException;
 use Illuminate\Http\Request;
 use Illuminate\Validation\ValidationException;
 use Symfony\Component\HttpKernel\Exception\HttpExceptionInterface;
@@ -18,7 +20,8 @@ return Application::configure(basePath: dirname(__DIR__))
         commands: __DIR__.'/../routes/console.php',
     )
     ->withMiddleware(function (Middleware $middleware): void {
-        $middleware->api(prepend: [AddRequestId::class]);
+        // Global, not api-group: unmatched routes (404) never enter the api group.
+        $middleware->prepend(AddRequestId::class);
     })
     ->withExceptions(function (Exceptions $exceptions): void {
         $exceptions->shouldRenderJsonWhen(
@@ -37,9 +40,13 @@ return Application::configure(basePath: dirname(__DIR__))
             $request, 404, 'not_found', 'Resource not found.',
         ));
 
-        // Anything else on /api/*; HttpExceptions (405, 401...) keep their own status via Laravel's default handling.
+        $exceptions->render(fn (AuthenticationException $e, Request $request) => ApiEnvelope::error(
+            $request, 401, 'unauthenticated', 'Unauthenticated.',
+        ));
+
+        // Anything else on /api/*; HTTP exceptions and HttpResponseException keep their own response.
         $exceptions->render(function (Throwable $e, Request $request) {
-            if (! $request->is('api/*') || $e instanceof HttpExceptionInterface) {
+            if (! $request->is('api/*') || $e instanceof HttpExceptionInterface || $e instanceof HttpResponseException) {
                 return null;
             }
 

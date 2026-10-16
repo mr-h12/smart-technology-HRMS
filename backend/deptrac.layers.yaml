@@ -1,7 +1,7 @@
 # Domain may depend on nothing (not even Illuminate); that is the load-bearing rule.
 deptrac:
   paths:
-    - ./app/Modules
+    - ./app
   layers:
     - name: Presentation
       collectors:
@@ -28,4 +28,4 @@ deptrac:
     Application: [Domain, Infrastructure, Framework, SharedContracts]
     Infrastructure: [Domain, Framework, SharedContracts]
     Domain: ~
-    SharedContracts: ~
+    SharedContracts: [Framework]
