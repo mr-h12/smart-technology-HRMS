@@ -189,4 +189,11 @@ class SitesApiTest extends TestCase
         $this->assertSame('absent', \DB::table('sites')->where('name_ar', 'غ')->value('leave_code'));
         $this->assertSame(0, Fare::count());
     }
+
+    public function test_lists_accept_per_page_from_the_query_string(): void
+    {
+        foreach (['/api/v1/sites', '/api/v1/residences', '/api/v1/fares'] as $url) {
+            $this->getJson($url.'?per_page=100')->assertOk()->assertJsonPath('meta.pagination.per_page', 100);
+        }
+    }
 }

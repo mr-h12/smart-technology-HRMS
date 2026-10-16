@@ -15,9 +15,10 @@ trait Paginates
      * @param  Builder<T>  $query
      * @return array{data: list<array<string, mixed>>, pagination: array{page: int, per_page: int, total: int, total_pages: int, has_next_page: bool, has_previous_page: bool}}
      */
-    private function page(Builder $query, int $perPage): array
+    private function page(Builder $query, int|string $perPage): array
     {
-        $page = $query->paginate(min(max($perPage, 1), 100));
+        // Validated query-string values arrive as strings.
+        $page = $query->paginate(min(max((int) $perPage, 1), 100));
 
         return [
             'data' => array_values($page->getCollection()->map(fn (Model $m) => $this->row($m))->all()),
