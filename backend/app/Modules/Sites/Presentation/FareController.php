@@ -53,7 +53,7 @@ final class FareController
 
     public function show(Request $request, string $employee): JsonResponse
     {
-        $q = $request->validate(['site_id' => ['required', 'uuid'], 'date' => ['sometimes', 'date_format:Y-m-d']]);
+        $q = $request->validate(['site_id' => $this->site(), 'date' => ['sometimes', 'date_format:Y-m-d']]);
 
         return ApiEnvelope::single($request, $this->lookup->describe($employee, $q['site_id'], $q['date'] ?? now('Africa/Cairo')->toDateString()));
     }

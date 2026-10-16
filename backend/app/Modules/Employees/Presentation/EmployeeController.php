@@ -121,7 +121,7 @@ final class EmployeeController
             'phone' => ['nullable', 'string'],
             'address' => ['nullable', 'string'],
             'department' => ['nullable', 'string'],
-            'residence_id' => ['nullable', 'uuid'],
+            'residence_id' => ['nullable', 'uuid', Rule::exists('residences', 'id')->whereNull('deleted_at')],
             'pay_method' => ['sometimes', Rule::enum(PayMethod::class)],
             'bank_account' => ['nullable', 'string'],
             'hire_date' => ['nullable', 'date_format:Y-m-d'],

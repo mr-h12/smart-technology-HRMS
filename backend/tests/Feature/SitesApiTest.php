@@ -109,7 +109,7 @@ class SitesApiTest extends TestCase
         $emp = $this->employee($res);
         $url = "/api/v1/employees/$emp/fare?site_id=$s&date=2026-06-15";
 
-        $this->getJson($url)->assertOk()->assertJsonPath('data.source', 'none')->assertJsonPath('data.amount', '0');
+        $this->getJson($url)->assertOk()->assertJsonPath('data.source', 'none')->assertJsonPath('data.amount', '0.000000');
 
         $this->postJson('/api/v1/fares', ['residence_id' => $res, 'site_id' => $s, 'effective_from' => '2026-01-01', 'amount' => '40'])->assertCreated();
         $this->postJson('/api/v1/fares', ['residence_id' => $res, 'site_id' => $s, 'effective_from' => '2026-09-01', 'amount' => '99'])->assertCreated();
@@ -125,6 +125,28 @@ class SitesApiTest extends TestCase
         $this->getJson("/api/v1/employees/$emp/fare")->assertStatus(422);
         $this->getJson('/api/v1/employees/'.fake()->uuid()."/fare?site_id=$s&date=2026-06-15")->assertNotFound();
         $this->postJson('/api/v1/employees/'.fake()->uuid().'/fare-overrides', ['site_id' => $s, 'effective_from' => '2026-03-01', 'amount' => '2'])->assertNotFound();
+    }
+
+    public function test_fare_lookup_requires_an_existing_site(): void
+    {
+        $emp = $this->employee();
+        $this->getJson("/api/v1/employees/$emp/fare?date=2026-06-15")->assertStatus(422);
+        $this->getJson("/api/v1/employees/$emp/fare?site_id=".fake()->uuid())->assertStatus(422);
+        $s = $this->site();
+        $this->deleteJson("/api/v1/sites/$s")->assertNoContent();
+        $this->getJson("/api/v1/employees/$emp/fare?site_id=$s")->assertStatus(422);
+    }
+
+    public function test_employee_residence_must_exist_and_be_live(): void
+    {
+        $res = $this->residence();
+        $emp = $this->employee();
+        $base = ['name_ar' => 'س', 'gender' => 'male', 'type' => 'office', 'effective_from' => '2026-01-01', 'salary' => '1'];
+        $this->postJson('/api/v1/employees', [...$base, 'residence_id' => fake()->uuid()])->assertStatus(422);
+        $this->patchJson("/api/v1/employees/$emp", ['residence_id' => fake()->uuid()])->assertStatus(422);
+        $this->patchJson("/api/v1/employees/$emp", ['residence_id' => $res])->assertOk();
+        $this->deleteJson("/api/v1/residences/$res")->assertNoContent();
+        $this->postJson('/api/v1/employees', [...$base, 'residence_id' => $res])->assertStatus(422);
     }
 
     public function test_employee_without_residence_gets_none(): void
