@@ -1,4 +1,4 @@
-import { Menu, Moon, Sun, Users, MapPin } from 'lucide-react'
+import { Menu, Moon, Sun, Users, MapPin, House, Banknote } from 'lucide-react'
 import { useEffect, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { NavLink, Outlet, useLocation } from 'react-router-dom'
@@ -12,6 +12,8 @@ import { SegmentedControl } from './SegmentedControl'
 const NAV = [
   { path: '/employees', key: 'nav.employees', icon: Users },
   { path: '/sites', key: 'nav.sites', icon: MapPin },
+  { path: '/residences', key: 'nav.residences', icon: House },
+  { path: '/fares', key: 'nav.fares', icon: Banknote },
 ]
 
 function Brand() {

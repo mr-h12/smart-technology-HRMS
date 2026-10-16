@@ -13,7 +13,9 @@
     "main": "التنقل الرئيسي",
     "open": "فتح القائمة",
     "employees": "الموظفون",
-    "sites": "المواقع"
+    "sites": "المواقع",
+    "residences": "محال الإقامة",
+    "fares": "الأجرة"
   },
   "toggle": {
     "language": "اللغة",
@@ -23,7 +25,9 @@
   },
   "page": {
     "employees": "الموظفون",
-    "sites": "المواقع"
+    "sites": "المواقع",
+    "residences": "محال الإقامة",
+    "fares": "أجرة المواصلات"
   },
   "notFound": {
     "title": "الصفحة غير موجودة",
@@ -104,6 +108,50 @@
       "photos": "صور شخصية",
       "military_status": "موقف التجنيد",
       "other": "أخرى"
+    },
+    "site_kind": {
+      "work": "موقع عمل",
+      "leave": "إجازة"
+    },
+    "leave_code": {
+      "friday": "الجمعة",
+      "official_holiday": "إجازة رسمية",
+      "sick": "مرضي",
+      "rest": "راحة",
+      "absent": "غياب",
+      "other": "أخرى"
+    },
+    "allowance_mode": {
+      "none": "بدون",
+      "share_of_wage": "نسبة من الأجر",
+      "fixed": "مبلغ ثابت"
     }
+  },
+  "site": {
+    "add": "إضافة موقع",
+    "edit": "تعديل",
+    "kind": "نوع الموقع",
+    "allKinds": "كل الأنواع",
+    "leave_code": "كود الإجازة",
+    "active": "نشط",
+    "allActive": "الكل",
+    "inactive": "غير نشط",
+    "outside_alexandria": "خارج الإسكندرية",
+    "allowances": "بدلات",
+    "allowanceHistory": "سجل البدلات",
+    "mode": "نمط البدل",
+    "value": "القيمة",
+    "addRule": "إضافة",
+    "yes": "نعم",
+    "no": "لا"
+  },
+  "residence": {
+    "add": "إضافة محل إقامة"
+  },
+  "fare": {
+    "amount": "الأجرة",
+    "add": "إضافة أجرة",
+    "tooMany": "عدد الأجور أكبر من 100، قد لا تظهر كل الأجور في الجدول.",
+    "residence": "محل الإقامة"
   }
 }

@@ -4,9 +4,9 @@ import { Link, useNavigate, useParams } from 'react-router-dom'
 import { Button } from '@/components/ui/button'
 import { Dialog, DialogBody, DialogContent, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { Input, Textarea } from '@/components/ui/input'
-import { Label } from '@/components/ui/label'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
-import { api, ApiError, apiList, type Pagination } from '@/lib/api'
+import { ErrorBanner, Field, type Errs, type Row, SelectField, selectCls, TextField, toErrs, useForm, useMoney } from '@/components/form'
+import { api, apiList, type Pagination } from '@/lib/api'
 
 const TYPES = ['office', 'engineer', 'permanent_worker', 'day_laborer']
 const GENDERS = ['male', 'female']
@@ -15,85 +15,10 @@ const DOC_KINDS = ['national_id_copy', 'work_stub', 'criminal_record', 'qualific
 const IDENTITY = ['name_ar', 'name_en', 'fingerprint_name', 'gender', 'national_id', 'insurance_no', 'phone', 'address', 'department', 'residence_id', 'pay_method', 'bank_account', 'hire_date', 'contract_end_date', 'termination_date', 'termination_reason', 'hr_notes']
 const PAY = ['salary', 'raise', 'insured_basic', 'daily_wage', 'shift_start', 'shift_end']
 
-type Row = Record<string, any> // eslint-disable-line @typescript-eslint/no-explicit-any
-type Errs = Record<string, string>
-
-const selectCls =
-  'flex h-9 w-full rounded-md border border-input bg-card px-3 text-sm outline-none focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring aria-invalid:border-destructive'
-
-const toErrs = (e: unknown): Errs =>
-  e instanceof ApiError ? Object.fromEntries(e.details.filter((d) => d.field).map((d) => [d.field!, d.message])) : {}
 
 /** Fields PayFields renders for a type; also what create/dialog submit. */
 const payFields = (type: string) => [...(type === 'day_laborer' ? ['daily_wage'] : ['salary', 'raise', 'insured_basic']), 'shift_start', 'shift_end']
 
-/** Shows every error message that no rendered field displays (non-422s, or fields hidden for this type). */
-function ErrorBanner({ err, shown }: { err: unknown; shown: string[] }) {
-  if (!err) return null
-  const msgs =
-    err instanceof ApiError && err.details.length
-      ? err.details.filter((d) => !d.field || !shown.includes(d.field)).map((d) => d.message)
-      : [err instanceof Error ? err.message : String(err)]
-  return msgs.length ? (
-    <div role="alert" className="rounded-md border border-destructive p-3 text-sm text-destructive">
-      {msgs.map((m, i) => (
-        <p key={i}>{m}</p>
-      ))}
-    </div>
-  ) : null
-}
-
-function useMoney() {
-  const { i18n } = useTranslation()
-  const f = new Intl.NumberFormat(i18n.language, { minimumFractionDigits: 2, maximumFractionDigits: 2 })
-  return (v: string | null | undefined) => (v == null ? '—' : f.format(v as unknown as number)) // string input is formatted exactly by Intl
-}
-
-/** Label + control + server error wired with aria-describedby. */
-function Field({ name, id = name, label, errs, children }: { name: string; id?: string; label: string; errs: Errs; children: (p: Row) => React.ReactNode }) {
-  const err = errs[name]
-  return (
-    <div className="flex flex-col gap-1.5">
-      <Label htmlFor={id}>{label}</Label>
-      {children({ id, name, 'aria-invalid': !!err || undefined, 'aria-describedby': err ? `${id}-err` : undefined })}
-      {err && (
-        <p id={`${id}-err`} className="text-[13px] text-destructive">
-          {err}
-        </p>
-      )}
-    </div>
-  )
-}
-
-function TextField({ name, label, values, set, errs, ns = '', ...rest }: { name: string; label: string; values: Row; set: (k: string, v: string) => void; errs: Errs; ns?: string } & Omit<React.ComponentProps<'input'>, 'form'>) {
-  return (
-    <Field name={name} id={ns + name} label={label} errs={errs}>
-      {(p) => <Input {...p} {...rest} value={values[name] ?? ''} onChange={(e) => set(name, e.target.value)} />}
-    </Field>
-  )
-}
-
-function SelectField({ name, label, values, set, errs, options, blank }: { name: string; label: string; values: Row; set: (k: string, v: string) => void; errs: Errs; options: [string, string][]; blank?: boolean }) {
-  return (
-    <Field name={name} label={label} errs={errs}>
-      {(p) => (
-        <select {...p} className={selectCls} value={values[name] ?? ''} onChange={(e) => set(name, e.target.value)}>
-          {blank && <option value="" />}
-          {options.map(([v, l]) => (
-            <option key={v} value={v}>
-              {l}
-            </option>
-          ))}
-        </select>
-      )}
-    </Field>
-  )
-}
-
-function useForm(initial: Row = {}) {
-  const [form, setForm] = useState<Row>(initial)
-  return { form, setForm, set: (k: string, v: string) => setForm((f) => ({ ...f, [k]: v })) }
-}
 
 /** Pay inputs; day laborers are paid a daily wage, everyone else a monthly salary. */
 function PayFields({ type, values, set, errs }: { type: string; values: Row; set: (k: string, v: string) => void; errs: Errs }) {

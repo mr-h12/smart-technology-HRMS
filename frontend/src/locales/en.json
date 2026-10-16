@@ -13,7 +13,9 @@
     "main": "Main navigation",
     "open": "Open menu",
     "employees": "Employees",
-    "sites": "Sites"
+    "sites": "Sites",
+    "residences": "Residences",
+    "fares": "Fares"
   },
   "toggle": {
     "language": "Language",
@@ -23,7 +25,9 @@
   },
   "page": {
     "employees": "Employees",
-    "sites": "Sites"
+    "sites": "Sites",
+    "residences": "Residences",
+    "fares": "Transport fares"
   },
   "notFound": {
     "title": "Page not found",
@@ -104,6 +108,50 @@
       "photos": "Photos",
       "military_status": "Military status",
       "other": "Other"
+    },
+    "site_kind": {
+      "work": "Work site",
+      "leave": "Leave"
+    },
+    "leave_code": {
+      "friday": "Friday",
+      "official_holiday": "Official holiday",
+      "sick": "Sick",
+      "rest": "Rest",
+      "absent": "Absent",
+      "other": "Other"
+    },
+    "allowance_mode": {
+      "none": "None",
+      "share_of_wage": "Share of wage",
+      "fixed": "Fixed amount"
     }
+  },
+  "site": {
+    "add": "Add site",
+    "edit": "Edit",
+    "kind": "Site kind",
+    "allKinds": "All kinds",
+    "leave_code": "Leave code",
+    "active": "Active",
+    "allActive": "All",
+    "inactive": "Inactive",
+    "outside_alexandria": "Outside Alexandria",
+    "allowances": "Allowances",
+    "allowanceHistory": "Allowance history",
+    "mode": "Allowance mode",
+    "value": "Value",
+    "addRule": "Add",
+    "yes": "Yes",
+    "no": "No"
+  },
+  "residence": {
+    "add": "Add residence"
+  },
+  "fare": {
+    "amount": "Fare",
+    "add": "Add fare",
+    "tooMany": "More than 100 fares exist; the grid may not show them all.",
+    "residence": "Residence"
   }
 }

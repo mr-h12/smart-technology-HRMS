@@ -1,7 +1,8 @@
 import { BrowserRouter, Navigate, Route, Routes } from 'react-router-dom'
 import { AppLayout } from '@/components/layout/AppLayout'
 import { EmployeeFormPage, EmployeesPage } from '@/pages/employees'
-import { NotFoundPage, TitlePage } from '@/pages/pages'
+import { FaresPage, ResidencesPage, SitesPage } from '@/pages/sites'
+import { NotFoundPage } from '@/pages/pages'
 
 export default function App() {
   return (
@@ -12,8 +13,9 @@ export default function App() {
           <Route path="employees" element={<EmployeesPage />} />
           <Route path="employees/new" element={<EmployeeFormPage />} />
           <Route path="employees/:id" element={<EmployeeFormPage />} />
-          {/* ponytail: placeholder, Task 6 replaces it */}
-          <Route path="sites" element={<TitlePage titleKey="page.sites" />} />
+          <Route path="sites" element={<SitesPage />} />
+          <Route path="residences" element={<ResidencesPage />} />
+          <Route path="fares" element={<FaresPage />} />
           <Route path="*" element={<NotFoundPage />} />
         </Route>
       </Routes>
