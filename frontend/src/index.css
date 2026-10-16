@@ -1,0 +1,288 @@
+@import 'tailwindcss';
+
+@font-face {
+  font-family: 'Inter';
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: url('/fonts/inter-latin-400-normal.woff2') format('woff2');
+}
+
+@font-face {
+  font-family: 'Inter';
+  font-style: normal;
+  font-weight: 500;
+  font-display: swap;
+  src: url('/fonts/inter-latin-500-normal.woff2') format('woff2');
+}
+
+@font-face {
+  font-family: 'Inter';
+  font-style: normal;
+  font-weight: 600;
+  font-display: swap;
+  src: url('/fonts/inter-latin-600-normal.woff2') format('woff2');
+}
+
+@font-face {
+  font-family: 'Inter';
+  font-style: normal;
+  font-weight: 700;
+  font-display: swap;
+  src: url('/fonts/inter-latin-700-normal.woff2') format('woff2');
+}
+
+@font-face {
+  font-family: 'Noto Sans Arabic';
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: url('/fonts/noto-sans-arabic-arabic-400-normal.woff2') format('woff2');
+}
+
+@font-face {
+  font-family: 'Noto Sans Arabic';
+  font-style: normal;
+  font-weight: 500;
+  font-display: swap;
+  src: url('/fonts/noto-sans-arabic-arabic-500-normal.woff2') format('woff2');
+}
+
+@font-face {
+  font-family: 'Noto Sans Arabic';
+  font-style: normal;
+  font-weight: 600;
+  font-display: swap;
+  src: url('/fonts/noto-sans-arabic-arabic-600-normal.woff2') format('woff2');
+}
+
+@font-face {
+  font-family: 'Noto Sans Arabic';
+  font-style: normal;
+  font-weight: 700;
+  font-display: swap;
+  src: url('/fonts/noto-sans-arabic-arabic-700-normal.woff2') format('woff2');
+}
+
+@font-face {
+  font-family: 'Noto Sans Mono';
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: url('/fonts/noto-sans-mono-latin-400-normal.woff2') format('woff2');
+}
+
+@font-face {
+  font-family: 'Noto Sans Mono';
+  font-style: normal;
+  font-weight: 500;
+  font-display: swap;
+  src: url('/fonts/noto-sans-mono-latin-500-normal.woff2') format('woff2');
+}
+
+@custom-variant dark (&:where(.dark, .dark *));
+
+/*
+ * Semantic tokens copied from smart-technology-CRM (resources/css/tokens.css, Design System §3.3).
+ * Light = "Warm Editorial", dark = "Midnight Obsidian". Components use the shadcn names below.
+ */
+:root {
+  --radius: 0.5rem;
+  --background: #faf8f5;
+  --foreground: #292524;
+  --card: #ffffff;
+  --card-foreground: #292524;
+  --popover: #ffffff;
+  --popover-foreground: #292524;
+  --surface-raised: #ffffff;
+  --primary: #c2410c;
+  --primary-hover: #9a3412;
+  --primary-active: #7c2d12;
+  --primary-foreground: #ffffff;
+  --secondary: #f5f1ec;
+  --secondary-foreground: #292524;
+  --muted: #f5f1ec;
+  --muted-foreground: #57534e;
+  --accent: color-mix(in srgb, #c2410c 10%, #ffffff);
+  --accent-foreground: #9a3412;
+  --destructive: #b42318;
+  --border: #e7e5e4;
+  --input: #78716c;
+  --ring: #c2410c;
+  --link: #9a3412;
+  --sidebar: #ffffff;
+  --success: #166534;
+  --warning: #9a4700;
+  --info: #1d4ed8;
+
+  --elevation-1: 0 1px 2px 0 rgb(0 0 0 / 0.06), 0 1px 3px 0 rgb(0 0 0 / 0.1);
+  --elevation-2: 0 8px 24px -4px rgb(0 0 0 / 0.14), 0 2px 8px -2px rgb(0 0 0 / 0.08);
+
+  --chart-1: #c2410c;
+  --chart-2: #1d4ed8;
+  --chart-3: #15803d;
+  --chart-4: #0f766e;
+  --chart-5: #be185d;
+  --chart-6: #57534e;
+}
+
+.dark {
+  --background: #0b0f19;
+  --foreground: #e0e7ff;
+  --card: #111827;
+  --card-foreground: #e0e7ff;
+  --popover: #1b2437;
+  --popover-foreground: #e0e7ff;
+  --surface-raised: #1b2437;
+  --primary: #818cf8;
+  --primary-hover: #a5b4fc;
+  --primary-active: #c7d2fe;
+  --primary-foreground: #0b0f19;
+  --secondary: #1b2437;
+  --secondary-foreground: #e0e7ff;
+  --muted: #0f1524;
+  --muted-foreground: #afbad4;
+  --accent: color-mix(in srgb, #818cf8 16%, #111827);
+  --accent-foreground: #c7d2fe;
+  --destructive: #ff9b91;
+  --border: #1f2937;
+  --input: #6b7280;
+  --ring: #a5b4fc;
+  --link: #a5b4fc;
+  --sidebar: #111827;
+  --success: #5ddb90;
+  --warning: #ffca6a;
+  --info: #7cc4ff;
+
+  --elevation-1: 0 1px 2px 0 rgb(0 0 0 / 0.4), 0 1px 3px 0 rgb(0 0 0 / 0.3);
+  --elevation-2: 0 8px 24px -4px rgb(0 0 0 / 0.55), 0 2px 8px -2px rgb(0 0 0 / 0.4);
+
+  --chart-1: #818cf8;
+  --chart-2: #7cc4ff;
+  --chart-3: #5ddb90;
+  --chart-4: #ffca6a;
+  --chart-5: #f9a8d4;
+  --chart-6: #afbad4;
+}
+
+@theme inline {
+  /* Inter for Latin and digits, Noto Sans Arabic for Arabic — resolved per character (CRM §4.1). */
+  --font-sans: 'Inter', 'Noto Sans Arabic', sans-serif;
+  --font-mono: 'Noto Sans Mono', monospace;
+
+  --text-body: 14px;
+  --text-body--line-height: 1.55;
+  --text-table: 13px;
+  --text-table--line-height: 1.45;
+  --text-page-title: 24px;
+  --text-page-title--line-height: 1.3;
+  --text-page-title--font-weight: 600;
+  --text-section-title: 18px;
+  --text-section-title--line-height: 1.35;
+  --text-section-title--font-weight: 600;
+  --text-card-title: 16px;
+  --text-card-title--line-height: 1.4;
+  --text-card-title--font-weight: 600;
+
+  --shadow-1: var(--elevation-1);
+  --shadow-2: var(--elevation-2);
+
+  --radius-sm: calc(var(--radius) - 4px);
+  --radius-md: calc(var(--radius) - 2px);
+  --radius-lg: var(--radius);
+  --radius-xl: calc(var(--radius) + 4px);
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
+  --color-popover: var(--popover);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-surface-raised: var(--surface-raised);
+  --color-primary: var(--primary);
+  --color-primary-hover: var(--primary-hover);
+  --color-primary-active: var(--primary-active);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-secondary: var(--secondary);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-destructive: var(--destructive);
+  --color-border: var(--border);
+  --color-input: var(--input);
+  --color-ring: var(--ring);
+  --color-link: var(--link);
+  --color-sidebar: var(--sidebar);
+  --color-success: var(--success);
+  --color-warning: var(--warning);
+  --color-info: var(--info);
+  --color-chart-1: var(--chart-1);
+  --color-chart-2: var(--chart-2);
+  --color-chart-3: var(--chart-3);
+  --color-chart-4: var(--chart-4);
+  --color-chart-5: var(--chart-5);
+  --color-chart-6: var(--chart-6);
+
+  --animate-fade-in: fade-in 0.25s ease-out;
+  @keyframes fade-in {
+    from { opacity: 0; transform: translateY(4px); }
+    to { opacity: 1; transform: translateY(0); }
+  }
+}
+
+@layer base {
+  * {
+    @apply border-border outline-ring/50;
+  }
+  html {
+    font-variant-numeric: tabular-nums;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+  }
+  body {
+    @apply bg-background text-foreground font-sans;
+    font-size: var(--text-body);
+    line-height: var(--text-body--line-height);
+  }
+  /* Grid/flex children shouldn't be stretched by long nowrap content (truncation works instead). */
+  .grid > * {
+    min-width: 0;
+  }
+  button:not(:disabled),
+  [role='button']:not(:disabled) {
+    cursor: pointer;
+  }
+}
+
+@layer utilities {
+  .scrollbar-thin {
+    scrollbar-width: thin;
+  }
+  .tabular {
+    font-variant-numeric: tabular-nums;
+  }
+}
+
+/* Recharts: remove focus outline on click */
+.recharts-wrapper *:focus {
+  outline: none;
+}
+
+/* ---------- Arabic / RTL ---------- */
+/* Letter-spacing breaks Arabic letter joining. */
+html[lang='ar'] * {
+  letter-spacing: 0 !important;
+}
+/* Charts keep a left-to-right time axis; tooltips follow the page direction. */
+[dir='rtl'] .recharts-wrapper {
+  direction: ltr;
+}
+[dir='rtl'] .recharts-tooltip-wrapper {
+  direction: rtl;
+}
+/* Phone numbers, emails, amounts and dates are typed left-to-right. */
+[dir='rtl'] input:is([type='email'], [type='tel'], [type='number'], [type='date'], [type='time']) {
+  direction: ltr;
+  text-align: right;
+}
