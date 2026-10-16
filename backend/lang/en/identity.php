@@ -8,4 +8,5 @@ return [
         'permission_denied' => 'You do not have permission to perform this action.',
         'rate_limited' => 'Too many attempts. Try again shortly.',
     ],
+    'last_role_manager' => 'At least one active account must keep the right to manage roles.',
 ];

@@ -4,6 +4,8 @@ use App\Modules\Audit\Presentation\AuditLogController;
 use App\Modules\Employees\Domain\DocumentKind;
 use App\Modules\Employees\Presentation\EmployeeController;
 use App\Modules\Identity\Presentation\AuthController;
+use App\Modules\Identity\Presentation\RoleController;
+use App\Modules\Identity\Presentation\UserController;
 use App\Modules\Sites\Presentation\FareController;
 use App\Modules\Sites\Presentation\ResidenceController;
 use App\Modules\Sites\Presentation\SiteController;
@@ -68,4 +70,28 @@ Route::middleware('auth')->group(function (): void {
     });
 
     Route::get('audit-log', [AuditLogController::class, 'index'])->middleware('permission:audit_log.view');
+
+    Route::prefix('users')->controller(UserController::class)->group(function (): void {
+        Route::get('/', 'index')->middleware('permission:user.view');
+        Route::post('/', 'store')->middleware('permission:user.manage');
+        Route::middleware([])->whereUuid(['user', 'session'])->group(function (): void {
+            Route::get('{user}', 'show')->middleware('permission:user.view');
+            Route::patch('{user}', 'update')->middleware('permission:user.manage');
+            Route::patch('{user}/deactivate', 'deactivate')->middleware('permission:user.manage');
+            Route::patch('{user}/reactivate', 'reactivate')->middleware('permission:user.manage');
+            Route::put('{user}/password', 'password')->middleware('permission:user.manage');
+            Route::get('{user}/sessions', 'sessions')->middleware('permission:user.manage');
+            Route::delete('{user}/sessions/{session}', 'terminateSession')->middleware('permission:user.manage');
+        });
+    });
+
+    Route::controller(RoleController::class)->group(function (): void {
+        Route::get('roles', 'index')->middleware('permission:role.view');
+        Route::get('permissions', 'permissions')->middleware('permission:role.view');
+        Route::post('roles', 'store')->middleware('permission:role.manage');
+        Route::middleware([])->whereUuid('role')->group(function (): void {
+            Route::patch('roles/{role}', 'update')->middleware('permission:role.manage');
+            Route::patch('roles/{role}/permissions', 'syncPermissions')->middleware('permission:role.manage');
+        });
+    });
 });

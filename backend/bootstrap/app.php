@@ -5,6 +5,7 @@ use App\Http\Middleware\ForgetResolvedGuards;
 use App\Modules\Identity\Domain\Authentication\AuthenticationRefused;
 use App\Modules\Identity\Domain\Rbac\AuthorizationRefused;
 use App\Modules\Identity\Presentation\AuthorizePermission;
+use App\Modules\Identity\Presentation\CreateUserCommand;
 use App\Support\Http\ApiEnvelope;
 use Illuminate\Auth\AuthenticationException;
 use Illuminate\Database\Eloquent\ModelNotFoundException;
@@ -24,6 +25,7 @@ return Application::configure(basePath: dirname(__DIR__))
         apiPrefix: 'api/v1',
         commands: __DIR__.'/../routes/console.php',
     )
+    ->withCommands([CreateUserCommand::class])
     ->withMiddleware(function (Middleware $middleware): void {
         // Global, not api-group: unmatched routes (404) never enter the api group.
         $middleware->prepend(AddRequestId::class);
