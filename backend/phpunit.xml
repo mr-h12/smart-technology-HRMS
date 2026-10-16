@@ -27,6 +27,10 @@
         <env name="DB_CONNECTION" value="pgsql" force="true"/>
         <env name="DB_DATABASE" value="hrms_test" force="true"/>
         <env name="DB_URL" value="" force="true"/>
+        <!-- Laravel reads $_SERVER before $_ENV, and the container sets DB_DATABASE there -->
+        <server name="DB_CONNECTION" value="pgsql" force="true"/>
+        <server name="DB_DATABASE" value="hrms_test" force="true"/>
+        <server name="DB_URL" value="" force="true"/>
         <env name="MAIL_MAILER" value="array"/>
         <env name="QUEUE_CONNECTION" value="sync"/>
         <env name="SESSION_DRIVER" value="array"/>
