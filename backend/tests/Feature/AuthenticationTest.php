@@ -2,7 +2,9 @@
 
 namespace Tests\Feature;
 
+use App\Modules\Identity\Domain\Authentication\AuthenticationRefused;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Facades\Exceptions;
 use Illuminate\Testing\TestResponse;
 use Tests\TestCase;
 
@@ -40,6 +42,14 @@ class AuthenticationTest extends TestCase
         $this->login(password: 'nope')->assertStatus(401)->assertJsonPath('error.code', 'invalid_credentials');
         $this->assertSame(1, $u->fresh()->failed_login_attempts);
         $this->login('nobody@smart.test')->assertStatus(401)->assertJsonPath('error.code', 'invalid_credentials');
+    }
+
+    public function test_a_refused_login_is_not_reported_to_the_log(): void
+    {
+        Exceptions::fake();
+        $this->makeUser('hr', ['email' => 'hr@smart.test']);
+        $this->login(password: 'nope')->assertStatus(401);
+        Exceptions::assertNotReported(AuthenticationRefused::class);
     }
 
     public function test_fifth_failure_locks_for_the_configured_minutes(): void

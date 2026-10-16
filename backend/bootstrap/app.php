@@ -50,6 +50,9 @@ return Application::configure(basePath: dirname(__DIR__))
             $request, 401, 'unauthenticated', 'Unauthenticated.',
         ));
 
+        // An expected answer, not a fault: logging it would also write the email, IP and user agent.
+        $exceptions->dontReport(AuthenticationRefused::class);
+
         $exceptions->render(fn (AuthenticationRefused $e, Request $request) => ApiEnvelope::error(
             $request, $e->reason->status(), $e->reason->value, __('identity.refusal.'.$e->reason->value),
         ));
