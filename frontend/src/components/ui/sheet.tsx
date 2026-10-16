@@ -1,4 +1,5 @@
 import * as React from 'react'
+import { useTranslation } from 'react-i18next'
 import * as SheetPrimitive from '@radix-ui/react-dialog'
 import { X } from 'lucide-react'
 import { cn } from '@/lib/utils'
@@ -13,6 +14,7 @@ export function SheetContent({
   hideClose,
   ...props
 }: React.ComponentProps<typeof SheetPrimitive.Content> & { side?: 'left' | 'right'; hideClose?: boolean }) {
+  const { t } = useTranslation()
   return (
     <SheetPrimitive.Portal>
       <SheetPrimitive.Overlay className="fixed inset-0 z-50 backdrop-brightness-[0.45] backdrop-blur-[2px] data-[state=open]:animate-fade-in" />
@@ -29,7 +31,7 @@ export function SheetContent({
         {!hideClose && (
           <SheetPrimitive.Close className="absolute top-4 end-4 rounded-md p-1 text-muted-foreground transition hover:bg-muted hover:text-foreground">
             <X className="size-4" />
-            <span className="sr-only">Close</span>
+            <span className="sr-only">{t('common.close')}</span>
           </SheetPrimitive.Close>
         )}
       </SheetPrimitive.Content>

@@ -18,3 +18,9 @@ test('throws ApiError on an error envelope', async () => {
   expect(err).toBeInstanceOf(ApiError)
   expect(err).toMatchObject({ code: 'validation_failed', message: 'Invalid', status: 422, details })
 })
+
+test('null details becomes an empty array', async () => {
+  reply(500, { error: { code: 'server_error', message: 'Boom', details: null }, meta: { request_id: 'r' } })
+  const err = await api('/x').catch((e) => e)
+  expect((err as ApiError).details).toEqual([])
+})

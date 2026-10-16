@@ -24,7 +24,7 @@ export async function api<T = unknown>(path: string, { method = 'GET', body }: O
   const json = await res.json().catch(() => null)
   if (!res.ok) {
     const e = json?.error
-    throw new ApiError(e?.code ?? 'unknown_error', e?.message ?? res.statusText, res.status, e?.details)
+    throw new ApiError(e?.code ?? 'unknown_error', e?.message ?? res.statusText, res.status, e?.details ?? [])
   }
   return json?.data as T
 }
