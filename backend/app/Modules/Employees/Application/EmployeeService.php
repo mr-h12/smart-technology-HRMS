@@ -30,13 +30,11 @@ final class EmployeeService
      */
     public function list(array $filters): array
     {
-        $query = Employee::query()->orderBy('code');
+        $current = '(select t.type from employee_type_changes t where t.employee_id = employees.id and t.deleted_at is null and t.effective_from <= ? order by t.effective_from desc limit 1)';
+        $query = Employee::query()->select('employees.*')->selectRaw("$current as current_type", [self::today()])->orderBy('code');
 
         if (isset($filters['type'])) {
-            $query->whereRaw(
-                '(select t.type from employee_type_changes t where t.employee_id = employees.id and t.deleted_at is null and t.effective_from <= ? order by t.effective_from desc limit 1) = ?',
-                [self::today(), $filters['type']],
-            );
+            $query->whereRaw("$current = ?", [self::today(), $filters['type']]);
         }
 
         if (isset($filters['search']) && $filters['search'] !== '') {

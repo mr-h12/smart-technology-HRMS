@@ -24,6 +24,25 @@ const selectCls =
 const toErrs = (e: unknown): Errs =>
   e instanceof ApiError ? Object.fromEntries(e.details.filter((d) => d.field).map((d) => [d.field!, d.message])) : {}
 
+/** Fields PayFields renders for a type; also what create/dialog submit. */
+const payFields = (type: string) => [...(type === 'day_laborer' ? ['daily_wage'] : ['salary', 'raise', 'insured_basic']), 'shift_start', 'shift_end']
+
+/** Shows every error message that no rendered field displays (non-422s, or fields hidden for this type). */
+function ErrorBanner({ err, shown }: { err: unknown; shown: string[] }) {
+  if (!err) return null
+  const msgs =
+    err instanceof ApiError && err.details.length
+      ? err.details.filter((d) => !d.field || !shown.includes(d.field)).map((d) => d.message)
+      : [err instanceof Error ? err.message : String(err)]
+  return msgs.length ? (
+    <div role="alert" className="rounded-md border border-destructive p-3 text-sm text-destructive">
+      {msgs.map((m, i) => (
+        <p key={i}>{m}</p>
+      ))}
+    </div>
+  ) : null
+}
+
 function useMoney() {
   const { i18n } = useTranslation()
   const f = new Intl.NumberFormat(i18n.language, { minimumFractionDigits: 2, maximumFractionDigits: 2 })
@@ -84,7 +103,7 @@ function PayFields({ type, values, set, errs }: { type: string; values: Row; set
   )
   return (
     <>
-      {type === 'day_laborer' ? money('daily_wage') : ['salary', 'raise', 'insured_basic'].map(money)}
+      {payFields(type).filter((n) => !n.startsWith('shift')).map(money)}
       <TextField name="shift_start" label={t('pay.shift_start')} type="time" values={values} set={set} errs={errs} />
       <TextField name="shift_end" label={t('pay.shift_end')} type="time" values={values} set={set} errs={errs} />
     </>
@@ -100,13 +119,17 @@ export function EmployeesPage() {
   const [page, setPage] = useState(1)
   const [rows, setRows] = useState<Row[]>([])
   const [pg, setPg] = useState<Pagination>()
+  const [err, setErr] = useState<unknown>()
 
   useEffect(() => {
     const qs = new URLSearchParams({ page: String(page), ...(q && { search: q }), ...(type && { type }) })
-    apiList<Row>(`/employees?${qs}`).then((r) => {
-      setRows(r.data)
-      setPg(r.meta.pagination)
-    })
+    apiList<Row>(`/employees?${qs}`)
+      .then((r) => {
+        setErr(undefined)
+        setRows(r.data)
+        setPg(r.meta.pagination)
+      })
+      .catch(setErr)
   }, [q, type, page])
 
   return (
@@ -128,6 +151,7 @@ export function EmployeesPage() {
           ))}
         </select>
       </div>
+      <ErrorBanner err={err} shown={[]} />
       <Table>
         <TableHeader>
           <TableRow>
@@ -174,14 +198,17 @@ export function EmployeeFormPage() {
   const { form, setForm, set } = useForm({ gender: 'male', pay_method: 'cash', type: 'office' })
   const [emp, setEmp] = useState<Row>()
   const [residences, setResidences] = useState<Row[]>([])
-  const [errs, setErrs] = useState<Errs>({})
+  const [err, setErr] = useState<unknown>()
+  const errs = toErrs(err)
 
   const load = useCallback(() => {
     if (!id) return
-    api<Row>(`/employees/${id}`).then((e) => {
-      setEmp(e)
-      setForm((f) => ({ ...f, ...Object.fromEntries(IDENTITY.map((k) => [k, e[k] ?? ''])) }))
-    })
+    api<Row>(`/employees/${id}`)
+      .then((e) => {
+        setEmp(e)
+        setForm((f) => ({ ...f, ...Object.fromEntries(IDENTITY.map((k) => [k, e[k] ?? ''])) }))
+      })
+      .catch(setErr)
   }, [id, setForm])
   useEffect(load, [load])
   useEffect(() => {
@@ -190,7 +217,7 @@ export function EmployeeFormPage() {
 
   async function save(ev: React.FormEvent) {
     ev.preventDefault()
-    setErrs({})
+    setErr(undefined)
     try {
       if (id) {
         // PATCH: blank clears a nullable field; name_ar/gender/pay_method must stay set
@@ -198,18 +225,21 @@ export function EmployeeFormPage() {
         await api(`/employees/${id}`, { method: 'PATCH', body })
         load()
       } else {
-        const e = await api<Row>('/employees', { method: 'POST', body: clean(form, [...IDENTITY, ...PAY, 'type', 'effective_from']) })
+        const e = await api<Row>('/employees', { method: 'POST', body: clean(form, [...IDENTITY, ...payFields(form.type), 'type', 'effective_from']) })
         navigate(`/employees/${e.id}`)
       }
     } catch (e) {
-      setErrs(toErrs(e))
+      setErr(e)
     }
   }
 
   const f = { values: form, set, errs }
+  const shown = [...IDENTITY, ...(id ? [] : [...payFields(form.type), 'type', 'effective_from'])]
   return (
-    <form onSubmit={save} className="flex max-w-3xl flex-col gap-6">
+    <div className="flex max-w-3xl flex-col gap-6">
+    <form onSubmit={save} className="flex flex-col gap-6">
       <h1 className="text-page-title">{id ? emp?.name_ar : t('employee.add')}</h1>
+      <ErrorBanner err={err} shown={shown} />
       <fieldset className="grid gap-4 sm:grid-cols-2">
         <legend className="mb-2 font-semibold">{t('employee.identity')}</legend>
         <TextField name="name_ar" label={t('employee.name_ar')} {...f} />
@@ -248,8 +278,9 @@ export function EmployeeFormPage() {
       <div>
         <Button type="submit">{t('common.save')}</Button>
       </div>
-      {emp && <History emp={emp} reload={load} />}
     </form>
+    {emp && <History emp={emp} reload={load} />}
+    </div>
   )
 }
 
@@ -323,18 +354,20 @@ function ChangeDialog({ kind, empId, current, reload }: { kind: 'type' | 'pay'; 
   const { t } = useTranslation()
   const [open, setOpen] = useState(false)
   const { form, set, setForm } = useForm({ type: current ?? 'office' })
-  const [errs, setErrs] = useState<Errs>({})
+  const [err, setErr] = useState<unknown>()
+  const errs = toErrs(err)
   const f = { values: form, set, errs }
+  const shown = ['effective_from', ...(kind === 'type' ? ['type'] : payFields(current ?? ''))]
 
   async function submit() {
-    setErrs({})
+    setErr(undefined)
     try {
-      await api(`/employees/${empId}/${kind}-changes`, { method: 'POST', body: clean(form, ['effective_from', ...(kind === 'type' ? ['type'] : PAY)]) })
+      await api(`/employees/${empId}/${kind}-changes`, { method: 'POST', body: clean(form, shown) })
       setOpen(false)
       setForm({ type: current ?? 'office' })
       reload()
     } catch (e) {
-      setErrs(toErrs(e))
+      setErr(e)
     }
   }
 
@@ -348,6 +381,7 @@ function ChangeDialog({ kind, empId, current, reload }: { kind: 'type' | 'pay'; 
           <DialogTitle>{t(kind === 'type' ? 'history.types' : 'history.pay')}</DialogTitle>
         </DialogHeader>
         <DialogBody className="grid gap-4">
+          <ErrorBanner err={err} shown={shown} />
           <TextField name="effective_from" label={t('change.effective_from')} type="date" {...f} />
           {kind === 'type' ? (
             <SelectField name="type" label={t('employee.type')} options={TYPES.map((v) => [v, t(`enum.type.${v}`)])} {...f} />
@@ -368,18 +402,21 @@ function ChangeDialog({ kind, empId, current, reload }: { kind: 'type' | 'pay'; 
 function DocRow({ kind, empId, doc, reload }: { kind: string; empId: string; doc?: Row; reload: () => void }) {
   const { t } = useTranslation()
   const { form, set } = useForm({ received_at: doc?.received_at ?? '', expires_at: doc?.expires_at ?? '', note: doc?.note ?? '' })
-  const [errs, setErrs] = useState<Errs>({})
+  const [err, setErr] = useState<unknown>()
+  const errs = toErrs(err)
   const save = async () => {
-    setErrs({})
+    setErr(undefined)
     try {
       await api(`/employees/${empId}/documents/${kind}`, { method: 'PUT', body: Object.fromEntries(Object.entries(form).map(([k, v]) => [k, v || null])) })
       reload()
     } catch (e) {
-      setErrs(toErrs(e))
+      setErr(e)
     }
   }
   const f = { values: form, set, errs, ns: `${kind}-` }
   return (
+    <div className="flex flex-col gap-2">
+    <ErrorBanner err={err} shown={['received_at', 'expires_at', 'note']} />
     <div className="grid items-end gap-3 sm:grid-cols-[1fr_1fr_1fr_1fr_auto]">
       <span className="text-sm font-medium">{t(`enum.document.${kind}`)}</span>
       <TextField name="received_at" label={t('document.received_at')} type="date" {...f} />
@@ -388,6 +425,7 @@ function DocRow({ kind, empId, doc, reload }: { kind: string; empId: string; doc
       <Button type="button" variant="outline" onClick={save}>
         {t('common.save')}
       </Button>
+    </div>
     </div>
   )
 }

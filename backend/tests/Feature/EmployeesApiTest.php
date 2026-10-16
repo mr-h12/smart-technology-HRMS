@@ -141,4 +141,15 @@ class EmployeesApiTest extends TestCase
         $this->getJson('/api/v1/employees?type=engineer')->assertJsonCount(0, 'data');
         $this->getJson('/api/v1/employees?type=office')->assertJsonCount(1, 'data');
     }
+
+    public function test_list_rows_carry_current_type_ignoring_future_and_deleted_changes(): void
+    {
+        $id = $this->make();
+        $this->postJson("/api/v1/employees/$id/type-changes", ['type' => 'engineer', 'effective_from' => '2026-02-01'])->assertCreated();
+        $this->postJson("/api/v1/employees/$id/type-changes", ['type' => 'day_laborer', 'effective_from' => '2999-01-01'])->assertCreated();
+        $this->getJson('/api/v1/employees')->assertJsonPath('data.0.current_type', 'engineer');
+
+        EmployeeTypeChange::where('employee_id', $id)->where('type', 'engineer')->delete();
+        $this->getJson('/api/v1/employees')->assertJsonPath('data.0.current_type', 'office');
+    }
 }
