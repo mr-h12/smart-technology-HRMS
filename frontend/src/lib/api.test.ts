@@ -1,5 +1,5 @@
 import { afterEach, expect, test, vi } from 'vitest'
-import { api, ApiError } from './api'
+import { api, ApiError, apiList } from './api'
 
 const reply = (status: number, body: unknown) =>
   vi.stubGlobal('fetch', vi.fn(async () => new Response(JSON.stringify(body), { status })))
@@ -23,4 +23,9 @@ test('null details becomes an empty array', async () => {
   reply(500, { error: { code: 'server_error', message: 'Boom', details: null }, meta: { request_id: 'r' } })
   const err = await api('/x').catch((e) => e)
   expect((err as ApiError).details).toEqual([])
+})
+
+test('apiList returns data and meta', async () => {
+  reply(200, { data: [{ id: 1 }], meta: { pagination: { total: 1 }, request_id: 'r' } })
+  expect(await apiList('/employees')).toEqual({ data: [{ id: 1 }], meta: { pagination: { total: 1 }, request_id: 'r' } })
 })

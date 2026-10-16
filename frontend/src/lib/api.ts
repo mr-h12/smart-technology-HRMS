@@ -14,8 +14,9 @@ export class ApiError extends Error {
 
 type Options = { method?: string; body?: unknown }
 
-/** Calls /api/v1 and returns the envelope's `data`; throws ApiError on an error envelope. */
-export async function api<T = unknown>(path: string, { method = 'GET', body }: Options = {}): Promise<T> {
+export type Pagination = { page: number; per_page: number; total: number; total_pages: number; has_next_page: boolean; has_previous_page: boolean }
+
+async function call(path: string, { method = 'GET', body }: Options = {}) {
   const res = await fetch(`/api/v1${path}`, {
     method,
     headers: { Accept: 'application/json', ...(body !== undefined && { 'Content-Type': 'application/json' }) },
@@ -26,5 +27,16 @@ export async function api<T = unknown>(path: string, { method = 'GET', body }: O
     const e = json?.error
     throw new ApiError(e?.code ?? 'unknown_error', e?.message ?? res.statusText, res.status, e?.details ?? [])
   }
-  return json?.data as T
+  return json
+}
+
+/** Calls /api/v1 and returns the envelope's `data`; throws ApiError on an error envelope. */
+export async function api<T = unknown>(path: string, opts?: Options): Promise<T> {
+  return (await call(path, opts))?.data as T
+}
+
+/** Like api(), for list endpoints: also returns `meta` (meta.pagination). */
+export async function apiList<T = unknown>(path: string): Promise<{ data: T[]; meta: { pagination: Pagination } }> {
+  const j = await call(path)
+  return { data: j.data, meta: j.meta }
 }

@@ -1,9 +1,109 @@
 {
-  "common": { "close": "إغلاق" },
-  "app": { "name": "سمارت تكنولوجي HRMS" },
-  "nav": { "main": "التنقل الرئيسي", "open": "فتح القائمة", "employees": "الموظفون", "sites": "المواقع" },
-  "toggle": { "language": "اللغة", "theme": "المظهر", "light": "الوضع الفاتح", "dark": "الوضع الداكن" },
-  "page": { "employees": "الموظفون", "sites": "المواقع" },
-  "notFound": { "title": "الصفحة غير موجودة", "back": "العودة إلى الموظفين" },
-  "skip": "تخطي إلى المحتوى"
+  "common": {
+    "close": "إغلاق",
+    "save": "حفظ",
+    "prev": "السابق",
+    "next": "التالي",
+    "pageOf": "صفحة {{page}} من {{total}}"
+  },
+  "app": {
+    "name": "سمارت تكنولوجي HRMS"
+  },
+  "nav": {
+    "main": "التنقل الرئيسي",
+    "open": "فتح القائمة",
+    "employees": "الموظفون",
+    "sites": "المواقع"
+  },
+  "toggle": {
+    "language": "اللغة",
+    "theme": "المظهر",
+    "light": "الوضع الفاتح",
+    "dark": "الوضع الداكن"
+  },
+  "page": {
+    "employees": "الموظفون",
+    "sites": "المواقع"
+  },
+  "notFound": {
+    "title": "الصفحة غير موجودة",
+    "back": "العودة إلى الموظفين"
+  },
+  "skip": "تخطي إلى المحتوى",
+  "employee": {
+    "add": "إضافة موظف",
+    "search": "بحث بالاسم أو الرقم القومي أو الكود",
+    "allTypes": "كل الأنواع",
+    "code": "الكود",
+    "name_ar": "الاسم بالعربية",
+    "name_en": "الاسم بالإنجليزية",
+    "fingerprint_name": "اسم البصمة",
+    "gender": "النوع",
+    "national_id": "الرقم القومي",
+    "insurance_no": "رقم التأمين",
+    "phone": "الهاتف",
+    "address": "العنوان",
+    "department": "القسم",
+    "residence": "محل الإقامة",
+    "hire_date": "تاريخ التعيين",
+    "contract_end_date": "نهاية العقد",
+    "termination_date": "تاريخ إنهاء الخدمة",
+    "termination_reason": "سبب إنهاء الخدمة",
+    "hr_notes": "ملاحظات الموارد البشرية",
+    "pay_method": "طريقة الدفع",
+    "bank_account": "الحساب البنكي",
+    "type": "نوع الموظف",
+    "identity": "البيانات الشخصية",
+    "placement": "التعيين",
+    "pay": "الأجر"
+  },
+  "pay": {
+    "salary": "المرتب",
+    "raise": "العلاوة",
+    "insured_basic": "الأساسي التأميني",
+    "daily_wage": "الأجر اليومي",
+    "shift_start": "بداية الوردية",
+    "shift_end": "نهاية الوردية"
+  },
+  "change": {
+    "add": "إضافة تغيير",
+    "effective_from": "ساري من"
+  },
+  "history": {
+    "types": "سجل تغيير النوع",
+    "pay": "سجل تغيير الأجر",
+    "documents": "المستندات"
+  },
+  "document": {
+    "received_at": "تاريخ الاستلام",
+    "expires_at": "تاريخ الانتهاء",
+    "note": "ملاحظة"
+  },
+  "enum": {
+    "type": {
+      "office": "موظف مثبت شركة",
+      "engineer": "مهندس",
+      "permanent_worker": "عامل مثبت",
+      "day_laborer": "عامل باليومية"
+    },
+    "gender": {
+      "male": "ذكر",
+      "female": "أنثى"
+    },
+    "pay_method": {
+      "cash": "نقدي",
+      "bank": "بنكي"
+    },
+    "document": {
+      "national_id_copy": "صورة البطاقة",
+      "work_stub": "عقب عمل",
+      "criminal_record": "فيش وتشبيه",
+      "qualification": "المؤهل",
+      "birth_certificate": "شهادة الميلاد",
+      "insurance_form_6": "استمارة 6 تأمينات",
+      "photos": "صور شخصية",
+      "military_status": "موقف التجنيد",
+      "other": "أخرى"
+    }
+  }
 }

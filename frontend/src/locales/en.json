@@ -1,9 +1,109 @@
 {
-  "common": { "close": "Close" },
-  "app": { "name": "Smart Technology HRMS" },
-  "nav": { "main": "Main navigation", "open": "Open menu", "employees": "Employees", "sites": "Sites" },
-  "toggle": { "language": "Language", "theme": "Theme", "light": "Light mode", "dark": "Dark mode" },
-  "page": { "employees": "Employees", "sites": "Sites" },
-  "notFound": { "title": "Page not found", "back": "Back to employees" },
-  "skip": "Skip to content"
+  "common": {
+    "close": "Close",
+    "save": "Save",
+    "prev": "Previous",
+    "next": "Next",
+    "pageOf": "Page {{page}} of {{total}}"
+  },
+  "app": {
+    "name": "Smart Technology HRMS"
+  },
+  "nav": {
+    "main": "Main navigation",
+    "open": "Open menu",
+    "employees": "Employees",
+    "sites": "Sites"
+  },
+  "toggle": {
+    "language": "Language",
+    "theme": "Theme",
+    "light": "Light mode",
+    "dark": "Dark mode"
+  },
+  "page": {
+    "employees": "Employees",
+    "sites": "Sites"
+  },
+  "notFound": {
+    "title": "Page not found",
+    "back": "Back to employees"
+  },
+  "skip": "Skip to content",
+  "employee": {
+    "add": "Add employee",
+    "search": "Search by name, national ID or code",
+    "allTypes": "All types",
+    "code": "Code",
+    "name_ar": "Name (Arabic)",
+    "name_en": "Name (English)",
+    "fingerprint_name": "Fingerprint name",
+    "gender": "Gender",
+    "national_id": "National ID",
+    "insurance_no": "Insurance no.",
+    "phone": "Phone",
+    "address": "Address",
+    "department": "Department",
+    "residence": "Residence",
+    "hire_date": "Hire date",
+    "contract_end_date": "Contract end",
+    "termination_date": "Termination date",
+    "termination_reason": "Termination reason",
+    "hr_notes": "HR notes",
+    "pay_method": "Pay method",
+    "bank_account": "Bank account",
+    "type": "Employee type",
+    "identity": "Identity",
+    "placement": "Placement",
+    "pay": "Pay"
+  },
+  "pay": {
+    "salary": "Salary",
+    "raise": "Raise",
+    "insured_basic": "Insured basic",
+    "daily_wage": "Daily wage",
+    "shift_start": "Shift start",
+    "shift_end": "Shift end"
+  },
+  "change": {
+    "add": "Add change",
+    "effective_from": "Effective from"
+  },
+  "history": {
+    "types": "Type history",
+    "pay": "Pay history",
+    "documents": "Documents"
+  },
+  "document": {
+    "received_at": "Received",
+    "expires_at": "Expires",
+    "note": "Note"
+  },
+  "enum": {
+    "type": {
+      "office": "Office employee",
+      "engineer": "Engineer",
+      "permanent_worker": "Permanent worker",
+      "day_laborer": "Day laborer"
+    },
+    "gender": {
+      "male": "Male",
+      "female": "Female"
+    },
+    "pay_method": {
+      "cash": "Cash",
+      "bank": "Bank"
+    },
+    "document": {
+      "national_id_copy": "National ID copy",
+      "work_stub": "Work stub",
+      "criminal_record": "Criminal record",
+      "qualification": "Qualification",
+      "birth_certificate": "Birth certificate",
+      "insurance_form_6": "Insurance form 6",
+      "photos": "Photos",
+      "military_status": "Military status",
+      "other": "Other"
+    }
+  }
 }
