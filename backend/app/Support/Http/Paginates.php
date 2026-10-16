@@ -2,7 +2,7 @@
 
 declare(strict_types=1);
 
-namespace App\Modules\Sites\Application;
+namespace App\Support\Http;
 
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Model;
@@ -36,6 +36,6 @@ trait Paginates
     /** @return array<string, mixed> */
     private function row(Model $m): array
     {
-        return array_diff_key($m->toArray(), array_flip(['created_by', 'updated_by', 'deleted_at', 'allowance_rules']));
+        return array_diff_key($m->toArray(), array_flip(['created_by', 'updated_by', 'deleted_at']));
     }
 }

@@ -1,5 +1,6 @@
 <?php
 
+use App\Modules\Audit\Presentation\AuditLogController;
 use App\Modules\Employees\Domain\DocumentKind;
 use App\Modules\Employees\Presentation\EmployeeController;
 use App\Modules\Identity\Presentation\AuthController;
@@ -65,4 +66,6 @@ Route::middleware('auth')->group(function (): void {
         Route::get('/', 'index')->middleware('permission:site.view');
         Route::post('/', 'store')->middleware('permission:site.manage');
     });
+
+    Route::get('audit-log', [AuditLogController::class, 'index'])->middleware('permission:audit_log.view');
 });

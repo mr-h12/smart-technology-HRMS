@@ -7,6 +7,7 @@ namespace App\Modules\Sites\Application;
 use App\Modules\Sites\Domain\AllowanceMode;
 use App\Modules\Sites\Domain\SiteKind;
 use App\Modules\Sites\Infrastructure\Eloquent\Site;
+use App\Support\Http\Paginates;
 use Illuminate\Validation\ValidationException;
 
 /** Sites (work places and leave "sites") and their dated allowance rules. */

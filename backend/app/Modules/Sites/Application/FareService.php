@@ -8,6 +8,7 @@ use App\Modules\Employees\Infrastructure\Eloquent\Employee;
 use App\Modules\Sites\Infrastructure\Eloquent\EmployeeFareOverride;
 use App\Modules\Sites\Infrastructure\Eloquent\Fare;
 use App\Modules\Sites\Infrastructure\Eloquent\Residence;
+use App\Support\Http\Paginates;
 use Illuminate\Validation\ValidationException;
 
 /** Residences, residence x site fares and per-employee fare overrides. */
