@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { ErrorBanner, type Row, SelectField, selectCls, TextField, toErrs, useForm, useMoney } from '@/components/form'
 import { Button } from '@/components/ui/button'
@@ -35,30 +35,20 @@ const Notice = ({ show, text }: { show: boolean; text: string }) =>
     </p>
   ) : null
 
-/** One-form dialog: shows the banner + `children`, saves through `submit`, closes on success. */
-function FormDialog({ title, trigger, submit, onDone, err, setErr, shown, children, footer = 'common.save' }: {
+type FormApi = { values: Row; set: (k: string, v: string) => void; errs: Record<string, string> }
+
+/** Dialog whose form state lives in the body, so it is fresh on every open (Radix unmounts closed content). */
+function FormDialog({ title, trigger, init, submit, onDone, shown, children, footer = 'common.save' }: {
   title: string
   trigger: React.ReactNode
-  submit: () => Promise<unknown>
+  init: Row
+  submit: (form: Row) => Promise<unknown>
   onDone: () => void
-  err: unknown
-  setErr: (e: unknown) => void
   shown: string[]
-  children: React.ReactNode
+  children: (f: FormApi) => React.ReactNode
   footer?: string
 }) {
-  const { t } = useTranslation()
   const [open, setOpen] = useState(false)
-  async function go() {
-    setErr(undefined)
-    try {
-      await submit()
-      setOpen(false)
-      onDone()
-    } catch (e) {
-      setErr(e)
-    }
-  }
   return (
     <Dialog open={open} onOpenChange={setOpen}>
       <span onClick={() => setOpen(true)}>{trigger}</span>
@@ -66,29 +56,54 @@ function FormDialog({ title, trigger, submit, onDone, err, setErr, shown, childr
         <DialogHeader>
           <DialogTitle>{title}</DialogTitle>
         </DialogHeader>
-        <DialogBody className="grid gap-4">
-          <ErrorBanner err={err} shown={shown} />
+        <FormBody init={init} submit={submit} shown={shown} footer={footer} onDone={() => { setOpen(false); onDone() }}>
           {children}
-        </DialogBody>
-        <DialogFooter>
-          <Button type="button" onClick={go}>
-            {t(footer)}
-          </Button>
-        </DialogFooter>
+        </FormBody>
       </DialogContent>
     </Dialog>
+  )
+}
+
+function FormBody({ init, submit, onDone, shown, footer, children }: { init: Row; submit: (form: Row) => Promise<unknown>; onDone: () => void; shown: string[]; footer: string; children: (f: FormApi) => React.ReactNode }) {
+  const { t } = useTranslation()
+  const { form, set } = useForm(init)
+  const [err, setErr] = useState<unknown>()
+  const busy = useRef(false)
+  const [, rerender] = useState(0)
+  async function go() {
+    if (busy.current) return
+    busy.current = true
+    rerender((n) => n + 1)
+    setErr(undefined)
+    try {
+      await submit(form)
+      onDone()
+    } catch (e) {
+      setErr(e)
+    } finally {
+      busy.current = false
+      rerender((n) => n + 1)
+    }
+  }
+  return (
+    <>
+      <DialogBody className="grid gap-4">
+        <ErrorBanner err={err} shown={shown} />
+        {children({ values: form, set, errs: toErrs(err) })}
+      </DialogBody>
+      <DialogFooter>
+        <Button type="button" disabled={busy.current} onClick={go}>
+          {t(footer)}
+        </Button>
+      </DialogFooter>
+    </>
   )
 }
 
 function SiteDialog({ site, reload }: { site?: Row; reload: () => void }) {
   const { t } = useTranslation()
   const init = { name_ar: site?.name_ar ?? '', name_en: site?.name_en ?? '', kind: site?.kind ?? 'work', leave_code: site?.leave_code ?? '', outside_alexandria: site?.outside_alexandria ? 'true' : '', active: site?.active === false ? '' : 'true' }
-  const { form, set } = useForm(init)
-  const [err, setErr] = useState<unknown>()
-  const errs = toErrs(err)
-  const f = { values: form, set, errs }
-  const shown = ['name_ar', 'name_en', 'kind', 'leave_code']
-  const body = () => ({
+  const body = (form: Row) => ({
     name_ar: form.name_ar,
     name_en: form.name_en || null,
     kind: form.kind,
@@ -96,59 +111,45 @@ function SiteDialog({ site, reload }: { site?: Row; reload: () => void }) {
     outside_alexandria: !!form.outside_alexandria,
     active: !!form.active,
   })
-  const check = (k: string) => (
-    <label className="flex items-center gap-2 text-sm">
-      <input type="checkbox" checked={!!form[k]} onChange={(e) => set(k, e.target.checked ? 'true' : '')} />
-      {t(`site.${k}`)}
-    </label>
-  )
   return (
     <FormDialog
       title={t(site ? 'site.edit' : 'site.add')}
       trigger={<Button type="button" variant={site ? 'outline' : 'default'}>{t(site ? 'site.edit' : 'site.add')}</Button>}
-      submit={() => (site ? api(`/sites/${site.id}`, { method: 'PATCH', body: body() }) : api('/sites', { method: 'POST', body: body() }))}
+      init={init}
+      submit={(form) => (site ? api(`/sites/${site.id}`, { method: 'PATCH', body: body(form) }) : api('/sites', { method: 'POST', body: body(form) }))}
       onDone={reload}
-      err={err}
-      setErr={setErr}
-      shown={shown}
+      shown={['name_ar', 'name_en', 'kind', 'leave_code']}
     >
-      <TextField name="name_ar" label={t('employee.name_ar')} {...f} />
-      <TextField name="name_en" label={t('employee.name_en')} {...f} />
-      <SelectField name="kind" label={t('site.kind')} options={['work', 'leave'].map((v) => [v, t(`enum.site_kind.${v}`)])} {...f} />
-      {form.kind === 'leave' && <SelectField name="leave_code" label={t('site.leave_code')} blank options={LEAVE_CODES.map((v) => [v, t(`enum.leave_code.${v}`)])} {...f} />}
-      {check('outside_alexandria')}
-      {check('active')}
+      {(f) => (
+        <>
+          <TextField name="name_ar" label={t('employee.name_ar')} {...f} />
+          <TextField name="name_en" label={t('employee.name_en')} {...f} />
+          <SelectField name="kind" label={t('site.kind')} options={['work', 'leave'].map((v) => [v, t(`enum.site_kind.${v}`)])} {...f} />
+          {f.values.kind === 'leave' && <SelectField name="leave_code" label={t('site.leave_code')} blank options={LEAVE_CODES.map((v) => [v, t(`enum.leave_code.${v}`)])} {...f} />}
+          {['outside_alexandria', 'active'].map((k) => (
+            <label key={k} className="flex items-center gap-2 text-sm">
+              <input type="checkbox" checked={!!f.values[k]} onChange={(e) => f.set(k, e.target.checked ? 'true' : '')} />
+              {t(`site.${k}`)}
+            </label>
+          ))}
+        </>
+      )}
     </FormDialog>
   )
 }
 
-/** Allowance-rule history for a site, with an add form (a rule applies from its date until the next). */
-function RulesDialog({ site }: { site: Row }) {
+/** Rule history table; mounted only while the dialog is open, so it loads on open. */
+function RuleHistory({ siteId }: { siteId: string }) {
   const { t } = useTranslation()
   const money = useMoney()
   const [rules, setRules] = useState<Row[]>([])
-  const [loadErr, setLoadErr] = useState<unknown>()
-  const { form, set, setForm } = useForm({ mode: 'fixed' })
   const [err, setErr] = useState<unknown>()
-  const errs = toErrs(err)
-  const f = { values: form, set, errs }
-  const load = useCallback(() => {
-    api<Row>(`/sites/${site.id}`).then((s) => { setLoadErr(undefined); setRules(s.allowance_rules) }).catch(setLoadErr)
-  }, [site.id])
-  useEffect(load, [load])
-  const shown = ['effective_from', 'mode', 'value']
+  useEffect(() => {
+    api<Row>(`/sites/${siteId}`).then((s) => { setErr(undefined); setRules(s.allowance_rules) }).catch(setErr)
+  }, [siteId])
   return (
-    <FormDialog
-      title={`${t('site.allowanceHistory')}: ${site.name_ar}`}
-      trigger={<Button type="button" variant="outline">{t('site.allowances')}</Button>}
-      submit={() => api(`/sites/${site.id}/allowance-rules`, { method: 'POST', body: { effective_from: form.effective_from, mode: form.mode, ...(form.mode !== 'none' && { value: form.value }) } })}
-      onDone={() => { setForm({ mode: 'fixed' }); load() }}
-      err={err}
-      setErr={setErr}
-      shown={shown}
-      footer="site.addRule"
-    >
-      <ErrorBanner err={loadErr} shown={[]} />
+    <>
+      <ErrorBanner err={err} shown={[]} />
       <Table>
         <TableHeader>
           <TableRow>
@@ -167,9 +168,31 @@ function RulesDialog({ site }: { site: Row }) {
           ))}
         </TableBody>
       </Table>
-      <TextField name="effective_from" label={t('change.effective_from')} type="date" {...f} />
-      <SelectField name="mode" label={t('site.mode')} options={MODES.map((v) => [v, t(`enum.allowance_mode.${v}`)])} {...f} />
-      {form.mode !== 'none' && <TextField name="value" label={t('site.value')} inputMode="decimal" {...f} />}
+    </>
+  )
+}
+
+/** Allowance-rule history for a site, with an add form (a rule applies from its date until the next). */
+function RulesDialog({ site }: { site: Row }) {
+  const { t } = useTranslation()
+  return (
+    <FormDialog
+      title={`${t('site.allowanceHistory')}: ${site.name_ar}`}
+      trigger={<Button type="button" variant="outline">{t('site.allowances')}</Button>}
+      init={{ mode: 'fixed' }}
+      submit={(form) => api(`/sites/${site.id}/allowance-rules`, { method: 'POST', body: { effective_from: form.effective_from, mode: form.mode, ...(form.mode !== 'none' && { value: form.value }) } })}
+      onDone={() => {}}
+      shown={['effective_from', 'mode', 'value']}
+      footer="site.addRule"
+    >
+      {(f) => (
+        <>
+          <RuleHistory siteId={site.id} />
+          <TextField name="effective_from" label={t('change.effective_from')} type="date" {...f} />
+          <SelectField name="mode" label={t('site.mode')} options={MODES.map((v) => [v, t(`enum.allowance_mode.${v}`)])} {...f} />
+          {f.values.mode !== 'none' && <TextField name="value" label={t('site.value')} inputMode="decimal" {...f} />}
+        </>
+      )}
     </FormDialog>
   )
 }
@@ -197,7 +220,7 @@ export function SitesPage() {
         </select>
       </div>
       <ErrorBanner err={err} shown={[]} />
-      <Notice show={total > rows.length} text={t('fare.tooMany')} />
+      <Notice show={total > rows.length} text={t('common.tooMany')} />
       <Table>
         <TableHeader>
           <TableRow>
@@ -231,19 +254,16 @@ export function SitesPage() {
 
 function ResidenceDialog({ residence, reload }: { residence?: Row; reload: () => void }) {
   const { t } = useTranslation()
-  const { form, set } = useForm({ name_ar: residence?.name_ar ?? '' })
-  const [err, setErr] = useState<unknown>()
   return (
     <FormDialog
       title={t(residence ? 'site.edit' : 'residence.add')}
       trigger={<Button type="button" variant={residence ? 'outline' : 'default'}>{t(residence ? 'site.edit' : 'residence.add')}</Button>}
-      submit={() => (residence ? api(`/residences/${residence.id}`, { method: 'PATCH', body: { name_ar: form.name_ar } }) : api('/residences', { method: 'POST', body: { name_ar: form.name_ar } }))}
+      init={{ name_ar: residence?.name_ar ?? '' }}
+      submit={(form) => (residence ? api(`/residences/${residence.id}`, { method: 'PATCH', body: { name_ar: form.name_ar } }) : api('/residences', { method: 'POST', body: { name_ar: form.name_ar } }))}
       onDone={reload}
-      err={err}
-      setErr={setErr}
       shown={['name_ar']}
     >
-      <TextField name="name_ar" label={t('employee.name_ar')} values={form} set={set} errs={toErrs(err)} />
+      {(f) => <TextField name="name_ar" label={t('employee.name_ar')} {...f} />}
     </FormDialog>
   )
 }
@@ -258,7 +278,7 @@ export function ResidencesPage() {
         <ResidenceDialog reload={reload} />
       </div>
       <ErrorBanner err={err} shown={[]} />
-      <Notice show={total > rows.length} text={t('fare.tooMany')} />
+      <Notice show={total > rows.length} text={t('common.tooMany')} />
       <Table>
         <TableBody>
           {rows.map((r) => (
@@ -287,20 +307,21 @@ function inForce(fares: Row[], today: string) {
 
 function FareDialog({ residence, site, reload, children }: { residence: Row; site: Row; reload: () => void; children: React.ReactNode }) {
   const { t } = useTranslation()
-  const { form, set, setForm } = useForm({})
-  const [err, setErr] = useState<unknown>()
   return (
     <FormDialog
       title={`${residence.name_ar} / ${site.name_ar}`}
       trigger={<button type="button" className="min-h-9 w-full rounded px-2 text-start hover:bg-muted">{children}</button>}
-      submit={() => api('/fares', { method: 'POST', body: { residence_id: residence.id, site_id: site.id, effective_from: form.effective_from, amount: form.amount } })}
-      onDone={() => { setForm({}); reload() }}
-      err={err}
-      setErr={setErr}
+      init={{}}
+      submit={(form) => api('/fares', { method: 'POST', body: { residence_id: residence.id, site_id: site.id, effective_from: form.effective_from, amount: form.amount } })}
+      onDone={reload}
       shown={['effective_from', 'amount']}
     >
-      <TextField name="effective_from" label={t('change.effective_from')} type="date" values={form} set={set} errs={toErrs(err)} />
-      <TextField name="amount" label={t('fare.amount')} inputMode="decimal" values={form} set={set} errs={toErrs(err)} />
+      {(f) => (
+        <>
+          <TextField name="effective_from" label={t('change.effective_from')} type="date" {...f} />
+          <TextField name="amount" label={t('fare.amount')} inputMode="decimal" {...f} />
+        </>
+      )}
     </FormDialog>
   )
 }

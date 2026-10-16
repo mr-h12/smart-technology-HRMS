@@ -1,4 +1,4 @@
-import { render, screen, within } from '@testing-library/react'
+import { render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { MemoryRouter } from 'react-router-dom'
 import { afterEach, beforeEach, expect, test, vi } from 'vitest'
@@ -140,4 +140,57 @@ test('residences list renders and a load failure shows the banner', async () => 
   mockFetch({ 'GET /api/v1/residences': () => json(500, { error: { code: 'server_error', message: 'تعذر التحميل' } }) })
   render(<MemoryRouter><ResidencesPage /></MemoryRouter>)
   expect(await screen.findByRole('alert')).toHaveTextContent('تعذر التحميل')
+})
+
+test('rules are fetched only when the dialog opens, once', async () => {
+  mockFetch({
+    'GET /api/v1/sites': list(sites),
+    'GET /api/v1/sites/s1': () => json(200, { data: { ...sites[0], allowance_rules: [] } }),
+  })
+  render(<MemoryRouter><SitesPage /></MemoryRouter>)
+  const user = userEvent.setup()
+  const btns = await screen.findAllByRole('button', { name: 'بدلات' })
+  const detail = () => calls('GET').filter(([u]) => /\/sites\/s\d/.test(String(u)))
+  expect(detail()).toHaveLength(0)
+  await user.click(btns[0])
+  await screen.findByLabelText('ساري من')
+  expect(detail()).toHaveLength(1)
+})
+
+test('dialog form and errors are reset on reopen', async () => {
+  let n = 0
+  mockFetch({
+    'GET /api/v1/sites': list([]),
+    'POST /api/v1/sites': () => (n++ === 0 ? json(500, { error: { code: 'server_error', message: 'تعذر الحفظ' } }) : json(201, { data: {} })),
+  })
+  render(<MemoryRouter><SitesPage /></MemoryRouter>)
+  const user = userEvent.setup()
+  const open = async () => user.click(await screen.findByRole('button', { name: 'إضافة موقع' }))
+  await open()
+  await user.type(screen.getByLabelText('الاسم بالعربية'), 'قديم')
+  await user.click(screen.getByRole('button', { name: 'حفظ' }))
+  await screen.findByRole('alert')
+  await user.keyboard('{Escape}')
+  await open()
+  expect(screen.queryByRole('alert')).toBeNull()
+  expect(screen.getByLabelText('الاسم بالعربية')).toHaveValue('')
+  await user.type(screen.getByLabelText('الاسم بالعربية'), 'جديد')
+  await user.click(screen.getByRole('button', { name: 'حفظ' }))
+  await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull())
+  await open()
+  expect(screen.getByLabelText('الاسم بالعربية')).toHaveValue('')
+})
+
+test('a double click on Save submits once', async () => {
+  mockFetch({
+    'GET /api/v1/sites': list([]),
+    'POST /api/v1/sites': () => json(201, { data: {} }),
+  })
+  render(<MemoryRouter><SitesPage /></MemoryRouter>)
+  const user = userEvent.setup()
+  await user.click(await screen.findByRole('button', { name: 'إضافة موقع' }))
+  await user.type(screen.getByLabelText('الاسم بالعربية'), 'س')
+  await user.dblClick(screen.getByRole('button', { name: 'حفظ' }))
+  await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull())
+  expect(calls('POST')).toHaveLength(1)
 })

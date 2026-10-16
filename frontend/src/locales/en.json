@@ -4,7 +4,8 @@
     "save": "Save",
     "prev": "Previous",
     "next": "Next",
-    "pageOf": "Page {{page}} of {{total}}"
+    "pageOf": "Page {{page}} of {{total}}",
+    "tooMany": "More than 100 rows; showing the first 100."
   },
   "app": {
     "name": "Smart Technology HRMS"
