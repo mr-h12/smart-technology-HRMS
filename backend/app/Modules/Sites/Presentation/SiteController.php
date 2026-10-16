@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Modules\Sites\Presentation;
 
+use App\Modules\Identity\Presentation\RequestScope;
 use App\Modules\Sites\Application\SiteService;
 use App\Modules\Sites\Domain\AllowanceMode;
 use App\Modules\Sites\Domain\LeaveCode;
@@ -26,7 +27,7 @@ final class SiteController
             'active' => ['sometimes', 'in:true,false,1,0'],
             'per_page' => ['sometimes', 'integer', 'min:1'],
         ]);
-        $r = $this->sites->list($f);
+        $r = $this->sites->list($f, RequestScope::ownerId($request));
 
         return ApiEnvelope::collection($request, $r['data'], $r['pagination']);
     }
@@ -38,7 +39,7 @@ final class SiteController
 
     public function show(Request $request, string $site): JsonResponse
     {
-        return ApiEnvelope::single($request, $this->sites->show($site));
+        return ApiEnvelope::single($request, $this->sites->show($site, RequestScope::ownerId($request)));
     }
 
     public function update(Request $request, string $site): JsonResponse
@@ -62,6 +63,16 @@ final class SiteController
         ]);
 
         return ApiEnvelope::single($request, $this->sites->addRule($site, $data), 201);
+    }
+
+    public function managers(Request $request, string $site): JsonResponse
+    {
+        $data = $request->validate([
+            'manager_ids' => ['present', 'array'],
+            'manager_ids.*' => ['uuid', Rule::exists('users', 'id')->where('is_active', true)->whereNull('deleted_at')],
+        ]);
+
+        return ApiEnvelope::single($request, $this->sites->setManagers($site, $data['manager_ids']));
     }
 
     /** @return array<string, mixed> */

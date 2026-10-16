@@ -10,6 +10,7 @@ use App\Modules\Employees\Domain\EmployeeType;
 use App\Modules\Employees\Domain\PayMethod;
 use App\Modules\Employees\Infrastructure\Eloquent\Employee;
 use App\Modules\Employees\Infrastructure\Eloquent\EmployeeDocument;
+use App\Modules\Employees\Infrastructure\Eloquent\EmployeeManagerAssignment;
 use App\Modules\Employees\Infrastructure\Eloquent\EmployeePayChange;
 use App\Modules\Employees\Infrastructure\Eloquent\EmployeeTypeChange;
 use Illuminate\Database\Eloquent\Builder;
@@ -22,19 +23,26 @@ final class EmployeeService
 {
     private const HIDDEN = ['created_by', 'updated_by', 'deleted_at'];
 
+    private const CURRENT_TYPE = '(select t.type from employee_type_changes t where t.employee_id = employees.id and t.deleted_at is null and t.effective_from <= ? order by t.effective_from desc limit 1)';
+
+    private const CURRENT_MANAGER = '(select m.manager_id from employee_manager_assignments m where m.employee_id = employees.id and m.deleted_at is null and m.effective_from <= ? order by m.effective_from desc limit 1)';
+
     private const PAY_FIELDS = ['effective_from', 'salary', 'raise', 'insured_basic', 'daily_wage', 'shift_start', 'shift_end'];
 
     /**
      * @param  array{type?: string, search?: string, per_page?: int}  $filters
      * @return array{data: list<array<string, mixed>>, pagination: array{page: int, per_page: int, total: int, total_pages: int, has_next_page: bool, has_previous_page: bool}}
      */
-    public function list(array $filters): array
+    public function list(array $filters, ?string $ownerId = null): array
     {
-        $current = '(select t.type from employee_type_changes t where t.employee_id = employees.id and t.deleted_at is null and t.effective_from <= ? order by t.effective_from desc limit 1)';
-        $query = Employee::query()->select('employees.*')->selectRaw("$current as current_type", [self::today()])->orderBy('code');
+        $query = Employee::query()->select('employees.*')->selectRaw(self::CURRENT_TYPE.' as current_type', [self::today()])->orderBy('code');
 
         if (isset($filters['type'])) {
-            $query->whereRaw("$current = ?", [self::today(), $filters['type']]);
+            $query->whereRaw(self::CURRENT_TYPE.' = ?', [self::today(), $filters['type']]);
+        }
+
+        if ($ownerId !== null) {
+            $query->whereRaw(self::CURRENT_MANAGER.' = ?', [self::today(), $ownerId]);
         }
 
         if (isset($filters['search']) && $filters['search'] !== '') {
@@ -90,10 +98,17 @@ final class EmployeeService
     /** @return array<string, mixed> */
     public function show(string $id): array
     {
-        $e = Employee::with(['typeChanges', 'payChanges', 'documents'])->findOrFail($id);
+        $e = Employee::with(['typeChanges', 'payChanges', 'documents', 'managerAssignments.manager'])->findOrFail($id);
         $types = $e->typeChanges->sortBy('effective_from')->values()->map(fn ($t) => $this->row($t))->all();
         $pays = $e->payChanges->sortBy('effective_from')->values()->map(fn ($p) => $this->row($p))->all();
+        $managers = $e->managerAssignments->sortBy('effective_from')->values()->map(fn (EmployeeManagerAssignment $m) => [
+            'id' => $m->id,
+            'manager_id' => $m->manager_id,
+            'manager_name' => $m->manager?->name,
+            'effective_from' => $m->effective_from,
+        ])->all();
         $today = self::today();
+        $manager = EffectiveDated::at($managers, $today);
 
         return [
             ...$this->summary($e),
@@ -101,6 +116,8 @@ final class EmployeeService
             'current_pay' => EffectiveDated::at($pays, $today),
             'type_changes' => $types,
             'pay_changes' => $pays,
+            'current_manager' => $manager === null ? null : ['id' => $manager['manager_id'], 'name' => $manager['manager_name']],
+            'manager_assignments' => $managers,
             'documents' => $e->documents->sortBy('kind')->values()->map(fn ($d) => $this->row($d))->all(),
         ];
     }
@@ -155,6 +172,24 @@ final class EmployeeService
         $this->assertPay(EmployeeType::from($type['type']), $pay);
 
         $employee->payChanges()->create($pay);
+
+        return $this->show($id);
+    }
+
+    public function isManagedBy(string $employeeId, string $userId): bool
+    {
+        return Employee::query()->whereKey($employeeId)->whereRaw(self::CURRENT_MANAGER.' = ?', [self::today(), $userId])->exists();
+    }
+
+    /**
+     * @param  array{manager_id: string, effective_from: string}  $data
+     * @return array<string, mixed>
+     */
+    public function assignManager(string $id, array $data): array
+    {
+        $employee = Employee::findOrFail($id);
+        $this->assertFreeDate($employee->managerAssignments(), $data['effective_from']);
+        $employee->managerAssignments()->create($data);
 
         return $this->show($id);
     }
@@ -217,7 +252,7 @@ final class EmployeeService
     /** @return array<string, mixed> */
     private function summary(Employee $e): array
     {
-        return Arr::except($e->toArray(), [...self::HIDDEN, 'type_changes', 'pay_changes', 'documents']);
+        return Arr::except($e->toArray(), [...self::HIDDEN, 'type_changes', 'pay_changes', 'documents', 'manager_assignments']);
     }
 
     /** @return array<string, mixed> */

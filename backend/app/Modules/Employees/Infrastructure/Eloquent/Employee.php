@@ -33,4 +33,10 @@ class Employee extends Model
     {
         return $this->hasMany(EmployeeDocument::class);
     }
+
+    /** @return HasMany<EmployeeManagerAssignment, $this> */
+    public function managerAssignments(): HasMany
+    {
+        return $this->hasMany(EmployeeManagerAssignment::class);
+    }
 }

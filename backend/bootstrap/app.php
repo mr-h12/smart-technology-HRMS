@@ -2,6 +2,7 @@
 
 use App\Http\Middleware\AddRequestId;
 use App\Http\Middleware\ForgetResolvedGuards;
+use App\Modules\Employees\Presentation\EnsureEmployeeInScope;
 use App\Modules\Identity\Domain\Authentication\AuthenticationRefused;
 use App\Modules\Identity\Domain\Rbac\AuthorizationRefused;
 use App\Modules\Identity\Presentation\AuthorizePermission;
@@ -32,7 +33,7 @@ return Application::configure(basePath: dirname(__DIR__))
         $middleware->append(ForgetResolvedGuards::class);
         // No login route to redirect to: an API guest gets the 401 envelope.
         $middleware->redirectGuestsTo(fn (Request $r) => $r->is('api/*') ? null : '/');
-        $middleware->alias(['permission' => AuthorizePermission::class]);
+        $middleware->alias(['permission' => AuthorizePermission::class, 'employee.scope' => EnsureEmployeeInScope::class]);
     })
     ->withExceptions(function (Exceptions $exceptions): void {
         $exceptions->shouldRenderJsonWhen(

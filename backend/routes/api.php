@@ -28,19 +28,20 @@ Route::middleware('auth')->group(function (): void {
         Route::get('/', 'index')->middleware('permission:employee.view');
         Route::post('/', 'store')->middleware('permission:employee.create');
         Route::middleware([])->whereUuid('employee')->group(function (): void {
-            Route::get('{employee}', 'show')->middleware('permission:employee.view');
-            Route::patch('{employee}', 'update')->middleware('permission:employee.edit');
-            Route::delete('{employee}', 'destroy')->middleware('permission:employee.delete');
-            Route::post('{employee}/type-changes', 'typeChange')->middleware('permission:employee.edit');
-            Route::post('{employee}/pay-changes', 'payChange')->middleware('permission:employee.edit');
-            Route::put('{employee}/documents/{kind}', 'document')->middleware('permission:employee.edit')
+            Route::get('{employee}', 'show')->middleware(['permission:employee.view', 'employee.scope']);
+            Route::patch('{employee}', 'update')->middleware(['permission:employee.edit', 'employee.scope']);
+            Route::delete('{employee}', 'destroy')->middleware(['permission:employee.delete', 'employee.scope']);
+            Route::post('{employee}/type-changes', 'typeChange')->middleware(['permission:employee.edit', 'employee.scope']);
+            Route::post('{employee}/pay-changes', 'payChange')->middleware(['permission:employee.edit', 'employee.scope']);
+            Route::post('{employee}/manager-assignments', 'assignManager')->middleware(['permission:employee.assign_manager', 'employee.scope']);
+            Route::put('{employee}/documents/{kind}', 'document')->middleware(['permission:employee.edit', 'employee.scope'])
                 ->whereIn('kind', array_column(DocumentKind::cases(), 'value'));
         });
     });
 
     Route::prefix('employees')->whereUuid('employee')->group(function (): void {
-        Route::post('{employee}/fare-overrides', [FareController::class, 'override'])->middleware('permission:employee.edit');
-        Route::get('{employee}/fare', [FareController::class, 'show'])->middleware('permission:employee.view');
+        Route::post('{employee}/fare-overrides', [FareController::class, 'override'])->middleware(['permission:employee.edit', 'employee.scope']);
+        Route::get('{employee}/fare', [FareController::class, 'show'])->middleware(['permission:employee.view', 'employee.scope']);
     });
 
     Route::prefix('sites')->controller(SiteController::class)->group(function (): void {
@@ -51,6 +52,7 @@ Route::middleware('auth')->group(function (): void {
             Route::patch('{site}', 'update')->middleware('permission:site.manage');
             Route::delete('{site}', 'destroy')->middleware('permission:site.manage');
             Route::post('{site}/allowance-rules', 'allowanceRule')->middleware('permission:site.manage');
+            Route::put('{site}/managers', 'managers')->middleware('permission:site.assign_manager');
         });
     });
 
