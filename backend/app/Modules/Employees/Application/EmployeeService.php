@@ -34,7 +34,7 @@ final class EmployeeService
 
         if (isset($filters['type'])) {
             $query->whereRaw(
-                '(select t.type from employee_type_changes t where t.employee_id = employees.id and t.effective_from <= ? order by t.effective_from desc limit 1) = ?',
+                '(select t.type from employee_type_changes t where t.employee_id = employees.id and t.deleted_at is null and t.effective_from <= ? order by t.effective_from desc limit 1) = ?',
                 [self::today(), $filters['type']],
             );
         }
@@ -71,7 +71,7 @@ final class EmployeeService
     {
         $this->assertBank($data);
         $type = EmployeeType::from($data['type']);
-        $pay = Arr::only($data, self::PAY_FIELDS);
+        $pay = $this->payRow($data);
         $this->assertPay($type, $pay);
 
         $id = DB::transaction(function () use ($data, $type, $pay): string {
@@ -153,9 +153,10 @@ final class EmployeeService
         if ($type === null) {
             throw ValidationException::withMessages(['effective_from' => 'The employee has no type in force on this date.']);
         }
-        $this->assertPay(EmployeeType::from($type['type']), $data);
+        $pay = $this->payRow($data);
+        $this->assertPay(EmployeeType::from($type['type']), $pay);
 
-        $employee->payChanges()->create($data);
+        $employee->payChanges()->create($pay);
 
         return $this->show($id);
     }
@@ -200,6 +201,19 @@ final class EmployeeService
         if ($relation->where('effective_from', $date)->exists()) {
             throw ValidationException::withMessages(['effective_from' => 'A change already exists on this date.']);
         }
+    }
+
+    /** @return array<string, mixed> */
+    /**
+     * @param  array<string, mixed>  $data
+     * @return array<string, mixed>
+     */
+    private function payRow(array $data): array
+    {
+        $pay = Arr::only($data, self::PAY_FIELDS);
+        $pay['raise'] = blank($pay['raise'] ?? null) ? '0' : $pay['raise'];
+
+        return $pay;
     }
 
     /** @return array<string, mixed> */

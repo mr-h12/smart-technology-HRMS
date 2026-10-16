@@ -2,6 +2,8 @@
 
 namespace Tests\Feature;
 
+use App\Modules\Employees\Infrastructure\Eloquent\EmployeeTypeChange;
+use Illuminate\Foundation\Http\Middleware\TrimStrings;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Tests\TestCase;
 
@@ -113,5 +115,30 @@ class EmployeesApiTest extends TestCase
         $docs = $this->getJson("/api/v1/employees/$id")->json('data.documents');
         $this->assertCount(1, $docs);
         $this->assertSame('2026-02-02', $docs[0]['received_at']);
+    }
+
+    public function test_null_or_empty_raise_defaults_to_zero(): void
+    {
+        $id = $this->make(['raise' => null]);
+        $this->postJson("/api/v1/employees/$id/pay-changes", ['effective_from' => '2026-03-01', 'salary' => '5', 'raise' => ''])->assertCreated();
+        $this->postJson("/api/v1/employees/$id/pay-changes", ['effective_from' => '2026-04-01', 'salary' => '5', 'raise' => null])->assertCreated();
+        $this->assertSame('0.000000', $this->getJson("/api/v1/employees/$id")->json('data.pay_changes.0.raise'));
+    }
+
+    public function test_money_with_trailing_newline_is_rejected(): void
+    {
+        // TrimStrings would hide the newline before the rule sees it.
+        $this->withoutMiddleware(TrimStrings::class)
+            ->postJson('/api/v1/employees', $this->payload(['salary' => "9000\n"]))->assertStatus(422);
+    }
+
+    public function test_soft_deleted_type_change_is_ignored_by_type_filter(): void
+    {
+        $id = $this->make();
+        $this->postJson("/api/v1/employees/$id/type-changes", ['type' => 'engineer', 'effective_from' => '2026-02-01'])->assertCreated();
+        EmployeeTypeChange::where('employee_id', $id)->where('type', 'engineer')->delete();
+
+        $this->getJson('/api/v1/employees?type=engineer')->assertJsonCount(0, 'data');
+        $this->getJson('/api/v1/employees?type=office')->assertJsonCount(1, 'data');
     }
 }
