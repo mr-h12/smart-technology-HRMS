@@ -40,6 +40,7 @@ class EmployeesApiTest extends TestCase
         $this->postJson('/api/v1/employees', $this->payload(['national_id' => '123']))->assertStatus(422);
         $this->postJson('/api/v1/employees', $this->payload(['pay_method' => 'bank']))->assertStatus(422);
         $this->postJson('/api/v1/employees', $this->payload(['pay_method' => 'bank', 'bank_account' => '1234']))->assertCreated();
+        $this->postJson('/api/v1/employees', $this->payload(['salary' => '9999999999999']))->assertStatus(422);
         $this->postJson('/api/v1/employees', $this->payload(['type' => 'day_laborer', 'salary' => null]))->assertStatus(422);
         $this->postJson('/api/v1/employees', $this->payload(['salary' => null]))->assertStatus(422);
         $this->postJson('/api/v1/employees', $this->payload(['type' => 'day_laborer', 'salary' => null, 'daily_wage' => '250']))->assertCreated();

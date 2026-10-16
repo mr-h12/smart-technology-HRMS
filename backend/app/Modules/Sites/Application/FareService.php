@@ -57,7 +57,7 @@ final class FareService
     }
 
     /**
-     * @param  array{residence_id?: string, site_id?: string, per_page?: int}  $filters
+     * @param  array{residence_id?: string, site_id?: string, date?: string, per_page?: int}  $filters
      * @return array{data: list<array<string, mixed>>, pagination: array{page: int, per_page: int, total: int, total_pages: int, has_next_page: bool, has_previous_page: bool}}
      */
     public function listFares(array $filters): array
@@ -67,6 +67,13 @@ final class FareService
             if (isset($filters[$col])) {
                 $query->where($col, $filters[$col]);
             }
+        }
+
+        if (isset($filters['date'])) {
+            // only the row in force on that date per (residence, site)
+            $query->whereIn('id', fn ($q) => $q->from('fares')->selectRaw('distinct on (residence_id, site_id) id')
+                ->where('effective_from', '<=', $filters['date'])->whereNull('deleted_at')
+                ->orderBy('residence_id')->orderBy('site_id')->orderByDesc('effective_from'));
         }
 
         return $this->page($query, $filters['per_page'] ?? 20);

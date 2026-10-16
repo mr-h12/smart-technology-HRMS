@@ -102,6 +102,22 @@ class SitesApiTest extends TestCase
         $this->getJson("/api/v1/fares?site_id=$s&residence_id=$r2")->assertJsonCount(1, 'data');
     }
 
+    public function test_fares_date_filter_returns_only_the_row_in_force_per_pair(): void
+    {
+        $r1 = $this->residence();
+        $r2 = $this->residence('العامرية');
+        $s = $this->site();
+        foreach ([[$r1, '2026-01-01', '40'], [$r1, '2026-03-01', '45'], [$r1, '2999-01-01', '99'], [$r2, '2026-02-01', '60']] as [$r, $d, $a]) {
+            $this->postJson('/api/v1/fares', ['residence_id' => $r, 'site_id' => $s, 'effective_from' => $d, 'amount' => $a])->assertCreated();
+        }
+
+        $res = $this->getJson('/api/v1/fares?date=2026-06-01')->assertOk()->assertJsonCount(2, 'data')->assertJsonPath('meta.pagination.total', 2);
+        $this->assertEqualsCanonicalizing(['45.000000', '60.000000'], array_column($res->json('data'), 'amount'));
+        $this->getJson('/api/v1/fares?date=2025-01-01')->assertJsonCount(0, 'data');
+        $this->postJson('/api/v1/fares', ['residence_id' => $r1, 'site_id' => $s, 'effective_from' => '2026-04-01', 'amount' => '9999999999999'])->assertStatus(422);
+        $this->postJson("/api/v1/sites/$s/allowance-rules", ['effective_from' => '2026-01-01', 'mode' => 'fixed', 'value' => '9999999999999'])->assertStatus(422);
+    }
+
     public function test_fare_lookup_override_default_none_and_future_dated_ignored(): void
     {
         $res = $this->residence();

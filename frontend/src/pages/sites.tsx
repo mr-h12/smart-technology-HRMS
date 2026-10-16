@@ -28,6 +28,8 @@ function useList(path: string) {
   return { rows, total, err, reload }
 }
 
+const cairoToday = () => new Date().toLocaleDateString('en-CA', { timeZone: 'Africa/Cairo' })
+
 const Notice = ({ show, text }: { show: boolean; text: string }) =>
   show ? (
     <p role="status" className="rounded-md border p-3 text-sm">
@@ -163,7 +165,7 @@ function RuleHistory({ siteId }: { siteId: string }) {
             <TableRow key={r.id}>
               <TableCell>{r.effective_from}</TableCell>
               <TableCell>{t(`enum.allowance_mode.${r.mode}`)}</TableCell>
-              <TableCell>{r.mode === 'none' ? '—' : money(r.value)}</TableCell>
+              <TableCell>{r.mode === 'none' ? '—' : r.mode === 'share_of_wage' ? `×${r.value.replace(/(\.\d*?)0+$/, '$1').replace(/\.$/, '')}` : money(r.value)}</TableCell>
             </TableRow>
           ))}
         </TableBody>
@@ -329,27 +331,26 @@ function FareDialog({ residence, site, reload, children }: { residence: Row; sit
 export function FaresPage() {
   const { t } = useTranslation()
   const money = useMoney()
-  const [data, setData] = useState<{ sites: Row[]; residences: Row[]; fares: Row[]; total: number }>()
+  const [data, setData] = useState<{ sites: Row[]; residences: Row[]; fares: Row[]; over: boolean }>()
   const [err, setErr] = useState<unknown>()
   const load = useCallback(() => {
-    Promise.all([apiList<Row>(`/sites${LIST}&kind=work&active=true`), apiList<Row>(`/residences${LIST}`), apiList<Row>(`/fares${LIST}`)])
+    Promise.all([apiList<Row>(`/sites${LIST}&kind=work&active=true`), apiList<Row>(`/residences${LIST}`), apiList<Row>(`/fares${LIST}&date=${cairoToday()}`)])
       .then(([s, r, f]) => {
         setErr(undefined)
-        setData({ sites: s.data, residences: r.data, fares: f.data, total: f.meta.pagination.total })
+        setData({ sites: s.data, residences: r.data, fares: f.data, over: [s, r, f].some((x) => x.meta.pagination.total > x.data.length) })
       })
       .catch(setErr)
   }, [])
   useEffect(load, [load])
-  const today = new Date().toLocaleDateString('en-CA', { timeZone: 'Africa/Cairo' })
-  const best = inForce(data?.fares ?? [], today)
+  const best = inForce(data?.fares ?? [], cairoToday())
   return (
     <div className="flex flex-col gap-4">
       <h1 className="text-page-title">{t('page.fares')}</h1>
       <ErrorBanner err={err} shown={[]} />
       {data && (
         <>
-          {/* ponytail: one 100-row page; paginating a grid needs a server-side latest-fare endpoint */}
-          <Notice show={data.total > data.fares.length} text={t('fare.tooMany')} />
+          {/* ponytail: one 100-row page of in-force fares; paginate if a site x residence grid ever exceeds it */}
+          <Notice show={data.over} text={t('fare.tooMany')} />
           <Table>
             <TableHeader>
               <TableRow>

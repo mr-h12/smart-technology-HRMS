@@ -46,6 +46,9 @@ services:
       context: docker/php
     restart: unless-stopped
     working_dir: /var/www/html
+    command: php artisan serve --host=0.0.0.0 --port=8000
+    ports:
+      - "127.0.0.1:${APP_PORT:-8000}:8000"
     volumes:
       - ./backend:/var/www/html
     environment:

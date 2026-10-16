@@ -50,10 +50,14 @@ export function Field({ name, id = name, label, errs, children }: { name: string
   )
 }
 
+/** Arabic-Indic / Eastern Arabic digits and the Arabic decimal separator to ASCII, so typed amounts validate. */
+export const asciiDigits = (v: string) =>
+  v.replace(/[٠-٩۰-۹]/g, (c) => String(c.charCodeAt(0) - (c < '۰' ? 0x660 : 0x6f0))).replace(/٫/g, '.')
+
 export function TextField({ name, label, values, set, errs, ns = '', ...rest }: { name: string; label: string; values: Row; set: (k: string, v: string) => void; errs: Errs; ns?: string } & Omit<React.ComponentProps<'input'>, 'form'>) {
   return (
     <Field name={name} id={ns + name} label={label} errs={errs}>
-      {(p) => <Input {...p} {...rest} value={values[name] ?? ''} onChange={(e) => set(name, e.target.value)} />}
+      {(p) => <Input {...p} {...rest} value={values[name] ?? ''} onChange={(e) => set(name, rest.inputMode === 'decimal' || rest.inputMode === 'numeric' ? asciiDigits(e.target.value) : e.target.value)} />}
     </Field>
   )
 }

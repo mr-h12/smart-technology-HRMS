@@ -12,7 +12,10 @@ docker compose exec app vendor/bin/phpstan analyse     # larastan level 8
 docker compose exec app vendor/bin/deptrac analyse --config-file=deptrac.layers.yaml
 ```
 
-If the host ports 5432/6379 are taken, set `POSTGRES_PORT` / `REDIS_PORT` in the root `.env`.
+`app` serves the API with `php artisan serve` on `127.0.0.1:${APP_PORT:-8000}` (`curl http://127.0.0.1:8000/api/v1/health`).
+Full stack: `docker compose up -d`, `docker compose exec app php artisan migrate --seed`, then `npm run dev` in `frontend/`.
+
+If the host ports 5432/6379/8000 are taken, set `POSTGRES_PORT` / `REDIS_PORT` / `APP_PORT` in the root `.env`.
 The postgres init script only runs on an empty volume; after changing it, `docker compose down -v`.
 
 Layout: `app/Modules/<Module>/{Domain,Application,Infrastructure,Presentation}`; shared code in `app/Support`. Domain imports nothing from `Illuminate\*`.

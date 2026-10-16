@@ -13,7 +13,7 @@ use Illuminate\Validation\Rule;
 
 final class FareController
 {
-    private const MONEY = ['required', 'regex:/^\d+(\.\d{1,6})?$/D'];
+    private const MONEY = ['required', 'regex:/^\d{1,12}(\.\d{1,6})?$/D'];
 
     public function __construct(private readonly FareService $fares, private readonly FareLookup $lookup) {}
 
@@ -22,6 +22,7 @@ final class FareController
         $r = $this->fares->listFares($request->validate([
             'residence_id' => ['sometimes', 'uuid'],
             'site_id' => ['sometimes', 'uuid'],
+            'date' => ['sometimes', 'date_format:Y-m-d'],
             'per_page' => ['sometimes', 'integer', 'min:1'],
         ]));
 

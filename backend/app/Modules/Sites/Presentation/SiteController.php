@@ -58,7 +58,7 @@ final class SiteController
         $data = $request->validate([
             'effective_from' => ['required', 'date_format:Y-m-d'],
             'mode' => ['required', Rule::enum(AllowanceMode::class)],
-            'value' => ['nullable', 'regex:/^\d+(\.\d{1,6})?$/D'],
+            'value' => ['nullable', 'regex:/^\d{1,12}(\.\d{1,6})?$/D'],
         ]);
 
         return ApiEnvelope::single($request, $this->sites->addRule($site, $data), 201);

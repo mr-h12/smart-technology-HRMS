@@ -137,7 +137,7 @@ export function EmployeeFormPage() {
   }, [id, setForm])
   useEffect(load, [load])
   useEffect(() => {
-    apiList<Row>('/residences?per_page=100').then((r) => setResidences(r.data))
+    apiList<Row>('/residences?per_page=100').then((r) => setResidences(r.data)).catch(setErr)
   }, [])
 
   async function save(ev: React.FormEvent) {
@@ -218,7 +218,7 @@ function History({ emp, reload }: { emp: Row; reload: () => void }) {
       <section className="flex flex-col gap-2">
         <div className="flex items-center justify-between">
           <h2 className="font-semibold">{t('history.types')}</h2>
-          <ChangeDialog kind="type" empId={emp.id} current={emp.current_type} reload={reload} />
+          <ChangeDialog kind="type" emp={emp} reload={reload} />
         </div>
         <Table>
           <TableHeader>
@@ -240,7 +240,7 @@ function History({ emp, reload }: { emp: Row; reload: () => void }) {
       <section className="flex flex-col gap-2">
         <div className="flex items-center justify-between">
           <h2 className="font-semibold">{t('history.pay')}</h2>
-          <ChangeDialog kind="pay" empId={emp.id} current={emp.current_type} reload={reload} />
+          <ChangeDialog kind="pay" emp={emp} reload={reload} />
         </div>
         <Table>
           <TableHeader>
@@ -274,22 +274,31 @@ function History({ emp, reload }: { emp: Row; reload: () => void }) {
   )
 }
 
-/** "Add change" dialog: a type change, or a pay change shaped by the current type. */
-function ChangeDialog({ kind, empId, current, reload }: { kind: 'type' | 'pay'; empId: string; current: string | null; reload: () => void }) {
+/** Type in force on a date: greatest effective_from <= date, else the first change, else the current type. */
+const typeOn = (emp: Row, date: string): string => {
+  const cs: Row[] = [...(emp.type_changes ?? [])].sort((x, y) => x.effective_from.localeCompare(y.effective_from))
+  return (date && cs.filter((c) => c.effective_from <= date).at(-1)?.type) || cs[0]?.type || emp.current_type || ''
+}
+
+/** "Add change" dialog: a type change, or a pay change shaped by the type in force on the chosen date. */
+function ChangeDialog({ kind, emp, reload }: { kind: 'type' | 'pay'; emp: Row; reload: () => void }) {
   const { t } = useTranslation()
   const [open, setOpen] = useState(false)
-  const { form, set, setForm } = useForm({ type: current ?? 'office' })
+  const { form, set, setForm } = useForm({})
   const [err, setErr] = useState<unknown>()
-  const errs = toErrs(err)
-  const f = { values: form, set, errs }
-  const shown = ['effective_from', ...(kind === 'type' ? ['type'] : payFields(current ?? ''))]
+  const [sameType, setSameType] = useState(false)
+  const errs = { ...toErrs(err), ...(sameType ? { type: t('change.sameType') } : {}) }
+  const f = { values: form, set: (k: string, v: string) => { setSameType(false); set(k, v) }, errs }
+  const inForce = typeOn(emp, form.effective_from ?? '')
+  const shown = ['effective_from', ...(kind === 'type' ? ['type'] : payFields(inForce))]
 
   async function submit() {
     setErr(undefined)
+    if (kind === 'type' && form.type === inForce) return setSameType(true)
     try {
-      await api(`/employees/${empId}/${kind}-changes`, { method: 'POST', body: clean(form, shown) })
+      await api(`/employees/${emp.id}/${kind}-changes`, { method: 'POST', body: clean(form, shown) })
       setOpen(false)
-      setForm({ type: current ?? 'office' })
+      setForm({})
       reload()
     } catch (e) {
       setErr(e)
@@ -309,9 +318,9 @@ function ChangeDialog({ kind, empId, current, reload }: { kind: 'type' | 'pay'; 
           <ErrorBanner err={err} shown={shown} />
           <TextField name="effective_from" label={t('change.effective_from')} type="date" {...f} />
           {kind === 'type' ? (
-            <SelectField name="type" label={t('employee.type')} options={TYPES.map((v) => [v, t(`enum.type.${v}`)])} {...f} />
+            <SelectField name="type" label={t('employee.type')} blank options={TYPES.map((v) => [v, t(`enum.type.${v}`)])} {...f} />
           ) : (
-            <PayFields type={current ?? ''} {...f} />
+            <PayFields type={inForce} {...f} />
           )}
         </DialogBody>
         <DialogFooter>

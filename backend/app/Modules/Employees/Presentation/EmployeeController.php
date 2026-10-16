@@ -17,7 +17,7 @@ use Illuminate\Validation\Rule;
 
 final class EmployeeController
 {
-    private const MONEY = ['nullable', 'regex:/^\d+(\.\d{1,6})?$/D'];
+    private const MONEY = ['nullable', 'regex:/^\d{1,12}(\.\d{1,6})?$/D'];
 
     public function __construct(private readonly EmployeeService $employees) {}
 

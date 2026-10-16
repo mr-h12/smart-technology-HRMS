@@ -194,3 +194,28 @@ test('a double click on Save submits once', async () => {
   await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull())
   expect(calls('POST')).toHaveLength(1)
 })
+
+test('fares grid asks the server for the fares in force today', async () => {
+  mockFetch({ 'GET /api/v1/sites': list(sites), 'GET /api/v1/residences': list(residences), 'GET /api/v1/fares': list([]) })
+  render(<MemoryRouter><FaresPage /></MemoryRouter>)
+  await screen.findByRole('row', { name: /العجمي/ })
+  const url = vi.mocked(fetch).mock.calls.map(([u]) => String(u)).find((u) => u.includes('/fares'))!
+  expect(url).toMatch(/date=\d{4}-\d{2}-\d{2}/)
+  expect(url).toContain('per_page=100')
+})
+
+test('fares grid warns when sites or residences overflow the page', async () => {
+  mockFetch({ 'GET /api/v1/sites': list(sites, 150), 'GET /api/v1/residences': list(residences), 'GET /api/v1/fares': list([]) })
+  render(<MemoryRouter><FaresPage /></MemoryRouter>)
+  expect(await screen.findByRole('status')).toBeInTheDocument()
+})
+
+test('share-of-wage rule shows the exact multiplier, not money', async () => {
+  mockFetch({
+    'GET /api/v1/sites': list([sites[0]]),
+    'GET /api/v1/sites/s1': () => json(200, { data: { ...sites[0], allowance_rules: [{ id: 'a1', effective_from: '2020-01-01', mode: 'share_of_wage', value: '0.125000' }] } }),
+  })
+  render(<MemoryRouter><SitesPage /></MemoryRouter>)
+  await userEvent.click(await screen.findByRole('button', { name: 'بدلات' }))
+  expect(await screen.findByText('×0.125')).toBeInTheDocument()
+})

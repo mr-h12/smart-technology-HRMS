@@ -72,7 +72,8 @@
   },
   "change": {
     "add": "Add change",
-    "effective_from": "Effective from"
+    "effective_from": "Effective from",
+    "sameType": "Choose a type different from the one in force on that date."
   },
   "history": {
     "types": "Type history",
