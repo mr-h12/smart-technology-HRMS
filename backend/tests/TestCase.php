@@ -35,4 +35,13 @@ abstract class TestCase extends BaseTestCase
             ...$attributes,
         ]);
     }
+
+    /** makeUser() signed in on the api guard. */
+    protected function signIn(string $roleSlug = 'developer', array $attributes = []): User
+    {
+        $user = $this->makeUser($roleSlug, $attributes);
+        $this->actingAs($user, 'api');
+
+        return $user;
+    }
 }

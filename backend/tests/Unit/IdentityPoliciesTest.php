@@ -5,6 +5,8 @@ namespace Tests\Unit;
 use App\Modules\Identity\Domain\Authentication\IdleTimeout;
 use App\Modules\Identity\Domain\Authentication\LockoutPolicy;
 use App\Modules\Identity\Domain\Authentication\SessionToken;
+use App\Modules\Identity\Domain\Rbac\PermissionDecision;
+use App\Modules\Identity\Domain\Rbac\Scope;
 use DateTimeImmutable;
 use InvalidArgumentException;
 use PHPUnit\Framework\TestCase;
@@ -29,5 +31,14 @@ class IdentityPoliciesTest extends TestCase
         $this->assertFalse(LockoutPolicy::isLocked($now, $now)); // a lock ending now is over
         $this->assertFalse(IdleTimeout::hasExpired($now->modify('-8 hours'), $now));
         $this->assertTrue(IdleTimeout::hasExpired($now->modify('-8 hours -1 second'), $now));
+    }
+
+    public function test_scope_and_decision(): void
+    {
+        $this->assertTrue(Scope::All->includes(Scope::Own));
+        $this->assertFalse(Scope::Own->includes(Scope::All));
+        $this->assertFalse((new PermissionDecision([]))->granted());
+        $this->assertTrue((new PermissionDecision([Scope::Own]))->allows(Scope::Own));
+        $this->assertFalse((new PermissionDecision([Scope::Own]))->allows(Scope::All));
     }
 }

@@ -11,6 +11,12 @@ class SitesApiTest extends TestCase
 {
     use RefreshDatabase;
 
+    protected function setUp(): void
+    {
+        parent::setUp();
+        $this->signIn('hr');
+    }
+
     private function site(array $over = []): string
     {
         return $this->postJson('/api/v1/sites', ['name_ar' => 'سموحة الدولي', 'kind' => 'work', ...$over])->assertCreated()->json('data.id');

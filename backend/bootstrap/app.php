@@ -3,6 +3,8 @@
 use App\Http\Middleware\AddRequestId;
 use App\Http\Middleware\ForgetResolvedGuards;
 use App\Modules\Identity\Domain\Authentication\AuthenticationRefused;
+use App\Modules\Identity\Domain\Rbac\AuthorizationRefused;
+use App\Modules\Identity\Presentation\AuthorizePermission;
 use App\Support\Http\ApiEnvelope;
 use Illuminate\Auth\AuthenticationException;
 use Illuminate\Database\Eloquent\ModelNotFoundException;
@@ -28,6 +30,7 @@ return Application::configure(basePath: dirname(__DIR__))
         $middleware->append(ForgetResolvedGuards::class);
         // No login route to redirect to: an API guest gets the 401 envelope.
         $middleware->redirectGuestsTo(fn (Request $r) => $r->is('api/*') ? null : '/');
+        $middleware->alias(['permission' => AuthorizePermission::class]);
     })
     ->withExceptions(function (Exceptions $exceptions): void {
         $exceptions->shouldRenderJsonWhen(
@@ -55,6 +58,13 @@ return Application::configure(basePath: dirname(__DIR__))
 
         $exceptions->render(fn (AuthenticationRefused $e, Request $request) => ApiEnvelope::error(
             $request, $e->reason->status(), $e->reason->value, __('identity.refusal.'.$e->reason->value),
+        ));
+
+        // Same reasoning: a 403 is an answer, not a fault.
+        $exceptions->dontReport(AuthorizationRefused::class);
+
+        $exceptions->render(fn (AuthorizationRefused $e, Request $request) => ApiEnvelope::error(
+            $request, 403, 'permission_denied', __('identity.refusal.permission_denied'),
         ));
 
         $exceptions->render(fn (ThrottleRequestsException $e, Request $request) => ApiEnvelope::error(
