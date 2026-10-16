@@ -2,6 +2,7 @@
 
 use App\Modules\Employees\Domain\DocumentKind;
 use App\Modules\Employees\Presentation\EmployeeController;
+use App\Modules\Identity\Presentation\AuthController;
 use App\Modules\Sites\Presentation\FareController;
 use App\Modules\Sites\Presentation\ResidenceController;
 use App\Modules\Sites\Presentation\SiteController;
@@ -10,6 +11,14 @@ use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Route;
 
 Route::get('/health', fn (Request $request) => ApiEnvelope::single($request, ['status' => 'ok']));
+
+Route::prefix('auth')->controller(AuthController::class)->group(function (): void {
+    Route::post('login', 'login')->middleware('throttle:login');
+    Route::middleware('auth')->group(function (): void {
+        Route::post('logout', 'logout');
+        Route::get('me', 'me');
+    });
+});
 
 Route::prefix('employees')->controller(EmployeeController::class)->group(function (): void {
     Route::get('/', 'index');
