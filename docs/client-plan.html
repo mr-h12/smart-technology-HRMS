@@ -1,0 +1,196 @@
+<title>خطة نظام الموارد البشرية</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Readex+Pro:wght@500;600;700&family=IBM+Plex+Sans+Arabic:wght@400;500;600&display=swap">
+<style>
+/* Layout: one reading column, a 4-month track at top, each release as a dated section; "مطلوب منكم" set apart as the only tinted block. */
+:root {
+  --bg: #f6f8f9;
+  --surface: #ffffff;
+  --fg: #16232b;
+  --muted: #5b6b74;
+  --line: #d8e0e4;
+  --accent: #1d6a86;
+  --accent-soft: #e2eff4;
+  --ask: #a8641a;
+  --ask-soft: #fbf1e4;
+  --font-display: "Readex Pro", "Segoe UI", Tahoma, sans-serif;
+  --font-body: "IBM Plex Sans Arabic", "Segoe UI", Tahoma, sans-serif;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #0f171c; --surface: #16222a; --fg: #e3ebef; --muted: #93a5ae; --line: #26363f;
+    --accent: #5cb4d4; --accent-soft: #17313d; --ask: #e2a25a; --ask-soft: #2c2216; color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #0f171c; --surface: #16222a; --fg: #e3ebef; --muted: #93a5ae; --line: #26363f;
+  --accent: #5cb4d4; --accent-soft: #17313d; --ask: #e2a25a; --ask-soft: #2c2216; color-scheme: dark;
+}
+* { box-sizing: border-box; }
+body {
+  background: var(--bg); color: var(--fg);
+  font-family: var(--font-body); font-size: 1rem; line-height: 1.8;
+  padding-inline: 16px; padding-block: 2.5rem 4rem;
+}
+main { max-width: 52rem; margin-inline: auto; display: grid; gap: 3rem; }
+h1, h2, h3 { font-family: var(--font-display); text-wrap: balance; line-height: 1.35; margin: 0; }
+h1 { font-size: clamp(1.7rem, 4vw, 2.3rem); font-weight: 700; }
+h2 { font-size: 1.35rem; font-weight: 600; }
+h3 { font-size: 1.05rem; font-weight: 600; }
+p { margin: 0; }
+.eyebrow { font-family: var(--font-display); font-size: .82rem; color: var(--accent); font-weight: 600; letter-spacing: .02em; }
+.lead { color: var(--muted); max-width: 40rem; }
+header { display: grid; gap: .75rem; }
+
+/* 4-month track */
+.track { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: .5rem; }
+.track a { text-decoration: none; color: inherit; display: grid; gap: .2rem; padding-block: .75rem; border-top: 3px solid var(--accent); }
+.track a:focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; }
+.track b { font-family: var(--font-display); font-weight: 600; }
+.track span { color: var(--muted); font-size: .88rem; line-height: 1.5; }
+@media (max-width: 640px) { .track { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+
+/* Releases */
+.release { display: grid; gap: 1rem; padding-top: 1.5rem; border-top: 1px solid var(--line); }
+.release-head { display: flex; flex-wrap: wrap; align-items: baseline; gap: .5rem 1rem; }
+.when { font-family: var(--font-display); font-size: .85rem; color: var(--accent); background: var(--accent-soft); padding: .15rem .7rem; border-radius: 999px; }
+.modules { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 1rem 2rem; }
+@media (max-width: 640px) { .modules { grid-template-columns: 1fr; } }
+.module { display: grid; gap: .25rem; min-width: 0; }
+.module p { color: var(--muted); font-size: .95rem; }
+.result { font-size: .95rem; padding: .75rem 1rem; background: var(--surface); border: 1px solid var(--line); border-radius: 8px; }
+.result strong { font-family: var(--font-display); font-weight: 600; }
+
+/* Roles table */
+.table-wrap { overflow-x: auto; }
+table { width: 100%; border-collapse: collapse; font-size: .95rem; }
+th, td { text-align: start; padding: .6rem .75rem; border-bottom: 1px solid var(--line); vertical-align: top; }
+th { font-family: var(--font-display); font-weight: 600; color: var(--muted); font-size: .85rem; }
+td:first-child { font-weight: 600; white-space: nowrap; }
+.num { font-variant-numeric: tabular-nums; }
+
+/* Ask block */
+.ask { background: var(--ask-soft); border-radius: 10px; padding: 1.5rem; display: grid; gap: 1rem; }
+.ask h2 { color: var(--ask); }
+.ask ol { margin: 0; padding-inline-start: 1.25rem; display: grid; gap: .6rem; }
+.ask li::marker { color: var(--ask); font-family: var(--font-display); }
+.ask .by { color: var(--muted); font-size: .88rem; }
+
+ul.plain { margin: 0; padding-inline-start: 1.25rem; display: grid; gap: .4rem; }
+section { display: grid; gap: 1rem; }
+footer { color: var(--muted); font-size: .88rem; border-top: 1px solid var(--line); padding-top: 1rem; }
+</style>
+
+<main dir="rtl" lang="ar">
+  <header>
+    <p class="eyebrow">سمارت تكنولوجي للأنظمة المتكاملة</p>
+    <h1>خطة تنفيذ نظام الموارد البشرية والمرتبات</h1>
+    <p class="lead">النظام هيتسلم على ٤ مراحل، كل مرحلة في آخر شهر من بداية التنفيذ، وكل مرحلة بتشتغل على السيرفر الفعلي عندكم من يوم تسليمها. النظام هيشتغل منفصل دلوقتي، وجاهز للربط مع نظام الـ CRM بعد كده.</p>
+  </header>
+
+  <nav class="track" aria-label="مراحل التسليم">
+    <a href="#r1"><b>الشهر الأول</b><span>الأساس والحضور اليومي</span></a>
+    <a href="#r2"><b>الشهر الثاني</b><span>المرتبات</span></a>
+    <a href="#r3"><b>الشهر الثالث</b><span>الطلبات والنماذج والتواصل</span></a>
+    <a href="#r4"><b>الشهر الرابع</b><span>التوظيف والتقارير والتسليم</span></a>
+  </nav>
+
+  <section class="release" id="r1">
+    <div class="release-head">
+      <h2>المرحلة الأولى: الأساس والحضور اليومي</h2>
+      <span class="when">تسليم نهاية الشهر الأول</span>
+    </div>
+    <div class="modules">
+      <div class="module"><h3>الدخول والصلاحيات</h3><p>دخول بالإيميل وكلمة السر لكل مستخدم، وتغيير كلمة السر بيتم عن طريق فريق التطوير فقط. كل دور يشوف ويعمل اللي مسموح له بس. نقدر نضيف أدوار جديدة ونعدّل صلاحيات الأدوار الموجودة.</p></div>
+      <div class="module"><h3>سجل النشاط</h3><p>لوحة بتبيّن مين عمل إيه وإمتى على كل حاجة في النظام، قبل التعديل وبعده، وشاشة للأخطاء.</p></div>
+      <div class="module"><h3>ملفات الموظفين</h3><p>بيانات كل موظف: النوع (مكتب، مهندس، عامل مثبت، عامل يومية)، الرقم القومي، الرقم التأميني، الحساب البنكي، المدير المسؤول، تواريخ العقد والمستندات، وملاحظات HR.</p></div>
+      <div class="module"><h3>المواقع والأسعار</h3><p>المواقع، وفئات الأجر، وسعر كل فئة في كل موقع، وتكلفة المواصلات من السكن للموقع، والمواقع اللي ماسكها كل مدير.</p></div>
+      <div class="module"><h3>الحضور عن طريق المدير</h3><p>المدير يسجل لكل موظف تحته يومياً: الموقع، الحضور والانصراف، التأخير، الإضافي، الغياب، والسلفة. الشاشة بتشتغل من الموبايل.</p></div>
+      <div class="module"><h3>الإجازات</h3><p>رصيد ١٠ أيام للمعيّن الجديد و٢١ يوم لمن أتم سنة، منهم ٦ أيام عارضة. المدير يسجل الإجازة و HR يعتمدها.</p></div>
+    </div>
+    <p class="result"><strong>بعد التسليم:</strong> المديرين بيسجلوا الحضور من النظام بدل الإكسيل، و HR بيتابع كل حاجة لحظة بلحظة. بيانات الموظفين والمواقع وأرصدة الإجازات والسلف الحالية هتكون اتنقلت من ملفات الإكسيل.</p>
+  </section>
+
+  <section class="release" id="r2">
+    <div class="release-head">
+      <h2>المرحلة الثانية: المرتبات</h2>
+      <span class="when">تسليم نهاية الشهر الثاني</span>
+    </div>
+    <div class="modules">
+      <div class="module"><h3>البصمة</h3><p>HR يرفع ملف جهاز البصمة لموظفين المكتب، والنظام يحسب التأخير تلقائياً مع ١٥ دقيقة سماح.</p></div>
+      <div class="module"><h3>حساب المرتبات</h3><p>تلات أنواع: موظفين المكتب (شهري)، المهندسين والعمال المثبتين (من ٢٦ لـ ٢٥)، وعمال اليومية (نص شهري). بنفس طريقة الحساب المستخدمة عندكم حالياً.</p></div>
+      <div class="module"><h3>السلف</h3><p>سجل لكل سلفة: المبلغ، الأقساط، اللي اتسدد، والباقي.</p></div>
+      <div class="module"><h3>التأمينات والضرائب</h3><p>التأمينات للموظفين المثبتين فقط: ١١٪ على الموظف و١٨.٧٥٪ على الشركة من الأجر التأميني.</p></div>
+      <div class="module"><h3>اعتماد وصرف المرتب</h3><p>HR يقفل الشهر، والمدير العام يعتمده، وبعدها مفيش تعديل غير بفتح الشهر بسبب مكتوب. لكل موظف علامة "تم الصرف" مع طريقة الاستلام.</p></div>
+      <div class="module"><h3>مفردات المرتب والأرشيف</h3><p>مفردات مرتب PDF لكل موظف. ونقل المرتبات القديمة من الإكسيل للعرض فقط، مع تنبيه جنب أي رقم فيه خطأ في الملف الأصلي.</p></div>
+    </div>
+    <p class="result"><strong>بعد التسليم:</strong> المرتبات بتتحسب من النظام. من الشهر ده لحد آخر المشروع هنشغّل النظام والإكسيل جنب بعض ونقارن النتايج كل شهر قبل ما نعتمد على النظام لوحده.</p>
+  </section>
+
+  <section class="release" id="r3">
+    <div class="release-head">
+      <h2>المرحلة الثالثة: الطلبات والنماذج والتواصل</h2>
+      <span class="when">تسليم نهاية الشهر الثالث</span>
+    </div>
+    <div class="modules">
+      <div class="module"><h3>الطلبات والموافقات</h3><p>المدير يقدم الطلب عن الموظف (إجازة، إذن تأخير، انصراف باكراً، سلفة، استقالة)، و HR يعتمده أو يحوّله للمدير العام. بعد الاعتماد بيتطبق تلقائياً على الحضور والرصيد والمرتب.</p></div>
+      <div class="module"><h3>النماذج الرسمية</h3><p>١١ نموذج بنفس شكلكم: خطاب قبول التوظيف، إذن تأخير، طلب انصراف باكراً، طلب إجازة، استقالة، إنذار، استلام خط موبايل، إخلاء طرف، شهادة خبرة، مكافأة نهاية الخدمة، ومفردات المرتب. بيانات الموظف بتتملي تلقائياً، وتوقيع HR والمدير العام بيتطبع عند الاعتماد.</p></div>
+      <div class="module"><h3>التواصل مع الموظفين</h3><p>HR يبعت تهنئة أو تعزية أو تنبيه أو إنذار أو ملف PDF، ويختار يوصل للمدير أو للموظف بالإيميل أو الواتساب. كل رسالة بتتسجل في ملف الموظف. وللرسايل الجماعية: HR يختار مجموعة موظفين (حسب الموقع أو المدير)، والنظام يجهّز أرقامهم ونص الرسالة للإرسال من قائمة بث على الواتساب.</p></div>
+      <div class="module"><h3>تنبيهات المواعيد</h3><p>تنبيه لـ HR قبل انتهاء العقود، وفترة التجربة، والبطاقات والتصاريح، ومواعيد تسليم المسوغات، وأي تذكير يكتبه في ملاحظات الموظف. المدة قبل كل تنبيه بتتعدل من الإعدادات.</p></div>
+      <div class="module"><h3>العهد</h3><p>سجل بالعهد اللي مع كل موظف (خط موبايل، أجهزة...). إخلاء الطرف ما يتعملش غير بعد ما كل العهد ترجع.</p></div>
+      <div class="module"><h3>التعيين وإنهاء الخدمة</h3><p>من خطاب القبول للمسوغات لتقييم فترة التجربة، ومن الاستقالة لإخلاء الطرف والتسوية النهائية وشهادة الخبرة.</p></div>
+    </div>
+    <p class="result"><strong>بعد التسليم:</strong> كل الأوراق الرسمية بتطلع من النظام، والموقّعة منها بتتسجل في ملف الموظف إلكترونياً أو كنسخة ورقية متصورة.</p>
+  </section>
+
+  <section class="release" id="r4">
+    <div class="release-head">
+      <h2>المرحلة الرابعة: التوظيف والأداء والتقارير والتسليم النهائي</h2>
+      <span class="when">تسليم نهاية الشهر الرابع</span>
+    </div>
+    <div class="modules">
+      <div class="module"><h3>التوظيف</h3><p>الوظائف المطلوبة ومتابعة المتقدمين من التقديم للتعيين، والمقابلات.</p></div>
+      <div class="module"><h3>الأداء</h3><p>المدير يقيّم موظفينه في كل دورة تقييم.</p></div>
+      <div class="module"><h3>التدريب</h3><p>الدورات، ومين اشترك فيها، ومين خلّصها.</p></div>
+      <div class="module"><h3>الأصول</h3><p>الأجهزة والمعدات بتصنيفاتها وحالتها، ومربوطة بسجل العهد.</p></div>
+      <div class="module"><h3>التقارير ولوحة المدير العام</h3><p>تقارير الموظفين والحضور والإجازات والمرتبات ودوران العمالة، وتقرير <strong>تكلفة العمالة لكل موقع</strong>، مع تصدير Excel و PDF.</p></div>
+      <div class="module"><h3>الاختبار والتسليم</h3><p>آخر أسبوعين: اختبار شامل مع فريقكم، ومقارنة نهائية للمرتبات مع الإكسيل، وتسليم النظام وشرحه.</p></div>
+    </div>
+  </section>
+
+  <section>
+    <h2>المستخدمين</h2>
+    <div class="table-wrap">
+      <table>
+        <thead><tr><th>الدور</th><th class="num">العدد</th><th>بيعمل إيه</th></tr></thead>
+        <tbody>
+          <tr><td>المدير العام</td><td class="num">١</td><td>يعتمد المرتبات والطلبات اللي HR يحوّلها له، ويشوف كل التقارير.</td></tr>
+          <tr><td>الموارد البشرية</td><td class="num">١</td><td>صلاحيات كاملة على الموظفين والحضور والمرتبات والنماذج، ويتبلغ بكل حاجة يسجلها المديرين.</td></tr>
+          <tr><td>المديرين</td><td class="num">٥</td><td>كل مدير يسجل حضور وإجازات وطلبات الموظفين اللي تحته في مواقعه.</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <p class="lead">الموظفين والعمال مش هيكون ليهم حسابات. نقدر نضيف حسابات جديدة في أي وقت.</p>
+  </section>
+
+  <section class="ask">
+    <h2>مطلوب منكم</h2>
+    <ol>
+      <li>حساب إيميل على دومين الشركة يبعت منه النظام التنبيهات والرسايل. <span class="by">قبل نهاية الشهر الأول</span></li>
+      <li>مراجعة بيانات الموظفين والمواقع والأسعار بعد نقلها من الإكسيل، وتأكيد هل سعر الساعة بيختلف من موقع لموقع ولا ثابت. <span class="by">خلال الشهر الأول</span></li>
+      <li>ملف تصدير من جهاز البصمة لشهر كامل. <span class="by">بداية الشهر الثاني</span></li>
+      <li>صورة توقيع HR والمدير العام عشان تتطبع على النماذج. <span class="by">بداية الشهر الثالث</span></li>
+      <li>شخص من عندكم يجرّب كل مرحلة بعد تسليمها، ويشغّل المرتبات على النظام والإكسيل في نفس الوقت من الشهر الثاني لحد النهاية.</li>
+    </ol>
+  </section>
+
+  <section>
+    <h2>بعد الأربع شهور</h2>
+    <ul class="plain">
+      <li>الربط مع نظام الـ CRM وباقي أنظمة الشركة.</li>
+      <li>إرسال رسايل الواتساب تلقائياً من النظام.</li>
+      <li>الربط المباشر مع جهاز البصمة بدل رفع الملف.</li>
+    </ul>
+  </section>
+</main>

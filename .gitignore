@@ -1,0 +1,6 @@
+.DS_Store
+.superpowers/
+.env
+# Client payroll data: salaries, national IDs, bank accounts. Never commit.
+/*.xlsx
+docs/templates/*.xlsx
