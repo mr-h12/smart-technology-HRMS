@@ -1,0 +1,11 @@
+includes:
+    - vendor/larastan/larastan/extension.neon
+
+parameters:
+    paths:
+        - app
+    level: 8
+    ignoreErrors:
+        # Shared trait with no user until the first module model lands.
+        - identifier: trait.unused
+          path: app/Support/Database/HasStandardColumns.php
