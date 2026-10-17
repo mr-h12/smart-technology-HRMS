@@ -2,7 +2,7 @@
 
 > **Status:** Mandatory engineering standard. Read it before writing code.
 > **Scope:** Applies to all backend (Laravel), frontend (React), database, queue-worker, and infrastructure code.
-> **Authority:** `CLAUDE.md` is the project source of truth. Where this file conflicts with it or with the documents listed in §1, those win.
+> **Authority:** `CLAUDE.md` is the project source of truth. Where this file conflicts with it or with the documents ranked above it in §1, those win; this file wins over the rest.
 > **Origin:** Adapted from the CRM's coding standard; the CRM-only parts (sales documents, currencies, procurement, field-sales flows) are replaced by HRMS equivalents or dropped.
 
 ## 1. Purpose and Rule Precedence
@@ -15,7 +15,7 @@ Use this precedence order:
 2. `docs/hrms-module-plan.md` (what ships in each release, settled decisions).
 3. `docs/calculations.md` (every formula, with open questions marked ⚠️).
 4. This coding standard.
-5. `CONTEXT.md` (glossary), `docs/adr/`, `docs/excel-system-analysis.md`, `docs/client-questions.md`, `docs/templates/`, and module-specific notes.
+5. Everything else: `CONTEXT.md` (the glossary for terms), `docs/adr/` (recorded decisions), `docs/templates/` (the PDF layouts), `docs/excel-system-analysis.md`, `docs/client-questions.md`, and module-specific notes.
 6. Tool, plugin, framework, or individual preference.
 
 If a requirement is ambiguous, incomplete, or contradictory, stop and ask for a documented decision. Do not resolve it in code silently. A formula marked ⚠️ in `docs/calculations.md` is an open question, not permission to guess.
@@ -80,12 +80,12 @@ Code lives under `backend/app/Modules/<Module>/{Domain,Application,Infrastructur
 - Enforce invariants in the database as well as in application code: foreign keys, check constraints, unique constraints, required fields, and indexes. Dated histories (employee type, daily wage, manager assignment, shift) must not overlap; enforce it in the database.
 - Treat database constraints as the final authority under concurrent requests. Convert known constraint failures to safe contract errors; never expose raw database messages.
 - Business numbers (month = 30 days, day = 8 hours, overtime ×1.5, lateness multipliers, grace period, shifts, leave entitlements) are **settings**. Read them from settings; never use literals in domain code or UI.
-- Use enum or reference tables (settings, managed lists) for extendable values such as leave day-types, sites, departments, and residences.
+- Use reference tables (managed lists) for extendable values such as leave day-types, sites, departments, and residences.
 - Never hard-code permissions, employee types' pay rules, sites, leave day-types, or any managed list in UI or domain conditionals. Check permissions by name (`resource.action.scope`), never by role name.
 
 ## 6. Money, Time, and Calculations
 
-- **Float is forbidden for money.** Store as PostgreSQL `NUMERIC(18,6)`; compute in PHP with bcmath on decimal strings. Domain code calls bcmath directly (deptrac forbids it from using `App\Support`); Application and Infrastructure use the shared `Precision`/`Decimal` helpers to cast, validate, and persist amounts.
+- **Float is forbidden for money.** Store as PostgreSQL `NUMERIC(18,6)`; compute in PHP with bcmath on decimal strings. Domain code calls bcmath directly (deptrac forbids it from using `App\Support`) and passes scale 6 to every call (bcmath defaults to scale 0, which truncates); Application and Infrastructure use the shared `Precision`/`Decimal` helpers to cast, validate, and persist amounts.
 - Serialize money as decimal strings at the API boundary. The frontend never parses them into floats for arithmetic.
 - Perform all calculations in the backend domain layer. The frontend may show a server-confirmed result but never becomes the source of truth.
 - **Do not round intermediate values** (the Excel does not). Display 2 decimals; round only where `docs/calculations.md` says so.

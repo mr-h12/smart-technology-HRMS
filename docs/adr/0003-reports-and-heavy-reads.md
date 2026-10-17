@@ -15,7 +15,7 @@ Reports, the CEO dashboard and the generated PDFs arrive in Releases 2–4 (pays
 ## Consequences
 - Each queued job declares its input, idempotency key, retry limit, failure handling, audit and log behaviour, and an observable status (`docs/coding-standards.md` §12). A retried job must not create a second file, serial number or audit entry.
 - A generated PDF is an immutable snapshot that carries its per-form-type serial number. Regenerating a PDF creates a new document; it never overwrites the old one.
-- Snapshots must stay consistent with reopen: a reopen deletes or marks the period's snapshots stale in the same transaction that writes its audit entry.
+- Snapshots must stay consistent with reopen: a reopen marks the period's snapshots stale (it never deletes them) in the same transaction that writes its audit entry.
 - **Production deploy** (deferred from the dev compose file, which bind-mounts the source):
   - run `php artisan optimize` on deploy;
   - set `APP_DEBUG=false`, `LOG_LEVEL=warning`, `display_errors=Off` and `opcache.validate_timestamps=0`;
