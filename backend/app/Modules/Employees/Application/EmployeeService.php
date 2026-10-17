@@ -45,12 +45,14 @@ final class EmployeeService
         }
 
         if (isset($filters['search']) && $filters['search'] !== '') {
-            $like = '%'.addcslashes($filters['search'], '%_\\').'%';
+            $search = $filters['search'];
+            $like = '%'.addcslashes($search, '%_\\').'%';
+            // Every arm must be indexable or Postgres scans the table: trigram indexes for the text, the code's unique index for a number.
             $query->where(fn (Builder $q) => $q
                 ->where('name_ar', 'ilike', $like)
                 ->orWhere('name_en', 'ilike', $like)
                 ->when($ownerId === null, fn (Builder $q) => $q->orWhere('national_id', 'like', $like))
-                ->orWhereRaw('code::text = ?', [$filters['search']]));
+                ->when(preg_match('/^[1-9]\d{0,8}$/D', $search) === 1, fn (Builder $q) => $q->orWhere('code', (int) $search)));
         }
 
         $page = $query->paginate(min(max($filters['per_page'] ?? 20, 1), 100));

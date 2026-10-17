@@ -147,4 +147,16 @@ class HotPathTest extends TestCase
 
         $this->getJson('/api/v1/sites')->assertOk();
     }
+
+    public function test_foreign_keys_and_search_columns_are_indexed(): void
+    {
+        $indexes = DB::table('pg_indexes')->where('schemaname', 'public')->pluck('indexdef', 'indexname');
+        foreach (['user_sessions.user_id', 'users.role_id', 'fares.site_id', 'manager_sites.site_id', 'employee_manager_assignments.manager_id', 'role_permissions.permission_id'] as $column) {
+            [$table, $col] = explode('.', $column);
+            $this->assertArrayHasKey("{$table}_{$col}_index", $indexes, $column);
+        }
+        foreach (['name_ar', 'name_en', 'national_id'] as $col) {
+            $this->assertStringContainsString("gin ({$col} gin_trgm_ops)", $indexes["employees_{$col}_trgm_index"] ?? '', $col);
+        }
+    }
 }

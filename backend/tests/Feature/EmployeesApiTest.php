@@ -68,6 +68,15 @@ class EmployeesApiTest extends TestCase
         $this->getJson('/api/v1/employees?per_page=1')->assertJsonPath('meta.pagination.total', 2)->assertJsonPath('meta.pagination.total_pages', 2);
     }
 
+    public function test_search_matches_the_exact_code(): void
+    {
+        $this->make();
+        $this->make();
+        $this->getJson('/api/v1/employees?search=2')->assertJsonCount(1, 'data')->assertJsonPath('data.0.code', 2);
+        $this->getJson('/api/v1/employees?search=02')->assertJsonCount(0, 'data');
+        $this->getJson('/api/v1/employees?search=99999999999')->assertOk()->assertJsonCount(0, 'data');
+    }
+
     public function test_show_ignores_future_pay_change_and_returns_decimal_strings(): void
     {
         $id = $this->make();
