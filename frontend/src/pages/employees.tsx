@@ -135,7 +135,7 @@ export function EmployeesPage() {
       <Card className="overflow-hidden">
         <div className="space-y-3 border-b p-4">
           <div className="flex flex-col gap-3 xl:flex-row xl:items-center">
-            <SearchInput value={q} onChange={filter(setQ)} placeholder={t('employee.search')} className="xl:w-80" />
+            <SearchInput value={q} onChange={filter(setQ)} placeholder={t('employee.search')} className="sm:w-full sm:max-w-md" />
             <FilterSelect value={type} onChange={filter(setType)} label={t('employee.type')} allLabel={t('employee.allTypes')} options={TYPES.map((v) => [v, t(`enum.type.${v}`)])} />
             {(q || type) && (
               <Button variant="ghost" size="sm" onClick={clear} className="xl:ms-auto">

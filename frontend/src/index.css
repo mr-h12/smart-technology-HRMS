@@ -87,6 +87,7 @@
  * Light = "Warm Editorial", dark = "Midnight Obsidian". Components use the shadcn names below.
  */
 :root {
+  color-scheme: light;
   --radius: 0.5rem;
   --background: #faf8f5;
   --foreground: #292524;
@@ -127,6 +128,7 @@
 }
 
 .dark {
+  color-scheme: dark;
   --background: #0b0f19;
   --foreground: #e0e7ff;
   --card: #111827;
