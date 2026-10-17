@@ -69,6 +69,14 @@ test('a save can name the resources it invalidates', async () => {
   await waitFor(() => expect(calls('/employees')).toBe(2))
 })
 
+test('every save also marks the audit log stale, so the next visit shows the new entry', async () => {
+  mockFetch({ 'GET /api/v1/audit-log': () => list([]), 'POST /api/v1/sites': () => json(201, { data: {} }) })
+  const { result } = renderHook(() => ({ a: useList('/audit-log?page=1'), save: useSave() }), { wrapper })
+  await waitFor(() => expect(result.current.a.loading).toBe(false))
+  await act(() => result.current.save('/sites', { body: {} }))
+  await waitFor(() => expect(calls('/audit-log?page=1')).toBe(2))
+})
+
 test('an older, slower response never overwrites the newer one', async () => {
   const pending: Record<string, (r: Response) => void> = {}
   vi.stubGlobal('fetch', vi.fn((url: string) => new Promise<Response>((resolve) => (pending[url] = resolve))))

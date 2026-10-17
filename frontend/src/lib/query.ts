@@ -20,6 +20,10 @@ export function queryKey(path: string): string[] {
   return i < 0 || i === path.length - 1 ? segments : [...segments, path.slice(i)]
 }
 
+/** Lookups several pages share. One exact string each: query keys depend on query-string order, so every caller must use these to hit one cache entry. */
+export const USERS = '/users?per_page=100'
+export const RESIDENCES = '/residences?per_page=100'
+
 // Both hooks cache the whole envelope ({data, meta}) under the same key shape, so they never collide.
 const fetchEnvelope = (path: string) => ({ signal }: { signal: AbortSignal }) => apiList<Row>(path, { signal })
 const none: Row[] = []
@@ -44,13 +48,14 @@ export function useApi<T = Row>(path: string | null) {
 /**
  * Returns `save(path, {method, body}, invalidate?)`: sends the write (POST by default) and, on success, marks stale every query
  * under each `invalidate` path (default: the path's resource, e.g. '/sites/1' → ['sites']), so what is on screen refetches.
+ * Every write is audited, so the audit log is always marked stale too.
  */
 export function useSave() {
   const qc = useQueryClient()
   return useCallback(
     async <T = Row>(path: string, opts: { method?: string; body?: unknown } = {}, invalidate: string[] = [queryKey(path)[0] ?? '']) => {
       const r = await api<T>(path, { method: 'POST', ...opts })
-      for (const p of invalidate) void qc.invalidateQueries({ queryKey: queryKey(p) })
+      for (const p of [...invalidate, '/audit-log']) void qc.invalidateQueries({ queryKey: queryKey(p) })
       return r
     },
     [qc],
