@@ -59,7 +59,7 @@
   "skip": "Skip to content",
   "employee": {
     "add": "Add employee",
-    "search": "Search by name, national ID or employee ID",
+    "search": "Search name or ID",
     "allTypes": "All types",
     "code": "Employee ID",
     "name_ar": "Name (Arabic)",
@@ -94,7 +94,7 @@
       "total": "Total employees",
       "office": "Office staff",
       "engineer": "Engineers",
-      "permanent_worker": "Permanent workers",
+      "permanent_worker": "Perm. workers",
       "day_laborer": "Day laborers"
     },
     "status": "Status",
