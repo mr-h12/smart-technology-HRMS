@@ -6,7 +6,7 @@ Written 2026-10-17 (cloud session). Every fact below was re-checked at the end o
 Finish Release 1b: **Task 8 (manager assignment screens)** then **Task 9 (Arabic API messages via Accept-Language)** from `docs/superpowers/plans/release-1b-accounts.md`, then open the PR `feature/release-1b-accounts` → `main`.
 
 ## Key Findings
-- **Remote exists now:** `github.com/mr-h12/smart-technology-HRMS` (private, default branch `main`). `main` = `515b042`; `feature/release-1b-accounts` = `2d8ff21`, 9 commits ahead of main, pushed. Working tree clean.
+- **Remote exists now:** `github.com/mr-h12/smart-technology-HRMS` (private, default branch `main`). `main` = `515b042`; `feature/release-1b-accounts` = the latest handoff commit on top of `2d8ff21` (Task 7), 10 commits ahead of main, pushed. No PR exists yet. Working tree clean.
 - **History was rewritten on 2026-10-17.** Four client forms in `docs/templates/` had been committed filled in with two real employees' names and national IDs. They were removed from every commit with `git filter-repo`, blanked copies (names/IDs replaced by dots) were added in `515b042`, and both branches were force-pushed. Any clone made before that date carries the old history: re-clone or `git fetch && git reset --hard origin/<branch>` before pushing anything. Never commit a filled form.
 - **Execution so far** (each task: Opus implementer with TDD → spec review + quality review → one fix round → gates re-run by the controller → commit):
   - Task 3 `9d6aca8` audit log (append-only trigger, `Audited` trait wraps save/delete in a transaction, login events, `GET /audit-log`).
