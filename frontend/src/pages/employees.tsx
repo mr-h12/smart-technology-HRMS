@@ -331,7 +331,11 @@ export function EmployeeFormPage() {
         <div className="min-w-0 flex-1 space-y-1">
           <h1 className="text-page-title">{emp.name_ar}</h1>
           {emp.name_en && <p className="text-sm text-muted-foreground">{emp.name_en}</p>}
-          {emp.code != null && <p className="font-mono text-xs text-muted-foreground">{emp.code}</p>}
+          {emp.code != null && (
+            <p className="text-xs text-muted-foreground">
+              {t('employee.code')}: <span className="font-mono">{emp.code}</span>
+            </p>
+          )}
         </div>
         {emp.current_type && <Badge variant="info" className="self-start sm:self-center">{t(`enum.type.${emp.current_type}`)}</Badge>}
         <dl className="flex gap-2 text-sm">
@@ -345,7 +349,7 @@ export function EmployeeFormPage() {
         <TabsList>
           {TABS.map(([v, Icon]) => (
             <TabsTrigger key={v} value={v}>
-              <Icon className="size-4" aria-hidden /> {t(`employee.tab.${v}`)}
+              <Icon className="hidden size-4 sm:block" aria-hidden /> {t(`employee.tab.${v}`)}
             </TabsTrigger>
           ))}
         </TabsList>
