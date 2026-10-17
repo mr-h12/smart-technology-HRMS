@@ -1,32 +1,13 @@
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 import { useTranslation } from 'react-i18next'
-import { ErrorBanner, type Row, SelectField, selectCls, TextField, toErrs, useForm, useMoney } from '@/components/form'
+import { ErrorBanner, FormDialog, type Row, SelectField, selectCls, TextField, useList, useMoney } from '@/components/form'
 import { Button } from '@/components/ui/button'
-import { Dialog, DialogBody, DialogContent, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 import { api, apiList } from '@/lib/api'
 
 const LEAVE_CODES = ['friday', 'official_holiday', 'sick', 'rest', 'absent', 'other']
 const MODES = ['none', 'share_of_wage', 'fixed']
 const LIST = '?per_page=100' // server max; these lists are small, the notice below covers overflow
-
-/** Loads a list endpoint; `total` lets pages warn when more rows exist than were fetched. */
-function useList(path: string) {
-  const [rows, setRows] = useState<Row[]>([])
-  const [total, setTotal] = useState(0)
-  const [err, setErr] = useState<unknown>()
-  const reload = useCallback(() => {
-    apiList<Row>(path)
-      .then((r) => {
-        setErr(undefined)
-        setRows(r.data)
-        setTotal(r.meta.pagination.total)
-      })
-      .catch(setErr)
-  }, [path])
-  useEffect(reload, [reload])
-  return { rows, total, err, reload }
-}
 
 const cairoToday = () => new Date().toLocaleDateString('en-CA', { timeZone: 'Africa/Cairo' })
 
@@ -36,71 +17,6 @@ const Notice = ({ show, text }: { show: boolean; text: string }) =>
       {text}
     </p>
   ) : null
-
-type FormApi = { values: Row; set: (k: string, v: string) => void; errs: Record<string, string> }
-
-/** Dialog whose form state lives in the body, so it is fresh on every open (Radix unmounts closed content). */
-function FormDialog({ title, trigger, init, submit, onDone, shown, children, footer = 'common.save' }: {
-  title: string
-  trigger: React.ReactNode
-  init: Row
-  submit: (form: Row) => Promise<unknown>
-  onDone: () => void
-  shown: string[]
-  children: (f: FormApi) => React.ReactNode
-  footer?: string
-}) {
-  const [open, setOpen] = useState(false)
-  return (
-    <Dialog open={open} onOpenChange={setOpen}>
-      <span onClick={() => setOpen(true)}>{trigger}</span>
-      <DialogContent aria-describedby={undefined}>
-        <DialogHeader>
-          <DialogTitle>{title}</DialogTitle>
-        </DialogHeader>
-        <FormBody init={init} submit={submit} shown={shown} footer={footer} onDone={() => { setOpen(false); onDone() }}>
-          {children}
-        </FormBody>
-      </DialogContent>
-    </Dialog>
-  )
-}
-
-function FormBody({ init, submit, onDone, shown, footer, children }: { init: Row; submit: (form: Row) => Promise<unknown>; onDone: () => void; shown: string[]; footer: string; children: (f: FormApi) => React.ReactNode }) {
-  const { t } = useTranslation()
-  const { form, set } = useForm(init)
-  const [err, setErr] = useState<unknown>()
-  const busy = useRef(false)
-  const [, rerender] = useState(0)
-  async function go() {
-    if (busy.current) return
-    busy.current = true
-    rerender((n) => n + 1)
-    setErr(undefined)
-    try {
-      await submit(form)
-      onDone()
-    } catch (e) {
-      setErr(e)
-    } finally {
-      busy.current = false
-      rerender((n) => n + 1)
-    }
-  }
-  return (
-    <>
-      <DialogBody className="grid gap-4">
-        <ErrorBanner err={err} shown={shown} />
-        {children({ values: form, set, errs: toErrs(err) })}
-      </DialogBody>
-      <DialogFooter>
-        <Button type="button" disabled={busy.current} onClick={go}>
-          {t(footer)}
-        </Button>
-      </DialogFooter>
-    </>
-  )
-}
 
 function SiteDialog({ site, reload }: { site?: Row; reload: () => void }) {
   const { t } = useTranslation()

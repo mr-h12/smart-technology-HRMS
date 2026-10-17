@@ -1,8 +1,10 @@
-import { useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
+import { Button } from '@/components/ui/button'
+import { Dialog, DialogBody, DialogContent, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
-import { ApiError } from '@/lib/api'
+import { ApiError, apiList } from '@/lib/api'
 
 export type Row = Record<string, any> // eslint-disable-line @typescript-eslint/no-explicit-any
 export type Errs = Record<string, string>
@@ -26,6 +28,13 @@ export function ErrorBanner({ err, shown }: { err: unknown; shown: string[] }) {
       ))}
     </div>
   ) : null
+}
+
+/** Formats a stored UTC timestamp as Cairo wall time in the current language. */
+export function useCairoTime() {
+  const { i18n } = useTranslation()
+  const f = new Intl.DateTimeFormat(i18n.language, { timeZone: 'Africa/Cairo', dateStyle: 'short', timeStyle: 'medium' })
+  return (iso: string | null | undefined) => (iso ? f.format(new Date(iso)) : '—')
 }
 
 export function useMoney() {
@@ -82,4 +91,87 @@ export function SelectField({ name, label, values, set, errs, options, blank }: 
 export function useForm(initial: Row = {}) {
   const [form, setForm] = useState<Row>(initial)
   return { form, setForm, set: (k: string, v: string) => setForm((f) => ({ ...f, [k]: v })) }
+}
+
+/** Loads a list endpoint; `total` lets pages warn when more rows exist than were fetched. */
+export function useList(path: string) {
+  const [rows, setRows] = useState<Row[]>([])
+  const [total, setTotal] = useState(0)
+  const [err, setErr] = useState<unknown>()
+  const reload = useCallback(() => {
+    apiList<Row>(path)
+      .then((r) => {
+        setErr(undefined)
+        setRows(r.data)
+        setTotal(r.meta.pagination.total)
+      })
+      .catch(setErr)
+  }, [path])
+  useEffect(reload, [reload])
+  return { rows, total, err, reload }
+}
+
+type FormApi = { values: Row; set: (k: string, v: string) => void; errs: Record<string, string> }
+
+/** Dialog whose form state lives in the body, so it is fresh on every open (Radix unmounts closed content). */
+export function FormDialog({ title, trigger, init, submit, onDone, shown, children, footer = 'common.save' }: {
+  title: string
+  trigger: React.ReactNode
+  init: Row
+  submit: (form: Row) => Promise<unknown>
+  onDone: () => void
+  shown: string[]
+  children: (f: FormApi) => React.ReactNode
+  footer?: string
+}) {
+  const [open, setOpen] = useState(false)
+  return (
+    <Dialog open={open} onOpenChange={setOpen}>
+      <span onClick={() => setOpen(true)}>{trigger}</span>
+      <DialogContent aria-describedby={undefined}>
+        <DialogHeader>
+          <DialogTitle>{title}</DialogTitle>
+        </DialogHeader>
+        <FormBody init={init} submit={submit} shown={shown} footer={footer} onDone={() => { setOpen(false); onDone() }}>
+          {children}
+        </FormBody>
+      </DialogContent>
+    </Dialog>
+  )
+}
+
+function FormBody({ init, submit, onDone, shown, footer, children }: { init: Row; submit: (form: Row) => Promise<unknown>; onDone: () => void; shown: string[]; footer: string; children: (f: FormApi) => React.ReactNode }) {
+  const { t } = useTranslation()
+  const { form, set } = useForm(init)
+  const [err, setErr] = useState<unknown>()
+  const busy = useRef(false)
+  const [, rerender] = useState(0)
+  async function go() {
+    if (busy.current) return
+    busy.current = true
+    rerender((n) => n + 1)
+    setErr(undefined)
+    try {
+      await submit(form)
+      onDone()
+    } catch (e) {
+      setErr(e)
+    } finally {
+      busy.current = false
+      rerender((n) => n + 1)
+    }
+  }
+  return (
+    <>
+      <DialogBody className="grid gap-4">
+        <ErrorBanner err={err} shown={shown} />
+        {children({ values: form, set, errs: toErrs(err) })}
+      </DialogBody>
+      <DialogFooter>
+        <Button type="button" disabled={busy.current} onClick={go}>
+          {t(footer)}
+        </Button>
+      </DialogFooter>
+    </>
+  )
 }

@@ -5,7 +5,8 @@
     "prev": "Previous",
     "next": "Next",
     "pageOf": "Page {{page}} of {{total}}",
-    "tooMany": "More than 100 rows; showing the first 100."
+    "tooMany": "More than 100 rows; showing the first 100.",
+    "edit": "Edit"
   },
   "app": {
     "name": "Smart Technology HRMS"
@@ -16,7 +17,11 @@
     "employees": "Employees",
     "sites": "Sites",
     "residences": "Residences",
-    "fares": "Fares"
+    "fares": "Fares",
+    "console": "Developer console",
+    "accounts": "Accounts",
+    "roles": "Roles and permissions",
+    "audit": "Audit log"
   },
   "toggle": {
     "language": "Language",
@@ -28,7 +33,10 @@
     "employees": "Employees",
     "sites": "Sites",
     "residences": "Residences",
-    "fares": "Transport fares"
+    "fares": "Transport fares",
+    "accounts": "Accounts",
+    "roles": "Roles and permissions",
+    "audit": "Audit log"
   },
   "notFound": {
     "title": "Page not found",
@@ -168,6 +176,102 @@
       "account_suspended": "The account is deactivated. Contact the developer.",
       "rate_limited": "Too many attempts; try again in a minute.",
       "unknown": "Could not sign in."
+    }
+  },
+  "console": {
+    "addAccount": "Add account",
+    "name": "Name",
+    "role": "Role",
+    "status": "Status",
+    "active": "Active",
+    "inactive": "Deactivated",
+    "locked": "Locked",
+    "deactivate": "Deactivate",
+    "reactivate": "Reactivate",
+    "setPassword": "Set password",
+    "sessions": "Sessions",
+    "noSessions": "No active sessions.",
+    "ip": "IP address",
+    "userAgent": "Browser",
+    "lastActivity": "Last activity",
+    "revoke": "End session",
+    "addRole": "Add role",
+    "slug": "Code",
+    "pickRole": "Choose a role to see its permissions."
+  },
+  "perm": {
+    "employee": {
+      "view": "Employees: view",
+      "create": "Employees: create",
+      "edit": "Employees: edit",
+      "delete": "Employees: delete",
+      "assign_manager": "Employees: assign manager"
+    },
+    "site": {
+      "view": "Sites: view",
+      "manage": "Sites: manage",
+      "assign_manager": "Sites: assign managers"
+    },
+    "user": {
+      "view": "Accounts: view",
+      "manage": "Accounts: manage"
+    },
+    "role": {
+      "view": "Roles: view",
+      "manage": "Roles: manage"
+    },
+    "audit_log": {
+      "view": "Audit log: view"
+    }
+  },
+  "scope": {
+    "own": "own",
+    "all": "all"
+  },
+  "audit": {
+    "actor": "Actor",
+    "entityType": "Record type",
+    "from": "From",
+    "to": "To",
+    "time": "Time",
+    "action": "Event",
+    "entityId": "Record ID",
+    "changes": "Changes",
+    "old_values": "Before",
+    "new_values": "After",
+    "event": {
+      "CREATED": "Created",
+      "UPDATED": "Updated",
+      "DELETED": "Deleted",
+      "LOGIN_SUCCEEDED": "Signed in",
+      "LOGIN_FAILED": "Failed sign-in",
+      "ACCOUNT_LOCKED": "Account locked",
+      "LOGIN_BLOCKED": "Sign-in refused",
+      "LOGOUT": "Signed out",
+      "USER_CREATED": "Account created",
+      "USER_UPDATED": "Account updated",
+      "USER_ACTIVATED": "Account reactivated",
+      "USER_DEACTIVATED": "Account deactivated",
+      "PASSWORD_SET": "Password set",
+      "ADMIN_SESSION_TERMINATED": "Session ended by the developer",
+      "ROLE_CREATED": "Role created",
+      "ROLE_UPDATED": "Role updated",
+      "ROLE_PERMISSIONS_UPDATED": "Role permissions changed",
+      "SITE_MANAGERS_UPDATED": "Site managers changed"
+    },
+    "entity": {
+      "employees": "Employees",
+      "employee_type_changes": "Employee type changes",
+      "employee_pay_changes": "Pay changes",
+      "employee_documents": "Employee documents",
+      "employee_fare_overrides": "Employee fare overrides",
+      "employee_manager_assignments": "Manager assignments",
+      "sites": "Sites",
+      "site_allowance_rules": "Site allowance rules",
+      "residences": "Residences",
+      "fares": "Fares",
+      "users": "Accounts",
+      "roles": "Roles"
     }
   }
 }

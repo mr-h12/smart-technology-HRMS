@@ -5,7 +5,8 @@
     "prev": "السابق",
     "next": "التالي",
     "pageOf": "صفحة {{page}} من {{total}}",
-    "tooMany": "أكثر من 100 صف، يتم عرض أول 100 فقط."
+    "tooMany": "أكثر من 100 صف، يتم عرض أول 100 فقط.",
+    "edit": "تعديل"
   },
   "app": {
     "name": "سمارت تكنولوجي HRMS"
@@ -16,7 +17,11 @@
     "employees": "الموظفون",
     "sites": "المواقع",
     "residences": "محال الإقامة",
-    "fares": "الأجرة"
+    "fares": "الأجرة",
+    "console": "لوحة المطور",
+    "accounts": "الحسابات",
+    "roles": "الأدوار والصلاحيات",
+    "audit": "سجل التدقيق"
   },
   "toggle": {
     "language": "اللغة",
@@ -28,7 +33,10 @@
     "employees": "الموظفون",
     "sites": "المواقع",
     "residences": "محال الإقامة",
-    "fares": "أجرة المواصلات"
+    "fares": "أجرة المواصلات",
+    "accounts": "الحسابات",
+    "roles": "الأدوار والصلاحيات",
+    "audit": "سجل التدقيق"
   },
   "notFound": {
     "title": "الصفحة غير موجودة",
@@ -168,6 +176,102 @@
       "account_suspended": "الحساب معطّل. تواصل مع المطور.",
       "rate_limited": "محاولات كثيرة، حاول بعد دقيقة.",
       "unknown": "تعذّر تسجيل الدخول."
+    }
+  },
+  "console": {
+    "addAccount": "إضافة حساب",
+    "name": "الاسم",
+    "role": "الدور",
+    "status": "الحالة",
+    "active": "نشط",
+    "inactive": "معطّل",
+    "locked": "مقفل",
+    "deactivate": "تعطيل",
+    "reactivate": "إعادة تفعيل",
+    "setPassword": "تعيين كلمة المرور",
+    "sessions": "الجلسات",
+    "noSessions": "لا توجد جلسات نشطة.",
+    "ip": "عنوان IP",
+    "userAgent": "المتصفح",
+    "lastActivity": "آخر نشاط",
+    "revoke": "إنهاء الجلسة",
+    "addRole": "إضافة دور",
+    "slug": "الرمز",
+    "pickRole": "اختر دورًا لعرض صلاحياته."
+  },
+  "perm": {
+    "employee": {
+      "view": "الموظفون: عرض",
+      "create": "الموظفون: إضافة",
+      "edit": "الموظفون: تعديل",
+      "delete": "الموظفون: حذف",
+      "assign_manager": "الموظفون: تعيين المدير"
+    },
+    "site": {
+      "view": "المواقع: عرض",
+      "manage": "المواقع: إدارة",
+      "assign_manager": "المواقع: تعيين المديرين"
+    },
+    "user": {
+      "view": "الحسابات: عرض",
+      "manage": "الحسابات: إدارة"
+    },
+    "role": {
+      "view": "الأدوار: عرض",
+      "manage": "الأدوار: إدارة"
+    },
+    "audit_log": {
+      "view": "سجل التدقيق: عرض"
+    }
+  },
+  "scope": {
+    "own": "موظفوه فقط",
+    "all": "الكل"
+  },
+  "audit": {
+    "actor": "المستخدم",
+    "entityType": "نوع السجل",
+    "from": "من",
+    "to": "إلى",
+    "time": "الوقت",
+    "action": "الحدث",
+    "entityId": "معرّف السجل",
+    "changes": "التغييرات",
+    "old_values": "قبل",
+    "new_values": "بعد",
+    "event": {
+      "CREATED": "إنشاء",
+      "UPDATED": "تعديل",
+      "DELETED": "حذف",
+      "LOGIN_SUCCEEDED": "تسجيل دخول",
+      "LOGIN_FAILED": "محاولة دخول فاشلة",
+      "ACCOUNT_LOCKED": "قفل الحساب",
+      "LOGIN_BLOCKED": "رفض الدخول",
+      "LOGOUT": "تسجيل خروج",
+      "USER_CREATED": "إنشاء حساب",
+      "USER_UPDATED": "تعديل حساب",
+      "USER_ACTIVATED": "إعادة تفعيل حساب",
+      "USER_DEACTIVATED": "تعطيل حساب",
+      "PASSWORD_SET": "تعيين كلمة المرور",
+      "ADMIN_SESSION_TERMINATED": "إنهاء جلسة بواسطة المطور",
+      "ROLE_CREATED": "إنشاء دور",
+      "ROLE_UPDATED": "تعديل دور",
+      "ROLE_PERMISSIONS_UPDATED": "تعديل صلاحيات دور",
+      "SITE_MANAGERS_UPDATED": "تعديل مديري الموقع"
+    },
+    "entity": {
+      "employees": "الموظفون",
+      "employee_type_changes": "تغييرات نوع الموظف",
+      "employee_pay_changes": "تغييرات الأجر",
+      "employee_documents": "مستندات الموظف",
+      "employee_fare_overrides": "أجرة خاصة بالموظف",
+      "employee_manager_assignments": "تعيينات المديرين",
+      "sites": "المواقع",
+      "site_allowance_rules": "قواعد بدل المواقع",
+      "residences": "محال الإقامة",
+      "fares": "الأجرة",
+      "users": "الحسابات",
+      "roles": "الأدوار"
     }
   }
 }

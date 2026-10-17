@@ -1,4 +1,4 @@
-import { Menu, Moon, Sun, Users, MapPin, House, Banknote, LogOut } from 'lucide-react'
+import { Menu, Moon, Sun, Users, MapPin, House, Banknote, LogOut, UserCog, ShieldCheck, ScrollText } from 'lucide-react'
 import { useEffect, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { NavLink, Outlet, useLocation } from 'react-router-dom'
@@ -10,11 +10,14 @@ import { useAuth } from '@/lib/auth'
 import { cn } from '@/lib/utils'
 import { SegmentedControl } from './SegmentedControl'
 
-const NAV = [
+const NAV: { path: string; key: string; icon: typeof Users; ability: string; group?: string }[] = [
   { path: '/employees', key: 'nav.employees', icon: Users, ability: 'employee.view' },
   { path: '/sites', key: 'nav.sites', icon: MapPin, ability: 'site.view' },
   { path: '/residences', key: 'nav.residences', icon: House, ability: 'site.view' },
   { path: '/fares', key: 'nav.fares', icon: Banknote, ability: 'site.view' },
+  { path: '/console/accounts', key: 'nav.accounts', icon: UserCog, ability: 'user.view', group: 'nav.console' },
+  { path: '/console/roles', key: 'nav.roles', icon: ShieldCheck, ability: 'role.view', group: 'nav.console' },
+  { path: '/console/audit', key: 'nav.audit', icon: ScrollText, ability: 'audit_log.view', group: 'nav.console' },
 ]
 
 /** The first page the user may open; the fallback is the 1a landing page. */
@@ -50,27 +53,33 @@ function Brand() {
 function Nav({ onNavigate }: { onNavigate?: () => void }) {
   const { t } = useTranslation()
   const { can } = useAuth()
+  const visible = NAV.filter((n) => can(n.ability))
   return (
-    <nav aria-label={t('nav.main')}>
-      <ul className="flex flex-col gap-1">
-        {NAV.filter((n) => can(n.ability)).map(({ path, key, icon: Icon }) => (
-          <li key={path}>
-            <NavLink
-              to={path}
-              onClick={onNavigate}
-              className={({ isActive }) =>
-                cn(
-                  'flex min-h-11 items-center gap-3 rounded-lg px-3 transition-colors hover:bg-muted focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring',
-                  isActive && 'bg-muted font-medium text-primary',
-                )
-              }
-            >
-              <Icon className="size-5 shrink-0" />
-              {t(key)}
-            </NavLink>
-          </li>
-        ))}
-      </ul>
+    <nav aria-label={t('nav.main')} className="flex flex-col gap-3">
+      {[...new Set(visible.map((n) => n.group))].map((group) => (
+        <div key={group ?? ''}>
+          {group && <h2 className="px-3 pb-1 text-xs font-medium text-muted-foreground">{t(group)}</h2>}
+          <ul className="flex flex-col gap-1">
+            {visible.filter((n) => n.group === group).map(({ path, key, icon: Icon }) => (
+              <li key={path}>
+                <NavLink
+                  to={path}
+                  onClick={onNavigate}
+                  className={({ isActive }) =>
+                    cn(
+                      'flex min-h-11 items-center gap-3 rounded-lg px-3 transition-colors hover:bg-muted focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring',
+                      isActive && 'bg-muted font-medium text-primary',
+                    )
+                  }
+                >
+                  <Icon className="size-5 shrink-0" />
+                  {t(key)}
+                </NavLink>
+              </li>
+            ))}
+          </ul>
+        </div>
+      ))}
     </nav>
   )
 }
