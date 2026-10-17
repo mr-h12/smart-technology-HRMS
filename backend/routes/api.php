@@ -6,6 +6,7 @@ use App\Modules\Employees\Presentation\EmployeeController;
 use App\Modules\Identity\Presentation\AuthController;
 use App\Modules\Identity\Presentation\RoleController;
 use App\Modules\Identity\Presentation\UserController;
+use App\Modules\Settings\Presentation\SettingController;
 use App\Modules\Sites\Presentation\FareController;
 use App\Modules\Sites\Presentation\ResidenceController;
 use App\Modules\Sites\Presentation\SiteController;
@@ -72,6 +73,9 @@ Route::middleware('auth')->group(function (): void {
     });
 
     Route::get('audit-log', [AuditLogController::class, 'index'])->middleware('permission:audit_log.view');
+
+    Route::get('settings', [SettingController::class, 'index'])->middleware('permission:setting.view');
+    Route::put('settings', [SettingController::class, 'update'])->middleware('permission:setting.manage');
 
     Route::prefix('users')->controller(UserController::class)->group(function (): void {
         Route::get('/', 'index')->middleware('permission:user.view');

@@ -18,12 +18,12 @@ class RbacTest extends TestCase
     {
         $grants = fn (string $slug) => Role::where('slug', $slug)->firstOrFail()->permissions
             ->map(fn ($p) => "{$p->resource}.{$p->action}.{$p->scope}")->sort()->values()->all();
-        $this->assertSame(15, Permission::count());
+        $this->assertSame(17, Permission::count());
         $this->assertSame(['employee.view.own', 'site.view.own'], $grants('manager'));
-        $this->assertSame(['audit_log.view.all', 'employee.view.all', 'site.view.all'], $grants('ceo'));
-        $this->assertCount(9, $grants('hr'));
+        $this->assertSame(['audit_log.view.all', 'employee.view.all', 'setting.view.all', 'site.view.all'], $grants('ceo'));
+        $this->assertCount(11, $grants('hr'));
         $this->assertNotContains('user.manage.all', $grants('hr'));
-        $this->assertCount(13, $grants('developer'));
+        $this->assertCount(15, $grants('developer'));
     }
 
     public function test_every_api_route_requires_auth_and_a_permission(): void
