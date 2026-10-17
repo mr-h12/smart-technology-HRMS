@@ -4,9 +4,25 @@ import { cn } from '@/lib/utils'
 
 export const Tabs = TabsPrimitive.Root
 
+/** A strip that scrolls sideways on a phone keeps the selected tab in view, on mount and whenever the selection or the labels change (works in RTL). */
 export function TabsList({ className, ...props }: React.ComponentProps<typeof TabsPrimitive.List>) {
+  const ref = React.useRef<HTMLDivElement>(null)
+  React.useEffect(() => {
+    const list = ref.current
+    if (!list) return
+    const show = () => list.querySelector('[data-state=active]')?.scrollIntoView({ inline: 'nearest', block: 'nearest' })
+    show()
+    const watch = new MutationObserver(show)
+    watch.observe(list, { attributes: true, attributeFilter: ['data-state'], subtree: true, childList: true, characterData: true }) // a label change (language) moves the tabs too
+    document.fonts?.addEventListener('loadingdone', show) // so does a font finishing its load
+    return () => {
+      document.fonts?.removeEventListener('loadingdone', show)
+      watch.disconnect()
+    }
+  }, [])
   return (
     <TabsPrimitive.List
+      ref={ref}
       className={cn('inline-flex h-10 max-w-full items-center gap-1 overflow-x-auto rounded-xl border bg-muted p-1 text-muted-foreground scrollbar-thin', className)}
       {...props}
     />
