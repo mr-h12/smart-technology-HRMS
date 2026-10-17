@@ -5,16 +5,19 @@ declare(strict_types=1);
 namespace App\Modules\Settings\Application;
 
 use App\Modules\Settings\Infrastructure\Eloquent\Setting;
+use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\DB;
 
 /** The business-rule settings, read and written as strings (never floats). */
 final class BusinessRules
 {
+    private const CACHE_KEY = 'settings';
+
     /** @return array<string, string> */
     public function all(): array
     {
         /** @var array<string, string> */
-        return Setting::orderBy('key')->pluck('value', 'key')->all();
+        return Cache::rememberForever(self::CACHE_KEY, fn () => Setting::orderBy('key')->pluck('value', 'key')->all());
     }
 
     /**
@@ -29,7 +32,14 @@ final class BusinessRules
                 $setting->save();
             }
         });
+        // After the commit, so the next read cannot re-cache the old values.
+        self::forgetCache();
 
         return $this->all();
+    }
+
+    public static function forgetCache(): void
+    {
+        Cache::forget(self::CACHE_KEY);
     }
 }

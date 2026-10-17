@@ -9,6 +9,7 @@ use App\Modules\Identity\Domain\Authentication\IdentityAuditEvents;
 use App\Modules\Identity\Infrastructure\Eloquent\Permission;
 use App\Modules\Identity\Infrastructure\Eloquent\Role;
 use App\Modules\Identity\Infrastructure\Eloquent\User;
+use App\Modules\Identity\Infrastructure\RolePermissions;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\ValidationException;
@@ -65,7 +66,7 @@ final class RoleAdministration
      */
     public function syncPermissions(string $id, array $permissionIds): array
     {
-        return DB::transaction(function () use ($id, $permissionIds): array {
+        $row = DB::transaction(function () use ($id, $permissionIds): array {
             $role = Role::findOrFail($id);
             $old = self::triples($role);
             $role->permissions()->sync($permissionIds);
@@ -77,6 +78,10 @@ final class RoleAdministration
 
             return $this->row($role);
         });
+        // After the commit, so the next read cannot re-cache the old grants.
+        RolePermissions::forget($id);
+
+        return $row;
     }
 
     /** @return list<array{id: string, resource: string, action: string, scope: string, key: string}> */

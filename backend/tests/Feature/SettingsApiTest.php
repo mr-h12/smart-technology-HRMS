@@ -2,6 +2,7 @@
 
 namespace Tests\Feature;
 
+use App\Modules\Settings\Application\BusinessRules;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\DB;
 use Tests\TestCase;
@@ -45,6 +46,20 @@ class SettingsApiTest extends TestCase
         $this->assertSame(['value' => '20'], json_decode($row->new_values, true));
         $this->assertSame($hr->id, $row->user_id);
         $this->assertSame(2, DB::table('audit_log')->where(['entity_type' => 'settings', 'event' => 'UPDATED'])->count()); // month_days did not change
+    }
+
+    public function test_settings_are_read_once_and_an_update_is_visible_on_the_next_read(): void
+    {
+        $this->signIn('hr');
+        $rules = app(BusinessRules::class);
+        $rules->all();
+        DB::enableQueryLog();
+        $this->assertSame('15', $rules->all()['office_grace_minutes']);
+        $this->assertSame([], DB::getQueryLog());
+
+        $this->putJson('/api/v1/settings', ['office_grace_minutes' => '25'])->assertOk()->assertJsonPath('data.office_grace_minutes', '25');
+        $this->getJson('/api/v1/settings')->assertJsonPath('data.office_grace_minutes', '25');
+        $this->assertSame('25', $rules->all()['office_grace_minutes']);
     }
 
     public function test_put_rejects_malformed_values_under_their_field(): void

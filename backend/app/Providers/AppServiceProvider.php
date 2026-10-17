@@ -3,10 +3,14 @@
 namespace App\Providers;
 
 use App\Modules\Identity\Infrastructure\BearerSessionResolver;
+use App\Modules\Identity\Infrastructure\RolePermissions;
+use App\Modules\Settings\Application\BusinessRules;
 use App\Support\Database\StandardColumns;
 use Illuminate\Cache\RateLimiting\Limit;
+use Illuminate\Database\Events\MigrationsEnded;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Facades\Event;
 use Illuminate\Support\Facades\RateLimiter;
 use Illuminate\Support\ServiceProvider;
 
@@ -26,6 +30,12 @@ class AppServiceProvider extends ServiceProvider
     public function boot(): void
     {
         StandardColumns::register();
+
+        // Migrations write grants and settings straight to the tables, past the services that clear the caches.
+        Event::listen(MigrationsEnded::class, function (): void {
+            RolePermissions::forgetAll();
+            BusinessRules::forgetCache();
+        });
 
         Auth::viaRequest('hrms-bearer-session', fn (Request $r) => app(BearerSessionResolver::class)->forRequest($r));
 

@@ -10,6 +10,7 @@ use App\Modules\Identity\Application\Authentication\SignOut;
 use App\Modules\Identity\Domain\Authentication\IdleTimeout;
 use App\Modules\Identity\Domain\Authentication\SessionAttribute;
 use App\Support\Http\ApiEnvelope;
+use Illuminate\Auth\AuthenticationException;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Http\Response;
@@ -30,7 +31,7 @@ final class AuthController
             'token' => $session['token'],
             'token_type' => 'Bearer',
             'idle_timeout_seconds' => IdleTimeout::HOURS * 3600,
-            'user' => $this->profile->for($session['user_id']),
+            'user' => $this->profile->forId($session['user_id']),
         ], 201);
     }
 
@@ -44,6 +45,6 @@ final class AuthController
 
     public function me(Request $request): JsonResponse
     {
-        return ApiEnvelope::single($request, $this->profile->for((string) $request->user()?->getAuthIdentifier()));
+        return ApiEnvelope::single($request, $this->profile->for($request->user() ?? throw new AuthenticationException));
     }
 }
