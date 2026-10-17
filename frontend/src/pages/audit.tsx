@@ -1,4 +1,4 @@
-import { ScrollText } from 'lucide-react'
+import { Eye, ScrollText } from 'lucide-react'
 import { useEffect, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { EmptyState } from '@/components/common/EmptyState'
@@ -22,8 +22,8 @@ const ENTITIES = [
 const PER_PAGE = 20
 const EVENT_VARIANT: Record<string, BadgeVariant> = { CREATED: 'success', UPDATED: 'info', DELETED: 'danger' }
 
-/** A string shows as is, a missing side or null as a dash, anything else (objects, arrays, numbers) as JSON text. */
-const show = (v: unknown) => (v == null ? '—' : typeof v === 'string' ? v : JSON.stringify(v))
+/** A string shows as is (an empty one as ""), a missing side or null as a dash, anything else (objects, arrays, numbers) as indented JSON text. */
+const show = (v: unknown) => (v == null ? '—' : typeof v === 'string' ? v || '""' : JSON.stringify(v, null, 2))
 
 function useLabels() {
   const { t } = useTranslation()
@@ -59,7 +59,7 @@ function Details({ entry, onClose }: { entry: Row; onClose: () => void }) {
                   {keys.map((key) => (
                     <div key={key}>
                       <dt dir="ltr" className="text-start font-mono text-xs text-muted-foreground">{key}</dt>
-                      <dd dir="ltr" className="text-start text-sm break-all whitespace-pre-wrap">{show(values[key])}</dd>
+                      <dd dir="ltr" className="text-start text-sm break-words whitespace-pre-wrap">{show(values[key])}</dd>
                     </div>
                   ))}
                 </dl>
@@ -97,8 +97,8 @@ export function AuditPage() {
       <Card className="overflow-hidden">
         <div className="space-y-3 border-b p-4">
           <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-            {canUsers && <SelectField name="user_id" label={t('audit.actor')} blank options={users.map((u) => [u.id, u.name])} {...f} />}
-            <SelectField name="entity_type" label={t('audit.entityType')} blank options={ENTITIES.map((e) => [e, t(`audit.entity.${e}`)])} {...f} />
+            {canUsers && <SelectField name="user_id" label={t('audit.actor')} blank={t('common.all')} options={users.map((u) => [u.id, u.name])} {...f} />}
+            <SelectField name="entity_type" label={t('audit.entityType')} blank={t('common.all')} options={ENTITIES.map((e) => [e, t(`audit.entity.${e}`)])} {...f} />
             <TextField name="from" label={t('audit.from')} type="date" {...f} />
             <TextField name="to" label={t('audit.to')} type="date" {...f} />
           </div>
@@ -119,7 +119,7 @@ export function AuditPage() {
             <TableHeader>
               <TableRow>
                 <TableHead>{t('audit.time')}</TableHead>
-                <TableHead>{t('audit.actor')}</TableHead>
+                <TableHead className="hidden sm:table-cell">{t('audit.actor')}</TableHead>
                 <TableHead>{t('audit.action')}</TableHead>
                 <TableHead className="hidden md:table-cell">{t('audit.entityType')}</TableHead>
                 <TableHead className="hidden xl:table-cell">{t('audit.entityId')}</TableHead>
@@ -131,8 +131,11 @@ export function AuditPage() {
             <TableBody>
               {rows.map((r) => (
                 <TableRow key={r.id}>
-                  <TableCell className="whitespace-normal text-muted-foreground sm:whitespace-nowrap">{time(r.occurred_at)}</TableCell>
-                  <TableCell className="whitespace-normal">
+                  <TableCell className="whitespace-normal text-muted-foreground sm:whitespace-nowrap">
+                    {time(r.occurred_at)}
+                    <div className="mt-1 text-xs font-medium text-foreground sm:hidden">{r.user?.name ?? '—'}</div>
+                  </TableCell>
+                  <TableCell className="hidden whitespace-normal sm:table-cell">
                     {r.user ? (
                       <div className="flex items-center gap-2">
                         <UserAvatar name={r.user.name} size="sm" />
@@ -142,14 +145,15 @@ export function AuditPage() {
                       '—'
                     )}
                   </TableCell>
-                  <TableCell>
-                    <Badge variant={EVENT_VARIANT[r.event] ?? 'neutral'}>{label.event(r)}</Badge>
+                  <TableCell className="whitespace-normal">
+                    <Badge variant={EVENT_VARIANT[r.event] ?? 'neutral'} className="whitespace-normal">{label.event(r)}</Badge>
                   </TableCell>
                   <TableCell className="hidden md:table-cell">{label.entity(r)}</TableCell>
                   <TableCell dir="ltr" className="hidden text-start font-mono text-xs text-muted-foreground xl:table-cell">{r.entity_id}</TableCell>
                   <TableCell className="text-end">
-                    <Button variant="ghost" size="sm" onClick={() => setOpen(r)}>
-                      {t('audit.details')}
+                    <Button variant="ghost" size="sm" onClick={() => setOpen(r)} className="max-sm:size-9 max-sm:px-0">
+                      <Eye className="sm:hidden" />
+                      <span className="max-sm:sr-only">{t('audit.details')}</span>
                     </Button>
                   </TableCell>
                 </TableRow>

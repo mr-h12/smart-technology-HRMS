@@ -30,6 +30,7 @@ test('without user.view there is no actor filter and no account list call', asyn
   renderWithAuth(<AuditPage />, ['audit_log.view.all'])
   expect(await screen.findByLabelText('نوع السجل')).toBeInTheDocument()
   expect(screen.queryByLabelText('المنفِّذ')).toBeNull()
+  expect(within(screen.getByLabelText('نوع السجل')).getByRole('option', { name: 'الكل' })).toBeInTheDocument()
   expect(vi.mocked(fetch).mock.calls.some(([u]) => String(u).includes('/users'))).toBe(false)
 })
 
@@ -45,7 +46,7 @@ test('details sheet shows previous and new values side by side', async () => {
   expect(within(before).getByText('name_ar')).toBeInTheDocument()
   expect(within(before).getAllByText('—')).toHaveLength(2)
   expect(within(after).getByText('سموحة')).toBeInTheDocument()
-  expect(within(after).getByText('{"a":1}')).toBeInTheDocument()
+  expect(within(after).getByText('{ "a": 1 }')).toBeInTheDocument()
   expect(sheet).not.toHaveTextContent('null')
   expect(sheet).not.toHaveTextContent('[object Object]')
 })
@@ -57,11 +58,20 @@ test('details sheet renders null fields as a dash and nested nulls as JSON text'
   const sheet = await screen.findByRole('dialog')
   const before = within(sheet).getByRole('region', { name: 'القيمة السابقة' })
   const after = within(sheet).getByRole('region', { name: 'القيمة الجديدة' })
-  expect(within(before).getByText('{"share":null}')).toBeInTheDocument()
+  expect(within(before).getByText('{ "share": null }')).toBeInTheDocument()
   expect(within(before).getAllByText('—')).toHaveLength(2) // name_ar: null, active: missing
-  expect(within(after).getByText('{"share":"0.5"}')).toBeInTheDocument()
+  expect(within(after).getByText('{ "share": "0.5" }')).toBeInTheDocument()
   expect(within(after).getByText('true')).toBeInTheDocument()
   expect(sheet).not.toHaveTextContent('[object Object]')
+})
+
+test('an empty string value shows as quotes and objects are indented', async () => {
+  mockFetch({ 'GET /api/v1/audit-log': () => json(200, { data: [entry({ old_values: { note: '' }, new_values: { note: 'x', perms: ['a', 'b'] } })], meta: { pagination } }) })
+  renderWithAuth(<AuditPage />, ['audit_log.view.all'])
+  await user.click(await screen.findByRole('button', { name: 'عرض التفاصيل' }))
+  const sheet = await screen.findByRole('dialog')
+  expect(within(within(sheet).getByRole('region', { name: 'القيمة السابقة' })).getByText('""')).toBeInTheDocument()
+  expect(within(sheet).getByText(/"a",\s*"b"/).textContent).toBe('[\n  "a",\n  "b"\n]')
 })
 
 test('an entry with no values on either side still opens, with a dash in each section', async () => {

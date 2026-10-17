@@ -77,12 +77,12 @@ export function TextField({ name, label, values, set, errs, ns = '', ...rest }: 
   )
 }
 
-export function SelectField({ name, label, values, set, errs, options, blank, disabled }: { name: string; label: string; values: Row; set: (k: string, v: string) => void; errs: Errs; options: [string, string][]; blank?: boolean; disabled?: boolean }) {
+export function SelectField({ name, label, values, set, errs, options, blank, disabled }: { name: string; label: string; values: Row; set: (k: string, v: string) => void; errs: Errs; options: [string, string][]; blank?: boolean | string; disabled?: boolean }) {
   return (
     <Field name={name} label={label} errs={errs}>
       {(p) => (
         <select {...p} disabled={disabled} className={selectCls} value={values[name] ?? ''} onChange={(e) => set(name, e.target.value)}>
-          {blank && <option value="" />}
+          {blank && <option value="">{typeof blank === 'string' ? blank : ''}</option>}
           {options.map(([v, l]) => (
             <option key={v} value={v}>
               {l}
