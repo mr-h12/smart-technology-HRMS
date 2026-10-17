@@ -1,9 +1,10 @@
-import { screen, waitFor, within } from '@testing-library/react'
+import { cleanup, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { afterEach, beforeEach, expect, test, vi } from 'vitest'
 import { json, mockFetch, pagination, renderWithAuth } from '@/test-utils'
 import { toast } from 'sonner'
 import { AccountsPage, RolesPage } from './console'
+import { AuditPage } from './audit'
 
 vi.mock('sonner', () => ({ toast: { success: vi.fn() }, Toaster: () => null }))
 
@@ -188,4 +189,44 @@ test('closing a dialog opened from the row menu leaves the page clickable', asyn
   expect(document.body.style.pointerEvents).not.toBe('none')
   await user.click(screen.getByRole('button', { name: 'إضافة حساب' }))
   expect(await screen.findByRole('dialog')).toBeInTheDocument()
+})
+
+test('the roles page shows the skeleton while its first load is pending', async () => {
+  mockFetch({ 'GET /api/v1/roles': () => new Promise<Response>(() => {}) as unknown as Response, 'GET /api/v1/permissions': () => json(200, { data: perms }) })
+  renderWithAuth(<RolesPage />, ['role.view.all'])
+  expect(await screen.findByLabelText('جارٍ التحميل…')).toHaveAttribute('aria-busy', 'true')
+})
+
+test('without role.view neither roles nor permissions are fetched', async () => {
+  mockFetch({})
+  renderWithAuth(<RolesPage />, ['audit_log.view.all'])
+  expect(await screen.findByText('اختر دورًا لعرض صلاحياته.')).toBeInTheDocument()
+  expect(fetch).not.toHaveBeenCalled()
+})
+
+test('saving an account refreshes the account lookup the audit filter shares', async () => {
+  const users = [{ ...account, name: 'سارة' }]
+  const usersGets = () => vi.mocked(fetch).mock.calls.filter(([u, i]) => String(u).startsWith('/api/v1/users?') && (i?.method ?? 'GET') === 'GET').length
+  mockFetch({
+    'GET /api/v1/users': () => json(200, { data: users, meta: { pagination } }),
+    'GET /api/v1/roles': () => json(200, { data: [role] }),
+    'GET /api/v1/audit-log': () => json(200, { data: [], meta: { pagination } }),
+    'POST /api/v1/users': () => { users.push({ ...account, id: 'u9', name: 'نور' }); return json(201, { data: {} }) },
+  })
+  const audit = renderWithAuth(<AuditPage />, ['audit_log.view.all', 'user.view.all'])
+  await screen.findByRole('option', { name: 'سارة' })
+  audit.unmount()
+  renderWithAuth(<AccountsPage />, ['user.view.all', 'user.manage.all', 'role.view.all'])
+  await screen.findByRole('row', { name: /سارة/ })
+  expect(usersGets()).toBe(1) // the accounts list and the audit filter are one cached request
+  await user.click(screen.getByRole('button', { name: 'إضافة حساب' }))
+  await user.type(screen.getByLabelText('الاسم'), 'نور')
+  await user.type(screen.getByLabelText('البريد الإلكتروني'), 'nour@smart.test')
+  await user.selectOptions(await screen.findByLabelText('الدور'), 'r1')
+  await user.type(screen.getByLabelText('كلمة المرور'), 'secret123')
+  await user.click(screen.getByRole('button', { name: 'حفظ' }))
+  await screen.findByRole('row', { name: /نور/ })
+  cleanup()
+  renderWithAuth(<AuditPage />, ['audit_log.view.all', 'user.view.all'])
+  expect(await screen.findByRole('option', { name: 'نور' })).toBeInTheDocument()
 })

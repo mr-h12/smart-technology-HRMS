@@ -1,5 +1,5 @@
 import { Eye, ScrollText } from 'lucide-react'
-import { useEffect, useState } from 'react'
+import { useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { EmptyState } from '@/components/common/EmptyState'
 import { PageHeader } from '@/components/common/PageHeader'
@@ -12,8 +12,8 @@ import { Button } from '@/components/ui/button'
 import { Card } from '@/components/ui/card'
 import { Sheet, SheetContent, SheetDescription, SheetTitle } from '@/components/ui/sheet'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
-import { apiList } from '@/lib/api'
 import { useAuth } from '@/lib/auth'
+import { USERS, useApi } from '@/lib/query'
 
 const ENTITIES = [
   'employees', 'employee_type_changes', 'employee_pay_changes', 'employee_documents', 'employee_fare_overrides', 'employee_manager_assignments',
@@ -81,13 +81,9 @@ export function AuditPage() {
   const label = useLabels()
   const { form, setForm, set } = useForm()
   const [page, setPage] = useState(1)
-  const [users, setUsers] = useState<Row[]>([])
-  const [usersErr, setUsersErr] = useState<unknown>()
   const [open, setOpen] = useState<Row>()
   const canUsers = can('user.view')
-  useEffect(() => {
-    if (canUsers) apiList<Row>('/users?per_page=100').then((r) => setUsers(r.data)).catch(setUsersErr)
-  }, [canUsers])
+  const { data: users = [], err: usersErr } = useApi<Row[]>(canUsers ? USERS : null) // shared with the accounts list
   const qs = new URLSearchParams({ ...Object.fromEntries(Object.entries(form).filter(([, v]) => v)), page: String(page), per_page: String(PER_PAGE) })
   const { rows, total, err, loading } = useList(`/audit-log?${qs}`)
   const f = { values: form, set: (k: string, v: string) => { set(k, v); setPage(1) }, errs: toErrs(err) }

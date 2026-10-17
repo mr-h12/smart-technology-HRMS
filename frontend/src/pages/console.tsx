@@ -1,20 +1,20 @@
 import { UserPlus } from 'lucide-react'
-import { useCallback, useEffect, useState } from 'react'
+import { useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { toast } from 'sonner'
 import { PageHeader } from '@/components/common/PageHeader'
 import { RowActions } from '@/components/common/RowActions'
 import { StatusBadge } from '@/components/common/StatusBadge'
 import { UserAvatar } from '@/components/common/UserAvatar'
-import { type Controlled, ErrorBanner, FormDialog, type Row, SelectField, TextField, useCairoTime, useList } from '@/components/form'
+import { type Controlled, ErrorBanner, FormDialog, type Row, SelectField, TextField, useCairoTime } from '@/components/form'
 import { TableSkeleton } from '@/components/layout/PageSkeleton'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Card, CardFooter, CardHeader, CardTitle } from '@/components/ui/card'
 import { Dialog, DialogBody, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
-import { api } from '@/lib/api'
 import { useAuth } from '@/lib/auth'
+import { USERS, useApi, useList, useSave } from '@/lib/query'
 
 function useRoleName() {
   const { i18n } = useTranslation()
@@ -22,8 +22,9 @@ function useRoleName() {
 }
 
 /** Without role.view the role list is not loaded, so the field stays locked to the account's current role. */
-function AccountDialog({ account, roles, reload, ...dialog }: { account?: Row; roles: Row[]; reload: () => void } & Controlled) {
+function AccountDialog({ account, roles, ...dialog }: { account?: Row; roles: Row[] } & Controlled) {
   const { t } = useTranslation()
+  const send = useSave()
   const { can } = useAuth()
   const roleName = useRoleName()
   const pick = can('role.view')
@@ -36,8 +37,8 @@ function AccountDialog({ account, roles, reload, ...dialog }: { account?: Row; r
       trigger={account ? undefined : <Button type="button"><UserPlus />{label}</Button>}
       init={{ name: account?.name ?? '', email: account?.email ?? '', role_id: account?.role?.id ?? '' }}
       submit={({ name, email, role_id, password }) =>
-        account ? api(`/users/${account.id}`, { method: 'PATCH', body: { name, email, role_id } }) : api('/users', { method: 'POST', body: { name, email, role_id, password } })}
-      onDone={reload}
+        account ? send(`/users/${account.id}`, { method: 'PATCH', body: { name, email, role_id } }) : send('/users', { body: { name, email, role_id, password } })}
+      onDone={() => {}}
       shown={['name', 'email', 'role_id', 'password']}
     >
       {(f) => (
@@ -54,12 +55,13 @@ function AccountDialog({ account, roles, reload, ...dialog }: { account?: Row; r
 
 function PasswordDialog({ account, ...dialog }: { account: Row } & Controlled) {
   const { t } = useTranslation()
+  const send = useSave()
   return (
     <FormDialog
       {...dialog}
       title={`${t('console.setPassword')}: ${account.name}`}
       init={{}}
-      submit={(form) => api(`/users/${account.id}/password`, { method: 'PUT', body: { password: form.password } })}
+      submit={(form) => send(`/users/${account.id}/password`, { method: 'PUT', body: { password: form.password } })}
       onDone={() => {}}
       shown={['password']}
     >
@@ -72,16 +74,15 @@ function PasswordDialog({ account, ...dialog }: { account: Row } & Controlled) {
 function SessionList({ account }: { account: Row }) {
   const { t } = useTranslation()
   const time = useCairoTime()
-  const [rows, setRows] = useState<Row[]>()
-  const [err, setErr] = useState<unknown>()
-  const load = useCallback(() => {
-    api<Row[]>(`/users/${account.id}/sessions`).then((s) => { setErr(undefined); setRows(s) }).catch(setErr)
-  }, [account.id])
-  useEffect(load, [load])
+  const send = useSave()
+  const { data: rows, err: loadErr } = useApi<Row[]>(`/users/${account.id}/sessions`)
+  const [revokeErr, setRevokeErr] = useState<unknown>()
+  const err = loadErr ?? revokeErr
   const [busy, setBusy] = useState<string>()
   const revoke = (id: string) => {
     setBusy(id)
-    api(`/users/${account.id}/sessions/${id}`, { method: 'DELETE' }).then(load).catch(setErr).finally(() => setBusy(undefined))
+    setRevokeErr(undefined)
+    send(`/users/${account.id}/sessions/${id}`, { method: 'DELETE' }).catch(setRevokeErr).finally(() => setBusy(undefined))
   }
   return (
     <>
@@ -138,23 +139,21 @@ export function AccountsPage() {
   const manage = can('user.manage')
   const viewRoles = can('role.view')
   // ponytail: one 100-account page; there are a handful of accounts
-  const { rows, err, loading, reload } = useList('/users?per_page=100')
-  const [roles, setRoles] = useState<Row[]>([])
+  const { rows, err, loading } = useList(USERS)
+  const send = useSave()
+  const { data: roles = [], err: rolesErr } = useApi<Row[]>(manage && viewRoles ? '/roles' : null)
   const [actErr, setActErr] = useState<unknown>()
-  useEffect(() => {
-    if (manage && viewRoles) api<Row[]>('/roles').then(setRoles).catch(setActErr)
-  }, [manage, viewRoles])
   const [dlg, setDlg] = useState<{ type: 'edit' | 'password' | 'sessions'; row: Row }>()
   const close = { open: true, onOpenChange: () => setDlg(undefined) }
   const toggle = (u: Row) => {
     setActErr(undefined)
-    api(`/users/${u.id}/${u.is_active ? 'deactivate' : 'reactivate'}`, { method: 'PATCH' }).then(reload).catch(setActErr)
+    send(`/users/${u.id}/${u.is_active ? 'deactivate' : 'reactivate'}`, { method: 'PATCH' }).catch(setActErr)
   }
   const now = new Date()
   return (
     <div className="space-y-6">
-      <PageHeader title={t('page.accounts')} description={t('console.accountsSubtitle')} actions={manage && viewRoles && <AccountDialog roles={roles} reload={reload} />} />
-      <ErrorBanner err={err ?? actErr} shown={[]} />
+      <PageHeader title={t('page.accounts')} description={t('console.accountsSubtitle')} actions={manage && viewRoles && <AccountDialog roles={roles} />} />
+      <ErrorBanner err={err ?? rolesErr ?? actErr} shown={[]} />
       <Card className="overflow-hidden">
         {loading ? (
           <TableSkeleton />
@@ -215,22 +214,23 @@ export function AccountsPage() {
           </Table>
         )}
       </Card>
-      {dlg?.type === 'edit' && <AccountDialog account={dlg.row} roles={roles} reload={reload} {...close} />}
+      {dlg?.type === 'edit' && <AccountDialog account={dlg.row} roles={roles} {...close} />}
       {dlg?.type === 'password' && <PasswordDialog account={dlg.row} {...close} />}
       {dlg?.type === 'sessions' && <SessionsDialog account={dlg.row} {...close} />}
     </div>
   )
 }
 
-function RoleDialog({ reload }: { reload: () => void }) {
+function RoleDialog() {
   const { t } = useTranslation()
+  const send = useSave()
   return (
     <FormDialog
       title={t('console.addRole')}
       trigger={<Button type="button">{t('console.addRole')}</Button>}
       init={{}}
-      submit={({ slug, name, name_ar }) => api('/roles', { method: 'POST', body: { slug, name, name_ar } })}
-      onDone={reload}
+      submit={({ slug, name, name_ar }) => send('/roles', { body: { slug, name, name_ar } })}
+      onDone={() => {}}
       shown={['slug', 'name', 'name_ar']}
     >
       {(f) => (
@@ -247,8 +247,9 @@ function RoleDialog({ reload }: { reload: () => void }) {
 const ACTIONS = ['view', 'create', 'edit', 'delete', 'assign_manager', 'manage']
 
 /** One row per resource, one column per action; keyed by role and its grants so a saved role resets the controls. */
-function Matrix({ role, perms, editable, onSaved }: { role: Row; perms: Row[]; editable: boolean; onSaved: (role: Row) => void }) {
+function Matrix({ role, perms, editable }: { role: Row; perms: Row[]; editable: boolean }) {
   const { t } = useTranslation()
+  const send = useSave()
   const roleName = useRoleName()
   const granted = () => new Set(perms.filter((p) => role.permissions.includes(p.key)).map((p) => p.id as string))
   const [checked, setChecked] = useState(granted)
@@ -268,8 +269,8 @@ function Matrix({ role, perms, editable, onSaved }: { role: Row; perms: Row[]; e
   const save = () => {
     setBusy(true)
     setErr(undefined)
-    api<Row>(`/roles/${role.id}/permissions`, { method: 'PATCH', body: { permission_ids: [...checked] } })
-      .then((r) => { toast.success(t('common.saved')); onSaved(r) })
+    send(`/roles/${role.id}/permissions`, { method: 'PATCH', body: { permission_ids: [...checked] } })
+      .then(() => toast.success(t('common.saved')))
       .catch((e) => { setErr(e); setChecked(granted()) })
       .finally(() => setBusy(false))
   }
@@ -337,23 +338,19 @@ export function RolesPage() {
   const { can } = useAuth()
   const roleName = useRoleName()
   const manage = can('role.manage')
-  const [roles, setRoles] = useState<Row[]>([])
-  const [perms, setPerms] = useState<Row[]>([])
+  const view = can('role.view') // nothing is fetched without it
   const [selected, setSelected] = useState<string>()
-  const [err, setErr] = useState<unknown>()
-  const load = useCallback(() => {
-    Promise.all([api<Row[]>('/roles'), api<Row[]>('/permissions')])
-      .then(([r, p]) => { setErr(undefined); setRoles(r); setPerms(p) })
-      .catch(setErr)
-  }, [])
-  useEffect(load, [load])
+  const { data: roles = [], err: rolesErr, loading } = useApi<Row[]>(view ? '/roles' : null)
+  const { data: perms = [], err: permsErr } = useApi<Row[]>(view ? '/permissions' : null)
+  const err = rolesErr ?? permsErr
   const role = roles.find((r) => r.id === selected)
   return (
     <div className="space-y-6">
-      <PageHeader title={t('page.roles')} description={t('console.rolesSubtitle')} actions={manage && <RoleDialog reload={load} />} />
+      <PageHeader title={t('page.roles')} description={t('console.rolesSubtitle')} actions={manage && <RoleDialog />} />
       <ErrorBanner err={err} shown={[]} />
       <div className="grid gap-6 xl:grid-cols-[18rem_1fr]">
         <Card className="flex flex-col gap-1 self-start p-2">
+          {loading && <TableSkeleton rows={4} />}
           {roles.map((r) => (
             <button key={r.id} type="button" aria-pressed={r.id === selected} onClick={() => setSelected(r.id)} className="w-full rounded-lg border-s-[3px] border-transparent px-3 py-2.5 text-start hover:bg-muted aria-pressed:border-primary aria-pressed:bg-muted">
               <div className="font-medium">{roleName(r)}</div>
@@ -363,7 +360,7 @@ export function RolesPage() {
           ))}
         </Card>
         {role ? (
-          <Matrix key={`${role.id}:${role.permissions.join()}`} role={role} perms={perms} editable={manage} onSaved={(saved) => setRoles((rs) => rs.map((r) => (r.id === saved.id ? saved : r)))} />
+          <Matrix key={`${role.id}:${role.permissions.join()}`} role={role} perms={perms} editable={manage} />
         ) : (
           <Card className="p-5 text-sm text-muted-foreground">{t('console.pickRole')}</Card>
         )}
