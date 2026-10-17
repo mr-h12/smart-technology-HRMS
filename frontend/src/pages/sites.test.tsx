@@ -2,19 +2,12 @@ import { render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { MemoryRouter } from 'react-router-dom'
 import { afterEach, beforeEach, expect, test, vi } from 'vitest'
-import '@/i18n'
+import { json, mockFetch } from '@/test-utils'
 import { FaresPage, ResidencesPage, SitesPage } from './sites'
 
 const pg = (total = 1) => ({ page: 1, per_page: 100, total, total_pages: 1, has_next_page: false, has_previous_page: false })
-const json = (status: number, body: unknown) => new Response(JSON.stringify(body), { status })
 const list = (data: unknown[], total = data.length) => () => json(200, { data, meta: { pagination: pg(total) } })
 
-function mockFetch(routes: Record<string, () => Response>) {
-  vi.stubGlobal('fetch', vi.fn(async (url: string, init?: RequestInit) => {
-    const key = `${init?.method ?? 'GET'} ${url.split('?')[0]}`
-    return routes[key]?.() ?? json(404, { error: { code: 'nf', message: key } })
-  }))
-}
 const calls = (m: string) => vi.mocked(fetch).mock.calls.filter(([, i]) => (i?.method ?? 'GET') === m)
 
 const fmt = (v: number) => new Intl.NumberFormat('ar', { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(v)

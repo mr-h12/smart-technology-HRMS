@@ -155,5 +155,19 @@
     "add": "Add fare",
     "tooMany": "More than 100 fares exist; the grid may not show them all.",
     "residence": "Residence"
+  },
+  "auth": {
+    "email": "Email",
+    "password": "Password",
+    "submit": "Sign in",
+    "logout": "Sign out",
+    "loading": "Loading…",
+    "error": {
+      "invalid_credentials": "Wrong email or password.",
+      "account_locked": "The account is locked after too many failed attempts. Contact the developer.",
+      "account_suspended": "The account is deactivated. Contact the developer.",
+      "rate_limited": "Too many attempts; try again in a minute.",
+      "unknown": "Could not sign in."
+    }
   }
 }

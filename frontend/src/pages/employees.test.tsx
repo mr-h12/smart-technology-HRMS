@@ -2,18 +2,9 @@ import { render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { MemoryRouter, Route, Routes } from 'react-router-dom'
 import { afterEach, beforeEach, expect, test, vi } from 'vitest'
-import '@/i18n'
+import { json, mockFetch, pagination } from '@/test-utils'
 import { EmployeeFormPage, EmployeesPage } from './employees'
 
-const pagination = { page: 1, per_page: 20, total: 1, total_pages: 1, has_next_page: false, has_previous_page: false }
-const json = (status: number, body: unknown) => new Response(JSON.stringify(body), { status })
-
-function mockFetch(routes: Record<string, () => Response>) {
-  vi.stubGlobal('fetch', vi.fn(async (url: string, init?: RequestInit) => {
-    const key = `${init?.method ?? 'GET'} ${url.split('?')[0]}`
-    return routes[key]?.() ?? json(404, { error: { code: 'nf', message: key } })
-  }))
-}
 const residences = () => json(200, { data: [{ id: 'r1', name_ar: 'العجمي' }], meta: { pagination } })
 
 beforeEach(() => localStorage.clear())

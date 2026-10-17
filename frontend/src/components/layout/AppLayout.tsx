@@ -1,4 +1,4 @@
-import { Menu, Moon, Sun, Users, MapPin, House, Banknote } from 'lucide-react'
+import { Menu, Moon, Sun, Users, MapPin, House, Banknote, LogOut } from 'lucide-react'
 import { useEffect, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { NavLink, Outlet, useLocation } from 'react-router-dom'
@@ -6,15 +6,34 @@ import logoMark from '@/assets/logo-mark.png'
 import { Button } from '@/components/ui/button'
 import { Sheet, SheetContent, SheetDescription, SheetTitle } from '@/components/ui/sheet'
 import { useTheme } from '@/hooks/useTheme'
+import { useAuth } from '@/lib/auth'
 import { cn } from '@/lib/utils'
 import { SegmentedControl } from './SegmentedControl'
 
 const NAV = [
-  { path: '/employees', key: 'nav.employees', icon: Users },
-  { path: '/sites', key: 'nav.sites', icon: MapPin },
-  { path: '/residences', key: 'nav.residences', icon: House },
-  { path: '/fares', key: 'nav.fares', icon: Banknote },
+  { path: '/employees', key: 'nav.employees', icon: Users, ability: 'employee.view' },
+  { path: '/sites', key: 'nav.sites', icon: MapPin, ability: 'site.view' },
+  { path: '/residences', key: 'nav.residences', icon: House, ability: 'site.view' },
+  { path: '/fares', key: 'nav.fares', icon: Banknote, ability: 'site.view' },
 ]
+
+/** The first page the user may open; the fallback is the 1a landing page. */
+export const homePath = (can: (ability: string) => boolean) => NAV.find((n) => can(n.ability))?.path ?? '/employees'
+
+export function LanguageToggle() {
+  const { t, i18n } = useTranslation()
+  return (
+    <SegmentedControl
+      label={t('toggle.language')}
+      value={i18n.language}
+      onChange={(l) => i18n.changeLanguage(l)}
+      options={[
+        { value: 'en', label: 'English', content: <span lang="en" aria-hidden>EN</span> },
+        { value: 'ar', label: 'العربية', content: <span lang="ar" aria-hidden>ع</span> },
+      ]}
+    />
+  )
+}
 
 function Brand() {
   const { t } = useTranslation()
@@ -30,10 +49,11 @@ function Brand() {
 
 function Nav({ onNavigate }: { onNavigate?: () => void }) {
   const { t } = useTranslation()
+  const { can } = useAuth()
   return (
     <nav aria-label={t('nav.main')}>
       <ul className="flex flex-col gap-1">
-        {NAV.map(({ path, key, icon: Icon }) => (
+        {NAV.filter((n) => can(n.ability)).map(({ path, key, icon: Icon }) => (
           <li key={path}>
             <NavLink
               to={path}
@@ -56,8 +76,9 @@ function Nav({ onNavigate }: { onNavigate?: () => void }) {
 }
 
 export function AppLayout() {
-  const { t, i18n } = useTranslation()
+  const { t } = useTranslation()
   const { theme, setTheme } = useTheme()
+  const { me, logout } = useAuth()
   const [mobileOpen, setMobileOpen] = useState(false)
   const { pathname } = useLocation()
 
@@ -87,15 +108,8 @@ export function AppLayout() {
             <Menu className="size-5" />
           </Button>
           <div className="ms-auto flex items-center gap-2">
-            <SegmentedControl
-              label={t('toggle.language')}
-              value={i18n.language}
-              onChange={(l) => i18n.changeLanguage(l)}
-              options={[
-                { value: 'en', label: 'English', content: <span lang="en" aria-hidden>EN</span> },
-                { value: 'ar', label: 'العربية', content: <span lang="ar" aria-hidden>ع</span> },
-              ]}
-            />
+            <span className="hidden text-sm font-medium sm:inline">{me?.name}</span>
+            <LanguageToggle />
             <SegmentedControl
               label={t('toggle.theme')}
               value={theme}
@@ -105,6 +119,10 @@ export function AppLayout() {
                 { value: 'dark', label: t('toggle.dark'), content: <Moon className="size-4" aria-hidden /> },
               ]}
             />
+            <Button variant="ghost" size="sm" onClick={logout}>
+              <LogOut className="rtl:-scale-x-100" aria-hidden />
+              {t('auth.logout')}
+            </Button>
           </div>
         </header>
         <main id="page-content" className="mx-auto w-full max-w-[1600px] flex-1 scroll-mt-20 p-4 sm:p-6">
