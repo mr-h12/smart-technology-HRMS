@@ -45,6 +45,13 @@ test('the breadcrumb names the group and the current page', async () => {
   expect(crumb).toHaveTextContent('الموظفون')
 })
 
+test('the breadcrumb shows one crumb when the group and the page share a name', async () => {
+  signedIn(['setting.view.all'])
+  renderApp('/settings')
+  const crumb = await screen.findByRole('navigation', { name: 'مسار التنقل' })
+  expect(crumb).toHaveTextContent(/^الإعدادات$/)
+})
+
 test('the profile menu shows the account and signs out from there', async () => {
   signedIn(['employee.view.all'])
   renderApp('/employees')

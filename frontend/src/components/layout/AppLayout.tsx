@@ -256,8 +256,12 @@ function Navbar({ onOpenMobile }: { onOpenMobile: () => void }) {
       </Button>
       {page && (
         <nav aria-label={t('nav.breadcrumb')} className="me-auto hidden min-w-0 items-center gap-2 text-table text-muted-foreground md:flex">
-          <span className="truncate">{t(page.group)}</span>
-          <span aria-hidden>/</span>
+          {t(page.group) !== t(page.key) && (
+            <>
+              <span className="truncate">{t(page.group)}</span>
+              <span aria-hidden>/</span>
+            </>
+          )}
           <span className="truncate text-section-title text-foreground">{t(page.key)}</span>
         </nav>
       )}

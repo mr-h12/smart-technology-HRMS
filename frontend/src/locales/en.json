@@ -14,7 +14,9 @@
     "noResults": "No results",
     "noData": "No records yet.",
     "saveChanges": "Save changes",
-    "name": "Name"
+    "name": "Name",
+    "saved": "Changes saved.",
+    "status": "Status"
   },
   "app": {
     "name": "Smart Technology HRMS",
@@ -238,6 +240,10 @@
       "none": "None",
       "own": "Own",
       "all": "All"
+    },
+    "setting": {
+      "view": "Business rules: view",
+      "manage": "Business rules: manage"
     }
   },
   "scope": {
@@ -287,7 +293,8 @@
       "residences": "Residences",
       "fares": "Fares",
       "users": "Accounts",
-      "roles": "Roles"
+      "roles": "Roles",
+      "settings": "Business rules"
     }
   },
   "settings": {
@@ -303,7 +310,8 @@
       "sites": "Places where attendance days are recorded.",
       "residences": "Areas employees travel from to reach a site.",
       "leaveTypes": "Days recorded instead of a work site, such as Fridays, official holidays and absences.",
-      "fares": "The fare from each residence to each site, effective from its date."
+      "fares": "The fare from each residence to each site, effective from its date.",
+      "rules": "The numbers payroll, lateness and leave calculations rely on."
     }
   },
   "status": {
@@ -314,5 +322,37 @@
     "title": "Manager",
     "assign": "Assign manager",
     "none": "No manager"
+  },
+  "rule": {
+    "group": {
+      "time": "Pay and working hours",
+      "lateness": "Lateness",
+      "schedule": "Shift and weekly rest",
+      "leave": "Annual leave entitlement"
+    },
+    "month_days": "Days per month",
+    "day_hours": "Hours per day",
+    "overtime_multiplier": "Overtime multiplier",
+    "lateness_multiplier_office": "Lateness multiplier: office staff",
+    "lateness_multiplier_engineer": "Lateness multiplier: engineers",
+    "lateness_multiplier_permanent_worker": "Lateness multiplier: permanent workers",
+    "lateness_multiplier_day_laborer": "Lateness multiplier: day laborers",
+    "office_grace_minutes": "Lateness grace period (minutes)",
+    "office_shift_start": "Office shift start",
+    "office_shift_end": "Office shift end",
+    "weekly_off_office": "Weekly rest: office staff",
+    "weekly_off_field": "Weekly rest: site staff",
+    "leave_days_under_one_year": "Leave days, under one year of service",
+    "leave_days_one_year_plus": "Leave days, one year of service or more",
+    "leave_casual_days": "Casual leave days"
+  },
+  "weekday": {
+    "saturday": "Saturday",
+    "sunday": "Sunday",
+    "monday": "Monday",
+    "tuesday": "Tuesday",
+    "wednesday": "Wednesday",
+    "thursday": "Thursday",
+    "friday": "Friday"
   }
 }

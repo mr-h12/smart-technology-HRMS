@@ -3,6 +3,8 @@ import userEvent from '@testing-library/user-event'
 import { afterEach, beforeEach, expect, test, vi } from 'vitest'
 import { json, me, mockFetch, renderApp, renderWithAuth } from '@/test-utils'
 import { SettingsPage } from './settings'
+vi.mock('sonner', () => ({ toast: { success: vi.fn() }, Toaster: () => null }))
+import { toast } from 'sonner'
 
 const user = userEvent.setup()
 const MANAGE = ['site.view.all', 'site.manage.all']
@@ -154,6 +156,8 @@ test('leave types tab lists kind=leave rows and adds one with its code', async (
   expect(await screen.findByText('جمعة')).toBeInTheDocument()
   expect(urlWith('/sites')).toContain('kind=leave')
   await user.click(screen.getByRole('button', { name: 'إضافة نوع إجازة' }))
+  expect(screen.getByLabelText('كود الإجازة')).toHaveValue('friday')
+  expect(within(screen.getByLabelText('كود الإجازة')).queryByRole('option', { name: '' })).toBeNull()
   await user.type(screen.getByLabelText('الاسم بالعربية'), 'مرضي')
   await user.selectOptions(screen.getByLabelText('كود الإجازة'), 'sick')
   await user.click(screen.getByRole('button', { name: 'حفظ' }))
@@ -288,4 +292,56 @@ test('site.manage alone shows no managers action', async () => {
   await rowMenu('موقع أ')
   expect(await screen.findByRole('menuitem', { name: 'تعديل' })).toBeInTheDocument()
   expect(screen.queryByRole('menuitem', { name: 'المديرون' })).toBeNull()
+})
+
+const rules = {
+  month_days: '30', day_hours: '8', overtime_multiplier: '1.5',
+  lateness_multiplier_office: '1', lateness_multiplier_engineer: '1.5', lateness_multiplier_permanent_worker: '2', lateness_multiplier_day_laborer: '2',
+  office_grace_minutes: '15', office_shift_start: '09:00', office_shift_end: '17:00',
+  weekly_off_office: 'friday,saturday', weekly_off_field: 'friday',
+  leave_days_under_one_year: '10', leave_days_one_year_plus: '21', leave_casual_days: '6',
+}
+const RULES = ['site.view.all', 'setting.view.all', 'setting.manage.all']
+
+test('rules tab loads the settings, saves typed values and toasts', async () => {
+  const put = vi.fn(() => json(200, { data: { ...rules, office_grace_minutes: '20', weekly_off_field: 'friday,thursday' } }))
+  mockFetch({ 'GET /api/v1/settings': () => json(200, { data: rules }), 'PUT /api/v1/settings': put })
+  renderWithAuth(<SettingsPage />, RULES, { path: '/settings?tab=rules' })
+  const grace = await screen.findByLabelText('فترة السماح للتأخير (دقيقة)')
+  expect(grace).toHaveValue('15')
+  expect(screen.getByRole('button', { name: 'حفظ التغييرات' })).toBeDisabled()
+  await user.clear(grace)
+  await user.type(grace, '٢٠')
+  const field = screen.getByRole('group', { name: 'الراحة الأسبوعية: العاملون بالمواقع' })
+  await user.click(within(field).getByRole('checkbox', { name: 'الخميس' }))
+  await user.click(screen.getByRole('button', { name: 'حفظ التغييرات' }))
+  expect(body(put)).toEqual({ ...rules, office_grace_minutes: '20', weekly_off_field: 'friday,thursday' })
+  await waitFor(() => expect(toast.success).toHaveBeenCalledWith('تم حفظ التغييرات.'))
+})
+
+test('a rejected rule value shows under its field', async () => {
+  mockFetch({
+    'GET /api/v1/settings': () => json(200, { data: rules }),
+    'PUT /api/v1/settings': () => json(422, { error: { code: 'validation_failed', message: 'x', details: [{ field: 'overtime_multiplier', code: 'invalid', message: 'صيغة القيمة غير صحيحة' }] } }),
+  })
+  renderWithAuth(<SettingsPage />, RULES, { path: '/settings?tab=rules' })
+  const ot = await screen.findByLabelText('معامل الوقت الإضافي')
+  await user.type(ot, '5')
+  await user.click(screen.getByRole('button', { name: 'حفظ التغييرات' }))
+  await waitFor(() => expect(ot).toHaveAccessibleDescription('صيغة القيمة غير صحيحة'))
+  expect(toast.success).not.toHaveBeenCalled()
+})
+
+test('view-only users see the rules read-only', async () => {
+  mockFetch({ 'GET /api/v1/settings': () => json(200, { data: rules }) })
+  renderWithAuth(<SettingsPage />, ['site.view.all', 'setting.view.all'], { path: '/settings?tab=rules' })
+  expect(await screen.findByLabelText('عدد أيام الشهر')).toBeDisabled()
+  expect(screen.queryByRole('button', { name: 'حفظ التغييرات' })).toBeNull()
+})
+
+test('the rules tab is hidden without setting.view', async () => {
+  mockFetch({ 'GET /api/v1/sites': list(sites) })
+  renderWithAuth(<SettingsPage />, MANAGE, { path: '/settings?tab=rules' })
+  expect(await screen.findByRole('tab', { name: 'المواقع' })).toHaveAttribute('aria-selected', 'true')
+  expect(screen.queryByRole('tab', { name: 'قواعد العمل' })).toBeNull()
 })

@@ -68,7 +68,7 @@ function ListCard({ title, description, action, err, loading, empty, icon, notic
 function SiteDialog({ kind, site, reload, ...dialog }: { kind: 'work' | 'leave'; site?: Row; reload: () => void } & Controlled) {
   const { t } = useTranslation()
   const addKey = kind === 'work' ? 'site.add' : 'site.addLeaveType'
-  const init = { name_ar: site?.name_ar ?? '', name_en: site?.name_en ?? '', leave_code: site?.leave_code ?? '', outside_alexandria: site?.outside_alexandria ? 'true' : '', active: site?.active === false ? '' : 'true' }
+  const init = { name_ar: site?.name_ar ?? '', name_en: site?.name_en ?? '', leave_code: site?.leave_code ?? LEAVE_CODES[0], outside_alexandria: site?.outside_alexandria ? 'true' : '', active: site?.active === false ? '' : 'true' }
   const body = (form: Row) => ({
     name_ar: form.name_ar,
     name_en: form.name_en || null,
@@ -91,7 +91,7 @@ function SiteDialog({ kind, site, reload, ...dialog }: { kind: 'work' | 'leave';
         <>
           <TextField name="name_ar" label={t('employee.name_ar')} {...f} />
           <TextField name="name_en" label={t('employee.name_en')} {...f} />
-          {kind === 'leave' && <SelectField name="leave_code" label={t('site.leave_code')} blank options={LEAVE_CODES.map((v) => [v, t(`enum.leave_code.${v}`)])} {...f} />}
+          {kind === 'leave' && <SelectField name="leave_code" label={t('site.leave_code')} options={LEAVE_CODES.map((v) => [v, t(`enum.leave_code.${v}`)])} {...f} />}
           {(kind === 'work' ? ['outside_alexandria', 'active'] : ['active']).map((k) => (
             <label key={k} className="flex items-center gap-2 text-sm">
               <input type="checkbox" checked={!!f.values[k]} onChange={(e) => f.set(k, e.target.checked ? 'true' : '')} />
@@ -253,7 +253,7 @@ function SiteList({ kind }: { kind: 'work' | 'leave' }) {
           <TableRow>
             <TableHead>{t('common.name')}</TableHead>
             {work ? <TableHead className="hidden md:table-cell">{t('site.outside_alexandria')}</TableHead> : <TableHead className="hidden sm:table-cell">{t('site.leave_code')}</TableHead>}
-            <TableHead>{t('console.status')}</TableHead>
+            <TableHead>{t('common.status')}</TableHead>
             <TableHead>
               <span className="sr-only">{t('common.actions')}</span>
             </TableHead>
@@ -366,7 +366,7 @@ function FareDialog({ residence, site, reload, children }: { residence: Row; sit
   return (
     <FormDialog
       title={`${residence.name_ar} / ${site.name_ar}`}
-      trigger={<button type="button" className="min-h-9 w-full rounded px-2 text-start hover:bg-muted">{children}</button>}
+      trigger={<Button type="button" variant="soft" size="sm" className="min-w-20 tabular-nums">{children}</Button>}
       init={{}}
       submit={(form) => api('/fares', { method: 'POST', body: { residence_id: residence.id, site_id: site.id, effective_from: form.effective_from, amount: form.amount } })}
       onDone={reload}
@@ -412,14 +412,14 @@ export function FaresTab() {
         <Table>
           <TableHeader>
             <TableRow>
-              <TableHead>{t('fare.residence')}</TableHead>
+              <TableHead className="sticky start-0 z-10 bg-muted">{t('fare.residence')}</TableHead>
               {data.sites.map((s) => <TableHead key={s.id}>{s.name_ar}</TableHead>)}
             </TableRow>
           </TableHeader>
           <TableBody>
             {data.residences.map((r) => (
               <TableRow key={r.id}>
-                <TableCell>{r.name_ar}</TableCell>
+                <TableCell className="sticky start-0 z-10 bg-card font-medium">{r.name_ar}</TableCell>
                 {data.sites.map((s) => (
                   <TableCell key={s.id}>
                     <FareDialog residence={r} site={s} reload={load}>
