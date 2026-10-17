@@ -322,11 +322,9 @@ export function AppLayout() {
         <div className="flex min-w-0 flex-1 flex-col">
           <Navbar onOpenMobile={() => setMobileOpen(true)} />
           <main id="page-content" className="mx-auto w-full max-w-[1600px] flex-1 scroll-mt-20 p-4 sm:p-6">
-            <div key={pathname} className="animate-fade-in">
-              <Suspense fallback={<TableSkeleton />}>
-                <Outlet />
-              </Suspense>
-            </div>
+            <Suspense fallback={<TableSkeleton />}>
+              <Outlet />
+            </Suspense>
           </main>
         </div>
 

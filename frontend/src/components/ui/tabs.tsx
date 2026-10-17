@@ -26,5 +26,5 @@ export function TabsTrigger({ className, ...props }: React.ComponentProps<typeof
 }
 
 export function TabsContent({ className, ...props }: React.ComponentProps<typeof TabsPrimitive.Content>) {
-  return <TabsPrimitive.Content className={cn('mt-5 outline-none data-[state=active]:animate-fade-in', className)} {...props} />
+  return <TabsPrimitive.Content className={cn('mt-5 outline-none', className)} {...props} />
 }
