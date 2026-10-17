@@ -1,4 +1,4 @@
-import { screen, within } from '@testing-library/react'
+import { screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { afterEach, beforeEach, expect, test, vi } from 'vitest'
 import { json, mockFetch, pagination, renderWithAuth } from '@/test-utils'
@@ -57,7 +57,7 @@ test('without role.manage the matrix is read-only', async () => {
 test('account create shows a server field error under its field', async () => {
   mockFetch({ 'GET /api/v1/users': () => json(200, { data: [], meta: { pagination } }), 'GET /api/v1/roles': () => json(200, { data: [role] }),
     'POST /api/v1/users': () => json(422, { error: { code: 'validation_failed', message: 'x', details: [{ field: 'email', code: 'invalid', message: 'البريد مستخدم' }] } }) })
-  renderWithAuth(<AccountsPage />, ['user.view.all', 'user.manage.all'])
+  renderWithAuth(<AccountsPage />, ['user.view.all', 'user.manage.all', 'role.view.all'])
   // open create dialog, fill, save
   await user.click(await screen.findByRole('button', { name: 'إضافة حساب' }))
   await user.type(screen.getByLabelText('الاسم'), 'سارة')
@@ -74,4 +74,69 @@ test('without user.manage there are no account actions', async () => {
   expect(await screen.findByText(account.email)).toBeInTheDocument()
   expect(screen.queryByRole('button', { name: 'إضافة حساب' })).toBeNull()
   expect(within(screen.getByRole('table')).queryAllByRole('button')).toHaveLength(0)
+})
+
+test('the accounts table shows role, status and locked badges', async () => {
+  mockFetch({ 'GET /api/v1/users': () => json(200, { data: [{ ...account, locked_until: '2999-01-01T00:00:00Z' }], meta: { pagination } }), 'GET /api/v1/roles': () => json(200, { data: [role] }) })
+  renderWithAuth(<AccountsPage />, ['user.view.all'])
+  const row = await screen.findByRole('row', { name: /سارة/ })
+  expect(within(row).getByText('مدير')).toBeInTheDocument()
+  expect(within(row).getByText('نشط')).toBeInTheDocument()
+  expect(within(row).getByText('مقفل')).toBeInTheDocument()
+})
+
+test('the row menu deactivates an account', async () => {
+  const deactivate = vi.fn(() => json(200, { data: { ...account, is_active: false } }))
+  mockFetch({ 'GET /api/v1/users': () => json(200, { data: [account], meta: { pagination } }), 'GET /api/v1/roles': () => json(200, { data: [role] }),
+    'PATCH /api/v1/users/u2/deactivate': deactivate })
+  renderWithAuth(<AccountsPage />, ['user.view.all', 'user.manage.all'])
+  const row = await screen.findByRole('row', { name: /سارة/ })
+  await user.click(within(row).getByRole('button', { name: 'الإجراءات' }))
+  await user.click(await screen.findByRole('menuitem', { name: 'تعطيل' }))
+  await waitFor(() => expect(deactivate).toHaveBeenCalledOnce())
+})
+
+test('the row menu sets a new password', async () => {
+  const put = vi.fn(() => json(200, { data: {} }))
+  mockFetch({ 'GET /api/v1/users': () => json(200, { data: [account], meta: { pagination } }), 'GET /api/v1/roles': () => json(200, { data: [role] }),
+    'PUT /api/v1/users/u2/password': put })
+  renderWithAuth(<AccountsPage />, ['user.view.all', 'user.manage.all'])
+  const row = await screen.findByRole('row', { name: /سارة/ })
+  await user.click(within(row).getByRole('button', { name: 'الإجراءات' }))
+  await user.click(await screen.findByRole('menuitem', { name: 'تعيين كلمة مرور جديدة' }))
+  await user.type(screen.getByLabelText('كلمة المرور'), 'newpass123')
+  await user.click(screen.getByRole('button', { name: 'حفظ' }))
+  expect(JSON.parse((put.mock.calls[0] as unknown as [string, RequestInit])[1].body as string)).toEqual({ password: 'newpass123' })
+})
+
+test('without role.view the roles list is not fetched and the role field is locked to the current role', async () => {
+  const roles = vi.fn(() => json(403, { error: { code: 'forbidden', message: 'ممنوع' } }))
+  const patch = vi.fn(() => json(200, { data: account }))
+  mockFetch({ 'GET /api/v1/users': () => json(200, { data: [account], meta: { pagination } }), 'GET /api/v1/roles': roles, 'PATCH /api/v1/users/u2': patch })
+  renderWithAuth(<AccountsPage />, ['user.view.all', 'user.manage.all'])
+  const row = await screen.findByRole('row', { name: /سارة/ })
+  expect(roles).not.toHaveBeenCalled()
+  expect(screen.queryByRole('alert')).toBeNull()
+  await user.click(within(row).getByRole('button', { name: 'الإجراءات' }))
+  await user.click(await screen.findByRole('menuitem', { name: 'تعديل' }))
+  const select = screen.getByLabelText('الدور')
+  expect(select).toBeDisabled()
+  expect(select).toHaveDisplayValue('مدير')
+  await user.click(screen.getByRole('button', { name: 'حفظ' }))
+  expect(JSON.parse((patch.mock.calls[0] as unknown as [string, RequestInit])[1].body as string)).toEqual({ name: 'سارة', email: 'sara@smart.test', role_id: 'r1' })
+})
+
+test('closing a dialog opened from the row menu leaves the page clickable', async () => {
+  mockFetch({ 'GET /api/v1/users': () => json(200, { data: [account], meta: { pagination } }), 'GET /api/v1/roles': () => json(200, { data: [role] }),
+    'GET /api/v1/users/u2/sessions': () => json(200, { data: [] }) })
+  renderWithAuth(<AccountsPage />, ['user.view.all', 'user.manage.all', 'role.view.all'])
+  const row = await screen.findByRole('row', { name: /سارة/ })
+  await user.click(within(row).getByRole('button', { name: 'الإجراءات' }))
+  await user.click(await screen.findByRole('menuitem', { name: 'الجلسات النشطة' }))
+  expect(await screen.findByText('لا توجد جلسات نشطة.')).toBeInTheDocument()
+  await user.keyboard('{Escape}')
+  await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull())
+  expect(document.body.style.pointerEvents).not.toBe('none')
+  await user.click(screen.getByRole('button', { name: 'إضافة حساب' }))
+  expect(await screen.findByRole('dialog')).toBeInTheDocument()
 })

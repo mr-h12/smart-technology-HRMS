@@ -10,7 +10,7 @@ export type Row = Record<string, any> // eslint-disable-line @typescript-eslint/
 export type Errs = Record<string, string>
 
 export const selectCls =
-  'flex h-9 w-full rounded-md border border-input bg-card px-3 text-sm outline-none focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring aria-invalid:border-destructive'
+  'flex h-9 w-full rounded-md border border-input bg-card px-3 text-sm outline-none focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring disabled:cursor-not-allowed disabled:opacity-50 aria-invalid:border-destructive'
 
 export const toErrs = (e: unknown): Errs =>
   e instanceof ApiError ? Object.fromEntries(e.details.filter((d) => d.field).map((d) => [d.field!, d.message])) : {}
@@ -77,11 +77,11 @@ export function TextField({ name, label, values, set, errs, ns = '', ...rest }: 
   )
 }
 
-export function SelectField({ name, label, values, set, errs, options, blank }: { name: string; label: string; values: Row; set: (k: string, v: string) => void; errs: Errs; options: [string, string][]; blank?: boolean }) {
+export function SelectField({ name, label, values, set, errs, options, blank, disabled }: { name: string; label: string; values: Row; set: (k: string, v: string) => void; errs: Errs; options: [string, string][]; blank?: boolean; disabled?: boolean }) {
   return (
     <Field name={name} label={label} errs={errs}>
       {(p) => (
-        <select {...p} className={selectCls} value={values[name] ?? ''} onChange={(e) => set(name, e.target.value)}>
+        <select {...p} disabled={disabled} className={selectCls} value={values[name] ?? ''} onChange={(e) => set(name, e.target.value)}>
           {blank && <option value="" />}
           {options.map(([v, l]) => (
             <option key={v} value={v}>

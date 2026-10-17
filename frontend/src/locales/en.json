@@ -221,7 +221,9 @@
     "revoke": "End session",
     "addRole": "Add role",
     "slug": "Identifier",
-    "pickRole": "Choose a role to see its permissions."
+    "pickRole": "Choose a role to see its permissions.",
+    "accountsSubtitle": "Create user accounts and manage their roles and sessions.",
+    "user": "User"
   },
   "perm": {
     "employee": {

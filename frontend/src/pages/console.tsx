@@ -1,27 +1,41 @@
+import { UserPlus } from 'lucide-react'
 import { useCallback, useEffect, useState } from 'react'
 import { useTranslation } from 'react-i18next'
+import { PageHeader } from '@/components/common/PageHeader'
+import { RowActions } from '@/components/common/RowActions'
+import { StatusBadge } from '@/components/common/StatusBadge'
+import { UserAvatar } from '@/components/common/UserAvatar'
 import { ErrorBanner, FormDialog, type Row, SelectField, TextField, useCairoTime, useList } from '@/components/form'
+import { TableSkeleton } from '@/components/layout/PageSkeleton'
+import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
-import { Dialog, DialogBody, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog'
+import { Card } from '@/components/ui/card'
+import { Dialog, DialogBody, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 import { api } from '@/lib/api'
 import { useAuth } from '@/lib/auth'
-
-const badge = 'inline-block rounded-md border px-2 py-0.5 text-xs'
 
 function useRoleName() {
   const { i18n } = useTranslation()
   return (r: Row | null | undefined) => (r ? (i18n.language === 'ar' ? r.name_ar : r.name) : '—')
 }
 
-function AccountDialog({ account, roles, reload }: { account?: Row; roles: Row[]; reload: () => void }) {
+/** Controlled-dialog props for a dialog opened from a row menu; it mounts only while open. */
+type Controlled = { open?: boolean; onOpenChange?: (open: boolean) => void }
+
+/** Without role.view the role list is not loaded, so the field stays locked to the account's current role. */
+function AccountDialog({ account, roles, reload, ...dialog }: { account?: Row; roles: Row[]; reload: () => void } & Controlled) {
   const { t } = useTranslation()
+  const { can } = useAuth()
   const roleName = useRoleName()
+  const pick = can('role.view')
   const label = t(account ? 'common.edit' : 'console.addAccount')
+  const options = pick ? roles : account?.role ? [account.role] : []
   return (
     <FormDialog
+      {...dialog}
       title={label}
-      trigger={<Button type="button" variant={account ? 'outline' : 'default'}>{label}</Button>}
+      trigger={account ? undefined : <Button type="button"><UserPlus />{label}</Button>}
       init={{ name: account?.name ?? '', email: account?.email ?? '', role_id: account?.role?.id ?? '' }}
       submit={({ name, email, role_id, password }) =>
         account ? api(`/users/${account.id}`, { method: 'PATCH', body: { name, email, role_id } }) : api('/users', { method: 'POST', body: { name, email, role_id, password } })}
@@ -32,7 +46,7 @@ function AccountDialog({ account, roles, reload }: { account?: Row; roles: Row[]
         <>
           <TextField name="name" label={t('console.name')} {...f} />
           <TextField name="email" label={t('auth.email')} type="email" dir="ltr" {...f} />
-          <SelectField name="role_id" label={t('console.role')} blank options={roles.map((r) => [r.id, roleName(r)])} {...f} />
+          <SelectField name="role_id" label={t('console.role')} blank={pick} disabled={!pick} options={options.map((r) => [r.id, roleName(r)])} {...f} />
           {!account && <TextField name="password" label={t('auth.password')} type="password" autoComplete="new-password" {...f} />}
         </>
       )}
@@ -40,12 +54,12 @@ function AccountDialog({ account, roles, reload }: { account?: Row; roles: Row[]
   )
 }
 
-function PasswordDialog({ account }: { account: Row }) {
+function PasswordDialog({ account, ...dialog }: { account: Row } & Controlled) {
   const { t } = useTranslation()
   return (
     <FormDialog
+      {...dialog}
       title={`${t('console.setPassword')}: ${account.name}`}
-      trigger={<Button type="button" variant="outline">{t('console.setPassword')}</Button>}
       init={{}}
       submit={(form) => api(`/users/${account.id}/password`, { method: 'PUT', body: { password: form.password } })}
       onDone={() => {}}
@@ -103,13 +117,10 @@ function SessionList({ account }: { account: Row }) {
   )
 }
 
-function SessionsDialog({ account }: { account: Row }) {
+function SessionsDialog({ account, open, onOpenChange }: { account: Row } & Controlled) {
   const { t } = useTranslation()
   return (
-    <Dialog>
-      <DialogTrigger asChild>
-        <Button type="button" variant="outline">{t('console.sessions')}</Button>
-      </DialogTrigger>
+    <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent aria-describedby={undefined}>
         <DialogHeader>
           <DialogTitle>{`${t('console.sessions')}: ${account.name}`}</DialogTitle>
@@ -127,62 +138,83 @@ export function AccountsPage() {
   const { can } = useAuth()
   const roleName = useRoleName()
   const manage = can('user.manage')
+  const viewRoles = can('role.view')
   // ponytail: one 100-account page; there are a handful of accounts
-  const { rows, err, reload } = useList('/users?per_page=100')
+  const { rows, err, loading, reload } = useList('/users?per_page=100')
   const [roles, setRoles] = useState<Row[]>([])
   const [actErr, setActErr] = useState<unknown>()
   useEffect(() => {
-    if (manage) api<Row[]>('/roles').then(setRoles).catch(setActErr)
-  }, [manage])
-  const [busy, setBusy] = useState<string>()
+    if (manage && viewRoles) api<Row[]>('/roles').then(setRoles).catch(setActErr)
+  }, [manage, viewRoles])
+  const [dlg, setDlg] = useState<{ type: 'edit' | 'password' | 'sessions'; row: Row }>()
+  const close = { open: true, onOpenChange: () => setDlg(undefined) }
   const toggle = (u: Row) => {
     setActErr(undefined)
-    setBusy(u.id)
-    api(`/users/${u.id}/${u.is_active ? 'deactivate' : 'reactivate'}`, { method: 'PATCH' }).then(reload).catch(setActErr).finally(() => setBusy(undefined))
+    api(`/users/${u.id}/${u.is_active ? 'deactivate' : 'reactivate'}`, { method: 'PATCH' }).then(reload).catch(setActErr)
   }
+  const now = new Date()
   return (
-    <div className="flex flex-col gap-4">
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <h1 className="text-page-title">{t('page.accounts')}</h1>
-        {manage && <AccountDialog roles={roles} reload={reload} />}
-      </div>
+    <div className="space-y-6">
+      <PageHeader title={t('page.accounts')} description={t('console.accountsSubtitle')} actions={manage && <AccountDialog roles={roles} reload={reload} />} />
       <ErrorBanner err={err ?? actErr} shown={[]} />
-      <Table>
-        <TableHeader>
-          <TableRow>
-            <TableHead>{t('console.name')}</TableHead>
-            <TableHead>{t('auth.email')}</TableHead>
-            <TableHead>{t('console.role')}</TableHead>
-            <TableHead>{t('console.status')}</TableHead>
-            {manage && <TableHead />}
-          </TableRow>
-        </TableHeader>
-        <TableBody>
-          {rows.map((u) => (
-            <TableRow key={u.id}>
-              <TableCell>{u.name}</TableCell>
-              <TableCell dir="ltr" className="text-start">{u.email}</TableCell>
-              <TableCell>{roleName(u.role)}</TableCell>
-              <TableCell>
-                <div className="flex flex-wrap gap-1">
-                  <span className={badge}>{t(u.is_active ? 'console.active' : 'console.inactive')}</span>
-                  {u.locked_until && new Date(u.locked_until) > new Date() && <span className={`${badge} border-destructive text-destructive`}>{t('console.locked')}</span>}
-                </div>
-              </TableCell>
-              {manage && (
-                <TableCell>
-                  <div className="flex flex-wrap gap-2">
-                    <AccountDialog account={u} roles={roles} reload={reload} />
-                    <Button type="button" variant="outline" disabled={busy === u.id} onClick={() => toggle(u)}>{t(u.is_active ? 'console.deactivate' : 'console.reactivate')}</Button>
-                    <PasswordDialog account={u} />
-                    <SessionsDialog account={u} />
-                  </div>
-                </TableCell>
-              )}
-            </TableRow>
-          ))}
-        </TableBody>
-      </Table>
+      <Card className="overflow-hidden">
+        {loading ? (
+          <TableSkeleton />
+        ) : (
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead>{t('console.user')}</TableHead>
+                <TableHead className="hidden md:table-cell">{t('auth.email')}</TableHead>
+                <TableHead className="hidden sm:table-cell">{t('console.role')}</TableHead>
+                <TableHead>{t('console.status')}</TableHead>
+                {manage && (
+                  <TableHead>
+                    <span className="sr-only">{t('common.actions')}</span>
+                  </TableHead>
+                )}
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {rows.map((u) => (
+                <TableRow key={u.id}>
+                  <TableCell className="whitespace-normal">
+                    <div className="flex items-center gap-3">
+                      <UserAvatar name={u.name} />
+                      <span className="min-w-0 font-medium">{u.name}</span>
+                    </div>
+                  </TableCell>
+                  <TableCell dir="ltr" className="hidden text-start text-muted-foreground md:table-cell">{u.email}</TableCell>
+                  <TableCell className="hidden sm:table-cell">
+                    <Badge variant="neutral">{roleName(u.role)}</Badge>
+                  </TableCell>
+                  <TableCell>
+                    <div className="flex flex-wrap gap-1">
+                      <StatusBadge variant={u.is_active ? 'success' : 'neutral'} label={t(u.is_active ? 'console.active' : 'console.inactive')} />
+                      {u.locked_until && new Date(u.locked_until) > now && <StatusBadge variant="danger" label={t('console.locked')} />}
+                    </div>
+                  </TableCell>
+                  {manage && (
+                    <TableCell className="text-end">
+                      <RowActions
+                        items={[
+                          { label: t('common.edit'), onSelect: () => setDlg({ type: 'edit', row: u }) },
+                          { label: t('console.setPassword'), onSelect: () => setDlg({ type: 'password', row: u }) },
+                          { label: t(u.is_active ? 'console.deactivate' : 'console.reactivate'), onSelect: () => toggle(u), destructive: u.is_active },
+                          { label: t('console.sessions'), onSelect: () => setDlg({ type: 'sessions', row: u }) },
+                        ]}
+                      />
+                    </TableCell>
+                  )}
+                </TableRow>
+              ))}
+            </TableBody>
+          </Table>
+        )}
+      </Card>
+      {dlg?.type === 'edit' && <AccountDialog account={dlg.row} roles={roles} reload={reload} {...close} />}
+      {dlg?.type === 'password' && <PasswordDialog account={dlg.row} {...close} />}
+      {dlg?.type === 'sessions' && <SessionsDialog account={dlg.row} {...close} />}
     </div>
   )
 }
