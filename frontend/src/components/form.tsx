@@ -119,6 +119,9 @@ export function useList(path: string) {
   return { rows, total, err, loading, reload }
 }
 
+/** Controlled-dialog props for a dialog opened from a row menu; it mounts only while open. */
+export type Controlled = { open?: boolean; onOpenChange?: (open: boolean) => void }
+
 export type FormApi = { values: Row; set: (k: string, v: string) => void; errs: Record<string, string> }
 
 /** Dialog whose form state lives in the body, so it is fresh on every open (Radix unmounts closed content). Passing `open` makes it controlled. */

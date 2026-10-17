@@ -4,7 +4,7 @@ import { useTranslation } from 'react-i18next'
 import { EmptyState } from '@/components/common/EmptyState'
 import { RowActions } from '@/components/common/RowActions'
 import { StatusBadge } from '@/components/common/StatusBadge'
-import { cairoToday, ErrorBanner, FormDialog, type Row, SelectField, TextField, useList, useMoney } from '@/components/form'
+import { cairoToday, type Controlled, ErrorBanner, FormDialog, type Row, SelectField, TextField, useList, useMoney } from '@/components/form'
 import { TableSkeleton } from '@/components/layout/PageSkeleton'
 import { Pagination, paginate } from '@/components/tables/Pagination'
 import { Badge } from '@/components/ui/badge'
@@ -26,9 +26,6 @@ const Notice = ({ show, text }: { show: boolean; text: string }) =>
       {text}
     </p>
   ) : null
-
-/** Controlled-dialog props for a dialog opened from a row menu; it mounts only while open. */
-type Controlled = { open?: boolean; onOpenChange?: (open: boolean) => void }
 
 /** The card every settings list shares: header with an optional add button, banners, skeleton, table or empty state, pagination. */
 function ListCard({ title, description, action, err, loading, empty, icon, notice, page, children }: {

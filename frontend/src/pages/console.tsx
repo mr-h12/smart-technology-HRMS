@@ -5,7 +5,7 @@ import { PageHeader } from '@/components/common/PageHeader'
 import { RowActions } from '@/components/common/RowActions'
 import { StatusBadge } from '@/components/common/StatusBadge'
 import { UserAvatar } from '@/components/common/UserAvatar'
-import { ErrorBanner, FormDialog, type Row, SelectField, TextField, useCairoTime, useList } from '@/components/form'
+import { type Controlled, ErrorBanner, FormDialog, type Row, SelectField, TextField, useCairoTime, useList } from '@/components/form'
 import { TableSkeleton } from '@/components/layout/PageSkeleton'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
@@ -19,9 +19,6 @@ function useRoleName() {
   const { i18n } = useTranslation()
   return (r: Row | null | undefined) => (r ? (i18n.language === 'ar' ? r.name_ar : r.name) : '—')
 }
-
-/** Controlled-dialog props for a dialog opened from a row menu; it mounts only while open. */
-type Controlled = { open?: boolean; onOpenChange?: (open: boolean) => void }
 
 /** Without role.view the role list is not loaded, so the field stays locked to the account's current role. */
 function AccountDialog({ account, roles, reload, ...dialog }: { account?: Row; roles: Row[]; reload: () => void } & Controlled) {
@@ -65,7 +62,7 @@ function PasswordDialog({ account, ...dialog }: { account: Row } & Controlled) {
       onDone={() => {}}
       shown={['password']}
     >
-      {(f) => <TextField name="password" label={t('auth.password')} type="password" autoComplete="new-password" {...f} />}
+      {(f) => <TextField name="password" label={t('auth.password')} type="password" dir="ltr" autoComplete="new-password" {...f} />}
     </FormDialog>
   )
 }
@@ -94,8 +91,8 @@ function SessionList({ account }: { account: Row }) {
           <TableHeader>
             <TableRow>
               <TableHead>{t('console.ip')}</TableHead>
-              <TableHead>{t('console.userAgent')}</TableHead>
-              <TableHead>{t('console.lastActivity')}</TableHead>
+              <TableHead className="hidden sm:table-cell">{t('console.userAgent')}</TableHead>
+              <TableHead className="hidden sm:table-cell">{t('console.lastActivity')}</TableHead>
               <TableHead />
             </TableRow>
           </TableHeader>
@@ -103,8 +100,8 @@ function SessionList({ account }: { account: Row }) {
             {rows.map((s) => (
               <TableRow key={s.id}>
                 <TableCell dir="ltr">{s.ip_address ?? '—'}</TableCell>
-                <TableCell dir="ltr" className="max-w-xs truncate" title={s.user_agent ?? ''}>{s.user_agent ?? '—'}</TableCell>
-                <TableCell>{time(s.last_activity_at)}</TableCell>
+                <TableCell dir="ltr" className="hidden w-full max-w-0 truncate sm:table-cell" title={s.user_agent ?? ''}>{s.user_agent ?? '—'}</TableCell>
+                <TableCell className="hidden sm:table-cell">{time(s.last_activity_at)}</TableCell>
                 <TableCell>
                   <Button type="button" variant="outline" size="sm" disabled={busy === s.id} onClick={() => revoke(s.id)}>{t('console.revoke')}</Button>
                 </TableCell>
@@ -121,7 +118,7 @@ function SessionsDialog({ account, open, onOpenChange }: { account: Row } & Cont
   const { t } = useTranslation()
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent aria-describedby={undefined}>
+      <DialogContent aria-describedby={undefined} className="sm:max-w-2xl">
         <DialogHeader>
           <DialogTitle>{`${t('console.sessions')}: ${account.name}`}</DialogTitle>
         </DialogHeader>
@@ -155,7 +152,7 @@ export function AccountsPage() {
   const now = new Date()
   return (
     <div className="space-y-6">
-      <PageHeader title={t('page.accounts')} description={t('console.accountsSubtitle')} actions={manage && <AccountDialog roles={roles} reload={reload} />} />
+      <PageHeader title={t('page.accounts')} description={t('console.accountsSubtitle')} actions={manage && viewRoles && <AccountDialog roles={roles} reload={reload} />} />
       <ErrorBanner err={err ?? actErr} shown={[]} />
       <Card className="overflow-hidden">
         {loading ? (
@@ -181,7 +178,12 @@ export function AccountsPage() {
                   <TableCell className="whitespace-normal">
                     <div className="flex items-center gap-3">
                       <UserAvatar name={u.name} />
-                      <span className="min-w-0 font-medium">{u.name}</span>
+                      <div className="min-w-0">
+                        <div className="font-medium">{u.name}</div>
+                        <div className="mt-1 sm:hidden">
+                          <Badge variant="neutral">{roleName(u.role)}</Badge>
+                        </div>
+                      </div>
                     </div>
                   </TableCell>
                   <TableCell dir="ltr" className="hidden text-start text-muted-foreground md:table-cell">{u.email}</TableCell>
