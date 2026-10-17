@@ -1,95 +1,54 @@
-# Handoff — Release 1a merged (scaffold, employees, sites & rates); next: Release 1b
+# Handoff — Release 1b Tasks 1–7 done on `feature/release-1b-accounts`; next: Task 8
 
-Written 2026-10-17. Every fact below was re-checked at the end of the session unless marked *unverified*.
+Written 2026-10-17 (cloud session). Every fact below was re-checked at the end of the session unless marked *unverified*.
 
 ## Current Goal
-Start **Release 1b**: accounts and login, roles/permissions (RBAC), the audit log, and manager ↔ employee / manager ↔ site assignment. First action: write the 1b implementation plan at `docs/superpowers/plans/release-1b-accounts.md`, mirroring the CRM's Identity + Audit modules (see Key Findings), then execute it with subagent-driven development.
+Finish Release 1b: **Task 8 (manager assignment screens)** then **Task 9 (Arabic API messages via Accept-Language)** from `docs/superpowers/plans/release-1b-accounts.md`, then open the PR `feature/release-1b-accounts` → `main`.
 
 ## Key Findings
-- **Repo state:** branch `main`, HEAD `67d8421`. `feature/release-1-foundation` was merged (`1d9a715`) and is kept. **No git remote** — nothing pushed, no PRs exist. Untracked: `.claude/launch.json` (preview config, deliberately uncommitted).
-- **Working rule (user):** always use the skills `ponytail:ponytail`, `andrej-karpathy-skills:karpathy-guidelines` and superpowers (e.g. `superpowers:subagent-driven-development`, `superpowers:test-driven-development`); delegate implementation to subagents and tell every subagent to load the same three. Saved in project memory.
-- **Specs live in:** `CLAUDE.md` (rules), `CONTEXT.md` (glossary), `docs/calculations.md` (formulas, ⚠️ = client-pending), `docs/hrms-module-plan.md` (release contents + settled decisions), `docs/client-questions.md` (17 open client questions), `docs/adr/0001-mirror-crm-stack.md`, `docs/adr/0002-daily-wage-on-worker.md`, `docs/superpowers/plans/release-1a-foundation.md` (the executed 1a plan).
-- **Stack:** mirrors the CRM at github.com/mr-h12/smart-technology-CRM (Laravel 13 / PHP 8.4 / Postgres 17.5 / Redis 7.4; modules `app/Modules/<M>/{Domain,Application,Infrastructure,Presentation}`; deptrac layers; PHPUnit 12; PHPStan level 8; `/api/v1`; UUIDv7; `ApiEnvelope`). For 1b copy the CRM's custom bearer-session auth (`app/Modules/Identity`, `BearerSessionResolver`, `user_sessions`), RBAC tables (`roles`, `permissions` resource.action.scope, `role_permissions`), and the append-only audit log (`app/Modules/Audit`). Drop self-service password change: only the Developer role sets passwords.
-- **Backend modules built:** `Employees` (employees, employee_type_changes, employee_pay_changes, employee_documents; auto code via table lock) and `Sites` (sites incl. leave day-types, site_allowance_rules, residences, fares, employee_fare_overrides; `GET /fares?date=` returns the in-force row per residence×site; `GET /employees/{id}/fare`). Money is `NUMERIC(18,6)` strings with bcmath, no rounding; regex `/^\d{1,12}(\.\d{1,6})?$/D`. Effective-dated rule everywhere = greatest `effective_from <= D`, Cairo date for "today".
-- **Frontend:** React 19 + Vite + TS, react-i18next (ar default, RTL), shadcn/Radix; pages employees (list/new/detail), sites, residences, fares grid. Shared form helpers in `frontend/src/components/form.tsx` (ErrorBanner, Field, TextField with Arabic-digit conversion, useMoney).
-- **Facts that cost a failure to learn:**
-  - Container env sets `DB_DATABASE=hrms`; Laravel reads `$_SERVER` before `$_ENV`, so phpunit needs `<server … force="true">` too. `tests/TestCase.php` now refuses to run on any DB but `hrms_test` (`67d8421`). Before that fix every test run wiped the dev DB.
-  - Validated query params are strings: shared `Sites\Application\Paginates::page()` takes `int|string` (`2cd4cc4`).
-  - After `git switch`/merge, the `artisan serve` process can lose its cwd (`require_once(/index.php)` error) → `docker compose restart app`.
-  - Host ports 5432/6379 belong to the CRM stack; this project's root `.env` maps 5433/6380 (API stays on 8000).
-  - A trait method overrides a parent-class method, so RefreshDatabase hooks can't be overridden from `TestCase`; use `setUpTraits()`.
-- **Open owner/client decisions and what they block:**
-  - Leave pay rules (paid %, sick 75%?, beyond-balance → absence) — blocks the leave module (deferred by the user to "when we build it").
-  - End-of-service rule (fractions of a year, wage base) — blocks the EOS form in Release 3.
-  - Is a worker's daily wage ever different by site — would add a per-worker × site wage override (ADR 0002).
-  - Do day laborers get transport (Oct Excel pays 0) — affects payroll parity in Release 2.
-  - The full list with defaults is in `docs/client-questions.md`.
+- **Remote exists now:** `github.com/mr-h12/smart-technology-HRMS` (private, default branch `main`). `main` = `515b042`; `feature/release-1b-accounts` = `2d8ff21`, 9 commits ahead of main, pushed. Working tree clean.
+- **History was rewritten on 2026-10-17.** Four client forms in `docs/templates/` had been committed filled in with two real employees' names and national IDs. They were removed from every commit with `git filter-repo`, blanked copies (names/IDs replaced by dots) were added in `515b042`, and both branches were force-pushed. Any clone made before that date carries the old history: re-clone or `git fetch && git reset --hard origin/<branch>` before pushing anything. Never commit a filled form.
+- **Execution so far** (each task: Opus implementer with TDD → spec review + quality review → one fix round → gates re-run by the controller → commit):
+  - Task 3 `9d6aca8` audit log (append-only trigger, `Audited` trait wraps save/delete in a transaction, login events, `GET /audit-log`).
+  - Task 4 `cca2fac` developer administration API (`users`, `roles`, `permissions`, `identity:create-user`; last-role-manager guard serialised with `pg_advisory_xact_lock`).
+  - Task 5 `c117f47` manager assignments + own-scope (`employee.scope` middleware after `permission:` on every `employees/{employee}…` route; `RequestScope::ownerId`; `manager_sites`).
+  - Task 6 `4e2fadd` frontend login/session (`hrms.auth.token.v1`, `AuthProvider` owns the unauthorized handler, `homePath(can)` picks the landing page).
+  - Task 7 `2d8ff21` developer console (accounts, roles matrix keyed on the server's permission list, audit viewer in Cairo time; `useCairoTime`, `useList`, `FormDialog` live in `components/form.tsx`).
+- **Gates on `2d8ff21`:** backend `php artisan test` **88 passed (512 assertions)**, pint passed, phpstan `[OK] No errors`, deptrac 0 violations; frontend vitest **47 passed (7 files)**, build ok, lint ok.
+- **Plan checkboxes are not ticked** (same convention as the 1a plan). Progress is the commit list above.
+- **Skills:** `ponytail`, `andrej-karpathy-skills:karpathy-guidelines` and `superpowers:*` were not installed in the cloud session; their rules were written into every subagent brief instead. On the desktop they are installed: invoke them normally.
 
 ## Completed Actions
-- Grilling session (35 questions answered or accepted) → docs updated: `CLAUDE.md`, `calculations.md`, `hrms-module-plan.md`, `excel-system-analysis.md` (16 known Excel errors now), new `CONTEXT.md`, 2 ADRs, `client-questions.md`.
-- Release 1a: 6 tasks implemented by subagents, each spec + quality reviewed with fix rounds, then a final whole-branch review (opus) and one fix wave, re-reviewed clean. Merged to `main` as `1d9a715`.
-- Post-merge fixes on `main`: `2cd4cc4` (per_page crash), `67d8421` (tests off the dev DB).
-- Gates re-run at session end on `67d8421`: backend `php artisan test` **48 passed (251 assertions)**, pint clean, phpstan `[OK] No errors`, deptrac 0 violations / 0 errors; frontend vitest **31 passed**, build ok, lint ok; `GET /api/v1/health` ok; Vite on 5173 returns 200.
-- Dev DB `hrms` now holds the seed only: 5 leave sites, 4 residences, 0 employees.
+- Repo created and pushed from the Mac; default branch set to `main`.
+- Cloud container made able to run every gate without Docker (see Environment).
+- Tasks 3–7 implemented, reviewed, committed and pushed as above.
+- Sensitive-data purge as above; the CRM repo was explicitly left alone by the owner.
 
 ## Plan
-**Next (Release 1b, start cold):**
-1. Read `CLAUDE.md` "Users and permissions", `docs/hrms-module-plan.md` Release 1, and the CRM's `crm/app/Modules/{Identity,Audit}` + RBAC migration (`2026_08_23_000000_create_rbac_tables.php`) and `audit_log` migrations.
-2. Write `docs/superpowers/plans/release-1b-accounts.md` with tasks, roughly:
-   1. users + bearer sessions + login/logout + lockout (Developer creates accounts and sets passwords; no self-service).
-   2. RBAC data (roles Developer/CEO/HR/Manager, permissions by name, scope Own/All) + middleware; check permissions by name, never by role name.
-   3. Audit log (append-only, before/after on every create/update/delete, login, override) wired into the existing Employees/Sites services; fill `created_by`/`updated_by`.
-   4. Manager ↔ employee assignment (dated, exactly one at a time) and manager ↔ sites; scope employee lists to the manager's own employees.
-   5. Developer console screens (accounts, roles/permissions, audit log viewer) + login screen; `api.ts` sends the token and `Accept-Language`.
-   6. Arabic backend validation messages (deferred finding I4).
-3. Execute with `superpowers:subagent-driven-development` (ledger in `.superpowers/sdd/<plan>/`).
+1. `/session-start`, then **Task 8** (plan lines 1101–1160): manager section + assign dialog on the employee page, site managers dialog, locale keys; tests verbatim. Backend endpoints already exist (`POST employees/{id}/manager-assignments`, `PUT sites/{id}/managers`, `GET users?per_page=100`).
+2. **Task 9** (lines 1161–1229): `SetLocaleFromRequest` middleware, `lang/ar` validation + envelope messages, switch the ten service literals to `__()` keys; `LocaleTest`.
+3. Open the PR; the other developer reviews; owner merges.
 
-**Remaining Release 1 items after 1b:** manager attendance (mobile), leave (balances; needs the leave-pay answers), notifications (instant + daily digest), migration step 1 from Excel (employees, sites with name dedupe, fares, opening leave balances, open advances).
-
-**Deferred minors carried forward** (from the 1a reviews):
-- A soft-deleted residence still resolves fares, and PATCHing it back returns 422 → block deleting a residence that is in use.
-- `national_id` / `fingerprint_name` are unique even across soft-deleted rows, which blocks re-hiring.
-- The duplicate-date check races the unique index and can return 500.
-- No DB CHECK constraints on enum columns.
-- `config/auth.php` references a missing `App\Models\User`, to fix in 1b.
-- `Allowance::for` truncates at scale 6; decide before payroll sums it.
-- Arabic search doesn't fold أ/ا or ة/ه, to handle at import.
-- Pay dialog with an empty date shows the first type's fields.
-- Frontend:
-  - No debounce or cancel on the search box.
-  - `Row = any` typing.
-  - Focus isn't restored when a dialog closes.
-  - Rows have no aria-labels.
-  - `TitlePage` is unused.
+**Deferred findings from the 1b reviews** (not fixed, carry forward):
+- `assertFreeDate` ignores soft-deleted rows but the unique indexes do not: re-using a soft-deleted date on type/pay/manager changes gives 500 instead of 422 (no delete endpoint yet, so unreachable today).
+- `manager_sites` rows of a deactivated manager stay in place; a soft-deleted manager drops out via the soft-delete scope.
+- `FareController::show` lets a scoped manager query any `site_id` (reveals existence via 422 vs 200).
+- A non-401 failure of `GET /auth/me` sends the user to `/login` with the token kept.
+- `AccountsPage` fetches `GET /roles`, which needs `role.view`; a `user.manage`-only role would see a 403 banner (no seeded role is in that state).
+- Timestamptz columns are bound without an offset; correct only while app and PostgreSQL session time zones are UTC.
+- Deferred minors from 1a (residence delete while in use; uniqueness across soft-deleted `national_id`; `config/auth.php` model reference; frontend debounce/aria/`Row = any`) still stand.
 
 ## Environment
-Run from the repo root `/Users/yousefhasabo/HRMS-Smart TECH` (no PHP on the host; everything PHP runs in Docker):
-```bash
-docker compose up -d
-docker compose exec app php artisan migrate --seed
-docker compose exec app php artisan test
-docker compose exec app vendor/bin/pint --test
-docker compose exec app vendor/bin/phpstan analyse
-docker compose exec app vendor/bin/deptrac analyse --config-file=deptrac.layers.yaml
-docker compose restart app
-curl http://127.0.0.1:8000/api/v1/health
-```
-Frontend (host, Node 22):
-```bash
-cd frontend && npm install && npm run dev
-cd frontend && npm test && npm run build && npm run lint
-```
-App: http://localhost:5173 (Vite proxies `/api` to `API_PROXY_TARGET`, default http://localhost:8000). In the desktop app, the preview config is `.claude/launch.json` → `frontend`.
-First-time setup: `cp .env.example .env` (set ports 5433/6380 if the CRM stack is running), `cp backend/.env.example backend/.env`, `docker compose exec app php artisan key:generate`.
+**Mac (owner):** as before — Docker from the repo root; `docker compose exec app …` for every PHP command; frontend on the host.
+
+**Cloud container (if a cloud session has to rebuild it):** no Docker daemon and the Ondřej PHP PPA, php.net and GitHub's API/zip hosts are blocked by the network policy; git over `github.com` and packagist are allowed.
+- PHP 8.4 was built from `github.com/php/php-src` branch `PHP-8.4` into `/opt/php84` (configure with `--disable-all` plus openssl, zlib, curl, zip, sodium, libxml, sqlite3, pgsql, pdo-pgsql, pdo-sqlite, iconv, bcmath, mbstring, intl, opcache, dom, simplexml, xml, xmlreader, xmlwriter, tokenizer, ctype, fileinfo, filter, session, pcntl, sockets, pdo, phar, posix) and registered with `update-alternatives`. ~10 min.
+- Composer: `composer config -g use-github-api false`, then `composer install --prefer-source`. `phpstan/phpstan` is dist-only: build its zip with `git archive` from a clone of `github.com/phpstan/phpstan` at the lock's commit and drop it into `~/.cache/composer/files/phpstan/phpstan/<sha1 of the dist url>.zip`.
+- PostgreSQL 16 from Ubuntu: `initdb` as the `postgres` user, databases `hrms` and `hrms_test` owned by role `hrms`/`change-me`; `backend/.env` with `DB_HOST=127.0.0.1`, `CACHE_STORE=array`, `SESSION_DRIVER=array`, `QUEUE_CONNECTION=sync`.
+- Then the plain commands work from `backend/`: `php artisan test`, `vendor/bin/pint --test`, `vendor/bin/phpstan analyse --memory-limit=1G`, `vendor/bin/deptrac analyse --config-file=deptrac.layers.yaml`; frontend `npm ci && npm test && npm run build && npm run lint`.
+- The session's GitHub proxy refuses repository-settings writes and force-pushes; those run from the Mac.
 
 ## Non-code items
-- ⚠️ **Backups are not configured; they stay manual until the owner confirms.** Do not automate them unprompted.
-- **No git remote.** Create a GitHub repo before PRs and the "other developer reviews" flow can start.
-- **Client inputs still needed:**
-  - The 17 questions in `docs/client-questions.md`.
-  - Remote access (VPN/SSH) to the on-prem server.
-  - An SMTP mailbox on the company domain.
-  - HR and CEO signature images (Release 3).
-  - A full month of fingerprint export (Release 2).
-  - The current company address, phone and email (the forms show two versions).
-- **claude-mem memory capture was paused** at session start (5-hour usage at 95%). Native project memory files work regardless.
+- Backups stay manual until the owner confirms (unchanged).
+- GitHub may still serve the pre-rewrite commits by SHA until its garbage collection; the repo is private with no forks. A support request would purge them sooner.
+- Client inputs still needed: unchanged from the previous handoff (17 questions, server access, SMTP, signatures, fingerprint export, company contact details).
