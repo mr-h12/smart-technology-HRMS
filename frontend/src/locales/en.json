@@ -15,7 +15,8 @@
     "noData": "No records yet."
   },
   "app": {
-    "name": "Smart Technology HRMS"
+    "name": "Smart Technology HRMS",
+    "product": "Human resources"
   },
   "nav": {
     "main": "Main navigation",
@@ -24,10 +25,18 @@
     "sites": "Sites",
     "residences": "Residences",
     "fares": "Fares",
-    "console": "Developer console",
     "accounts": "Accounts",
     "roles": "Roles and permissions",
-    "audit": "Audit log"
+    "audit": "Audit log",
+    "collapse": "Collapse sidebar",
+    "expand": "Expand sidebar",
+    "profile": "Account menu",
+    "breadcrumb": "Breadcrumb",
+    "group": {
+      "hr": "Human resources",
+      "settings": "Settings",
+      "admin": "System administration"
+    }
   },
   "toggle": {
     "language": "Language",
@@ -182,7 +191,8 @@
       "account_suspended": "The account is deactivated. Contact the developer.",
       "rate_limited": "Too many attempts; try again in a minute.",
       "unknown": "Could not sign in."
-    }
+    },
+    "title": "Sign in to your account"
   },
   "console": {
     "addAccount": "Add account",

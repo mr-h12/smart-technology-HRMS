@@ -35,6 +35,7 @@ test('shows the translated refusal', async () => {
 test('without a token any page redirects to login', async () => {
   renderApp('/employees')
   expect(await screen.findByRole('button', { name: 'دخول' })).toBeInTheDocument()
+  expect(screen.getByRole('heading', { name: 'تسجيل الدخول إلى حسابك' })).toBeInTheDocument()
 })
 
 test('nav hides what the user cannot do', async () => {
@@ -61,7 +62,8 @@ test('sign out calls the API, clears the token and shows the form', async () => 
     'POST /api/v1/auth/logout': () => new Response(null, { status: 204 }),
   })
   renderApp('/sites')
-  await user.click(await screen.findByRole('button', { name: 'خروج' }))
+  await user.click(await screen.findByRole('button', { name: 'قائمة الحساب' }))
+  await user.click(await screen.findByRole('menuitem', { name: 'خروج' }))
   expect(await screen.findByRole('button', { name: 'دخول' })).toBeInTheDocument()
   expect(vi.mocked(fetch).mock.calls.some(([u, i]) => u === '/api/v1/auth/logout' && i?.method === 'POST')).toBe(true)
   expect(localStorage.getItem('hrms.auth.token.v1')).toBeNull()

@@ -1,10 +1,10 @@
 import { useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { Navigate } from 'react-router-dom'
-import logoMark from '@/assets/logo-mark.png'
 import { ErrorBanner, TextField, useForm } from '@/components/form'
-import { LanguageToggle } from '@/components/layout/AppLayout'
+import { BrandMark, BrandName, LanguageToggle, ThemeToggle } from '@/components/layout/AppLayout'
 import { Button } from '@/components/ui/button'
+import { Card, CardContent } from '@/components/ui/card'
 import { ApiError } from '@/lib/api'
 import { useAuth } from '@/lib/auth'
 
@@ -30,22 +30,28 @@ export function LoginPage() {
 
   return (
     <div className="flex min-h-dvh flex-col bg-background text-foreground">
-      <header className="flex justify-end p-3 sm:p-4">
+      <header className="flex justify-end gap-2 p-3 sm:p-4">
         <LanguageToggle />
+        <ThemeToggle />
       </header>
       <main className="flex flex-1 items-start justify-center px-4 pt-[10vh]">
-        <form onSubmit={submit} className="flex w-full max-w-sm flex-col gap-4 rounded-xl border bg-card p-6 shadow-1">
-          <div className="flex items-center gap-3">
-            <img src={logoMark} alt="" className="size-8 object-contain dark:rounded-md dark:bg-white dark:p-0.5" draggable={false} />
-            <h1 className="text-[15px] font-semibold">{t('app.name')}</h1>
-          </div>
-          <ErrorBanner err={error && t(`auth.error.${error}`, { defaultValue: t('auth.error.unknown') })} shown={[]} />
-          <TextField name="email" label={t('auth.email')} values={form} set={set} errs={{}} type="email" dir="ltr" autoComplete="username" required />
-          <TextField name="password" label={t('auth.password')} values={form} set={set} errs={{}} type="password" dir="ltr" autoComplete="current-password" required />
-          <Button type="submit" disabled={busy}>
-            {t('auth.submit')}
-          </Button>
-        </form>
+        <Card className="w-full max-w-sm">
+          <form onSubmit={submit}>
+            <CardContent className="space-y-5 p-6">
+              <div className="flex items-center gap-3">
+                <BrandMark className="size-9" />
+                <BrandName product={t('app.product')} />
+              </div>
+              <h1 className="text-section-title">{t('auth.title')}</h1>
+              <ErrorBanner err={error && t(`auth.error.${error}`, { defaultValue: t('auth.error.unknown') })} shown={[]} />
+              <TextField name="email" label={t('auth.email')} values={form} set={set} errs={{}} type="email" dir="ltr" autoComplete="username" required />
+              <TextField name="password" label={t('auth.password')} values={form} set={set} errs={{}} type="password" dir="ltr" autoComplete="current-password" required />
+              <Button type="submit" className="w-full" disabled={busy}>
+                {t('auth.submit')}
+              </Button>
+            </CardContent>
+          </form>
+        </Card>
       </main>
     </div>
   )
