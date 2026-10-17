@@ -23,6 +23,7 @@ test('the owner wording rulings are in place', () => {
   expect(a['app.name']).toBe('سمارت تكنولوجي لإدارة الموارد البشرية')
   expect(a['enum.pay_method.bank']).toBe('تحويل بنكي')
   expect(a['settings.tab.leaveTypes']).toBe('أنواع الإجازات')
+  expect(a['employee.code']).toBe('الرقم الوظيفي')
 })
 
 test('the review wording rulings are in place', () => {

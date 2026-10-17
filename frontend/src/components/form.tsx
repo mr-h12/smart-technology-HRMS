@@ -33,6 +33,9 @@ export function ErrorBanner({ err, shown }: { err: unknown; shown: string[] }) {
 /** Intl locale for a UI language; Arabic keeps Latin digits. */
 export const intlLocale = (lng: string) => (lng === 'ar' ? 'ar-EG-u-nu-latn' : lng)
 
+/** Today's date in Cairo as YYYY-MM-DD. */
+export const cairoToday = () => new Date().toLocaleDateString('en-CA', { timeZone: 'Africa/Cairo' })
+
 /** Formats a stored UTC timestamp as Cairo wall time in the current language. */
 export function useCairoTime() {
   const { i18n } = useTranslation()

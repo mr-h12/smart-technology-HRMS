@@ -1,12 +1,24 @@
+import { Briefcase, CalendarDays, HardHat, type LucideIcon, UserPlus, Users, Wrench } from 'lucide-react'
 import { useCallback, useEffect, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { Link, useNavigate, useParams } from 'react-router-dom'
+import { MiniStat, type Tone } from '@/components/cards/StatCard'
+import { EmptyState } from '@/components/common/EmptyState'
+import { FilterSelect, SearchInput } from '@/components/common/Filters'
+import { PageHeader } from '@/components/common/PageHeader'
+import { StatusBadge } from '@/components/common/StatusBadge'
+import { UserAvatar } from '@/components/common/UserAvatar'
+import { TableSkeleton } from '@/components/layout/PageSkeleton'
+import { Pagination } from '@/components/tables/Pagination'
+import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
+import { Card } from '@/components/ui/card'
 import { Dialog, DialogBody, DialogContent, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog'
-import { Input, Textarea } from '@/components/ui/input'
+import { Textarea } from '@/components/ui/input'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
-import { ErrorBanner, Field, type Errs, type Row, SelectField, selectCls, TextField, toErrs, useForm, useMoney } from '@/components/form'
-import { api, apiList, type Pagination } from '@/lib/api'
+import { cairoToday, ErrorBanner, Field, type Errs, type Row, SelectField, TextField, toErrs, useForm, useMoney } from '@/components/form'
+import { api, apiList } from '@/lib/api'
+import { useAuth } from '@/lib/auth'
 
 const TYPES = ['office', 'engineer', 'permanent_worker', 'day_laborer']
 const GENDERS = ['male', 'female']
@@ -37,81 +49,153 @@ function PayFields({ type, values, set, errs }: { type: string; values: Row; set
 
 const clean = (o: Row, keys: string[]) => Object.fromEntries(keys.filter((k) => o[k] !== undefined && o[k] !== '').map((k) => [k, o[k]]))
 
+const PAGE = 12
+const STATS: [string, LucideIcon, Tone][] = [
+  ['total', Users, 'indigo'],
+  ['office', Briefcase, 'sky'],
+  ['engineer', HardHat, 'amber'],
+  ['permanent_worker', Wrench, 'emerald'],
+  ['day_laborer', CalendarDays, 'slate'],
+]
+
 export function EmployeesPage() {
   const { t } = useTranslation()
+  const { can } = useAuth()
+  const navigate = useNavigate()
   const [q, setQ] = useState('')
   const [type, setType] = useState('')
   const [page, setPage] = useState(1)
-  const [rows, setRows] = useState<Row[]>([])
-  const [pg, setPg] = useState<Pagination>()
+  const [rows, setRows] = useState<Row[]>()
+  const [total, setTotal] = useState(0)
+  const [counts, setCounts] = useState<Record<string, number>>({})
   const [err, setErr] = useState<unknown>()
 
   useEffect(() => {
-    const qs = new URLSearchParams({ page: String(page), ...(q && { search: q }), ...(type && { type }) })
+    let live = true // drop answers to queries the user has already typed past
+    const qs = new URLSearchParams({ page: String(page), per_page: String(PAGE), ...(q && { search: q }), ...(type && { type }) })
     apiList<Row>(`/employees?${qs}`)
       .then((r) => {
+        if (!live) return
         setErr(undefined)
         setRows(r.data)
-        setPg(r.meta.pagination)
+        setTotal(r.meta.pagination.total)
       })
-      .catch(setErr)
+      .catch((e) => live && setErr(e))
+    return () => {
+      live = false
+    }
   }, [q, type, page])
 
+  // ponytail: one count call per tile; replace them with a counts endpoint if the list grows slow.
+  useEffect(() => {
+    for (const [k] of STATS) {
+      apiList(`/employees?per_page=1${k === 'total' ? '' : `&type=${k}`}`).then(
+        (r) => setCounts((c) => ({ ...c, [k]: r.meta.pagination.total })),
+        () => {}, // a failed tile stays at —; the list request shows the banner
+      )
+    }
+  }, [])
+
+  const filter = (set: (v: string) => void) => (v: string) => {
+    set(v)
+    setPage(1)
+  }
+  const clear = () => {
+    setQ('')
+    setType('')
+    setPage(1)
+  }
+  const today = cairoToday()
+  const open = (id: string) => navigate(`/employees/${id}`)
+
   return (
-    <div className="flex flex-col gap-4">
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <h1 className="text-page-title">{t('page.employees')}</h1>
-        <Button asChild>
-          <Link to="/employees/new">{t('employee.add')}</Link>
-        </Button>
+    <div className="space-y-6">
+      <PageHeader
+        title={t('page.employees')}
+        description={t('employee.subtitle')}
+        actions={
+          can('employee.create') && (
+            <Button asChild>
+              <Link to="/employees/new">
+                <UserPlus />
+                {t('employee.add')}
+              </Link>
+            </Button>
+          )
+        }
+      />
+
+      <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-5">
+        {STATS.map(([k, icon, tone]) => (
+          <MiniStat key={k} label={t(`employee.stat.${k}`)} value={counts[k] ?? '—'} icon={icon} tone={tone} />
+        ))}
       </div>
-      <div className="flex flex-wrap gap-3">
-        <Input className="max-w-xs" aria-label={t('employee.search')} placeholder={t('employee.search')} value={q} onChange={(e) => { setQ(e.target.value); setPage(1) }} />
-        <select aria-label={t('employee.type')} className={`${selectCls} max-w-xs`} value={type} onChange={(e) => { setType(e.target.value); setPage(1) }}>
-          <option value="">{t('employee.allTypes')}</option>
-          {TYPES.map((v) => (
-            <option key={v} value={v}>
-              {t(`enum.type.${v}`)}
-            </option>
-          ))}
-        </select>
-      </div>
-      <ErrorBanner err={err} shown={[]} />
-      <Table>
-        <TableHeader>
-          <TableRow>
-            {['code', 'name_ar', 'type', 'department', 'pay_method'].map((c) => (
-              <TableHead key={c}>{t(`employee.${c}`)}</TableHead>
-            ))}
-          </TableRow>
-        </TableHeader>
-        <TableBody>
-          {rows.map((e) => (
-            <TableRow key={e.id}>
-              <TableCell>{e.code}</TableCell>
-              <TableCell>
-                <Link className="underline" to={`/employees/${e.id}`}>
-                  {e.name_ar}
-                </Link>
-              </TableCell>
-              <TableCell>{e.current_type ? t(`enum.type.${e.current_type}`) : '—'}</TableCell>
-              <TableCell>{e.department ?? '—'}</TableCell>
-              <TableCell>{t(`enum.pay_method.${e.pay_method}`)}</TableCell>
-            </TableRow>
-          ))}
-        </TableBody>
-      </Table>
-      {pg && (
-        <div className="flex items-center gap-3 text-sm">
-          <Button variant="outline" disabled={!pg.has_previous_page} onClick={() => setPage(page - 1)}>
-            {t('common.prev')}
-          </Button>
-          <span>{t('common.pageOf', { page: pg.page, pages: pg.total_pages })}</span>
-          <Button variant="outline" disabled={!pg.has_next_page} onClick={() => setPage(page + 1)}>
-            {t('common.next')}
-          </Button>
+
+      <Card className="overflow-hidden">
+        <div className="space-y-3 border-b p-4">
+          <div className="flex flex-col gap-3 xl:flex-row xl:items-center">
+            <SearchInput value={q} onChange={filter(setQ)} placeholder={t('employee.search')} className="xl:w-80" />
+            <FilterSelect value={type} onChange={filter(setType)} label={t('employee.type')} allLabel={t('employee.allTypes')} options={TYPES.map((v) => [v, t(`enum.type.${v}`)])} />
+            {(q || type) && (
+              <Button variant="ghost" size="sm" onClick={clear} className="xl:ms-auto">
+                {t('common.clearFilters')}
+              </Button>
+            )}
+          </div>
+          <ErrorBanner err={err} shown={[]} />
         </div>
-      )}
+
+        {!rows ? (
+          !err && <TableSkeleton rows={8} />
+        ) : !rows.length ? (
+          <EmptyState icon={Users} title={t('common.noResults')} />
+        ) : (
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead>{t('employee.employee')}</TableHead>
+                <TableHead>{t('employee.code')}</TableHead>
+                <TableHead>{t('employee.type')}</TableHead>
+                <TableHead className="hidden md:table-cell">{t('employee.department')}</TableHead>
+                <TableHead className="hidden lg:table-cell">{t('employee.hire_date')}</TableHead>
+                <TableHead>{t('employee.status')}</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {rows.map((e) => {
+                const left = e.termination_date && e.termination_date <= today
+                return (
+                  <TableRow
+                    key={e.id}
+                    tabIndex={0}
+                    className="cursor-pointer focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-ring"
+                    onClick={() => open(e.id)}
+                    onKeyDown={(ev) => ev.key === 'Enter' && open(e.id)}
+                  >
+                    <TableCell>
+                      <div className="flex items-center gap-3">
+                        <UserAvatar name={e.name_ar} />
+                        <div className="min-w-0">
+                          <div className="font-medium">{e.name_ar}</div>
+                          {e.name_en && <div className="text-xs text-muted-foreground">{e.name_en}</div>}
+                        </div>
+                      </div>
+                    </TableCell>
+                    <TableCell className="font-mono text-xs text-muted-foreground">{e.code}</TableCell>
+                    <TableCell>{e.current_type ? <Badge variant="info">{t(`enum.type.${e.current_type}`)}</Badge> : '—'}</TableCell>
+                    <TableCell className="hidden md:table-cell">{e.department ?? '—'}</TableCell>
+                    <TableCell className="hidden text-muted-foreground lg:table-cell">{e.hire_date ?? '—'}</TableCell>
+                    <TableCell>
+                      <StatusBadge variant={left ? 'neutral' : 'success'} label={t(left ? 'status.inactive' : 'status.active')} />
+                    </TableCell>
+                  </TableRow>
+                )
+              })}
+            </TableBody>
+          </Table>
+        )}
+        {total > 0 && <Pagination page={page} pageSize={PAGE} total={total} onPageChange={setPage} />}
+      </Card>
     </div>
   )
 }

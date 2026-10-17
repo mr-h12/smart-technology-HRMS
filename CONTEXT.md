@@ -24,6 +24,10 @@ _Avoid_: supervisor, team leader
 The English name an office employee has on the fingerprint device, used to match its export to the employee.
 _Avoid_: English name, device ID
 
+**Employee ID** (الرقم الوظيفي):
+The number the company gives each employee; stored as the employee's `code`.
+_Avoid_: الكود; code (in the UI)
+
 ## Work and attendance
 
 **Site** (موقع):

@@ -4,7 +4,7 @@ import { useTranslation } from 'react-i18next'
 import { EmptyState } from '@/components/common/EmptyState'
 import { RowActions } from '@/components/common/RowActions'
 import { StatusBadge } from '@/components/common/StatusBadge'
-import { ErrorBanner, FormDialog, type Row, SelectField, TextField, useList, useMoney } from '@/components/form'
+import { cairoToday, ErrorBanner, FormDialog, type Row, SelectField, TextField, useList, useMoney } from '@/components/form'
 import { TableSkeleton } from '@/components/layout/PageSkeleton'
 import { Pagination, paginate } from '@/components/tables/Pagination'
 import { Badge } from '@/components/ui/badge'
@@ -19,8 +19,6 @@ const LEAVE_CODES = ['friday', 'official_holiday', 'sick', 'rest', 'absent', 'ot
 const MODES = ['none', 'share_of_wage', 'fixed']
 const LIST = '?per_page=100' // server max; these lists are small, the notice below covers overflow
 const PAGE = 12
-
-const cairoToday = () => new Date().toLocaleDateString('en-CA', { timeZone: 'Africa/Cairo' })
 
 const Notice = ({ show, text }: { show: boolean; text: string }) =>
   show ? (

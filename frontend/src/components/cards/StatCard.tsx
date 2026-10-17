@@ -69,7 +69,7 @@ export function StatCard({ label, value, icon: Icon, tone = 'indigo', hint, delt
 
 export function MiniStat({ label, value, tone = 'slate', icon: Icon }: { label: string; value: ReactNode; tone?: Tone; icon?: LucideIcon }) {
   return (
-    <div className="flex items-center gap-3 rounded-xl border bg-card p-3.5">
+    <div role="group" aria-label={label} className="flex items-center gap-3 rounded-xl border bg-card p-3.5">
       {Icon && (
         <div className={cn('flex size-9 shrink-0 items-center justify-center rounded-lg', TONES[tone])}>
           <Icon className="size-4" />

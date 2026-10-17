@@ -59,9 +59,9 @@
   "skip": "Skip to content",
   "employee": {
     "add": "Add employee",
-    "search": "Search by name, national ID or code",
+    "search": "Search by name, national ID or employee ID",
     "allTypes": "All types",
-    "code": "Code",
+    "code": "Employee ID",
     "name_ar": "Name (Arabic)",
     "name_en": "Name (English)",
     "fingerprint_name": "Fingerprint name",
@@ -88,7 +88,17 @@
       "manager": "Manager",
       "history": "History",
       "documents": "Documents"
-    }
+    },
+    "subtitle": "Every employee and worker, of every type.",
+    "stat": {
+      "total": "Total employees",
+      "office": "Office staff",
+      "engineer": "Engineers",
+      "permanent_worker": "Permanent workers",
+      "day_laborer": "Day laborers"
+    },
+    "status": "Status",
+    "employee": "Employee"
   },
   "pay": {
     "salary": "Salary",
