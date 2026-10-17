@@ -30,16 +30,19 @@ export function ErrorBanner({ err, shown }: { err: unknown; shown: string[] }) {
   ) : null
 }
 
+/** Intl locale for a UI language; Arabic keeps Latin digits. */
+export const intlLocale = (lng: string) => (lng === 'ar' ? 'ar-EG-u-nu-latn' : lng)
+
 /** Formats a stored UTC timestamp as Cairo wall time in the current language. */
 export function useCairoTime() {
   const { i18n } = useTranslation()
-  const f = new Intl.DateTimeFormat(i18n.language, { timeZone: 'Africa/Cairo', dateStyle: 'short', timeStyle: 'medium' })
+  const f = new Intl.DateTimeFormat(intlLocale(i18n.language), { timeZone: 'Africa/Cairo', dateStyle: 'short', timeStyle: 'medium' })
   return (iso: string | null | undefined) => (iso ? f.format(new Date(iso)) : '—')
 }
 
 export function useMoney() {
   const { i18n } = useTranslation()
-  const f = new Intl.NumberFormat(i18n.language, { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+  const f = new Intl.NumberFormat(intlLocale(i18n.language), { minimumFractionDigits: 2, maximumFractionDigits: 2 })
   return (v: string | null | undefined) => (v == null ? '—' : f.format(v as unknown as number)) // string input is formatted exactly by Intl
 }
 

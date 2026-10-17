@@ -10,7 +10,7 @@ const list = (data: unknown[], total = data.length) => () => json(200, { data, m
 
 const calls = (m: string) => vi.mocked(fetch).mock.calls.filter(([, i]) => (i?.method ?? 'GET') === m)
 
-const fmt = (v: number) => new Intl.NumberFormat('ar', { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(v)
+const fmt = (v: number) => new Intl.NumberFormat('ar-EG-u-nu-latn', { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(v)
 
 const sites = [
   { id: 's1', name_ar: 'موقع أ', kind: 'work', leave_code: null, active: true },

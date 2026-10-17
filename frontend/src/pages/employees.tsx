@@ -106,7 +106,7 @@ export function EmployeesPage() {
           <Button variant="outline" disabled={!pg.has_previous_page} onClick={() => setPage(page - 1)}>
             {t('common.prev')}
           </Button>
-          <span>{t('common.pageOf', { page: pg.page, total: pg.total_pages })}</span>
+          <span>{t('common.pageOf', { page: pg.page, pages: pg.total_pages })}</span>
           <Button variant="outline" disabled={!pg.has_next_page} onClick={() => setPage(page + 1)}>
             {t('common.next')}
           </Button>

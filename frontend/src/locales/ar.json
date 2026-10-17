@@ -4,9 +4,15 @@
     "save": "حفظ",
     "prev": "السابق",
     "next": "التالي",
-    "pageOf": "صفحة {{page}} من {{total}}",
+    "pageOf": "صفحة {{page}} من {{pages}}",
     "tooMany": "أكثر من 100 صف، يتم عرض أول 100 فقط.",
-    "edit": "تعديل"
+    "edit": "تعديل",
+    "showing": "عرض {{from}}–{{to}} من {{total}}",
+    "actions": "الإجراءات",
+    "clearSearch": "مسح البحث",
+    "clearFilters": "مسح عوامل التصفية",
+    "noResults": "لا توجد نتائج",
+    "noData": "لا توجد سجلات بعد."
   },
   "app": {
     "name": "سمارت تكنولوجي HRMS"

@@ -4,9 +4,15 @@
     "save": "Save",
     "prev": "Previous",
     "next": "Next",
-    "pageOf": "Page {{page}} of {{total}}",
+    "pageOf": "Page {{page}} of {{pages}}",
     "tooMany": "More than 100 rows; showing the first 100.",
-    "edit": "Edit"
+    "edit": "Edit",
+    "showing": "Showing {{from}}–{{to}} of {{total}}",
+    "actions": "Actions",
+    "clearSearch": "Clear search",
+    "clearFilters": "Clear filters",
+    "noResults": "No results",
+    "noData": "No records yet."
   },
   "app": {
     "name": "Smart Technology HRMS"

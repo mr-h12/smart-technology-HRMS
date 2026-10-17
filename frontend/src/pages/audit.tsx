@@ -77,7 +77,7 @@ export function AuditPage() {
         <Button variant="outline" disabled={page <= 1} onClick={() => setPage(page - 1)}>
           {t('common.prev')}
         </Button>
-        <span>{t('common.pageOf', { page, total: pages })}</span>
+        <span>{t('common.pageOf', { page, pages })}</span>
         <Button variant="outline" disabled={page >= pages} onClick={() => setPage(page + 1)}>
           {t('common.next')}
         </Button>

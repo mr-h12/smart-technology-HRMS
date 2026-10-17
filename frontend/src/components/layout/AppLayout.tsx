@@ -2,6 +2,7 @@ import { Menu, Moon, Sun, Users, MapPin, House, Banknote, LogOut, UserCog, Shiel
 import { useEffect, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { NavLink, Outlet, useLocation } from 'react-router-dom'
+import { Toaster } from 'sonner'
 import logoMark from '@/assets/logo-mark.png'
 import { Button } from '@/components/ui/button'
 import { Sheet, SheetContent, SheetDescription, SheetTitle } from '@/components/ui/sheet'
@@ -85,7 +86,7 @@ function Nav({ onNavigate }: { onNavigate?: () => void }) {
 }
 
 export function AppLayout() {
-  const { t } = useTranslation()
+  const { t, i18n } = useTranslation()
   const { theme, setTheme } = useTheme()
   const { me, logout } = useAuth()
   const [mobileOpen, setMobileOpen] = useState(false)
@@ -95,8 +96,11 @@ export function AppLayout() {
     window.scrollTo({ top: 0 })
   }, [pathname])
 
+  const rtl = i18n.language === 'ar'
+
   return (
     <div className="flex min-h-dvh bg-background text-foreground">
+      <Toaster theme={theme} dir={rtl ? 'rtl' : 'ltr'} position={rtl ? 'top-left' : 'top-right'} richColors closeButton toastOptions={{ className: 'font-sans' }} />
       <a
         href="#page-content"
         className="sr-only rounded-lg border border-input bg-card px-3 py-2 shadow-2 focus:not-sr-only focus:absolute focus:z-50 focus:m-2 focus:outline-2 focus:outline-offset-2 focus:outline-ring"
