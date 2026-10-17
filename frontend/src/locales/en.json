@@ -223,7 +223,11 @@
     "slug": "Identifier",
     "pickRole": "Choose a role to see its permissions.",
     "accountsSubtitle": "Create user accounts and manage their roles and sessions.",
-    "user": "User"
+    "user": "User",
+    "rolesSubtitle": "Choose what each role can view or change.",
+    "resource": "Area",
+    "usersCount": "Users: {{count}}",
+    "matrixTitle": "{{role}} permissions"
   },
   "perm": {
     "employee": {
@@ -257,11 +261,23 @@
     "setting": {
       "view": "Business rules: view",
       "manage": "Business rules: manage"
+    },
+    "resource": {
+      "employee": "Employees",
+      "site": "Sites",
+      "user": "User accounts",
+      "role": "Roles and permissions",
+      "audit_log": "Audit log",
+      "setting": "Business rules"
+    },
+    "action": {
+      "view": "View",
+      "create": "Create",
+      "edit": "Edit",
+      "delete": "Delete",
+      "assign_manager": "Assign manager",
+      "manage": "Manage"
     }
-  },
-  "scope": {
-    "own": "own",
-    "all": "all"
   },
   "audit": {
     "actor": "User",

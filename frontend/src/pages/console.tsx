@@ -1,6 +1,7 @@
 import { UserPlus } from 'lucide-react'
 import { useCallback, useEffect, useState } from 'react'
 import { useTranslation } from 'react-i18next'
+import { toast } from 'sonner'
 import { PageHeader } from '@/components/common/PageHeader'
 import { RowActions } from '@/components/common/RowActions'
 import { StatusBadge } from '@/components/common/StatusBadge'
@@ -9,7 +10,7 @@ import { type Controlled, ErrorBanner, FormDialog, type Row, SelectField, TextFi
 import { TableSkeleton } from '@/components/layout/PageSkeleton'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
-import { Card } from '@/components/ui/card'
+import { Card, CardFooter, CardHeader, CardTitle } from '@/components/ui/card'
 import { Dialog, DialogBody, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 import { api } from '@/lib/api'
@@ -243,49 +244,91 @@ function RoleDialog({ reload }: { reload: () => void }) {
   )
 }
 
-/** One row per resource, one checkbox per permission; keyed by role and its grants so a reload resets the ticks. */
-function Matrix({ role, perms, editable, onSaved }: { role: Row; perms: Row[]; editable: boolean; onSaved: () => void }) {
+const ACTIONS = ['view', 'create', 'edit', 'delete', 'assign_manager', 'manage']
+
+/** One row per resource, one column per action; keyed by role and its grants so a saved role resets the controls. */
+function Matrix({ role, perms, editable, onSaved }: { role: Row; perms: Row[]; editable: boolean; onSaved: (role: Row) => void }) {
   const { t } = useTranslation()
+  const roleName = useRoleName()
   const granted = () => new Set(perms.filter((p) => role.permissions.includes(p.key)).map((p) => p.id as string))
   const [checked, setChecked] = useState(granted)
   const [err, setErr] = useState<unknown>()
   const [busy, setBusy] = useState(false)
   const resources = [...new Set(perms.map((p) => p.resource as string))]
-  const flip = (id: string) => setChecked((c) => {
+  const actions = ACTIONS.filter((a) => perms.some((p) => p.action === a))
+  const initial = granted()
+  const dirty = checked.size !== initial.size || [...checked].some((id) => !initial.has(id))
+  /** Grants `id` (or nothing) in place of every id in `ids`. */
+  const pick = (ids: string[], id?: string) => setChecked((c) => {
     const n = new Set(c)
-    if (!n.delete(id)) n.add(id)
+    ids.forEach((x) => n.delete(x))
+    if (id) n.add(id)
     return n
   })
   const save = () => {
     setBusy(true)
     setErr(undefined)
-    api(`/roles/${role.id}/permissions`, { method: 'PATCH', body: { permission_ids: [...checked] } }).then(onSaved).catch((e) => { setErr(e); setChecked(granted()) }).finally(() => setBusy(false))
+    api<Row>(`/roles/${role.id}/permissions`, { method: 'PATCH', body: { permission_ids: [...checked] } })
+      .then((r) => { toast.success(t('common.saved')); onSaved(r) })
+      .catch((e) => { setErr(e); setChecked(granted()) })
+      .finally(() => setBusy(false))
+  }
+  const cell = (res: string, action: string) => {
+    const label = t(`perm.${res}.${action}`)
+    const ps = perms.filter((p) => p.resource === res && p.action === action)
+    const own = ps.find((p) => p.scope === 'own')
+    const all = ps.find((p) => p.scope === 'all')
+    if (own && all) {
+      const value = checked.has(all.id) ? 'all' : checked.has(own.id) ? 'own' : 'none'
+      return (
+        <div role="radiogroup" aria-label={label} className="inline-flex rounded-lg border bg-muted p-0.5 text-muted-foreground">
+          {([['none', undefined], ['own', own.id], ['all', all.id]] as const).map(([s, id]) => (
+            <label key={s}>
+              <input type="radio" className="peer sr-only" name={`${res}.${action}`} disabled={!editable} checked={value === s} onChange={() => pick([own.id, all.id], id)} />
+              <span className="inline-flex h-7 items-center rounded-md px-2.5 text-xs peer-checked:bg-card peer-checked:text-foreground peer-checked:shadow-1 peer-focus-visible:outline-2 peer-focus-visible:outline-ring">{t(`perm.scope.${s}`)}</span>
+            </label>
+          ))}
+        </div>
+      )
+    }
+    if (ps.length === 1) {
+      const id = ps[0].id as string
+      return <input type="checkbox" aria-label={label} className="size-4 accent-primary" disabled={!editable} checked={checked.has(id)} onChange={() => pick([id], checked.has(id) ? undefined : id)} />
+    }
+    return <span className="text-muted-foreground">—</span>
   }
   return (
-    <div className="flex flex-col gap-3">
-      <ErrorBanner err={err} shown={[]} />
+    <Card className="min-w-0 overflow-hidden">
+      <CardHeader>
+        <CardTitle>{t('console.matrixTitle', { role: roleName(role) })}</CardTitle>
+      </CardHeader>
+      {!!err && (
+        <div className="px-5 pb-3">
+          <ErrorBanner err={err} shown={[]} />
+        </div>
+      )}
       <Table>
+        <TableHeader>
+          <TableRow className="hover:bg-transparent">
+            <TableHead className="sticky start-0 bg-muted">{t('console.resource')}</TableHead>
+            {actions.map((a) => <TableHead key={a}>{t(`perm.action.${a}`)}</TableHead>)}
+          </TableRow>
+        </TableHeader>
         <TableBody>
           {resources.map((res) => (
-            <TableRow key={res}>
-              {perms.filter((p) => p.resource === res).map((p) => (
-                <TableCell key={p.id}>
-                  <label className="flex items-center gap-2 text-sm">
-                    <input type="checkbox" disabled={!editable} checked={checked.has(p.id)} onChange={() => flip(p.id)} />
-                    {`${t(`perm.${p.resource}.${p.action}`)} ${t(`scope.${p.scope}`)}`}
-                  </label>
-                </TableCell>
-              ))}
+            <TableRow key={res} className="group hover:bg-muted">
+              <TableCell className="sticky start-0 bg-card font-medium group-hover:bg-muted">{t(`perm.resource.${res}`)}</TableCell>
+              {actions.map((a) => <TableCell key={a}>{cell(res, a)}</TableCell>)}
             </TableRow>
           ))}
         </TableBody>
       </Table>
       {editable && (
-        <div>
-          <Button type="button" disabled={busy} onClick={save}>{t('common.save')}</Button>
-        </div>
+        <CardFooter className="justify-end gap-3 bg-muted/40">
+          <Button type="button" disabled={!dirty || busy} onClick={save}>{t('common.saveChanges')}</Button>
+        </CardFooter>
       )}
-    </div>
+    </Card>
   )
 }
 
@@ -306,20 +349,25 @@ export function RolesPage() {
   useEffect(load, [load])
   const role = roles.find((r) => r.id === selected)
   return (
-    <div className="flex flex-col gap-4">
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <h1 className="text-page-title">{t('page.roles')}</h1>
-        {manage && <RoleDialog reload={load} />}
-      </div>
+    <div className="space-y-6">
+      <PageHeader title={t('page.roles')} description={t('console.rolesSubtitle')} actions={manage && <RoleDialog reload={load} />} />
       <ErrorBanner err={err} shown={[]} />
-      <div className="flex flex-wrap gap-2">
-        {roles.map((r) => (
-          <Button key={r.id} type="button" variant={r.id === selected ? 'default' : 'outline'} aria-pressed={r.id === selected} onClick={() => setSelected(r.id)}>
-            {roleName(r)}
-          </Button>
-        ))}
+      <div className="grid gap-6 lg:grid-cols-[18rem_1fr]">
+        <Card className="flex flex-col gap-1 self-start p-2">
+          {roles.map((r) => (
+            <button key={r.id} type="button" aria-pressed={r.id === selected} onClick={() => setSelected(r.id)} className="w-full rounded-lg border-s-[3px] border-transparent px-3 py-2.5 text-start hover:bg-muted aria-pressed:border-primary aria-pressed:bg-muted">
+              <div className="font-medium">{roleName(r)}</div>
+              <div className="font-mono text-xs text-muted-foreground"><span dir="ltr">{r.slug}</span></div>
+              <div className="text-xs text-muted-foreground">{t('console.usersCount', { count: r.users_count })}</div>
+            </button>
+          ))}
+        </Card>
+        {role ? (
+          <Matrix key={`${role.id}:${role.permissions.join()}`} role={role} perms={perms} editable={manage} onSaved={(saved) => setRoles((rs) => rs.map((r) => (r.id === saved.id ? saved : r)))} />
+        ) : (
+          <Card className="p-5 text-sm text-muted-foreground">{t('console.pickRole')}</Card>
+        )}
       </div>
-      {role ? <Matrix key={`${role.id}:${role.permissions.join()}`} role={role} perms={perms} editable={manage} onSaved={load} /> : <p className="text-sm text-muted-foreground">{t('console.pickRole')}</p>}
     </div>
   )
 }

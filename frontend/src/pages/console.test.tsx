@@ -2,7 +2,10 @@ import { screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { afterEach, beforeEach, expect, test, vi } from 'vitest'
 import { json, mockFetch, pagination, renderWithAuth } from '@/test-utils'
+import { toast } from 'sonner'
 import { AccountsPage, RolesPage } from './console'
+
+vi.mock('sonner', () => ({ toast: { success: vi.fn() }, Toaster: () => null }))
 
 const user = userEvent.setup()
 
@@ -15,43 +18,77 @@ const perms = [
   const [resource, action, scope] = key.split('.')
   return { id: ids[key] ?? `p-${key}`, resource, action, scope, key }
 })
-const role = { id: 'r1', slug: 'manager', name: 'Manager', name_ar: 'مدير', permissions: ['employee.view.own', 'site.view.own'] }
+const role = { id: 'r1', slug: 'manager', name: 'Manager', name_ar: 'مدير', permissions: ['employee.view.own', 'site.view.own'], users_count: 2 }
 const account = { id: 'u2', name: 'سارة', email: 'sara@smart.test', is_active: true, locked_until: null, failed_login_attempts: 0, role: { id: 'r1', slug: 'manager', name: 'Manager', name_ar: 'مدير' } }
 
 beforeEach(() => localStorage.clear())
-afterEach(() => vi.unstubAllGlobals())
+afterEach(() => {
+  vi.unstubAllGlobals()
+  vi.clearAllMocks()
+})
+
+const pickRole = async () => user.click(await screen.findByRole('button', { name: /مدير/ }))
+const scope = (group: string, option: string) => within(screen.getByRole('radiogroup', { name: group })).getByRole('radio', { name: option })
+const sentIds = (patch: { mock: { calls: unknown[][] } }) => JSON.parse((patch.mock.calls[0] as [string, RequestInit])[1].body as string).permission_ids.sort()
+const rolesApi = (patch?: () => Response) => mockFetch({
+  'GET /api/v1/roles': () => json(200, { data: [role] }),
+  'GET /api/v1/permissions': () => json(200, { data: perms }),
+  ...(patch && { 'PATCH /api/v1/roles/r1/permissions': patch }),
+})
 
 test('role matrix saves the checked permission ids', async () => {
   const patch = vi.fn(() => json(200, { data: { ...role, permissions: ['employee.view.own', 'site.view.own', 'audit_log.view.all'] } }))
-  mockFetch({ 'GET /api/v1/roles': () => json(200, { data: [role] }), 'GET /api/v1/permissions': () => json(200, { data: perms }), 'PATCH /api/v1/roles/r1/permissions': patch })
+  rolesApi(patch)
   renderWithAuth(<RolesPage />, ['role.view.all', 'role.manage.all'])
-  await user.click(await screen.findByRole('button', { name: 'مدير' }))
-  await user.click(screen.getByRole('checkbox', { name: /سجل التدقيق.*عرض.*الكل/ }))
-  await user.click(screen.getByRole('button', { name: 'حفظ' }))
-  expect(JSON.parse((patch.mock.calls[0] as unknown as [string, RequestInit])[1].body as string).permission_ids.sort()).toEqual(['p-audit', 'p-emp-own', 'p-site-own'])
+  await pickRole()
+  expect(scope('الموظفون: عرض', 'الخاص به')).toBeChecked()
+  expect(screen.getByRole('button', { name: 'حفظ التغييرات' })).toBeDisabled()
+  await user.click(screen.getByRole('checkbox', { name: 'سجل التدقيق: عرض' }))
+  await user.click(screen.getByRole('button', { name: 'حفظ التغييرات' }))
+  expect(sentIds(patch)).toEqual(['p-audit', 'p-emp-own', 'p-site-own'])
+  await waitFor(() => expect(toast.success).toHaveBeenCalledWith('تم حفظ التغييرات.'))
 })
 
-test('a refused save shows the error and puts the ticks back to the role permissions', async () => {
-  mockFetch({ 'GET /api/v1/roles': () => json(200, { data: [role] }), 'GET /api/v1/permissions': () => json(200, { data: perms }),
-    'PATCH /api/v1/roles/r1/permissions': () => json(422, { error: { code: 'validation_failed', message: 'x', details: [{ field: 'permission_ids', code: 'invalid', message: 'آخر مدير للأدوار' }] } }) })
+test('choosing a wider scope swaps the own permission for the all permission', async () => {
+  const patch = vi.fn(() => json(200, { data: role }))
+  rolesApi(patch)
   renderWithAuth(<RolesPage />, ['role.view.all', 'role.manage.all'])
-  await user.click(await screen.findByRole('button', { name: 'مدير' }))
-  await user.click(screen.getByRole('checkbox', { name: /سجل التدقيق.*عرض.*الكل/ }))
-  await user.click(screen.getByRole('button', { name: 'حفظ' }))
+  await pickRole()
+  await user.click(scope('الموظفون: عرض', 'الكل'))
+  await user.click(screen.getByRole('button', { name: 'حفظ التغييرات' }))
+  expect(sentIds(patch)).toEqual(['p-employee.view.all', 'p-site-own'])
+})
+
+test('choosing none removes the permission', async () => {
+  const patch = vi.fn(() => json(200, { data: role }))
+  rolesApi(patch)
+  renderWithAuth(<RolesPage />, ['role.view.all', 'role.manage.all'])
+  await pickRole()
+  await user.click(scope('المواقع: عرض', 'لا'))
+  await user.click(screen.getByRole('button', { name: 'حفظ التغييرات' }))
+  expect(sentIds(patch)).toEqual(['p-emp-own'])
+})
+
+test('a refused save shows the error and puts the controls back to the role permissions', async () => {
+  rolesApi(() => json(422, { error: { code: 'validation_failed', message: 'x', details: [{ field: 'permission_ids', code: 'invalid', message: 'آخر مدير للأدوار' }] } }))
+  renderWithAuth(<RolesPage />, ['role.view.all', 'role.manage.all'])
+  await pickRole()
+  await user.click(screen.getByRole('checkbox', { name: 'سجل التدقيق: عرض' }))
+  await user.click(scope('الموظفون: عرض', 'الكل'))
+  await user.click(screen.getByRole('button', { name: 'حفظ التغييرات' }))
   expect(await screen.findByText('آخر مدير للأدوار')).toBeInTheDocument()
-  // the fixture lists perms grouped by resource, so DOM order matches it
-  const ticked = screen.getAllByRole('checkbox').flatMap((b, i) => ((b as HTMLInputElement).checked ? [perms[i].key] : []))
-  expect(ticked).toEqual(role.permissions)
+  expect(screen.getByRole('checkbox', { name: 'سجل التدقيق: عرض' })).not.toBeChecked()
+  expect(scope('الموظفون: عرض', 'الخاص به')).toBeChecked()
 })
 
 test('without role.manage the matrix is read-only', async () => {
-  mockFetch({ 'GET /api/v1/roles': () => json(200, { data: [role] }), 'GET /api/v1/permissions': () => json(200, { data: perms }) })
+  rolesApi()
   renderWithAuth(<RolesPage />, ['role.view.all'])
-  await user.click(await screen.findByRole('button', { name: 'مدير' }))
-  const boxes = screen.getAllByRole('checkbox')
-  expect(boxes).toHaveLength(15)
-  for (const b of boxes) expect(b).toBeDisabled()
-  expect(screen.queryByRole('button', { name: 'حفظ' })).toBeNull()
+  await pickRole()
+  expect(screen.getAllByRole('checkbox')).toHaveLength(11)
+  expect(screen.getAllByRole('radiogroup')).toHaveLength(2)
+  for (const c of [...screen.getAllByRole('checkbox'), ...screen.getAllByRole('radio')]) expect(c).toBeDisabled()
+  expect(screen.queryByRole('button', { name: 'حفظ التغييرات' })).toBeNull()
 })
 
 test('account create shows a server field error under its field', async () => {
