@@ -75,7 +75,7 @@ test('list rows show the employee, ID, type badge, department, hire date and sta
   renderWithAuth(<EmployeesPage />, ['employee.view.all'])
   const row = await screen.findByRole('row', { name: /أحمد علي/ })
   expect(within(row).getByText('7')).toBeInTheDocument()
-  expect(within(row).getByText('مهندس')).toBeInTheDocument()
+  expect(within(row).getAllByText('مهندس')).toHaveLength(2) // under the name on phones, its own column from sm
   expect(within(row).getByText('المبيعات')).toBeInTheDocument()
   expect(within(row).getByText('2024-02-01')).toBeInTheDocument()
   expect(within(row).getByText('نشط')).toBeInTheDocument()

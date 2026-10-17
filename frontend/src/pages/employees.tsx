@@ -126,7 +126,7 @@ export function EmployeesPage() {
         }
       />
 
-      <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-5">
+      <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 xl:grid-cols-5">
         {STATS.map(([k, icon, tone]) => (
           <MiniStat key={k} label={t(`employee.stat.${k}`)} value={counts[k] ?? '—'} icon={icon} tone={tone} />
         ))}
@@ -155,16 +155,17 @@ export function EmployeesPage() {
             <TableHeader>
               <TableRow>
                 <TableHead>{t('employee.employee')}</TableHead>
-                <TableHead>{t('employee.code')}</TableHead>
-                <TableHead>{t('employee.type')}</TableHead>
+                <TableHead className="hidden sm:table-cell">{t('employee.code')}</TableHead>
+                <TableHead className="hidden sm:table-cell">{t('employee.type')}</TableHead>
                 <TableHead className="hidden md:table-cell">{t('employee.department')}</TableHead>
-                <TableHead className="hidden lg:table-cell">{t('employee.hire_date')}</TableHead>
+                <TableHead className="hidden xl:table-cell">{t('employee.hire_date')}</TableHead>
                 <TableHead>{t('employee.status')}</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
               {rows.map((e) => {
                 const left = e.termination_date && e.termination_date <= today
+                const badge = e.current_type && <Badge variant="info">{t(`enum.type.${e.current_type}`)}</Badge>
                 return (
                   <TableRow
                     key={e.id}
@@ -173,19 +174,20 @@ export function EmployeesPage() {
                     onClick={() => open(e.id)}
                     onKeyDown={(ev) => ev.key === 'Enter' && open(e.id)}
                   >
-                    <TableCell>
+                    <TableCell className="whitespace-normal">
                       <div className="flex items-center gap-3">
                         <UserAvatar name={e.name_ar} />
                         <div className="min-w-0">
                           <div className="font-medium">{e.name_ar}</div>
                           {e.name_en && <div className="text-xs text-muted-foreground">{e.name_en}</div>}
+                          {badge && <div className="mt-1 sm:hidden">{badge}</div>}
                         </div>
                       </div>
                     </TableCell>
-                    <TableCell className="font-mono text-xs text-muted-foreground">{e.code}</TableCell>
-                    <TableCell>{e.current_type ? <Badge variant="info">{t(`enum.type.${e.current_type}`)}</Badge> : '—'}</TableCell>
+                    <TableCell className="hidden font-mono text-xs text-muted-foreground sm:table-cell">{e.code}</TableCell>
+                    <TableCell className="hidden sm:table-cell">{badge || '—'}</TableCell>
                     <TableCell className="hidden md:table-cell">{e.department ?? '—'}</TableCell>
-                    <TableCell className="hidden text-muted-foreground lg:table-cell">{e.hire_date ?? '—'}</TableCell>
+                    <TableCell className="hidden text-muted-foreground xl:table-cell">{e.hire_date ?? '—'}</TableCell>
                     <TableCell>
                       <StatusBadge variant={left ? 'neutral' : 'success'} label={t(left ? 'status.inactive' : 'status.active')} />
                     </TableCell>
