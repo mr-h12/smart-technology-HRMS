@@ -4,13 +4,21 @@ import { cn } from '@/lib/utils'
 
 export const Tabs = TabsPrimitive.Root
 
-/** A strip that scrolls sideways on a phone keeps the selected tab in view, on mount and whenever the selection or the labels change (works in RTL). */
+/**
+ * A strip that scrolls sideways on a phone keeps the selected tab in view, on mount and whenever the selection or the labels change.
+ * It scrolls only the strip, never the page. scrollBy moves in screen pixels in both directions, so it is right in RTL too.
+ */
 export function TabsList({ className, ...props }: React.ComponentProps<typeof TabsPrimitive.List>) {
   const ref = React.useRef<HTMLDivElement>(null)
   React.useEffect(() => {
     const list = ref.current
     if (!list) return
-    const show = () => list.querySelector('[data-state=active]')?.scrollIntoView({ inline: 'nearest', block: 'nearest' })
+    const show = () => {
+      const tab = list.querySelector('[data-state=active]')?.getBoundingClientRect()
+      const box = list.getBoundingClientRect()
+      const dx = !tab ? 0 : tab.left < box.left ? tab.left - box.left : tab.right > box.right ? tab.right - box.right : 0
+      if (dx) list.scrollBy({ left: dx })
+    }
     show()
     const watch = new MutationObserver(show)
     watch.observe(list, { attributes: true, attributeFilter: ['data-state'], subtree: true, childList: true, characterData: true }) // a label change (language) moves the tabs too

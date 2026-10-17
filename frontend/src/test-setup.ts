@@ -17,5 +17,5 @@ globalThis.ResizeObserver ??= class { observe() {} unobserve() {} disconnect() {
 // jsdom does not implement scrolling; AppLayout scrolls to the top on every navigation.
 window.scrollTo = () => {}
 
-// jsdom has no scrollIntoView; the tab strip calls it for the selected tab.
-Element.prototype.scrollIntoView ??= () => {}
+// jsdom has no element scrolling; the tab strip scrolls itself sideways to the selected tab.
+Element.prototype.scrollBy ??= () => {}
