@@ -7,7 +7,7 @@ import { api, ApiError, apiList } from './api'
 /** A 4xx answer is final; anything else (5xx, network) gets one more try. */
 export const shouldRetry = (failures: number, e: unknown) => !(e instanceof ApiError && e.status >= 400 && e.status < 500) && failures < 1
 
-/** The one cache. Auth clears it on login, logout and 401 so no answer survives into another account. */
+/** The one cache. Auth clears it on login, logout, 401 and a sign-in or sign-out in another tab, so no answer survives into another account. */
 export const queryClient = new QueryClient({ defaultOptions: { queries: { staleTime: 30_000, gcTime: 5 * 60_000, retry: shouldRetry } } })
 
 // server messages are localized: a language switch makes every cached answer stale

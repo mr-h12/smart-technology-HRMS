@@ -196,3 +196,37 @@ test('a 401 drops every cached answer', async () => {
   render(<AuthProvider><SignOut /></AuthProvider>)
   await waitFor(() => expect(queryClient.getQueryCache().getAll()).toHaveLength(0))
 })
+
+function Who() {
+  const { me } = useAuth()
+  return <p>{me ? me.name : 'nobody'}</p>
+}
+
+// another tab writing localStorage fires a `storage` event here (never in the tab that wrote it)
+const otherTab = (key: string, newValue: string | null) => {
+  if (newValue === null) localStorage.removeItem(key)
+  else localStorage.setItem(key, newValue)
+  act(() => void window.dispatchEvent(new StorageEvent('storage', { key, newValue, storageArea: localStorage })))
+}
+
+test.each([['signs out', null], ['signs in as someone else', 'c'.repeat(64)]])('another tab that %s drops this tab’s cache and user', async (_, token) => {
+  setToken('a'.repeat(64))
+  mockFetch({ 'GET /api/v1/auth/me': () => json(200, { data: { name: 'A', permissions: [] } }) })
+  render(<AuthProvider><Who /></AuthProvider>)
+  await screen.findByText('A')
+  seed()
+  otherTab('hrms.auth.token.v1', token)
+  expect(queryClient.getQueryCache().getAll()).toHaveLength(0)
+  expect(screen.getByText('nobody')).toBeInTheDocument()
+})
+
+test('another tab writing an unrelated key keeps the cache and user', async () => {
+  setToken('a'.repeat(64))
+  mockFetch({ 'GET /api/v1/auth/me': () => json(200, { data: { name: 'A', permissions: [] } }) })
+  render(<AuthProvider><Who /></AuthProvider>)
+  await screen.findByText('A')
+  seed()
+  otherTab('theme', 'dark')
+  expect(queryClient.getQueryCache().getAll()).toHaveLength(1)
+  expect(screen.getByText('A')).toBeInTheDocument()
+})

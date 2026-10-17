@@ -18,7 +18,7 @@ type Options = { method?: string; body?: unknown; signal?: AbortSignal }
 
 export type Pagination = { page: number; per_page: number; total: number; total_pages: number; has_next_page: boolean; has_previous_page: boolean }
 
-const TOKEN_KEY = 'hrms.auth.token.v1'
+export const TOKEN_KEY = 'hrms.auth.token.v1'
 
 // ponytail: the token lives only in localStorage; where storage is blocked, sign-in does not stick.
 export function getToken(): string | null {
