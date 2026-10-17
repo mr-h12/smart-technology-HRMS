@@ -14,4 +14,6 @@ COPY --from=composer:2 /usr/bin/composer /usr/bin/composer
 ENV TZ=UTC
 RUN printf 'date.timezone=UTC\nmemory_limit=512M\n' > /usr/local/etc/php/conf.d/zz-app.ini
 
+COPY zzz-pool.conf /usr/local/etc/php-fpm.d/zzz-pool.conf
+
 WORKDIR /var/www/html
