@@ -5,12 +5,15 @@ declare(strict_types=1);
 namespace App\Modules\Audit\Infrastructure\Eloquent;
 
 use App\Modules\Identity\Infrastructure\Eloquent\User;
+use Illuminate\Database\Eloquent\Concerns\HasUuids;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 
 /** Read model for audit_log; rows are written only by AuditLog::record. */
 class AuditLogEntry extends Model
 {
+    use HasUuids;
+
     protected $table = 'audit_log';
 
     public $timestamps = false;

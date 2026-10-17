@@ -7,6 +7,7 @@ use App\Modules\Sites\Infrastructure\Eloquent\Site;
 use Illuminate\Database\QueryException;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Str;
 use Tests\TestCase;
 
 class AuditLogTest extends TestCase
@@ -103,5 +104,21 @@ class AuditLogTest extends TestCase
         $this->getJson('/api/v1/audit-log?from=2026-10-16&to=2026-10-16')->assertJsonCount(0, 'data');
         $this->signIn('manager');
         $this->getJson('/api/v1/audit-log')->assertStatus(403);
+    }
+
+    public function test_list_returns_each_entry_id_as_its_uuid(): void
+    {
+        $this->signIn('developer');
+        $this->postJson('/api/v1/sites', ['name_ar' => 'سموحة', 'kind' => 'work'])->assertCreated();
+        $this->postJson('/api/v1/sites', ['name_ar' => 'العامرية', 'kind' => 'work'])->assertCreated();
+
+        $ids = $this->getJson('/api/v1/audit-log')->assertOk()->json('data.*.id');
+
+        $this->assertGreaterThanOrEqual(2, count($ids));
+        $this->assertSame($ids, array_values(array_unique($ids)));
+        $this->assertEqualsCanonicalizing(DB::table('audit_log')->pluck('id')->all(), $ids);
+        foreach ($ids as $id) {
+            $this->assertTrue(Str::isUuid($id), (string) $id);
+        }
     }
 }
