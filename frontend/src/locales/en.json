@@ -26,7 +26,7 @@
     "sites": "Sites",
     "residences": "Residences",
     "fares": "Fares",
-    "accounts": "Accounts",
+    "accounts": "User accounts",
     "roles": "Roles and permissions",
     "audit": "Audit log",
     "collapse": "Collapse sidebar",
@@ -51,7 +51,7 @@
     "sites": "Sites",
     "residences": "Residences",
     "fares": "Transport fares",
-    "accounts": "Accounts",
+    "accounts": "User accounts",
     "roles": "Roles and permissions",
     "audit": "Audit log"
   },
@@ -71,7 +71,7 @@
     "gender": "Gender",
     "national_id": "National ID",
     "insurance_no": "Insurance number",
-    "phone": "Phone",
+    "phone": "Phone number",
     "address": "Address",
     "department": "Department",
     "residence": "Residence",
@@ -80,7 +80,7 @@
     "termination_date": "Termination date",
     "termination_reason": "Termination reason",
     "hr_notes": "HR notes",
-    "pay_method": "Payment method",
+    "pay_method": "Salary payment method",
     "bank_account": "Bank account",
     "type": "Employee type",
     "identity": "Personal information",
@@ -114,7 +114,7 @@
   "document": {
     "received_at": "Date received",
     "expires_at": "Expiry date",
-    "note": "Note"
+    "note": "Notes"
   },
   "enum": {
     "type": {
@@ -129,7 +129,7 @@
     },
     "pay_method": {
       "cash": "Cash",
-      "bank": "Bank"
+      "bank": "Bank transfer"
     },
     "document": {
       "national_id_copy": "National ID copy",
@@ -155,8 +155,8 @@
       "other": "Other"
     },
     "allowance_mode": {
-      "none": "None",
-      "share_of_wage": "Percentage of daily wage",
+      "none": "No allowance",
+      "share_of_wage": "Share of daily wage",
       "fixed": "Fixed amount"
     }
   },
@@ -209,12 +209,12 @@
     "role": "Role",
     "status": "Status",
     "active": "Active",
-    "inactive": "Inactive",
+    "inactive": "Deactivated",
     "locked": "Locked",
     "deactivate": "Deactivate",
     "reactivate": "Reactivate",
     "setPassword": "Set password",
-    "sessions": "End sessions",
+    "sessions": "Active sessions",
     "noSessions": "No active sessions.",
     "ip": "IP address",
     "userAgent": "Browser",
@@ -242,14 +242,14 @@
       "manage": "Accounts: manage"
     },
     "role": {
-      "view": "Roles: view",
-      "manage": "Roles: manage"
+      "view": "Roles and permissions: view",
+      "manage": "Roles and permissions: manage"
     },
     "audit_log": {
       "view": "Audit log: view"
     },
     "scope": {
-      "none": "No",
+      "none": "None",
       "own": "Own",
       "all": "All"
     }
@@ -267,8 +267,8 @@
     "action": "Event",
     "entityId": "Record ID",
     "changes": "Changes",
-    "old_values": "Before",
-    "new_values": "After",
+    "old_values": "Previous value",
+    "new_values": "New value",
     "event": {
       "CREATED": "Created",
       "UPDATED": "Updated",
@@ -283,7 +283,7 @@
       "USER_ACTIVATED": "Account reactivated",
       "USER_DEACTIVATED": "Account deactivated",
       "PASSWORD_SET": "Password set",
-      "ADMIN_SESSION_TERMINATED": "Session ended by an administrator",
+      "ADMIN_SESSION_TERMINATED": "Session ended by a system administrator",
       "ROLE_CREATED": "Role created",
       "ROLE_UPDATED": "Role updated",
       "ROLE_PERMISSIONS_UPDATED": "Role permissions updated",

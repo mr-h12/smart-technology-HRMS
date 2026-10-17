@@ -36,7 +36,7 @@ _Avoid_: leave site
 
 **Residence** (محل الإقامة):
 The town an employee travels from. Together with the site it sets the fare.
-_Avoid_: address, home
+_Avoid_: السكن; address, home
 
 **Shift**:
 An employee's scheduled start and end time. Lateness and overtime are measured against it.
