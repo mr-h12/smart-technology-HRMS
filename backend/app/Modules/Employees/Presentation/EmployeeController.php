@@ -34,6 +34,11 @@ final class EmployeeController
         return ApiEnvelope::collection($request, $r['data'], $r['pagination']);
     }
 
+    public function summary(Request $request): JsonResponse
+    {
+        return ApiEnvelope::single($request, $this->employees->countsByType(RequestScope::ownerId($request)));
+    }
+
     public function store(Request $request): JsonResponse
     {
         $data = $request->validate([

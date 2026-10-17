@@ -38,14 +38,10 @@ final class EmployeeService
      */
     public function list(array $filters, ?string $ownerId = null): array
     {
-        $query = Employee::query()->select('employees.*')->selectRaw(self::CURRENT_TYPE.' as current_type', [self::today()])->orderBy('code');
+        $query = $this->visibleTo($ownerId)->select('employees.*')->selectRaw(self::CURRENT_TYPE.' as current_type', [self::today()])->orderBy('code');
 
         if (isset($filters['type'])) {
             $query->whereRaw(self::CURRENT_TYPE.' = ?', [self::today(), $filters['type']]);
-        }
-
-        if ($ownerId !== null) {
-            $query->whereRaw(self::CURRENT_MANAGER.' = ?', [self::today(), $ownerId]);
         }
 
         if (isset($filters['search']) && $filters['search'] !== '') {
@@ -70,6 +66,28 @@ final class EmployeeService
                 'has_previous_page' => $page->currentPage() > 1,
             ],
         ];
+    }
+
+    /** @return array<string, int> `total` plus one count per employee type, by the type in force today, over the list's scope */
+    public function countsByType(?string $ownerId = null): array
+    {
+        $counts = $this->visibleTo($ownerId)->toBase()
+            ->selectRaw(self::CURRENT_TYPE.' as type, count(*) as n', [self::today()])
+            ->groupBy('type')->pluck('n', 'type');
+        $byType = array_map(fn (EmployeeType $t) => (int) ($counts[$t->value] ?? 0), array_column(EmployeeType::cases(), null, 'value'));
+
+        return ['total' => (int) $counts->sum(), ...$byType];
+    }
+
+    /** @return Builder<Employee> live employees, or only those a manager has today */
+    private function visibleTo(?string $ownerId): Builder
+    {
+        $query = Employee::query();
+        if ($ownerId !== null) {
+            $query->whereRaw(self::CURRENT_MANAGER.' = ?', [self::today(), $ownerId]);
+        }
+
+        return $query;
     }
 
     /**

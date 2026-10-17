@@ -37,6 +37,7 @@ class ManagerScopeTest extends TestCase
 
         $this->actingAs($a, 'api');
         $this->getJson('/api/v1/employees')->assertJsonCount(2, 'data');
+        $this->getJson('/api/v1/employees/summary')->assertJsonPath('data.total', 2)->assertJsonPath('data.engineer', 2);
         $this->getJson("/api/v1/employees/$e1")->assertOk();
         $this->getJson("/api/v1/employees/$e3")->assertNotFound();
         $this->getJson('/api/v1/employees/'.Str::uuid7())->assertNotFound();
