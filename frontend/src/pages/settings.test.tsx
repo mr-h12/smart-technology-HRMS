@@ -266,7 +266,7 @@ test('site managers dialog pre-checks current managers and saves the ticked ids'
   mockFetch({
     'GET /api/v1/sites': list([sites[0]]),
     'GET /api/v1/sites/s1': () => json(200, { data: { ...sites[0], managers: [{ id: 'u1', name: 'خالد' }], allowance_rules: [] } }),
-    'GET /api/v1/users': list([{ id: 'u1', name: 'خالد', is_active: true }, { id: 'u2', name: 'سامي', is_active: true }]),
+    'GET /api/v1/users': list([{ id: 'u1', name: 'خالد', is_active: true }, { id: 'u2', name: 'سامي', is_active: true }, { id: 'u3', name: 'معطل', is_active: false }]),
     'PUT /api/v1/sites/s1/managers': put,
   })
   renderWithAuth(<SettingsPage />, [...MANAGE, 'site.assign_manager.all'])
@@ -277,7 +277,38 @@ test('site managers dialog pre-checks current managers and saves the ticked ids'
   await user.click(screen.getByRole('checkbox', { name: 'سامي' }))
   await user.click(screen.getByRole('button', { name: 'حفظ' }))
   expect(body(put)).toEqual({ manager_ids: ['u1', 'u2'] })
-  expect(urlWith('/users')).toContain('active=true')
+  expect(screen.queryByRole('checkbox', { name: 'معطل' })).toBeNull() // only active accounts can manage a site
+  expect(urlWith('/users')).toBe('/api/v1/users?per_page=100') // the lookup every page shares
+})
+
+test('switching tabs back to one already shown makes no new request', async () => {
+  mockFetch({ 'GET /api/v1/sites': list(sites), 'GET /api/v1/residences': list(residences), 'GET /api/v1/fares': list([]) })
+  renderWithAuth(<SettingsPage />, MANAGE, { path: '/settings?tab=fares' })
+  await screen.findByRole('row', { name: /العجمي/ })
+  await user.click(screen.getByRole('tab', { name: 'المواقع' }))
+  await screen.findByText('موقع أ')
+  await user.click(screen.getByRole('tab', { name: 'المواصلات' }))
+  await screen.findByRole('row', { name: /العجمي/ })
+  expect(calls('GET').filter(([u]) => String(u).includes('/fares'))).toHaveLength(1)
+})
+
+test('adding a site shows it in the fares grid too', async () => {
+  let all = [sites[0]]
+  mockFetch({
+    'GET /api/v1/sites': () => json(200, { data: all, meta: { pagination: pg(all.length) } }),
+    'GET /api/v1/residences': list(residences),
+    'GET /api/v1/fares': list([]),
+    'POST /api/v1/sites': () => { all = [...all, { id: 's9', name_ar: 'موقع جديد', kind: 'work', leave_code: null, active: true }]; return json(201, { data: {} }) },
+  })
+  renderWithAuth(<SettingsPage />, MANAGE, { path: '/settings?tab=fares' })
+  await screen.findByRole('columnheader', { name: 'موقع أ' })
+  await user.click(screen.getByRole('tab', { name: 'المواقع' }))
+  await user.click(await screen.findByRole('button', { name: 'إضافة موقع' }))
+  await user.type(screen.getByLabelText('الاسم بالعربية'), 'موقع جديد')
+  await user.click(screen.getByRole('button', { name: 'حفظ' }))
+  await screen.findByText('موقع جديد')
+  await user.click(screen.getByRole('tab', { name: 'المواصلات' }))
+  expect(await screen.findByRole('columnheader', { name: 'موقع جديد' })).toBeInTheDocument()
 })
 
 test('without manage permissions there is no add button and no row actions', async () => {
@@ -346,4 +377,22 @@ test('the rules tab is hidden without setting.view', async () => {
   renderWithAuth(<SettingsPage />, MANAGE, { path: '/settings?tab=rules' })
   expect(await screen.findByRole('tab', { name: 'المواقع' })).toHaveAttribute('aria-selected', 'true')
   expect(screen.queryByRole('tab', { name: 'قواعد العمل' })).toBeNull()
+})
+
+test('the rules tab does not refetch on a tab switch, and a save refetches it', async () => {
+  let current = rules
+  const put = vi.fn(() => { current = { ...rules, office_grace_minutes: '20' }; return json(200, { data: current }) })
+  mockFetch({ 'GET /api/v1/settings': () => json(200, { data: current }), 'GET /api/v1/sites': list(sites), 'PUT /api/v1/settings': put })
+  renderWithAuth(<SettingsPage />, RULES, { path: '/settings?tab=rules' })
+  const settingsCalls = () => calls('GET').filter(([u]) => String(u).endsWith('/settings')).length
+  await screen.findByLabelText('فترة السماح للتأخير (دقيقة)')
+  await user.click(screen.getByRole('tab', { name: 'المواقع' }))
+  await screen.findByText('موقع أ')
+  await user.click(screen.getByRole('tab', { name: 'قواعد العمل' }))
+  expect(await screen.findByLabelText('فترة السماح للتأخير (دقيقة)')).toHaveValue('15')
+  expect(settingsCalls()).toBe(1)
+  await user.clear(screen.getByLabelText('فترة السماح للتأخير (دقيقة)'))
+  await user.type(screen.getByLabelText('فترة السماح للتأخير (دقيقة)'), '20')
+  await user.click(screen.getByRole('button', { name: 'حفظ التغييرات' }))
+  await waitFor(() => expect(settingsCalls()).toBe(2))
 })

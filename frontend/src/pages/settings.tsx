@@ -1,5 +1,5 @@
 import { Bus, CalendarOff, House, MapPin, SlidersHorizontal } from 'lucide-react'
-import { useEffect, useState } from 'react'
+import { useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { useSearchParams } from 'react-router-dom'
 import { toast } from 'sonner'
@@ -9,8 +9,8 @@ import { TableSkeleton } from '@/components/layout/PageSkeleton'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
-import { api } from '@/lib/api'
 import { useAuth } from '@/lib/auth'
+import { useApi, useSave } from '@/lib/query'
 import { FaresTab, LeaveTypesTab, ResidencesTab, SitesTab } from './sites'
 
 const GROUPS: [string, string[]][] = [
@@ -23,24 +23,46 @@ const KEYS = GROUPS.flatMap(([, keys]) => keys)
 const INTEGER = ['month_days', 'office_grace_minutes', 'leave_days_under_one_year', 'leave_days_one_year_plus', 'leave_casual_days']
 const DAYS = ['saturday', 'sunday', 'monday', 'tuesday', 'wednesday', 'thursday', 'friday']
 
-/** The 15 business-rule settings as one form; values stay strings, weekly-off days are a comma list. */
+/** The 15 business-rule settings: loads them, then shows the form. */
 function RulesTab() {
+  const { t } = useTranslation()
+  const { data, err } = useApi<Row>('/settings')
+  return (
+    <Card>
+      <CardHeader>
+        <div>
+          <CardTitle>{t('settings.tab.rules')}</CardTitle>
+          <CardDescription>{t('settings.desc.rules')}</CardDescription>
+        </div>
+      </CardHeader>
+      {data ? (
+        <RulesForm initial={data} />
+      ) : (
+        <CardContent className="space-y-6">
+          <ErrorBanner err={err} shown={[]} />
+          {!err && <TableSkeleton rows={4} />}
+        </CardContent>
+      )}
+    </Card>
+  )
+}
+
+/** One form; values stay strings, weekly-off days are a comma list. It starts from the loaded settings and keeps its own `saved` baseline after a save. */
+function RulesForm({ initial }: { initial: Row }) {
   const { t } = useTranslation()
   const { can } = useAuth()
   const manage = can('setting.manage')
-  const [saved, setSaved] = useState<Row>()
-  const { form, setForm, set } = useForm()
+  const send = useSave()
+  const [saved, setSaved] = useState(initial)
+  const { form, setForm, set } = useForm(initial)
   const [err, setErr] = useState<unknown>()
   const [busy, setBusy] = useState(false)
-  useEffect(() => {
-    api<Row>('/settings').then((d) => { setSaved(d); setForm(d) }, setErr)
-  }, [setForm])
-  const dirty = !!saved && JSON.stringify(form) !== JSON.stringify(saved)
+  const dirty = JSON.stringify(form) !== JSON.stringify(saved)
   const errs = toErrs(err)
   function save() {
     setBusy(true)
     setErr(undefined)
-    api<Row>('/settings', { method: 'PUT', body: form })
+    send<Row>('/settings', { method: 'PUT', body: form })
       .then((d) => { setSaved(d); setForm(d); toast.success(t('common.saved')) }, setErr)
       .finally(() => setBusy(false))
   }
@@ -71,23 +93,15 @@ function RulesTab() {
       />
     )
   return (
-    <Card>
-      <CardHeader>
-        <div>
-          <CardTitle>{t('settings.tab.rules')}</CardTitle>
-          <CardDescription>{t('settings.desc.rules')}</CardDescription>
-        </div>
-      </CardHeader>
+    <>
       <CardContent className="space-y-6">
         <ErrorBanner err={err} shown={KEYS} />
-        {saved
-          ? GROUPS.map(([group, keys]) => (
-              <fieldset key={group} disabled={!manage}>
-                <legend className="mb-3 text-sm font-semibold">{t(`rule.group.${group}`)}</legend>
-                <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">{keys.map(field)}</div>
-              </fieldset>
-            ))
-          : !err && <TableSkeleton rows={4} />}
+        {GROUPS.map(([group, keys]) => (
+          <fieldset key={group} disabled={!manage}>
+            <legend className="mb-3 text-sm font-semibold">{t(`rule.group.${group}`)}</legend>
+            <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">{keys.map(field)}</div>
+          </fieldset>
+        ))}
       </CardContent>
       {manage && (
         <CardFooter className="justify-end">
@@ -96,7 +110,7 @@ function RulesTab() {
           </Button>
         </CardFooter>
       )}
-    </Card>
+    </>
   )
 }
 
