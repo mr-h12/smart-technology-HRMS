@@ -10,7 +10,7 @@ const AuditPage = page(() => import('@/pages/audit'), 'AuditPage')
 const AccountsPage = page(() => import('@/pages/console'), 'AccountsPage')
 const RolesPage = page(() => import('@/pages/console'), 'RolesPage')
 const EmployeesPage = page(() => import('@/pages/employees'), 'EmployeesPage')
-const EmployeeFormPage = page(() => import('@/pages/employees'), 'EmployeeFormPage')
+const EmployeeRoute = page(() => import('@/pages/employees'), 'EmployeeRoute')
 const SettingsPage = page(() => import('@/pages/settings'), 'SettingsPage')
 const NotFoundPage = page(() => import('@/pages/pages'), 'NotFoundPage')
 
@@ -26,8 +26,8 @@ export function AppRoutes() {
       <Route element={<RequireAuth><AppLayout /></RequireAuth>}>
         <Route index element={<Home />} />
         <Route path="employees" element={<EmployeesPage />} />
-        <Route path="employees/new" element={<EmployeeFormPage />} />
-        <Route path="employees/:id" element={<EmployeeFormPage />} />
+        <Route path="employees/new" element={<EmployeeRoute />} />
+        <Route path="employees/:id" element={<EmployeeRoute />} />
         <Route path="settings" element={<SettingsPage />} />
         {/* old links, kept for one release */}
         <Route path="sites" element={<Navigate to="/settings?tab=sites" replace />} />

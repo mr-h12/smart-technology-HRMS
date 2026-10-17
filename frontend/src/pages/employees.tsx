@@ -1,5 +1,5 @@
 import { Briefcase, CalendarDays, FileText, HardHat, History as HistoryIcon, IdCard, type LucideIcon, UserCog, UserPlus, Users, Wrench } from 'lucide-react'
-import { useCallback, useEffect, useState } from 'react'
+import { useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import { MiniStat, type Tone } from '@/components/cards/StatCard'
@@ -18,8 +18,9 @@ import { Textarea } from '@/components/ui/input'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { cairoToday, ErrorBanner, Field, type Errs, FormDialog, type FormApi, type Row, SelectField, TextField, toErrs, useForm, useMoney } from '@/components/form'
-import { api, apiList } from '@/lib/api'
+import { useDebounced } from '@/hooks/useDebounced'
 import { useAuth } from '@/lib/auth'
+import { RESIDENCES, USERS, useApi, useList, useSave } from '@/lib/query'
 
 const TYPES = ['office', 'engineer', 'permanent_worker', 'day_laborer']
 const GENDERS = ['male', 'female']
@@ -66,36 +67,10 @@ export function EmployeesPage() {
   const [q, setQ] = useState('')
   const [type, setType] = useState('')
   const [page, setPage] = useState(1)
-  const [rows, setRows] = useState<Row[]>()
-  const [total, setTotal] = useState(0)
-  const [counts, setCounts] = useState<Record<string, number>>({})
-  const [err, setErr] = useState<unknown>()
-
-  useEffect(() => {
-    let live = true // drop answers to queries the user has already typed past
-    const qs = new URLSearchParams({ page: String(page), per_page: String(PAGE), ...(q && { search: q }), ...(type && { type }) })
-    apiList<Row>(`/employees?${qs}`)
-      .then((r) => {
-        if (!live) return
-        setErr(undefined)
-        setRows(r.data)
-        setTotal(r.meta.pagination.total)
-      })
-      .catch((e) => live && setErr(e))
-    return () => {
-      live = false
-    }
-  }, [q, type, page])
-
-  // ponytail: one count call per tile; replace them with a counts endpoint if the list grows slow.
-  useEffect(() => {
-    for (const [k] of STATS) {
-      apiList(`/employees?per_page=1${k === 'total' ? '' : `&type=${k}`}`).then(
-        (r) => setCounts((c) => ({ ...c, [k]: r.meta.pagination.total })),
-        () => {}, // a failed tile stays at —; the list request shows the banner
-      )
-    }
-  }, [])
+  const search = useDebounced(q, 250) // the box stays instant; the request waits for a pause in typing
+  const qs = new URLSearchParams({ page: String(page), per_page: String(PAGE), ...(search && { search }), ...(type && { type }) })
+  const { rows, total, err, loading } = useList(`/employees?${qs}`)
+  const { data: counts } = useApi<Record<string, number>>('/employees/summary') // a failed tile stays at —; the list shows the banner
 
   const filter = (set: (v: string) => void) => (v: string) => {
     set(v)
@@ -128,7 +103,7 @@ export function EmployeesPage() {
 
       <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 xl:grid-cols-5">
         {STATS.map(([k, icon, tone]) => (
-          <MiniStat key={k} label={t(`employee.stat.${k}`)} value={counts[k] ?? '—'} icon={icon} tone={tone} />
+          <MiniStat key={k} label={t(`employee.stat.${k}`)} value={counts?.[k] ?? '—'} icon={icon} tone={tone} />
         ))}
       </div>
 
@@ -146,10 +121,10 @@ export function EmployeesPage() {
           <ErrorBanner err={err} shown={[]} />
         </div>
 
-        {!rows ? (
-          !err && <TableSkeleton rows={8} />
+        {loading ? (
+          <TableSkeleton rows={8} />
         ) : !rows.length ? (
-          <EmptyState icon={Users} title={t('common.noResults')} />
+          !err && <EmptyState icon={Users} title={t('common.noResults')} />
         ) : (
           <Table>
             <TableHeader>
@@ -210,36 +185,35 @@ const TABS: [string, LucideIcon][] = [
   ['documents', FileText],
 ]
 
-/** Create (no id) or detail: both render the same profile form; detail adds a header card and tabs synced to `?tab=`. */
+/** One element for `employees/new` and `employees/:id`: keyed by the id so opening another employee starts a fresh form. */
+export function EmployeeRoute() {
+  const { id } = useParams()
+  return <EmployeeFormPage key={id ?? 'new'} />
+}
+
+/** Create (no id) or detail: loads the record, then shows the form. */
 export function EmployeeFormPage() {
+  const { id } = useParams()
+  const { data: emp, err } = useApi<Row>(id ? `/employees/${id}` : null)
+  if (id && !emp) return <div className="mx-auto max-w-5xl space-y-6">{err ? <ErrorBanner err={err} shown={[]} /> : <TableSkeleton rows={6} />}</div>
+  return <EmployeeForm emp={emp} />
+}
+
+/** Both render the same profile form; detail adds a header card and tabs synced to `?tab=`. The form starts from `emp` and is the user's after that. */
+function EmployeeForm({ emp }: { emp?: Row }) {
   const { t } = useTranslation()
   const { can } = useAuth()
-  const { id } = useParams()
+  const id: string | undefined = emp?.id
   const navigate = useNavigate()
   const [params, setParams] = useSearchParams()
-  const { form, setForm, set } = useForm({ gender: 'male', pay_method: 'cash', type: 'office' })
-  const [emp, setEmp] = useState<Row>()
-  const [residences, setResidences] = useState<Row[]>([])
+  const { form, set } = useForm({ gender: 'male', pay_method: 'cash', type: 'office', ...(emp && Object.fromEntries(IDENTITY.map((k) => [k, emp[k] ?? '']))) })
+  const { data: residences = [], err: residencesErr } = useApi<Row[]>(RESIDENCES)
+  const send = useSave() // refreshes every employees list and summary, and the detail
   const [err, setErr] = useState<unknown>()
   const errs = toErrs(err)
   // An own-scoped (manager) record comes without the sensitive identity and pay fields; never render or send what was not received.
   const has = (k: string) => !emp || k in emp
   const editable = can(id ? 'employee.edit' : 'employee.create')
-
-  const fill = useCallback(
-    (e: Row) => {
-      setEmp(e)
-      setForm((f) => ({ ...f, ...Object.fromEntries(IDENTITY.map((k) => [k, e[k] ?? ''])) }))
-    },
-    [setForm],
-  )
-  const load = useCallback(() => {
-    if (id) api<Row>(`/employees/${id}`).then(fill).catch(setErr)
-  }, [id, fill])
-  useEffect(load, [load])
-  useEffect(() => {
-    apiList<Row>('/residences?per_page=100').then((r) => setResidences(r.data)).catch(setErr)
-  }, [])
 
   async function save(ev: React.FormEvent) {
     ev.preventDefault()
@@ -248,9 +222,9 @@ export function EmployeeFormPage() {
       if (id) {
         // PATCH: blank clears a nullable field; name_ar/gender/pay_method must stay set
         const body = Object.fromEntries(IDENTITY.filter(has).map((k) => [k, form[k] === '' && !['name_ar', 'gender', 'pay_method'].includes(k) ? null : form[k]]))
-        fill(await api<Row>(`/employees/${id}`, { method: 'PATCH', body }))
+        await send(`/employees/${id}`, { method: 'PATCH', body })
       } else {
-        const e = await api<Row>('/employees', { method: 'POST', body: clean(form, [...IDENTITY, ...payFields(form.type), 'type', 'effective_from']) })
+        const e = await send<Row>('/employees', { body: clean(form, [...IDENTITY, ...payFields(form.type), 'type', 'effective_from']) })
         navigate(`/employees/${e.id}`)
       }
     } catch (e) {
@@ -270,7 +244,7 @@ export function EmployeeFormPage() {
   )
   const profile = (
     <form onSubmit={save} className="space-y-6">
-      <ErrorBanner err={err} shown={shown} />
+      <ErrorBanner err={err ?? residencesErr} shown={shown} />
       <fieldset disabled={!editable} className="min-w-0 space-y-6">
         {section('employee.identity', (
           <>
@@ -321,14 +295,13 @@ export function EmployeeFormPage() {
     </form>
   )
 
-  if (!id)
+  if (!emp)
     return (
       <div className="mx-auto max-w-5xl space-y-6">
         <PageHeader title={t('employee.add')} />
         {profile}
       </div>
     )
-  if (!emp) return <div className="mx-auto max-w-5xl space-y-6">{err ? <ErrorBanner err={err} shown={[]} /> : <TableSkeleton rows={6} />}</div>
 
   const tab = TABS.some(([v]) => v === params.get('tab')) ? params.get('tab')! : 'profile'
   return (
@@ -349,7 +322,7 @@ export function EmployeeFormPage() {
           <dt className="text-muted-foreground">{t('manager.title')}</dt>
           <dd>{emp.current_manager?.name ?? t('manager.none')}</dd>
         </dl>
-        {can('employee.assign_manager') && <AssignManagerDialog empId={emp.id} onAssigned={setEmp} />}
+        {can('employee.assign_manager') && <AssignManagerDialog empId={emp.id} />}
       </Card>
 
       <Tabs value={tab} onValueChange={(v) => setParams({ tab: v }, { replace: true })}>
@@ -365,8 +338,8 @@ export function EmployeeFormPage() {
           {{
             profile,
             manager: <ManagerHistory emp={emp} />,
-            history: <History emp={emp} reload={load} />,
-            documents: <Documents emp={emp} onSaved={setEmp} />,
+            history: <History emp={emp} />,
+            documents: <Documents emp={emp} />,
           }[tab]}
         </TabsContent>
       </Tabs>
@@ -375,8 +348,9 @@ export function EmployeeFormPage() {
 }
 
 /** Posts a dated manager assignment; the users list loads when the dialog opens (its body mounts then). */
-function AssignManagerDialog({ empId, onAssigned }: { empId: string; onAssigned: (e: Row) => void }) {
+function AssignManagerDialog({ empId }: { empId: string }) {
   const { t } = useTranslation()
+  const send = useSave()
   return (
     <FormDialog
       title={t('manager.assign')}
@@ -387,7 +361,7 @@ function AssignManagerDialog({ empId, onAssigned }: { empId: string; onAssigned:
         </Button>
       }
       init={{ manager_id: '', effective_from: '' }}
-      submit={(form) => api<Row>(`/employees/${empId}/manager-assignments`, { method: 'POST', body: { manager_id: form.manager_id, effective_from: form.effective_from } }).then(onAssigned)}
+      submit={(form) => send(`/employees/${empId}/manager-assignments`, { body: { manager_id: form.manager_id, effective_from: form.effective_from } })}
       onDone={() => {}}
       shown={['manager_id', 'effective_from']}
     >
@@ -403,15 +377,11 @@ function AssignManagerDialog({ empId, onAssigned }: { empId: string; onAssigned:
 
 function ManagerSelect(f: FormApi) {
   const { t } = useTranslation()
-  const [users, setUsers] = useState<Row[]>([])
-  const [err, setErr] = useState<unknown>()
-  useEffect(() => {
-    apiList<Row>('/users?active=true&per_page=100').then((r) => setUsers(r.data), setErr)
-  }, [])
+  const { data: users = [], err } = useApi<Row[]>(USERS) // shared with the accounts list and the audit filter
   return (
     <>
       <ErrorBanner err={err} shown={[]} />
-      <SelectField name="manager_id" label={t('manager.title')} blank options={users.map((u) => [u.id, u.name])} {...f} />
+      <SelectField name="manager_id" label={t('manager.title')} blank options={users.filter((u) => u.is_active).map((u) => [u.id, u.name])} {...f} />
     </>
   )
 }
@@ -448,7 +418,7 @@ function ManagerHistory({ emp }: { emp: Row }) {
   )
 }
 
-function History({ emp, reload }: { emp: Row; reload: () => void }) {
+function History({ emp }: { emp: Row }) {
   const { t } = useTranslation()
   const { can } = useAuth()
   const money = useMoney()
@@ -458,7 +428,7 @@ function History({ emp, reload }: { emp: Row; reload: () => void }) {
       <Card className="overflow-hidden">
         <CardHeader>
           <CardTitle>{t('history.types')}</CardTitle>
-          {can('employee.edit') && <ChangeDialog kind="type" emp={emp} reload={reload} />}
+          {can('employee.edit') && <ChangeDialog kind="type" emp={emp} />}
         </CardHeader>
         <Table>
           <TableHeader>
@@ -481,7 +451,7 @@ function History({ emp, reload }: { emp: Row; reload: () => void }) {
         <Card className="overflow-hidden">
           <CardHeader>
             <CardTitle>{t('history.pay')}</CardTitle>
-            {can('employee.edit') && <ChangeDialog kind="pay" emp={emp} reload={reload} />}
+            {can('employee.edit') && <ChangeDialog kind="pay" emp={emp} />}
           </CardHeader>
           <Table>
             <TableHeader>
@@ -517,8 +487,9 @@ const typeOn = (emp: Row, date: string): string => {
 }
 
 /** "Add change" dialog: a type change, or a pay change shaped by the type in force on the chosen date. */
-function ChangeDialog({ kind, emp, reload }: { kind: 'type' | 'pay'; emp: Row; reload: () => void }) {
+function ChangeDialog({ kind, emp }: { kind: 'type' | 'pay'; emp: Row }) {
   const { t } = useTranslation()
+  const send = useSave()
   const [open, setOpen] = useState(false)
   const { form, set, setForm } = useForm({})
   const [err, setErr] = useState<unknown>()
@@ -532,10 +503,9 @@ function ChangeDialog({ kind, emp, reload }: { kind: 'type' | 'pay'; emp: Row; r
     setErr(undefined)
     if (kind === 'type' && form.type === inForce) return setSameType(true)
     try {
-      await api(`/employees/${emp.id}/${kind}-changes`, { method: 'POST', body: clean(form, shown) })
+      await send(`/employees/${emp.id}/${kind}-changes`, { body: clean(form, shown) })
       setOpen(false)
       setForm({})
-      reload()
     } catch (e) {
       setErr(e)
     }
@@ -570,9 +540,10 @@ function ChangeDialog({ kind, emp, reload }: { kind: 'type' | 'pay'; emp: Row; r
 }
 
 /** One row per document kind; its dialog PUTs and the page shows the record the API returns. */
-function Documents({ emp, onSaved }: { emp: Row; onSaved: (e: Row) => void }) {
+function Documents({ emp }: { emp: Row }) {
   const { t } = useTranslation()
   const { can } = useAuth()
+  const send = useSave()
   return (
     <Card className="overflow-hidden">
       <CardHeader>
@@ -610,7 +581,7 @@ function Documents({ emp, onSaved }: { emp: Row; onSaved: (e: Row) => void }) {
                       }
                       init={{ received_at: doc?.received_at ?? '', expires_at: doc?.expires_at ?? '', note: doc?.note ?? '' }}
                       submit={(form) =>
-                        api<Row>(`/employees/${emp.id}/documents/${kind}`, { method: 'PUT', body: Object.fromEntries(Object.entries(form).map(([k, v]) => [k, v || null])) }).then(onSaved)
+                        send(`/employees/${emp.id}/documents/${kind}`, { method: 'PUT', body: Object.fromEntries(Object.entries(form).map(([k, v]) => [k, v || null])) })
                       }
                       onDone={() => {}}
                       shown={['received_at', 'expires_at', 'note']}

@@ -1,9 +1,9 @@
 import { screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
-import { MemoryRouter, Route, Routes } from 'react-router-dom'
+import { Link, MemoryRouter, Route, Routes } from 'react-router-dom'
 import { afterEach, beforeEach, expect, test, vi } from 'vitest'
 import { json, mockFetch, pagination, renderWithAuth } from '@/test-utils'
-import { EmployeeFormPage, EmployeesPage } from './employees'
+import { EmployeeFormPage, EmployeeRoute, EmployeesPage } from './employees'
 
 const residences = () => json(200, { data: [{ id: 'r1', name_ar: 'العجمي' }], meta: { pagination } })
 
@@ -26,13 +26,15 @@ function EmployeeDetailRoute({ id, tab }: { id: string; tab?: string }) {
 }
 
 test('assigning a manager posts the chosen user and date', async () => {
-  const post = vi.fn(() => json(201, { data: { ...emp, current_manager: { id: 'u1', name: 'خالد' } } }))
-  mockFetch({ 'GET /api/v1/employees/e1': () => json(200, { data: emp }), 'GET /api/v1/residences': residences,
-    'GET /api/v1/users': () => json(200, { data: [{ id: 'u1', name: 'خالد', is_active: true }], meta: { pagination } }),
+  let assigned = false
+  const post = vi.fn(() => { assigned = true; return json(201, { data: emp }) })
+  mockFetch({ 'GET /api/v1/employees/e1': () => json(200, { data: assigned ? { ...emp, current_manager: { id: 'u1', name: 'خالد' } } : emp }), 'GET /api/v1/residences': residences,
+    'GET /api/v1/users': () => json(200, { data: [{ id: 'u1', name: 'خالد', is_active: true }, { id: 'u3', name: 'معطل', is_active: false }], meta: { pagination } }),
     'POST /api/v1/employees/e1/manager-assignments': post })
   renderWithAuth(<EmployeeDetailRoute id="e1" />, ['employee.view.all', 'employee.assign_manager.all'], { router: false })
   await user.click(await screen.findByRole('button', { name: 'تعيين مدير' }))
   await screen.findByRole('option', { name: 'خالد' })
+  expect(screen.queryByRole('option', { name: 'معطل' })).toBeNull() // only active accounts can manage
   await user.selectOptions(screen.getByLabelText('المدير'), 'u1')
   await user.type(screen.getByLabelText('ساري اعتبارًا من'), '2026-11-01')
   await user.click(screen.getByRole('button', { name: 'حفظ' }))
@@ -55,9 +57,10 @@ test('manager tab lists the assignment history', async () => {
   expect(within(row).getByText('خالد')).toBeInTheDocument()
 })
 
-test('a document is updated from its row dialog and the returned record is shown', async () => {
-  const put = vi.fn(() => json(200, { data: { ...emp, documents: [{ id: 'd1', kind: 'criminal_record', received_at: '2026-10-01', expires_at: null, note: 'أصل' }] } }))
-  mockFetch({ 'GET /api/v1/residences': residences, 'GET /api/v1/employees/e1': () => json(200, { data: emp }),
+test('a document is updated from its row dialog and the refetched record is shown', async () => {
+  let docs: unknown[] = []
+  const put = vi.fn(() => { docs = [{ id: 'd1', kind: 'criminal_record', received_at: '2026-10-01', expires_at: null, note: 'أصل' }]; return json(200, { data: { ...emp, documents: docs } }) })
+  mockFetch({ 'GET /api/v1/residences': residences, 'GET /api/v1/employees/e1': () => json(200, { data: { ...emp, documents: docs } }),
     'PUT /api/v1/employees/e1/documents/criminal_record': put })
   renderWithAuth(<EmployeeDetailRoute id="e1" tab="documents" />, ALL, { router: false })
   const row = await screen.findByRole('row', { name: /صحيفة الحالة الجنائية/ })
@@ -67,7 +70,6 @@ test('a document is updated from its row dialog and the returned record is shown
   await user.click(screen.getByRole('button', { name: 'حفظ' }))
   expect(JSON.parse((put.mock.calls[0] as unknown as [string, RequestInit])[1].body as string)).toEqual({ received_at: '2026-10-01', expires_at: null, note: 'أصل' })
   expect(await within(screen.getByRole('row', { name: /صحيفة الحالة الجنائية/ })).findByText('2026-10-01')).toBeInTheDocument()
-  expect(vi.mocked(fetch).mock.calls.filter(([u]) => String(u).endsWith('/employees/e1'))).toHaveLength(1)
 })
 
 test('list rows show the employee, ID, type badge, department, hire date and status', async () => {
@@ -82,17 +84,66 @@ test('list rows show the employee, ID, type badge, department, hire date and sta
   expect(screen.queryByRole('link', { name: 'إضافة موظف' })).toBeNull()
 })
 
-test('stat tiles show the server totals per type', async () => {
-  const totals: Record<string, number> = { '': 40, office: 9, engineer: 7, permanent_worker: 13, day_laborer: 11 }
+test('stat tiles come from one summary request', async () => {
   mockFetch({
-    'GET /api/v1/employees': (url) =>
-      json(200, { data: [], meta: { pagination: { ...pagination, total: totals[new URL(url, 'http://x').searchParams.get('type') ?? ''] } } }),
+    'GET /api/v1/employees': () => json(200, { data: [], meta: { pagination } }),
+    'GET /api/v1/employees/summary': () => json(200, { data: { total: 40, office: 9, engineer: 7, permanent_worker: 13, day_laborer: 11 } }),
   })
   renderWithAuth(<EmployeesPage />, ['employee.view.all', 'employee.create.all'])
   expect(await within(screen.getByRole('group', { name: 'إجمالي الموظفين' })).findByText('40')).toBeInTheDocument()
   expect(await within(screen.getByRole('group', { name: 'المهندسون' })).findByText('7')).toBeInTheDocument()
   expect(await within(screen.getByRole('group', { name: 'عمال اليومية' })).findByText('11')).toBeInTheDocument()
   expect(screen.getByRole('link', { name: 'إضافة موظف' })).toBeInTheDocument()
+  const urls = vi.mocked(fetch).mock.calls.map(([u]) => String(u))
+  expect(urls.filter((u) => u.includes('/employees/summary'))).toHaveLength(1)
+  expect(urls.filter((u) => u.includes('per_page=1&') || u.endsWith('per_page=1'))).toHaveLength(0) // the five count calls are gone
+})
+
+test('typing fast sends one search request, 250 ms after the last key', async () => {
+  const list = vi.fn((_url: string) => json(200, { data: [], meta: { pagination } }))
+  mockFetch({ 'GET /api/v1/employees': list })
+  renderWithAuth(<EmployeesPage />, ['employee.view.all'])
+  const box = await screen.findByRole('textbox', { name: 'بحث بالاسم أو الرقم القومي أو الرقم الوظيفي' })
+  await user.type(box, 'أحمد')
+  expect(box).toHaveValue('أحمد') // the input itself is instant
+  const searches = () => list.mock.calls.map(([u]) => decodeURIComponent(String(u))).filter((u) => u.includes('search='))
+  expect(searches()).toHaveLength(0)
+  await waitFor(() => expect(searches()).toHaveLength(1))
+  expect(searches()[0]).toContain('search=أحمد')
+})
+
+test('opening an employee already in the cache shows that employee, not the form of the previous one', async () => {
+  mockFetch({
+    'GET /api/v1/residences': residences,
+    'GET /api/v1/employees/A': () => json(200, { data: { ...emp, id: 'A', name_ar: 'أحمد' } }),
+    'GET /api/v1/employees/B': () => json(200, { data: { ...emp, id: 'B', name_ar: 'بسمة' } }),
+  })
+  renderWithAuth(
+    <MemoryRouter initialEntries={['/employees/A']}>
+      <Link to="/employees/A">إلى أحمد</Link>
+      <Link to="/employees/B">إلى بسمة</Link>
+      <Routes><Route path="employees/:id" element={<EmployeeRoute />} /></Routes>
+    </MemoryRouter>,
+    ALL,
+    { router: false },
+  )
+  const name = await screen.findByLabelText('الاسم بالعربية')
+  expect(name).toHaveValue('أحمد')
+  await user.type(name, ' تعديل')
+  await user.click(screen.getByRole('link', { name: 'إلى بسمة' }))
+  await waitFor(() => expect(screen.getByLabelText('الاسم بالعربية')).toHaveValue('بسمة'))
+  await user.click(screen.getByRole('link', { name: 'إلى أحمد' })) // A is cached now, so it shows at once: the form must not keep B's values
+  expect(screen.getByLabelText('الاسم بالعربية')).toHaveValue('أحمد')
+})
+
+test('employees already fetched are shown again without a new request', async () => {
+  mockFetch({ 'GET /api/v1/residences': residences, 'GET /api/v1/employees/e1': () => json(200, { data: emp }) })
+  const first = renderWithAuth(<EmployeeDetailRoute id="e1" />, ALL, { router: false })
+  await screen.findByLabelText('الاسم بالعربية')
+  first.unmount()
+  renderWithAuth(<EmployeeDetailRoute id="e1" />, ALL, { router: false })
+  expect(screen.getByLabelText('الاسم بالعربية')).toBeInTheDocument()
+  expect(vi.mocked(fetch).mock.calls.filter(([u]) => String(u).endsWith('/employees/e1'))).toHaveLength(1)
 })
 
 test('search and type filter the query and clear filters resets them', async () => {
@@ -103,10 +154,11 @@ test('search and type filter the query and clear filters resets them', async () 
   await user.type(await screen.findByRole('textbox', { name: 'بحث بالاسم أو الرقم القومي أو الرقم الوظيفي' }), 'أحمد')
   await user.selectOptions(screen.getByRole('combobox', { name: 'نوع الموظف' }), 'engineer')
   await waitFor(() => expect(main()).toContain('type=engineer'))
-  expect(decodeURIComponent(main())).toContain('search=أحمد')
+  await waitFor(() => expect(decodeURIComponent(main())).toContain('search=أحمد')) // the search follows after the typing pause
   expect(main()).toContain('page=1')
   await user.click(screen.getByRole('button', { name: 'مسح عوامل التصفية' }))
   await waitFor(() => expect(main()).not.toContain('type='))
+  expect(screen.getByRole('textbox', { name: 'بحث بالاسم أو الرقم القومي أو الرقم الوظيفي' })).toHaveValue('')
   expect(screen.queryByRole('button', { name: 'مسح عوامل التصفية' })).toBeNull()
 })
 
