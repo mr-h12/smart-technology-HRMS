@@ -2,6 +2,7 @@ import { createContext, useContext, useEffect, useState, type ReactNode } from '
 import { useTranslation } from 'react-i18next'
 import { Navigate } from 'react-router-dom'
 import { api, getToken, setToken, setUnauthorizedHandler } from './api'
+import { queryClient } from './query'
 
 export type Me = { id: string; name: string; email: string; role: { id: string; slug: string; name: string; name_ar: string }; permissions: string[] }
 
@@ -26,7 +27,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     // a 401 has already cleared the token; with me null, RequireAuth sends the user to /login
-    setUnauthorizedHandler(() => setMe(null))
+    setUnauthorizedHandler(() => {
+      queryClient.clear()
+      setMe(null)
+    })
     return () => setUnauthorizedHandler(() => {})
   }, [])
 
@@ -44,11 +48,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     login: async (email, password) => {
       const r = await api<{ token: string; user: Me }>('/auth/login', { method: 'POST', body: { email, password } })
       setToken(r.token)
+      queryClient.clear()
       setMe(r.user)
     },
     logout: async () => {
       await api('/auth/logout', { method: 'POST' }).catch(() => {})
       setToken(null)
+      queryClient.clear()
       setMe(null)
     },
     can: (ability) => canDo(me?.permissions ?? [], ability),

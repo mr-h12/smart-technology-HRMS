@@ -1,6 +1,7 @@
 import { screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { afterEach, beforeEach, expect, test, vi } from 'vitest'
+import { queryClient } from '@/lib/query'
 import { json, me, mockFetch, renderApp, renderWithAuth } from '@/test-utils'
 import { SettingsPage } from './settings'
 vi.mock('sonner', () => ({ toast: { success: vi.fn() }, Toaster: () => null }))
@@ -105,6 +106,7 @@ test('residences list renders and a load failure shows the banner', async () => 
   const { unmount } = renderWithAuth(<SettingsPage />, MANAGE, { path: '/settings?tab=residences' })
   expect(await screen.findByText('العجمي')).toBeInTheDocument()
   unmount()
+  queryClient.clear() // a later visit, after the cached list has expired
   mockFetch({ 'GET /api/v1/residences': () => json(500, { error: { code: 'server_error', message: 'تعذر التحميل' } }) })
   renderWithAuth(<SettingsPage />, MANAGE, { path: '/settings?tab=residences' })
   expect(await screen.findByRole('alert')).toHaveTextContent('تعذر التحميل')
