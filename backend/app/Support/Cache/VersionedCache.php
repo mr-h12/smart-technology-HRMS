@@ -15,6 +15,9 @@ use Illuminate\Support\Facades\DB;
 final class VersionedCache
 {
     /**
+     * Do not call inside a transaction that writes the cached rows (grants, settings): a cold read there caches uncommitted
+     * rows under the current version, and they stay cached if the transaction rolls back.
+     *
      * @template T
      *
      * @param  Closure(): T  $load

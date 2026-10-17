@@ -21,3 +21,4 @@ The postgres init script only runs on an empty volume; after changing it, `docke
 
 Layout: `app/Modules/<Module>/{Domain,Application,Infrastructure,Presentation}`; shared code in `app/Support`. Domain imports nothing from `Illuminate\*`.
 API lives under `/api/v1` and answers through `App\Support\Http\ApiEnvelope`.
+Role grants and settings are cached in Redis with no expiry (versioned keys, `App\Support\Cache\VersionedCache`). Change them only through `RoleAdministration`, `BusinessRules` or a migration; after any other write (psql, tinker, a seeder) run `docker compose exec app php artisan cache:clear`.
