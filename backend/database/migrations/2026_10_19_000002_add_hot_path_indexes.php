@@ -15,6 +15,8 @@ return new class extends Migration
         'manager_sites' => 'site_id',
         'employee_manager_assignments' => 'manager_id',
         'role_permissions' => 'permission_id',
+        'employees' => 'residence_id',
+        'employee_fare_overrides' => 'site_id',
     ];
 
     private const SEARCHED = ['name_ar', 'name_en', 'national_id'];

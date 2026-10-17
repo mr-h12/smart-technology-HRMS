@@ -70,7 +70,7 @@ final class EmployeeService
         ];
     }
 
-    /** @return array<string, int> `total` plus one count per employee type, by the type in force today, over the list's scope */
+    /** @return array<string, int> `total` plus one count per employee type, by the type in force today, over the list's scope; `total` also counts employees with no type in force yet, so it can exceed the sum of the types */
     public function countsByType(?string $ownerId = null): array
     {
         $counts = $this->visibleTo($ownerId)->toBase()

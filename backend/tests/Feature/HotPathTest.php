@@ -2,8 +2,10 @@
 
 namespace Tests\Feature;
 
+use App\Modules\Identity\Application\Administration\RoleAdministration;
 use App\Modules\Identity\Infrastructure\Eloquent\Permission;
 use App\Modules\Identity\Infrastructure\Eloquent\Role;
+use App\Modules\Identity\Infrastructure\RolePermissions;
 use Illuminate\Database\Events\MigrationsEnded;
 use Illuminate\Database\Events\QueryExecuted;
 use Illuminate\Foundation\Testing\RefreshDatabase;
@@ -19,14 +21,12 @@ class HotPathTest extends TestCase
     /** @return list<string> the SQL the request ran */
     private function queriesOf(string $token, string $uri): array
     {
-        $sql = [];
-        DB::listen(function (QueryExecuted $q) use (&$sql): void {
-            $sql[] = $q->sql;
-        });
+        DB::flushQueryLog();
+        DB::enableQueryLog();
         $this->withToken($token)->getJson($uri)->assertOk();
-        DB::getEventDispatcher()?->forget(QueryExecuted::class);
+        DB::disableQueryLog();
 
-        return $sql;
+        return array_column(DB::getQueryLog(), 'query');
     }
 
     private function token(string $roleSlug): string
@@ -107,6 +107,26 @@ class HotPathTest extends TestCase
         $this->getJson('/api/v1/auth/me')->assertOk()->assertJsonPath('data.permissions', []);
     }
 
+    public function test_a_cold_read_that_loaded_grants_before_a_revoke_commits_cannot_cache_them(): void
+    {
+        $this->makeUser('developer');   // keeps a role manager, which syncPermissions requires
+        $role = $this->auditor();
+        $auditor = $this->makeUser('auditor');
+        // The interleaving: the reader's DB read returns the old grants, then the revoke commits, then the reader writes the cache.
+        $revoked = false;
+        DB::listen(function (QueryExecuted $q) use (&$revoked, $role): void {
+            if (! $revoked && str_contains($q->sql, 'inner join "role_permissions"')) {
+                $revoked = true;
+                app(RoleAdministration::class)->syncPermissions((string) $role->id, []);
+            }
+        });
+
+        $this->assertSame(['employee.view.all'], RolePermissions::of((string) $role->id));   // the late, stale write
+
+        $this->actingAs($auditor, 'api');
+        $this->getJson('/api/v1/employees')->assertStatus(403);
+    }
+
     public function test_deleting_a_role_denies_its_users_on_the_next_request(): void
     {
         $role = $this->auditor();
@@ -151,7 +171,7 @@ class HotPathTest extends TestCase
     public function test_foreign_keys_and_search_columns_are_indexed(): void
     {
         $indexes = DB::table('pg_indexes')->where('schemaname', 'public')->pluck('indexdef', 'indexname');
-        foreach (['user_sessions.user_id', 'users.role_id', 'fares.site_id', 'manager_sites.site_id', 'employee_manager_assignments.manager_id', 'role_permissions.permission_id'] as $column) {
+        foreach (['user_sessions.user_id', 'users.role_id', 'fares.site_id', 'manager_sites.site_id', 'employee_manager_assignments.manager_id', 'role_permissions.permission_id', 'employees.residence_id', 'employee_fare_overrides.site_id'] as $column) {
             [$table, $col] = explode('.', $column);
             $this->assertArrayHasKey("{$table}_{$col}_index", $indexes, $column);
         }

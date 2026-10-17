@@ -3,6 +3,7 @@
 namespace Tests\Feature;
 
 use App\Modules\Settings\Application\BusinessRules;
+use Illuminate\Database\Events\QueryExecuted;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\DB;
 use Tests\TestCase;
@@ -59,6 +60,21 @@ class SettingsApiTest extends TestCase
 
         $this->putJson('/api/v1/settings', ['office_grace_minutes' => '25'])->assertOk()->assertJsonPath('data.office_grace_minutes', '25');
         $this->getJson('/api/v1/settings')->assertJsonPath('data.office_grace_minutes', '25');
+        $this->assertSame('25', $rules->all()['office_grace_minutes']);
+    }
+
+    public function test_a_cold_read_that_loaded_settings_before_an_update_commits_cannot_cache_them(): void
+    {
+        $rules = app(BusinessRules::class);
+        $updated = false;
+        DB::listen(function (QueryExecuted $q) use (&$updated, $rules): void {
+            if (! $updated && str_contains($q->sql, 'from "settings"')) {
+                $updated = true;
+                $rules->update(['office_grace_minutes' => '25']);
+            }
+        });
+
+        $this->assertSame('15', $rules->all()['office_grace_minutes']);   // the late, stale write
         $this->assertSame('25', $rules->all()['office_grace_minutes']);
     }
 

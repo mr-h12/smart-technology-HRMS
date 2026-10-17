@@ -78,7 +78,6 @@ final class RoleAdministration
 
             return $this->row($role);
         });
-        // After the commit, so the next read cannot re-cache the old grants.
         RolePermissions::forget($id);
 
         return $row;

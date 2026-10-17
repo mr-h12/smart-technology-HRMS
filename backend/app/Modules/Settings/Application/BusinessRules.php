@@ -5,7 +5,7 @@ declare(strict_types=1);
 namespace App\Modules\Settings\Application;
 
 use App\Modules\Settings\Infrastructure\Eloquent\Setting;
-use Illuminate\Support\Facades\Cache;
+use App\Support\Cache\VersionedCache;
 use Illuminate\Support\Facades\DB;
 
 /** The business-rule settings, read and written as strings (never floats). */
@@ -17,7 +17,7 @@ final class BusinessRules
     public function all(): array
     {
         /** @var array<string, string> */
-        return Cache::rememberForever(self::CACHE_KEY, fn () => Setting::orderBy('key')->pluck('value', 'key')->all());
+        return VersionedCache::remember(self::CACHE_KEY, fn () => Setting::orderBy('key')->pluck('value', 'key')->all());
     }
 
     /**
@@ -32,7 +32,6 @@ final class BusinessRules
                 $setting->save();
             }
         });
-        // After the commit, so the next read cannot re-cache the old values.
         self::forgetCache();
 
         return $this->all();
@@ -40,6 +39,6 @@ final class BusinessRules
 
     public static function forgetCache(): void
     {
-        Cache::forget(self::CACHE_KEY);
+        VersionedCache::invalidate(self::CACHE_KEY);
     }
 }
