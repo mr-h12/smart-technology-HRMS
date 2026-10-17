@@ -284,8 +284,8 @@ function Matrix({ role, perms, editable, onSaved }: { role: Row; perms: Row[]; e
         <div role="radiogroup" aria-label={label} className="inline-flex rounded-lg border bg-muted p-0.5 text-muted-foreground">
           {([['none', undefined], ['own', own.id], ['all', all.id]] as const).map(([s, id]) => (
             <label key={s}>
-              <input type="radio" className="peer sr-only" name={`${res}.${action}`} disabled={!editable} checked={value === s} onChange={() => pick([own.id, all.id], id)} />
-              <span className="inline-flex h-7 items-center rounded-md px-2.5 text-xs peer-checked:bg-card peer-checked:text-foreground peer-checked:shadow-1 peer-focus-visible:outline-2 peer-focus-visible:outline-ring">{t(`perm.scope.${s}`)}</span>
+              <input type="radio" className="peer sr-only" name={`${res}.${action}`} disabled={!editable || busy} checked={value === s} onChange={() => pick([own.id, all.id], id)} />
+              <span className="inline-flex h-7 items-center rounded-md px-2.5 text-xs peer-checked:bg-accent peer-checked:text-accent-foreground peer-checked:ring-1 peer-checked:ring-primary peer-focus-visible:outline-2 peer-focus-visible:outline-ring">{t(`perm.scope.${s}`)}</span>
             </label>
           ))}
         </div>
@@ -293,7 +293,7 @@ function Matrix({ role, perms, editable, onSaved }: { role: Row; perms: Row[]; e
     }
     if (ps.length === 1) {
       const id = ps[0].id as string
-      return <input type="checkbox" aria-label={label} className="size-4 accent-primary" disabled={!editable} checked={checked.has(id)} onChange={() => pick([id], checked.has(id) ? undefined : id)} />
+      return <input type="checkbox" aria-label={label} className="size-4 accent-primary" disabled={!editable || busy} checked={checked.has(id)} onChange={() => pick([id], checked.has(id) ? undefined : id)} />
     }
     return <span className="text-muted-foreground">—</span>
   }
@@ -352,7 +352,7 @@ export function RolesPage() {
     <div className="space-y-6">
       <PageHeader title={t('page.roles')} description={t('console.rolesSubtitle')} actions={manage && <RoleDialog reload={load} />} />
       <ErrorBanner err={err} shown={[]} />
-      <div className="grid gap-6 lg:grid-cols-[18rem_1fr]">
+      <div className="grid gap-6 xl:grid-cols-[18rem_1fr]">
         <Card className="flex flex-col gap-1 self-start p-2">
           {roles.map((r) => (
             <button key={r.id} type="button" aria-pressed={r.id === selected} onClick={() => setSelected(r.id)} className="w-full rounded-lg border-s-[3px] border-transparent px-3 py-2.5 text-start hover:bg-muted aria-pressed:border-primary aria-pressed:bg-muted">

@@ -81,6 +81,16 @@ test('a refused save shows the error and puts the controls back to the role perm
   expect(scope('الموظفون: عرض', 'الخاص به')).toBeChecked()
 })
 
+test('the controls are locked while a save is in flight', async () => {
+  rolesApi(() => new Promise<Response>(() => {}) as unknown as Response)
+  renderWithAuth(<RolesPage />, ['role.view.all', 'role.manage.all'])
+  await pickRole()
+  await user.click(screen.getByRole('checkbox', { name: 'سجل التدقيق: عرض' }))
+  await user.click(screen.getByRole('button', { name: 'حفظ التغييرات' }))
+  expect(screen.getByRole('checkbox', { name: 'سجل التدقيق: عرض' })).toBeDisabled()
+  expect(scope('الموظفون: عرض', 'الكل')).toBeDisabled()
+})
+
 test('without role.manage the matrix is read-only', async () => {
   rolesApi()
   renderWithAuth(<RolesPage />, ['role.view.all'])
