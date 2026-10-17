@@ -5,14 +5,15 @@
     "prev": "Previous",
     "next": "Next",
     "pageOf": "Page {{page}} of {{pages}}",
-    "tooMany": "More than 100 rows; showing the first 100.",
+    "tooMany": "More than 100 rows. Showing the first 100.",
     "edit": "Edit",
     "showing": "Showing {{from}}–{{to}} of {{total}}",
     "actions": "Actions",
     "clearSearch": "Clear search",
     "clearFilters": "Clear filters",
     "noResults": "No results",
-    "noData": "No records yet."
+    "noData": "No records yet.",
+    "saveChanges": "Save changes"
   },
   "app": {
     "name": "Smart Technology HRMS",
@@ -36,7 +37,8 @@
       "hr": "Human resources",
       "settings": "Settings",
       "admin": "System administration"
-    }
+    },
+    "settings": "Settings"
   },
   "toggle": {
     "language": "Language",
@@ -68,22 +70,28 @@
     "fingerprint_name": "Fingerprint name",
     "gender": "Gender",
     "national_id": "National ID",
-    "insurance_no": "Insurance no.",
+    "insurance_no": "Insurance number",
     "phone": "Phone",
     "address": "Address",
     "department": "Department",
     "residence": "Residence",
     "hire_date": "Hire date",
-    "contract_end_date": "Contract end",
+    "contract_end_date": "Contract end date",
     "termination_date": "Termination date",
     "termination_reason": "Termination reason",
     "hr_notes": "HR notes",
-    "pay_method": "Pay method",
+    "pay_method": "Payment method",
     "bank_account": "Bank account",
     "type": "Employee type",
-    "identity": "Identity",
-    "placement": "Placement",
-    "pay": "Pay"
+    "identity": "Personal information",
+    "placement": "Employment details",
+    "pay": "Compensation",
+    "tab": {
+      "profile": "Profile",
+      "manager": "Manager",
+      "history": "History",
+      "documents": "Documents"
+    }
   },
   "pay": {
     "salary": "Salary",
@@ -96,7 +104,7 @@
   "change": {
     "add": "Add change",
     "effective_from": "Effective from",
-    "sameType": "Choose a type different from the one in force on that date."
+    "sameType": "Select a type different from the one in effect on that date."
   },
   "history": {
     "types": "Type history",
@@ -104,8 +112,8 @@
     "documents": "Documents"
   },
   "document": {
-    "received_at": "Received",
-    "expires_at": "Expires",
+    "received_at": "Date received",
+    "expires_at": "Expiry date",
     "note": "Note"
   },
   "enum": {
@@ -125,13 +133,13 @@
     },
     "document": {
       "national_id_copy": "National ID copy",
-      "work_stub": "Work stub",
-      "criminal_record": "Criminal record",
-      "qualification": "Qualification",
+      "work_stub": "Employment contract",
+      "criminal_record": "Criminal record certificate",
+      "qualification": "Educational qualification",
       "birth_certificate": "Birth certificate",
-      "insurance_form_6": "Insurance form 6",
+      "insurance_form_6": "Social insurance form No. 6",
       "photos": "Photos",
-      "military_status": "Military status",
+      "military_status": "Military service status",
       "other": "Other"
     },
     "site_kind": {
@@ -141,14 +149,14 @@
     "leave_code": {
       "friday": "Friday",
       "official_holiday": "Official holiday",
-      "sick": "Sick",
-      "rest": "Rest",
+      "sick": "Sick leave",
+      "rest": "Rest day",
       "absent": "Absent",
       "other": "Other"
     },
     "allowance_mode": {
       "none": "None",
-      "share_of_wage": "Share of wage",
+      "share_of_wage": "Percentage of daily wage",
       "fixed": "Fixed amount"
     }
   },
@@ -164,11 +172,12 @@
     "outside_alexandria": "Outside Alexandria",
     "allowances": "Allowances",
     "allowanceHistory": "Allowance history",
-    "mode": "Allowance mode",
+    "mode": "Allowance type",
     "value": "Value",
-    "addRule": "Add",
+    "addRule": "Add rule",
     "yes": "Yes",
-    "no": "No"
+    "no": "No",
+    "managers": "Managers"
   },
   "residence": {
     "add": "Add residence"
@@ -176,21 +185,21 @@
   "fare": {
     "amount": "Fare",
     "add": "Add fare",
-    "tooMany": "More than 100 fares exist; the grid may not show them all.",
+    "tooMany": "More than 100 fares exist. Some may not appear in the table.",
     "residence": "Residence"
   },
   "auth": {
-    "email": "Email",
+    "email": "Email address",
     "password": "Password",
     "submit": "Sign in",
     "logout": "Sign out",
     "loading": "Loading…",
     "error": {
-      "invalid_credentials": "Wrong email or password.",
-      "account_locked": "The account is locked after too many failed attempts. Contact the developer.",
-      "account_suspended": "The account is deactivated. Contact the developer.",
-      "rate_limited": "Too many attempts; try again in a minute.",
-      "unknown": "Could not sign in."
+      "invalid_credentials": "Incorrect email or password.",
+      "account_locked": "Your account has been locked after too many failed sign-in attempts. Please contact your system administrator.",
+      "account_suspended": "Your account has been deactivated. Please contact your system administrator.",
+      "rate_limited": "Too many attempts. Please try again in a minute.",
+      "unknown": "Unable to sign in. Please try again."
     },
     "title": "Sign in to your account"
   },
@@ -200,19 +209,19 @@
     "role": "Role",
     "status": "Status",
     "active": "Active",
-    "inactive": "Deactivated",
+    "inactive": "Inactive",
     "locked": "Locked",
     "deactivate": "Deactivate",
     "reactivate": "Reactivate",
     "setPassword": "Set password",
-    "sessions": "Sessions",
+    "sessions": "End sessions",
     "noSessions": "No active sessions.",
     "ip": "IP address",
     "userAgent": "Browser",
     "lastActivity": "Last activity",
     "revoke": "End session",
     "addRole": "Add role",
-    "slug": "Code",
+    "slug": "Identifier",
     "pickRole": "Choose a role to see its permissions."
   },
   "perm": {
@@ -238,6 +247,11 @@
     },
     "audit_log": {
       "view": "Audit log: view"
+    },
+    "scope": {
+      "none": "No",
+      "own": "Own",
+      "all": "All"
     }
   },
   "scope": {
@@ -245,11 +259,11 @@
     "all": "all"
   },
   "audit": {
-    "actor": "Actor",
+    "actor": "User",
     "entityType": "Record type",
     "from": "From",
     "to": "To",
-    "time": "Time",
+    "time": "Date and time",
     "action": "Event",
     "entityId": "Record ID",
     "changes": "Changes",
@@ -260,20 +274,20 @@
       "UPDATED": "Updated",
       "DELETED": "Deleted",
       "LOGIN_SUCCEEDED": "Signed in",
-      "LOGIN_FAILED": "Failed sign-in",
+      "LOGIN_FAILED": "Failed sign-in attempt",
       "ACCOUNT_LOCKED": "Account locked",
-      "LOGIN_BLOCKED": "Sign-in refused",
+      "LOGIN_BLOCKED": "Sign-in blocked",
       "LOGOUT": "Signed out",
       "USER_CREATED": "Account created",
       "USER_UPDATED": "Account updated",
       "USER_ACTIVATED": "Account reactivated",
       "USER_DEACTIVATED": "Account deactivated",
       "PASSWORD_SET": "Password set",
-      "ADMIN_SESSION_TERMINATED": "Session ended by the developer",
+      "ADMIN_SESSION_TERMINATED": "Session ended by an administrator",
       "ROLE_CREATED": "Role created",
       "ROLE_UPDATED": "Role updated",
-      "ROLE_PERMISSIONS_UPDATED": "Role permissions changed",
-      "SITE_MANAGERS_UPDATED": "Site managers changed"
+      "ROLE_PERMISSIONS_UPDATED": "Role permissions updated",
+      "SITE_MANAGERS_UPDATED": "Site managers updated"
     },
     "entity": {
       "employees": "Employees",
@@ -289,5 +303,23 @@
       "users": "Accounts",
       "roles": "Roles"
     }
+  },
+  "settings": {
+    "tab": {
+      "sites": "Sites",
+      "residences": "Residences",
+      "leaveTypes": "Leave types",
+      "fares": "Transport fares",
+      "rules": "Business rules"
+    }
+  },
+  "status": {
+    "active": "Active",
+    "inactive": "Inactive"
+  },
+  "manager": {
+    "title": "Manager",
+    "assign": "Assign manager",
+    "none": "No manager"
   }
 }

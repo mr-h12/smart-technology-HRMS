@@ -31,7 +31,7 @@ test('collapsing the sidebar flips aria-expanded and keeps link names', async ()
 test('nav groups appear only when the user may open one of their pages', async () => {
   signedIn(['employee.view.all', 'user.view.all'])
   renderApp('/employees')
-  expect(await screen.findByRole('link', { name: 'الحسابات' })).toBeInTheDocument()
+  expect(await screen.findByRole('link', { name: 'حسابات المستخدمين' })).toBeInTheDocument()
   expect(screen.getByText('إدارة النظام')).toBeInTheDocument()
   expect(screen.queryByText('الإعدادات')).toBeNull()
   expect(screen.queryByRole('link', { name: 'الأدوار والصلاحيات' })).toBeNull()
@@ -49,7 +49,7 @@ test('the profile menu shows the account and signs out from there', async () => 
   signedIn(['employee.view.all'])
   renderApp('/employees')
   await user.click(await screen.findByRole('button', { name: 'قائمة الحساب' }))
-  expect(await screen.findByRole('menuitem', { name: 'خروج' })).toBeInTheDocument()
+  expect(await screen.findByRole('menuitem', { name: 'تسجيل الخروج' })).toBeInTheDocument()
   expect(screen.getAllByText('hr@smart.test').length).toBeGreaterThan(0)
 })
 

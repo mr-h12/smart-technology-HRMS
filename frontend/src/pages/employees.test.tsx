@@ -21,7 +21,7 @@ test('list renders rows from the API', async () => {
   render(<MemoryRouter><EmployeesPage /></MemoryRouter>)
   expect(await screen.findByText('أحمد علي')).toBeInTheDocument()
   expect(screen.getByText('المبيعات')).toBeInTheDocument()
-  expect(screen.getByText('نقدي')).toBeInTheDocument()
+  expect(screen.getByText('نقدًا')).toBeInTheDocument()
   expect(within(screen.getByRole('table')).getByText('مهندس')).toBeInTheDocument()
 })
 
@@ -108,7 +108,7 @@ test('Enter in a document row does not submit the employee form', async () => {
       <Routes><Route path="employees/:id" element={<EmployeeFormPage />} /></Routes>
     </MemoryRouter>,
   )
-  const note = (await screen.findAllByLabelText('ملاحظة'))[0]
+  const note = (await screen.findAllByLabelText('ملاحظات'))[0]
   await userEvent.type(note, 'x{Enter}')
   expect(vi.mocked(fetch).mock.calls.some(([, i]) => i?.method === 'PATCH')).toBe(false)
 })
@@ -140,11 +140,11 @@ test('pay dialog shapes its fields by the type in force on the chosen date', asy
   openEmp(history)
   const user = userEvent.setup()
   await user.click((await screen.findAllByRole('button', { name: 'إضافة تغيير' }))[1])
-  await user.type(screen.getByLabelText('ساري من'), '2025-01-01')
+  await user.type(screen.getByLabelText('ساري اعتبارًا من'), '2025-01-01')
   expect(screen.getByLabelText('المرتب')).toBeInTheDocument()
   expect(screen.queryByLabelText('الأجر اليومي')).toBeNull()
-  await user.clear(screen.getByLabelText('ساري من'))
-  await user.type(screen.getByLabelText('ساري من'), '2026-07-01')
+  await user.clear(screen.getByLabelText('ساري اعتبارًا من'))
+  await user.type(screen.getByLabelText('ساري اعتبارًا من'), '2026-07-01')
   expect(screen.getByLabelText('الأجر اليومي')).toBeInTheDocument()
 })
 
@@ -152,7 +152,7 @@ test('type-change dialog rejects the type already in force on that date', async 
   openEmp(history)
   const user = userEvent.setup()
   await user.click((await screen.findAllByRole('button', { name: 'إضافة تغيير' }))[0])
-  await user.type(screen.getByLabelText('ساري من'), '2025-01-01')
+  await user.type(screen.getByLabelText('ساري اعتبارًا من'), '2025-01-01')
   await user.selectOptions(screen.getByLabelText('نوع الموظف'), 'office')
   await user.click(screen.getByRole('button', { name: 'حفظ' }))
   expect(await screen.findByText(/نوعًا مختلفًا/)).toBeInTheDocument()
