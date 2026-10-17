@@ -119,6 +119,7 @@
     "documents": "Documents"
   },
   "document": {
+    "kind": "Document",
     "received_at": "Date received",
     "expires_at": "Expiry date",
     "note": "Notes"
@@ -331,7 +332,8 @@
   "manager": {
     "title": "Manager",
     "assign": "Assign manager",
-    "none": "No manager"
+    "none": "No manager",
+    "history": "Manager history"
   },
   "rule": {
     "group": {

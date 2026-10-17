@@ -1,4 +1,4 @@
-import { render, screen, waitFor, within } from '@testing-library/react'
+import { screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { MemoryRouter, Route, Routes } from 'react-router-dom'
 import { afterEach, beforeEach, expect, test, vi } from 'vitest'
@@ -13,6 +13,62 @@ beforeEach(() => localStorage.clear())
 afterEach(() => vi.unstubAllGlobals())
 
 const row1 = { id: 'e1', code: 7, name_ar: 'أحمد علي', name_en: 'Ahmed Ali', department: 'المبيعات', hire_date: '2024-02-01', termination_date: null, pay_method: 'cash', current_type: 'engineer' }
+
+const ALL = ['employee.view.all', 'employee.create.all', 'employee.edit.all']
+const emp = { id: 'e1', name_ar: 'أحمد', current_type: 'office', type_changes: [], pay_changes: [], documents: [], current_manager: null, manager_assignments: [] }
+
+function EmployeeDetailRoute({ id, tab }: { id: string; tab?: string }) {
+  return (
+    <MemoryRouter initialEntries={[`/employees/${id}${tab ? `?tab=${tab}` : ''}`]}>
+      <Routes><Route path="employees/:id" element={<EmployeeFormPage />} /></Routes>
+    </MemoryRouter>
+  )
+}
+
+test('assigning a manager posts the chosen user and date', async () => {
+  const post = vi.fn(() => json(201, { data: { ...emp, current_manager: { id: 'u1', name: 'خالد' } } }))
+  mockFetch({ 'GET /api/v1/employees/e1': () => json(200, { data: emp }), 'GET /api/v1/residences': residences,
+    'GET /api/v1/users': () => json(200, { data: [{ id: 'u1', name: 'خالد', is_active: true }], meta: { pagination } }),
+    'POST /api/v1/employees/e1/manager-assignments': post })
+  renderWithAuth(<EmployeeDetailRoute id="e1" />, ['employee.view.all', 'employee.assign_manager.all'], { router: false })
+  await user.click(await screen.findByRole('button', { name: 'تعيين مدير' }))
+  await screen.findByRole('option', { name: 'خالد' })
+  await user.selectOptions(screen.getByLabelText('المدير'), 'u1')
+  await user.type(screen.getByLabelText('ساري اعتبارًا من'), '2026-11-01')
+  await user.click(screen.getByRole('button', { name: 'حفظ' }))
+  expect(JSON.parse((post.mock.calls[0] as unknown as [string, RequestInit])[1].body as string)).toEqual({ manager_id: 'u1', effective_from: '2026-11-01' })
+  expect(await screen.findByText('خالد')).toBeInTheDocument()
+})
+
+test('without the permission there is no assign button', async () => {
+  mockFetch({ 'GET /api/v1/employees/e1': () => json(200, { data: { ...emp, current_manager: null } }), 'GET /api/v1/residences': residences })
+  renderWithAuth(<EmployeeDetailRoute id="e1" />, ['employee.view.own'], { router: false })
+  expect(await screen.findByText('بدون مدير')).toBeInTheDocument()
+  expect(screen.queryByRole('button', { name: 'تعيين مدير' })).toBeNull()
+})
+
+test('manager tab lists the assignment history', async () => {
+  mockFetch({ 'GET /api/v1/residences': residences, 'GET /api/v1/employees/e1': () => json(200, { data: { ...emp,
+    current_manager: { id: 'u1', name: 'خالد' }, manager_assignments: [{ id: 'm1', manager_id: 'u1', manager_name: 'خالد', effective_from: '2026-01-01' }] } }) })
+  renderWithAuth(<EmployeeDetailRoute id="e1" tab="manager" />, ['employee.view.all'], { router: false })
+  const row = await screen.findByRole('row', { name: /2026-01-01/ })
+  expect(within(row).getByText('خالد')).toBeInTheDocument()
+})
+
+test('a document is updated from its row dialog and the returned record is shown', async () => {
+  const put = vi.fn(() => json(200, { data: { ...emp, documents: [{ id: 'd1', kind: 'criminal_record', received_at: '2026-10-01', expires_at: null, note: 'أصل' }] } }))
+  mockFetch({ 'GET /api/v1/residences': residences, 'GET /api/v1/employees/e1': () => json(200, { data: emp }),
+    'PUT /api/v1/employees/e1/documents/criminal_record': put })
+  renderWithAuth(<EmployeeDetailRoute id="e1" tab="documents" />, ALL, { router: false })
+  const row = await screen.findByRole('row', { name: /صحيفة الحالة الجنائية/ })
+  await user.click(within(row).getByRole('button', { name: 'تعديل' }))
+  await user.type(screen.getByLabelText('ملاحظات'), 'أصل')
+  await user.type(screen.getByLabelText('تاريخ الاستلام'), '2026-10-01')
+  await user.click(screen.getByRole('button', { name: 'حفظ' }))
+  expect(JSON.parse((put.mock.calls[0] as unknown as [string, RequestInit])[1].body as string)).toEqual({ received_at: '2026-10-01', expires_at: null, note: 'أصل' })
+  expect(await within(screen.getByRole('row', { name: /صحيفة الحالة الجنائية/ })).findByText('2026-10-01')).toBeInTheDocument()
+  expect(vi.mocked(fetch).mock.calls.filter(([u]) => String(u).endsWith('/employees/e1'))).toHaveLength(1)
+})
 
 test('list rows show the employee, ID, type badge, department, hire date and status', async () => {
   mockFetch({ 'GET /api/v1/employees': () => json(200, { data: [row1], meta: { pagination } }) })
@@ -73,11 +129,7 @@ test('create form shows a server field error under its field', async () => {
     'POST /api/v1/employees': () =>
       json(422, { error: { code: 'validation_failed', message: 'Invalid', details: [{ field: 'national_id', code: 'unique', message: 'الرقم القومي مستخدم' }] } }),
   })
-  render(
-    <MemoryRouter initialEntries={['/employees/new']}>
-      <Routes><Route path="employees/new" element={<EmployeeFormPage />} /></Routes>
-    </MemoryRouter>,
-  )
+  renderWithAuth(<MemoryRouter initialEntries={['/employees/new']}><Routes><Route path="employees/new" element={<EmployeeFormPage />} /></Routes></MemoryRouter>, ALL, { router: false })
   const user = userEvent.setup()
   await user.type(screen.getByLabelText('الاسم بالعربية'), 'أحمد')
   await user.click(screen.getByRole('button', { name: 'حفظ' }))
@@ -87,11 +139,7 @@ test('create form shows a server field error under its field', async () => {
 })
 
 const createForm = () =>
-  render(
-    <MemoryRouter initialEntries={['/employees/new']}>
-      <Routes><Route path="employees/new" element={<EmployeeFormPage />} /></Routes>
-    </MemoryRouter>,
-  )
+  renderWithAuth(<MemoryRouter initialEntries={['/employees/new']}><Routes><Route path="employees/new" element={<EmployeeFormPage />} /></Routes></MemoryRouter>, ALL, { router: false })
 
 test('a 500 on save shows the error banner', async () => {
   mockFetch({
@@ -140,21 +188,6 @@ test('create sends only the pay fields the type uses', async () => {
   expect(body).not.toHaveProperty('salary')
 })
 
-test('Enter in a document row does not submit the employee form', async () => {
-  mockFetch({
-    'GET /api/v1/residences': residences,
-    'GET /api/v1/employees/e1': () => json(200, { data: { id: 'e1', name_ar: 'أحمد', current_type: 'office', type_changes: [], pay_changes: [], documents: [] } }),
-  })
-  render(
-    <MemoryRouter initialEntries={['/employees/e1']}>
-      <Routes><Route path="employees/:id" element={<EmployeeFormPage />} /></Routes>
-    </MemoryRouter>,
-  )
-  const note = (await screen.findAllByLabelText('ملاحظات'))[0]
-  await userEvent.type(note, 'x{Enter}')
-  expect(vi.mocked(fetch).mock.calls.some(([, i]) => i?.method === 'PATCH')).toBe(false)
-})
-
 test('list load failure shows the banner', async () => {
   mockFetch({ 'GET /api/v1/employees': () => json(500, { error: { code: 'server_error', message: 'تعذر التحميل' } }) })
   renderWithAuth(<EmployeesPage />, ['employee.view.all'])
@@ -168,11 +201,7 @@ const openEmp = (type_changes: unknown[]) => {
     'GET /api/v1/employees/e1': () => json(200, { data: { id: 'e1', name_ar: 'أحمد', current_type: 'day_laborer', type_changes, pay_changes: [], documents: [] } }),
     'POST /api/v1/employees/e1/type-changes': () => json(201, { data: {} }),
   })
-  render(
-    <MemoryRouter initialEntries={['/employees/e1']}>
-      <Routes><Route path="employees/:id" element={<EmployeeFormPage />} /></Routes>
-    </MemoryRouter>,
-  )
+  renderWithAuth(<EmployeeDetailRoute id="e1" tab="history" />, ALL, { router: false })
 }
 const history = [
   { id: 't1', effective_from: '2020-01-01', type: 'office' },

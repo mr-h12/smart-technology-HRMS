@@ -1,7 +1,7 @@
-import { Briefcase, CalendarDays, HardHat, type LucideIcon, UserPlus, Users, Wrench } from 'lucide-react'
+import { Briefcase, CalendarDays, FileText, HardHat, History as HistoryIcon, IdCard, type LucideIcon, UserCog, UserPlus, Users, Wrench } from 'lucide-react'
 import { useCallback, useEffect, useState } from 'react'
 import { useTranslation } from 'react-i18next'
-import { Link, useNavigate, useParams } from 'react-router-dom'
+import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import { MiniStat, type Tone } from '@/components/cards/StatCard'
 import { EmptyState } from '@/components/common/EmptyState'
 import { FilterSelect, SearchInput } from '@/components/common/Filters'
@@ -12,11 +12,12 @@ import { TableSkeleton } from '@/components/layout/PageSkeleton'
 import { Pagination } from '@/components/tables/Pagination'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
-import { Card } from '@/components/ui/card'
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Dialog, DialogBody, DialogContent, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { Textarea } from '@/components/ui/input'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
-import { cairoToday, ErrorBanner, Field, type Errs, type Row, SelectField, TextField, toErrs, useForm, useMoney } from '@/components/form'
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
+import { cairoToday, ErrorBanner, Field, type Errs, FormDialog, type FormApi, type Row, SelectField, TextField, toErrs, useForm, useMoney } from '@/components/form'
 import { api, apiList } from '@/lib/api'
 import { useAuth } from '@/lib/auth'
 
@@ -200,25 +201,36 @@ export function EmployeesPage() {
   )
 }
 
+const TABS: [string, LucideIcon][] = [
+  ['profile', IdCard],
+  ['manager', UserCog],
+  ['history', HistoryIcon],
+  ['documents', FileText],
+]
+
+/** Create (no id) or detail: both render the same profile form; detail adds a header card and tabs synced to `?tab=`. */
 export function EmployeeFormPage() {
   const { t } = useTranslation()
+  const { can } = useAuth()
   const { id } = useParams()
   const navigate = useNavigate()
+  const [params, setParams] = useSearchParams()
   const { form, setForm, set } = useForm({ gender: 'male', pay_method: 'cash', type: 'office' })
   const [emp, setEmp] = useState<Row>()
   const [residences, setResidences] = useState<Row[]>([])
   const [err, setErr] = useState<unknown>()
   const errs = toErrs(err)
 
+  const fill = useCallback(
+    (e: Row) => {
+      setEmp(e)
+      setForm((f) => ({ ...f, ...Object.fromEntries(IDENTITY.map((k) => [k, e[k] ?? ''])) }))
+    },
+    [setForm],
+  )
   const load = useCallback(() => {
-    if (!id) return
-    api<Row>(`/employees/${id}`)
-      .then((e) => {
-        setEmp(e)
-        setForm((f) => ({ ...f, ...Object.fromEntries(IDENTITY.map((k) => [k, e[k] ?? ''])) }))
-      })
-      .catch(setErr)
-  }, [id, setForm])
+    if (id) api<Row>(`/employees/${id}`).then(fill).catch(setErr)
+  }, [id, fill])
   useEffect(load, [load])
   useEffect(() => {
     apiList<Row>('/residences?per_page=100').then((r) => setResidences(r.data)).catch(setErr)
@@ -231,8 +243,7 @@ export function EmployeeFormPage() {
       if (id) {
         // PATCH: blank clears a nullable field; name_ar/gender/pay_method must stay set
         const body = Object.fromEntries(IDENTITY.map((k) => [k, form[k] === '' && !['name_ar', 'gender', 'pay_method'].includes(k) ? null : form[k]]))
-        await api(`/employees/${id}`, { method: 'PATCH', body })
-        load()
+        fill(await api<Row>(`/employees/${id}`, { method: 'PATCH', body }))
       } else {
         const e = await api<Row>('/employees', { method: 'POST', body: clean(form, [...IDENTITY, ...payFields(form.type), 'type', 'effective_from']) })
         navigate(`/employees/${e.id}`)
@@ -244,66 +255,198 @@ export function EmployeeFormPage() {
 
   const f = { values: form, set, errs }
   const shown = [...IDENTITY, ...(id ? [] : [...payFields(form.type), 'type', 'effective_from'])]
-  return (
-    <div className="flex max-w-3xl flex-col gap-6">
-    <form onSubmit={save} className="flex flex-col gap-6">
-      <h1 className="text-page-title">{id ? emp?.name_ar : t('employee.add')}</h1>
+  const section = (title: string, fields: React.ReactNode) => (
+    <Card>
+      <CardHeader>
+        <CardTitle>{t(title)}</CardTitle>
+      </CardHeader>
+      <CardContent className="grid gap-4 sm:grid-cols-2">{fields}</CardContent>
+    </Card>
+  )
+  const profile = (
+    <form onSubmit={save} className="space-y-6">
       <ErrorBanner err={err} shown={shown} />
-      <fieldset className="grid gap-4 sm:grid-cols-2">
-        <legend className="mb-2 font-semibold">{t('employee.identity')}</legend>
-        <TextField name="name_ar" label={t('employee.name_ar')} {...f} />
-        <TextField name="name_en" label={t('employee.name_en')} {...f} />
-        <TextField name="fingerprint_name" label={t('employee.fingerprint_name')} {...f} />
-        <SelectField name="gender" label={t('employee.gender')} options={GENDERS.map((v) => [v, t(`enum.gender.${v}`)])} {...f} />
-        <TextField name="national_id" label={t('employee.national_id')} inputMode="numeric" {...f} />
-        <TextField name="insurance_no" label={t('employee.insurance_no')} {...f} />
-        <TextField name="phone" label={t('employee.phone')} {...f} />
-        <TextField name="address" label={t('employee.address')} {...f} />
-      </fieldset>
-      <fieldset className="grid gap-4 sm:grid-cols-2">
-        <legend className="mb-2 font-semibold">{t('employee.placement')}</legend>
-        <TextField name="department" label={t('employee.department')} {...f} />
-        <SelectField name="residence_id" label={t('employee.residence')} blank options={residences.map((r) => [r.id, r.name_ar])} {...f} />
-        <TextField name="hire_date" label={t('employee.hire_date')} type="date" {...f} />
-        <TextField name="contract_end_date" label={t('employee.contract_end_date')} type="date" {...f} />
-        <TextField name="termination_date" label={t('employee.termination_date')} type="date" {...f} />
-        <TextField name="termination_reason" label={t('employee.termination_reason')} {...f} />
-        <Field name="hr_notes" label={t('employee.hr_notes')} errs={errs}>
-          {(p) => <Textarea {...p} value={form.hr_notes ?? ''} onChange={(e) => set('hr_notes', e.target.value)} />}
-        </Field>
-      </fieldset>
-      <fieldset className="grid gap-4 sm:grid-cols-2">
-        <legend className="mb-2 font-semibold">{t('employee.pay')}</legend>
-        <SelectField name="pay_method" label={t('employee.pay_method')} options={PAY_METHODS.map((v) => [v, t(`enum.pay_method.${v}`)])} {...f} />
-        <TextField name="bank_account" label={t('employee.bank_account')} {...f} />
-        {!id && (
-          <>
-            <SelectField name="type" label={t('employee.type')} options={TYPES.map((v) => [v, t(`enum.type.${v}`)])} {...f} />
-            <TextField name="effective_from" label={t('change.effective_from')} type="date" {...f} />
-            <PayFields type={form.type} {...f} />
-          </>
-        )}
-      </fieldset>
-      <div>
-        <Button type="submit">{t('common.save')}</Button>
-      </div>
+      {section('employee.identity', (
+        <>
+          <TextField name="name_ar" label={t('employee.name_ar')} {...f} />
+          <TextField name="name_en" label={t('employee.name_en')} {...f} />
+          <TextField name="fingerprint_name" label={t('employee.fingerprint_name')} {...f} />
+          <SelectField name="gender" label={t('employee.gender')} options={GENDERS.map((v) => [v, t(`enum.gender.${v}`)])} {...f} />
+          <TextField name="national_id" label={t('employee.national_id')} inputMode="numeric" {...f} />
+          <TextField name="insurance_no" label={t('employee.insurance_no')} {...f} />
+          <TextField name="phone" label={t('employee.phone')} {...f} />
+          <TextField name="address" label={t('employee.address')} {...f} />
+        </>
+      ))}
+      {section('employee.placement', (
+        <>
+          <TextField name="department" label={t('employee.department')} {...f} />
+          <SelectField name="residence_id" label={t('employee.residence')} blank options={residences.map((r) => [r.id, r.name_ar])} {...f} />
+          <TextField name="hire_date" label={t('employee.hire_date')} type="date" {...f} />
+          <TextField name="contract_end_date" label={t('employee.contract_end_date')} type="date" {...f} />
+          <TextField name="termination_date" label={t('employee.termination_date')} type="date" {...f} />
+          <TextField name="termination_reason" label={t('employee.termination_reason')} {...f} />
+          <Field name="hr_notes" label={t('employee.hr_notes')} errs={errs}>
+            {(p) => <Textarea {...p} value={form.hr_notes ?? ''} onChange={(e) => set('hr_notes', e.target.value)} />}
+          </Field>
+        </>
+      ))}
+      {section('employee.pay', (
+        <>
+          <SelectField name="pay_method" label={t('employee.pay_method')} options={PAY_METHODS.map((v) => [v, t(`enum.pay_method.${v}`)])} {...f} />
+          <TextField name="bank_account" label={t('employee.bank_account')} {...f} />
+          {!id && (
+            <>
+              <SelectField name="type" label={t('employee.type')} options={TYPES.map((v) => [v, t(`enum.type.${v}`)])} {...f} />
+              <TextField name="effective_from" label={t('change.effective_from')} type="date" {...f} />
+              <PayFields type={form.type} {...f} />
+            </>
+          )}
+        </>
+      ))}
+      {can(id ? 'employee.edit' : 'employee.create') && (
+        <div className="flex justify-end">
+          <Button type="submit">{t('common.save')}</Button>
+        </div>
+      )}
     </form>
-    {emp && <History emp={emp} reload={load} />}
+  )
+
+  if (!id)
+    return (
+      <div className="mx-auto max-w-5xl space-y-6">
+        <PageHeader title={t('employee.add')} />
+        {profile}
+      </div>
+    )
+  if (!emp) return <div className="mx-auto max-w-5xl space-y-6">{err ? <ErrorBanner err={err} shown={[]} /> : <TableSkeleton rows={6} />}</div>
+
+  const tab = TABS.some(([v]) => v === params.get('tab')) ? params.get('tab')! : 'profile'
+  return (
+    <div className="mx-auto max-w-5xl space-y-6">
+      <Card className="flex flex-col gap-4 p-5 sm:flex-row sm:items-center">
+        <UserAvatar name={emp.name_ar} size="xl" />
+        <div className="min-w-0 flex-1 space-y-1">
+          <h1 className="text-page-title">{emp.name_ar}</h1>
+          {emp.name_en && <p className="text-sm text-muted-foreground">{emp.name_en}</p>}
+          {emp.code != null && <p className="font-mono text-xs text-muted-foreground">{emp.code}</p>}
+        </div>
+        {emp.current_type && <Badge variant="info" className="self-start sm:self-center">{t(`enum.type.${emp.current_type}`)}</Badge>}
+        <dl className="flex gap-2 text-sm">
+          <dt className="text-muted-foreground">{t('manager.title')}</dt>
+          <dd>{emp.current_manager?.name ?? t('manager.none')}</dd>
+        </dl>
+        {can('employee.assign_manager') && <AssignManagerDialog empId={emp.id} onAssigned={setEmp} />}
+      </Card>
+
+      <Tabs value={tab} onValueChange={(v) => setParams({ tab: v }, { replace: true })}>
+        <TabsList>
+          {TABS.map(([v, Icon]) => (
+            <TabsTrigger key={v} value={v}>
+              <Icon className="size-4" aria-hidden /> {t(`employee.tab.${v}`)}
+            </TabsTrigger>
+          ))}
+        </TabsList>
+        {/* Only the active panel is mounted: a hidden panel stays labelled by its trigger, so «المدير» would also name the manager panel. */}
+        <TabsContent key={tab} value={tab}>
+          {{
+            profile,
+            manager: <ManagerHistory emp={emp} />,
+            history: <History emp={emp} reload={load} />,
+            documents: <Documents emp={emp} onSaved={setEmp} />,
+          }[tab]}
+        </TabsContent>
+      </Tabs>
     </div>
+  )
+}
+
+/** Posts a dated manager assignment; the users list loads when the dialog opens (its body mounts then). */
+function AssignManagerDialog({ empId, onAssigned }: { empId: string; onAssigned: (e: Row) => void }) {
+  const { t } = useTranslation()
+  return (
+    <FormDialog
+      title={t('manager.assign')}
+      trigger={
+        <Button type="button" variant="outline">
+          <UserCog />
+          {t('manager.assign')}
+        </Button>
+      }
+      init={{ manager_id: '', effective_from: '' }}
+      submit={(form) => api<Row>(`/employees/${empId}/manager-assignments`, { method: 'POST', body: { manager_id: form.manager_id, effective_from: form.effective_from } }).then(onAssigned)}
+      onDone={() => {}}
+      shown={['manager_id', 'effective_from']}
+    >
+      {(f) => (
+        <>
+          <ManagerSelect {...f} />
+          <TextField name="effective_from" label={t('change.effective_from')} type="date" {...f} />
+        </>
+      )}
+    </FormDialog>
+  )
+}
+
+function ManagerSelect(f: FormApi) {
+  const { t } = useTranslation()
+  const [users, setUsers] = useState<Row[]>([])
+  const [err, setErr] = useState<unknown>()
+  useEffect(() => {
+    apiList<Row>('/users?active=true&per_page=100').then((r) => setUsers(r.data), setErr)
+  }, [])
+  return (
+    <>
+      <ErrorBanner err={err} shown={[]} />
+      <SelectField name="manager_id" label={t('manager.title')} blank options={users.map((u) => [u.id, u.name])} {...f} />
+    </>
+  )
+}
+
+function ManagerHistory({ emp }: { emp: Row }) {
+  const { t } = useTranslation()
+  const rows: Row[] = [...emp.manager_assignments].reverse() // the API sends oldest first
+  return (
+    <Card className="overflow-hidden">
+      <CardHeader>
+        <CardTitle>{t('manager.history')}</CardTitle>
+      </CardHeader>
+      {rows.length ? (
+        <Table>
+          <TableHeader>
+            <TableRow>
+              <TableHead>{t('manager.title')}</TableHead>
+              <TableHead>{t('change.effective_from')}</TableHead>
+            </TableRow>
+          </TableHeader>
+          <TableBody>
+            {rows.map((m) => (
+              <TableRow key={m.id}>
+                <TableCell className="font-medium">{m.manager_name ?? '—'}</TableCell>
+                <TableCell>{m.effective_from}</TableCell>
+              </TableRow>
+            ))}
+          </TableBody>
+        </Table>
+      ) : (
+        <EmptyState icon={UserCog} title={t('manager.none')} />
+      )}
+    </Card>
   )
 }
 
 function History({ emp, reload }: { emp: Row; reload: () => void }) {
   const { t } = useTranslation()
+  const { can } = useAuth()
   const money = useMoney()
   const cell = (v: string | null) => (v == null ? '—' : v)
   return (
-    <>
-      <section className="flex flex-col gap-2">
-        <div className="flex items-center justify-between">
-          <h2 className="font-semibold">{t('history.types')}</h2>
-          <ChangeDialog kind="type" emp={emp} reload={reload} />
-        </div>
+    <div className="space-y-6">
+      <Card className="overflow-hidden">
+        <CardHeader>
+          <CardTitle>{t('history.types')}</CardTitle>
+          {can('employee.edit') && <ChangeDialog kind="type" emp={emp} reload={reload} />}
+        </CardHeader>
         <Table>
           <TableHeader>
             <TableRow>
@@ -320,12 +463,12 @@ function History({ emp, reload }: { emp: Row; reload: () => void }) {
             ))}
           </TableBody>
         </Table>
-      </section>
-      <section className="flex flex-col gap-2">
-        <div className="flex items-center justify-between">
-          <h2 className="font-semibold">{t('history.pay')}</h2>
-          <ChangeDialog kind="pay" emp={emp} reload={reload} />
-        </div>
+      </Card>
+      <Card className="overflow-hidden">
+        <CardHeader>
+          <CardTitle>{t('history.pay')}</CardTitle>
+          {can('employee.edit') && <ChangeDialog kind="pay" emp={emp} reload={reload} />}
+        </CardHeader>
         <Table>
           <TableHeader>
             <TableRow>
@@ -347,14 +490,8 @@ function History({ emp, reload }: { emp: Row; reload: () => void }) {
             ))}
           </TableBody>
         </Table>
-      </section>
-      <section className="flex flex-col gap-2">
-        <h2 className="font-semibold">{t('history.documents')}</h2>
-        {DOC_KINDS.map((k) => (
-          <DocRow key={k} kind={k} empId={emp.id} doc={emp.documents.find((d: Row) => d.kind === k)} reload={reload} />
-        ))}
-      </section>
-    </>
+      </Card>
+    </div>
   )
 }
 
@@ -391,7 +528,7 @@ function ChangeDialog({ kind, emp, reload }: { kind: 'type' | 'pay'; emp: Row; r
 
   return (
     <Dialog open={open} onOpenChange={setOpen}>
-      <Button type="button" variant="outline" onClick={() => setOpen(true)}>
+      <Button type="button" variant="outline" size="sm" onClick={() => setOpen(true)}>
         {t('change.add')}
       </Button>
       <DialogContent aria-describedby={undefined}>
@@ -417,33 +554,67 @@ function ChangeDialog({ kind, emp, reload }: { kind: 'type' | 'pay'; emp: Row; r
   )
 }
 
-function DocRow({ kind, empId, doc, reload }: { kind: string; empId: string; doc?: Row; reload: () => void }) {
+/** One row per document kind; its dialog PUTs and the page shows the record the API returns. */
+function Documents({ emp, onSaved }: { emp: Row; onSaved: (e: Row) => void }) {
   const { t } = useTranslation()
-  const { form, set } = useForm({ received_at: doc?.received_at ?? '', expires_at: doc?.expires_at ?? '', note: doc?.note ?? '' })
-  const [err, setErr] = useState<unknown>()
-  const errs = toErrs(err)
-  const save = async () => {
-    setErr(undefined)
-    try {
-      await api(`/employees/${empId}/documents/${kind}`, { method: 'PUT', body: Object.fromEntries(Object.entries(form).map(([k, v]) => [k, v || null])) })
-      reload()
-    } catch (e) {
-      setErr(e)
-    }
-  }
-  const f = { values: form, set, errs, ns: `${kind}-` }
+  const { can } = useAuth()
   return (
-    <div className="flex flex-col gap-2">
-    <ErrorBanner err={err} shown={['received_at', 'expires_at', 'note']} />
-    <div className="grid items-end gap-3 sm:grid-cols-[1fr_1fr_1fr_1fr_auto]">
-      <span className="text-sm font-medium">{t(`enum.document.${kind}`)}</span>
-      <TextField name="received_at" label={t('document.received_at')} type="date" {...f} />
-      <TextField name="expires_at" label={t('document.expires_at')} type="date" {...f} />
-      <TextField name="note" label={t('document.note')} {...f} />
-      <Button type="button" variant="outline" onClick={save}>
-        {t('common.save')}
-      </Button>
-    </div>
-    </div>
+    <Card className="overflow-hidden">
+      <CardHeader>
+        <CardTitle>{t('history.documents')}</CardTitle>
+      </CardHeader>
+      <Table>
+        <TableHeader>
+          <TableRow>
+            <TableHead>{t('document.kind')}</TableHead>
+            <TableHead>{t('document.received_at')}</TableHead>
+            <TableHead className="hidden md:table-cell">{t('document.expires_at')}</TableHead>
+            <TableHead className="hidden lg:table-cell">{t('document.note')}</TableHead>
+            <TableHead>
+              <span className="sr-only">{t('common.actions')}</span>
+            </TableHead>
+          </TableRow>
+        </TableHeader>
+        <TableBody>
+          {DOC_KINDS.map((kind) => {
+            const doc: Row | undefined = emp.documents.find((d: Row) => d.kind === kind)
+            return (
+              <TableRow key={kind}>
+                <TableCell className="font-medium">{t(`enum.document.${kind}`)}</TableCell>
+                <TableCell>{doc?.received_at ?? '—'}</TableCell>
+                <TableCell className="hidden md:table-cell">{doc?.expires_at ?? '—'}</TableCell>
+                <TableCell className="hidden text-muted-foreground lg:table-cell">{doc?.note ?? '—'}</TableCell>
+                <TableCell className="text-end">
+                  {can('employee.edit') && (
+                    <FormDialog
+                      title={t(`enum.document.${kind}`)}
+                      trigger={
+                        <Button type="button" variant="outline" size="sm">
+                          {t('common.edit')}
+                        </Button>
+                      }
+                      init={{ received_at: doc?.received_at ?? '', expires_at: doc?.expires_at ?? '', note: doc?.note ?? '' }}
+                      submit={(form) =>
+                        api<Row>(`/employees/${emp.id}/documents/${kind}`, { method: 'PUT', body: Object.fromEntries(Object.entries(form).map(([k, v]) => [k, v || null])) }).then(onSaved)
+                      }
+                      onDone={() => {}}
+                      shown={['received_at', 'expires_at', 'note']}
+                    >
+                      {(f) => (
+                        <>
+                          <TextField name="received_at" label={t('document.received_at')} type="date" {...f} />
+                          <TextField name="expires_at" label={t('document.expires_at')} type="date" {...f} />
+                          <TextField name="note" label={t('document.note')} {...f} />
+                        </>
+                      )}
+                    </FormDialog>
+                  )}
+                </TableCell>
+              </TableRow>
+            )
+          })}
+        </TableBody>
+      </Table>
+    </Card>
   )
 }

@@ -119,7 +119,7 @@ export function useList(path: string) {
   return { rows, total, err, loading, reload }
 }
 
-type FormApi = { values: Row; set: (k: string, v: string) => void; errs: Record<string, string> }
+export type FormApi = { values: Row; set: (k: string, v: string) => void; errs: Record<string, string> }
 
 /** Dialog whose form state lives in the body, so it is fresh on every open (Radix unmounts closed content). Passing `open` makes it controlled. */
 export function FormDialog({ title, trigger, open: openProp, onOpenChange, init, submit, onDone, shown, children, footer = 'common.save' }: {
