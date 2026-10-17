@@ -23,10 +23,10 @@ const KEYS = GROUPS.flatMap(([, keys]) => keys)
 const INTEGER = ['month_days', 'office_grace_minutes', 'leave_days_under_one_year', 'leave_days_one_year_plus', 'leave_casual_days']
 const DAYS = ['saturday', 'sunday', 'monday', 'tuesday', 'wednesday', 'thursday', 'friday']
 
-/** The 15 business-rule settings: loads them, then shows the form. */
+/** The 15 business-rule settings: loads them fresh (never from the cache), then shows the form, which stays open if a later refetch fails. */
 function RulesTab() {
   const { t } = useTranslation()
-  const { data, err } = useApi<Row>('/settings')
+  const { data, err, ready } = useApi<Row>('/settings', { fresh: true })
   return (
     <Card>
       <CardHeader>
@@ -35,8 +35,8 @@ function RulesTab() {
           <CardDescription>{t('settings.desc.rules')}</CardDescription>
         </div>
       </CardHeader>
-      {data ? (
-        <RulesForm initial={data} />
+      {ready && data ? (
+        <RulesForm initial={data} loadErr={err} />
       ) : (
         <CardContent className="space-y-6">
           <ErrorBanner err={err} shown={[]} />
@@ -48,7 +48,7 @@ function RulesTab() {
 }
 
 /** One form; values stay strings, weekly-off days are a comma list. It starts from the loaded settings and keeps its own `saved` baseline after a save. */
-function RulesForm({ initial }: { initial: Row }) {
+function RulesForm({ initial, loadErr }: { initial: Row; loadErr?: unknown }) {
   const { t } = useTranslation()
   const { can } = useAuth()
   const manage = can('setting.manage')
@@ -95,6 +95,7 @@ function RulesForm({ initial }: { initial: Row }) {
   return (
     <>
       <CardContent className="space-y-6">
+        <ErrorBanner err={loadErr} shown={[]} />
         <ErrorBanner err={err} shown={KEYS} />
         {GROUPS.map(([group, keys]) => (
           <fieldset key={group} disabled={!manage}>

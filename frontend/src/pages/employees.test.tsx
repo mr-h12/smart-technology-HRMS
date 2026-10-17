@@ -1,7 +1,8 @@
-import { screen, waitFor, within } from '@testing-library/react'
+import { act, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { Link, MemoryRouter, Route, Routes } from 'react-router-dom'
 import { afterEach, beforeEach, expect, test, vi } from 'vitest'
+import { queryClient } from '@/lib/query'
 import { json, mockFetch, pagination, renderWithAuth } from '@/test-utils'
 import { EmployeeFormPage, EmployeeRoute, EmployeesPage } from './employees'
 
@@ -112,7 +113,7 @@ test('typing fast sends one search request, 250 ms after the last key', async ()
   expect(searches()[0]).toContain('search=أحمد')
 })
 
-test('opening an employee already in the cache shows that employee, not the form of the previous one', async () => {
+test('opening an employee already in the cache starts a new form, not the previous one', async () => {
   mockFetch({
     'GET /api/v1/residences': residences,
     'GET /api/v1/employees/A': () => json(200, { data: { ...emp, id: 'A', name_ar: 'أحمد' } }),
@@ -132,19 +133,37 @@ test('opening an employee already in the cache shows that employee, not the form
   await user.type(name, ' تعديل')
   await user.click(screen.getByRole('link', { name: 'إلى بسمة' }))
   await waitFor(() => expect(screen.getByLabelText('الاسم بالعربية')).toHaveValue('بسمة'))
-  await user.click(screen.getByRole('link', { name: 'إلى أحمد' })) // A is cached now, so it shows at once: the form must not keep B's values
-  expect(screen.getByLabelText('الاسم بالعربية')).toHaveValue('أحمد')
+  await user.click(screen.getByRole('link', { name: 'إلى أحمد' })) // A is cached now: the form must not keep B's values
+  await waitFor(() => expect(screen.getByLabelText('الاسم بالعربية')).toHaveValue('أحمد'))
 })
 
-test('employees already fetched are shown again without a new request', async () => {
-  mockFetch({ 'GET /api/v1/residences': residences, 'GET /api/v1/employees/e1': () => json(200, { data: emp }) })
+test('an employee opened from the cache still waits for the fresh record before the form starts', async () => {
+  let name = 'أحمد'
+  mockFetch({ 'GET /api/v1/residences': residences, 'GET /api/v1/employees/e1': () => json(200, { data: { ...emp, name_ar: name } }) })
   const first = renderWithAuth(<EmployeeDetailRoute id="e1" />, ALL, { router: false })
-  await screen.findByLabelText('الاسم بالعربية')
+  expect(await screen.findByLabelText('الاسم بالعربية')).toHaveValue('أحمد')
   first.unmount()
+  name = 'أحمد المعدّل' // someone else saved while this user was away
   renderWithAuth(<EmployeeDetailRoute id="e1" />, ALL, { router: false })
-  expect(screen.getByLabelText('الاسم بالعربية')).toBeInTheDocument()
-  expect(vi.mocked(fetch).mock.calls.filter(([u]) => String(u).endsWith('/employees/e1'))).toHaveLength(1)
+  expect(screen.queryByLabelText('الاسم بالعربية')).toBeNull() // the cached copy is not used to start the form
+  expect(await screen.findByLabelText('الاسم بالعربية')).toHaveValue('أحمد المعدّل')
+  expect(vi.mocked(fetch).mock.calls.filter(([u]) => String(u).endsWith('/employees/e1'))).toHaveLength(2)
 })
+
+test('a failed background refetch keeps the open form and what was typed, and shows the banner above it', async () => {
+  let fail = false
+  mockFetch({ 'GET /api/v1/residences': residences,
+    'GET /api/v1/employees/e1': () => (fail ? json(500, { error: { code: 'server_error', message: 'تعذر التحميل' } }) : json(200, { data: emp })) })
+  renderWithAuth(<EmployeeDetailRoute id="e1" />, ALL, { router: false })
+  const name = await screen.findByLabelText('الاسم بالعربية')
+  await user.type(name, ' تعديل')
+  fail = true
+  await act(() => queryClient.invalidateQueries())
+  expect(await screen.findByRole('alert')).toHaveTextContent('تعذر التحميل')
+  expect(screen.getByLabelText('الاسم بالعربية')).toBe(name) // the same input, not a remounted one
+  expect(name).toHaveValue('أحمد تعديل')
+})
+
 
 test('search and type filter the query and clear filters resets them', async () => {
   const list = vi.fn((_url: string) => json(200, { data: [], meta: { pagination } }))

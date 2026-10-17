@@ -1,5 +1,5 @@
 import { keepPreviousData, QueryClient, skipToken, useQuery, useQueryClient } from '@tanstack/react-query'
-import { useCallback } from 'react'
+import { useCallback, useRef } from 'react'
 import type { Row } from '@/components/form'
 import i18n from '@/i18n'
 import { api, ApiError, apiList } from './api'
@@ -37,12 +37,20 @@ export function useList(path: string) {
   return { rows: ok ? ok.data : none, total: ok ? ok.meta.pagination.total : 0, err: q.error ?? undefined, loading: q.isPending, reload }
 }
 
-/** Loads one record (the envelope's `data`); a null path loads nothing. */
-export function useApi<T = Row>(path: string | null) {
+/**
+ * Loads one record (the envelope's `data`); a null path loads nothing.
+ * Unlike useList, a failed refetch keeps the last good `data` and still sets `err`: a record may be open in a form, and a
+ * network blip must not throw away what the user typed. (useList clears its rows on error; lists hold no input.)
+ * `fresh` is for a form that starts from this record: it refetches on every mount even when the cache is fresh, and `ready`
+ * turns true once an answer has arrived after the mount (it stays true after that, whatever later refetches do). Start the
+ * form from `data` only when `ready`; a cached copy is never fresh enough to seed a form.
+ */
+export function useApi<T = Row>(path: string | null, { fresh = false } = {}) {
   const qc = useQueryClient()
-  const q = useQuery({ queryKey: queryKey(path ?? ''), queryFn: path === null ? skipToken : fetchEnvelope(path) })
+  const mountedAt = useRef(Date.now())
+  const q = useQuery({ queryKey: queryKey(path ?? ''), queryFn: path === null ? skipToken : fetchEnvelope(path), ...(fresh && { refetchOnMount: 'always' as const }) })
   const reload = useCallback(() => void (path !== null && qc.invalidateQueries({ queryKey: queryKey(path) })), [qc, path])
-  return { data: q.isError ? undefined : (q.data?.data as T | undefined), err: q.error ?? undefined, loading: q.isLoading, reload }
+  return { data: q.data?.data as T | undefined, err: q.error ?? undefined, loading: q.isLoading, reload, ready: q.dataUpdatedAt >= mountedAt.current }
 }
 
 /**

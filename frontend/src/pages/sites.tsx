@@ -174,11 +174,11 @@ function ManagersDialog({ site, open, onOpenChange }: { site: Row; open: boolean
 
 function ManagersBody({ siteId, onDone }: { siteId: string; onDone: () => void }) {
   const { t } = useTranslation()
-  const site = useApi<Row>(`/sites/${siteId}`)
+  const site = useApi<Row>(`/sites/${siteId}`, { fresh: true }) // the ticks start from the site as it is now, never from the cache
   const users = useApi<Row[]>(USERS) // shared with the accounts list and the audit filter
   const err = site.err ?? users.err
-  return site.data && users.data ? (
-    <ManagersForm siteId={siteId} managerIds={site.data.managers.map((m: Row) => m.id)} users={users.data.filter((u) => u.is_active)} onDone={onDone} />
+  return site.ready && site.data && users.data ? (
+    <ManagersForm siteId={siteId} managerIds={site.data.managers.map((m: Row) => m.id)} users={users.data.filter((u) => u.is_active)} loadErr={err} onDone={onDone} />
   ) : (
     <>
       <DialogBody className="grid gap-1">
@@ -195,7 +195,7 @@ function ManagersBody({ siteId, onDone }: { siteId: string; onDone: () => void }
 }
 
 /** The ticks start from the site's current managers, then belong to the user. */
-function ManagersForm({ siteId, managerIds, users, onDone }: { siteId: string; managerIds: string[]; users: Row[]; onDone: () => void }) {
+function ManagersForm({ siteId, managerIds, users, loadErr, onDone }: { siteId: string; managerIds: string[]; users: Row[]; loadErr?: unknown; onDone: () => void }) {
   const { t } = useTranslation()
   const send = useSave()
   const [ticked, setTicked] = useState(() => new Set(managerIds))
@@ -212,6 +212,7 @@ function ManagersForm({ siteId, managerIds, users, onDone }: { siteId: string; m
   return (
     <>
       <DialogBody className="grid gap-1">
+        <ErrorBanner err={loadErr} shown={[]} />
         <ErrorBanner err={err} shown={[]} />
         {users.map((u) => (
           <label key={u.id} className="flex min-h-11 items-center gap-3 rounded-md px-2 text-sm hover:bg-muted">

@@ -111,6 +111,45 @@ test('useApi returns one record and shares the resource prefix', async () => {
   await waitFor(() => expect(calls('/employees/e1')).toBe(2))
 })
 
+test('useApi keeps the last good data when a refetch fails, and still reports the error', async () => {
+  let fail = false
+  mockFetch({ 'GET /api/v1/employees/e1': () => (fail ? json(500, { error: { code: 'server_error', message: 'Boom' } }) : json(200, { data: { id: 'e1' } })) })
+  const { result } = renderHook(() => useApi<{ id: string }>('/employees/e1'), { wrapper })
+  await waitFor(() => expect(result.current.data).toEqual({ id: 'e1' }))
+  fail = true
+  act(() => result.current.reload())
+  await waitFor(() => expect(result.current.err).toBeInstanceOf(ApiError))
+  expect(result.current.data).toEqual({ id: 'e1' })
+})
+
+test('fresh: a cached record is shown but not ready until the refetch on mount answers', async () => {
+  let name = 'old'
+  mockFetch({ 'GET /api/v1/employees/e1': () => json(200, { data: { name } }) })
+  const first = renderHook(() => useApi<{ name: string }>('/employees/e1', { fresh: true }), { wrapper })
+  await waitFor(() => expect(first.result.current.ready).toBe(true))
+  first.unmount()
+  name = 'new'
+  const second = renderHook(() => useApi<{ name: string }>('/employees/e1', { fresh: true }), { wrapper })
+  expect(second.result.current).toMatchObject({ data: { name: 'old' }, ready: false })
+  await waitFor(() => expect(second.result.current).toMatchObject({ data: { name: 'new' }, ready: true }))
+  expect(calls('/employees/e1')).toBe(2)
+})
+
+test('fresh: a failed refetch on mount is not ready, and a later failure does not take readiness back', async () => {
+  let fail = false
+  mockFetch({ 'GET /api/v1/employees/e1': () => (fail ? json(500, { error: { code: 'server_error', message: 'Boom' } }) : json(200, { data: { id: 'e1' } })) })
+  const first = renderHook(() => useApi('/employees/e1', { fresh: true }), { wrapper })
+  await waitFor(() => expect(first.result.current.ready).toBe(true))
+  fail = true
+  act(() => first.result.current.reload())
+  await waitFor(() => expect(first.result.current.err).toBeDefined())
+  expect(first.result.current.ready).toBe(true) // a form that is open stays open
+  first.unmount()
+  const second = renderHook(() => useApi('/employees/e1', { fresh: true }), { wrapper })
+  await waitFor(() => expect(second.result.current.err).toBeDefined())
+  expect(second.result.current.ready).toBe(false) // the cached record is not fresh, so no form may start from it
+})
+
 test('useApi with a null path makes no request', () => {
   mockFetch({})
   const { result } = renderHook(() => useApi(null), { wrapper })

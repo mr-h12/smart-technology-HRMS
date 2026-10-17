@@ -191,16 +191,19 @@ export function EmployeeRoute() {
   return <EmployeeFormPage key={id ?? 'new'} />
 }
 
-/** Create (no id) or detail: loads the record, then shows the form. */
+/**
+ * Create (no id) or detail: loads the record, then shows the form. The form starts only from a record fetched since this page
+ * opened (never the cache), and once open it stays open: a failed refetch shows the banner above it and keeps what was typed.
+ */
 export function EmployeeFormPage() {
   const { id } = useParams()
-  const { data: emp, err } = useApi<Row>(id ? `/employees/${id}` : null)
-  if (id && !emp) return <div className="mx-auto max-w-5xl space-y-6">{err ? <ErrorBanner err={err} shown={[]} /> : <TableSkeleton rows={6} />}</div>
-  return <EmployeeForm emp={emp} />
+  const { data: emp, err, ready } = useApi<Row>(id ? `/employees/${id}` : null, { fresh: true })
+  if (id && !(ready && emp)) return <div className="mx-auto max-w-5xl space-y-6">{err ? <ErrorBanner err={err} shown={[]} /> : <TableSkeleton rows={6} />}</div>
+  return <EmployeeForm emp={emp} loadErr={err} />
 }
 
 /** Both render the same profile form; detail adds a header card and tabs synced to `?tab=`. The form starts from `emp` and is the user's after that. */
-function EmployeeForm({ emp }: { emp?: Row }) {
+function EmployeeForm({ emp, loadErr }: { emp?: Row; loadErr?: unknown }) {
   const { t } = useTranslation()
   const { can } = useAuth()
   const id: string | undefined = emp?.id
@@ -306,6 +309,7 @@ function EmployeeForm({ emp }: { emp?: Row }) {
   const tab = TABS.some(([v]) => v === params.get('tab')) ? params.get('tab')! : 'profile'
   return (
     <div className="mx-auto max-w-5xl space-y-6">
+      <ErrorBanner err={loadErr} shown={[]} />
       <Card className="flex flex-col gap-4 p-5 sm:flex-row sm:items-center">
         <UserAvatar name={emp.name_ar} size="xl" />
         <div className="min-w-0 flex-1 space-y-1">

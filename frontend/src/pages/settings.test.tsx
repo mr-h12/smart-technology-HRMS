@@ -1,4 +1,4 @@
-import { screen, waitFor, within } from '@testing-library/react'
+import { act, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { afterEach, beforeEach, expect, test, vi } from 'vitest'
 import { queryClient } from '@/lib/query'
@@ -379,20 +379,50 @@ test('the rules tab is hidden without setting.view', async () => {
   expect(screen.queryByRole('tab', { name: 'قواعد العمل' })).toBeNull()
 })
 
-test('the rules tab does not refetch on a tab switch, and a save refetches it', async () => {
+test('the rules form starts from the settings as they are now, not from the cache', async () => {
   let current = rules
-  const put = vi.fn(() => { current = { ...rules, office_grace_minutes: '20' }; return json(200, { data: current }) })
-  mockFetch({ 'GET /api/v1/settings': () => json(200, { data: current }), 'GET /api/v1/sites': list(sites), 'PUT /api/v1/settings': put })
+  let release = () => {}
+  let hold: Promise<void> | undefined
+  mockFetch({ 'GET /api/v1/settings': () => (hold ?? Promise.resolve()).then(() => json(200, { data: current })) as unknown as Response, 'GET /api/v1/sites': list(sites) })
   renderWithAuth(<SettingsPage />, RULES, { path: '/settings?tab=rules' })
-  const settingsCalls = () => calls('GET').filter(([u]) => String(u).endsWith('/settings')).length
-  await screen.findByLabelText('فترة السماح للتأخير (دقيقة)')
+  expect(await screen.findByLabelText('فترة السماح للتأخير (دقيقة)')).toHaveValue('15')
   await user.click(screen.getByRole('tab', { name: 'المواقع' }))
   await screen.findByText('موقع أ')
+  current = { ...rules, office_grace_minutes: '20' } // another HR user saved meanwhile
+  hold = new Promise<void>((r) => (release = r))
   await user.click(screen.getByRole('tab', { name: 'قواعد العمل' }))
-  expect(await screen.findByLabelText('فترة السماح للتأخير (دقيقة)')).toHaveValue('15')
-  expect(settingsCalls()).toBe(1)
-  await user.clear(screen.getByLabelText('فترة السماح للتأخير (دقيقة)'))
-  await user.type(screen.getByLabelText('فترة السماح للتأخير (دقيقة)'), '20')
-  await user.click(screen.getByRole('button', { name: 'حفظ التغييرات' }))
-  await waitFor(() => expect(settingsCalls()).toBe(2))
+  expect(screen.queryByLabelText('فترة السماح للتأخير (دقيقة)')).toBeNull() // no form from the cached copy while the fresh one is on its way
+  release()
+  expect(await screen.findByLabelText('فترة السماح للتأخير (دقيقة)')).toHaveValue('20')
+})
+
+test('a failed background refetch keeps the rules form and what was typed, with a banner', async () => {
+  let fail = false
+  mockFetch({ 'GET /api/v1/settings': () => (fail ? json(500, { error: { code: 'server_error', message: 'تعذر التحميل' } }) : json(200, { data: rules })) })
+  renderWithAuth(<SettingsPage />, RULES, { path: '/settings?tab=rules' })
+  const grace = await screen.findByLabelText('فترة السماح للتأخير (دقيقة)')
+  await user.type(grace, '5')
+  fail = true
+  await act(() => queryClient.invalidateQueries())
+  expect(await screen.findByRole('alert')).toHaveTextContent('تعذر التحميل')
+  expect(screen.getByLabelText('فترة السماح للتأخير (دقيقة)')).toBe(grace)
+  expect(grace).toHaveValue('155')
+})
+
+test('the managers dialog ticks the managers as they are now, not as cached', async () => {
+  let managers = [{ id: 'u1', name: 'خالد' }]
+  mockFetch({
+    'GET /api/v1/sites': list([sites[0]]),
+    'GET /api/v1/sites/s1': () => json(200, { data: { ...sites[0], managers, allowance_rules: [] } }),
+    'GET /api/v1/users': list([{ id: 'u1', name: 'خالد', is_active: true }, { id: 'u2', name: 'سامي', is_active: true }]),
+  })
+  renderWithAuth(<SettingsPage />, [...MANAGE, 'site.assign_manager.all'])
+  const open = async () => { await rowMenu('موقع أ'); await user.click(await screen.findByRole('menuitem', { name: 'المديرون' })) }
+  await open()
+  expect(await screen.findByRole('checkbox', { name: 'سامي' })).not.toBeChecked()
+  await user.keyboard('{Escape}')
+  await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull())
+  managers = [{ id: 'u1', name: 'خالد' }, { id: 'u2', name: 'سامي' }]
+  await open()
+  await waitFor(() => expect(screen.getByRole('checkbox', { name: 'سامي' })).toBeChecked())
 })
