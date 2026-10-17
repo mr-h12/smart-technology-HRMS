@@ -15,7 +15,7 @@ import {
   Users,
   type LucideIcon,
 } from 'lucide-react'
-import { useEffect, useState } from 'react'
+import { Suspense, useEffect, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { Link, NavLink, Outlet, useLocation } from 'react-router-dom'
 import { Toaster } from 'sonner'
@@ -28,6 +28,7 @@ import { Sheet, SheetContent, SheetDescription, SheetTitle } from '@/components/
 import { useTheme } from '@/hooks/useTheme'
 import { useAuth } from '@/lib/auth'
 import { cn } from '@/lib/utils'
+import { TableSkeleton } from './PageSkeleton'
 import { SegmentedControl } from './SegmentedControl'
 
 export const NAV: { group: string; items: { path: string; key: string; icon: LucideIcon; ability: string }[] }[] = [
@@ -103,13 +104,13 @@ export function BrandName({ product }: { product: string }) {
       <span className="text-[15px] font-extrabold tracking-tight whitespace-nowrap" dir="ltr">
         <span className="text-[#1b2a4a] dark:text-white">SMART</span> <span className="text-[#5b8bd0]">technology</span>
       </span>
-      <span className="mt-0.5 text-[10px] font-medium tracking-[0.18em] text-muted-foreground uppercase">{product}</span>
+      <span className="mt-0.5 text-xs font-medium tracking-[0.18em] text-muted-foreground uppercase">{product}</span>
     </span>
   )
 }
 
 function SidebarNav({ collapsed = false, onNavigate }: { collapsed?: boolean; onNavigate?: () => void }) {
-  const { t } = useTranslation()
+  const { t, i18n } = useTranslation()
   const { can } = useAuth()
   return (
     <nav aria-label={t('nav.main')} className="flex flex-col">
@@ -121,7 +122,7 @@ function SidebarNav({ collapsed = false, onNavigate }: { collapsed?: boolean; on
             {collapsed ? (
               <div aria-hidden className="mx-3 mt-2 mb-1 border-t" />
             ) : (
-              <p className="px-3 pt-3 pb-1 text-start text-[11px] font-medium tracking-[0.08em] text-muted-foreground/80 uppercase">{t(group)}</p>
+              <h2 className="px-3 pt-3 pb-1 text-start text-[11px] font-medium tracking-[0.08em] text-muted-foreground/80 uppercase">{t(group)}</h2>
             )}
             <ul className="flex flex-col gap-1">
               {visible.map(({ path, key, icon: Icon }) => {
@@ -157,7 +158,7 @@ function SidebarNav({ collapsed = false, onNavigate }: { collapsed?: boolean; on
                 return (
                   <li key={path}>
                     {collapsed ? (
-                      <Tooltip content={label} side="right">
+                      <Tooltip content={label} side={i18n.dir() === 'rtl' ? 'left' : 'right'}>
                         {link}
                       </Tooltip>
                     ) : (
@@ -261,16 +262,14 @@ function Navbar({ onOpenMobile }: { onOpenMobile: () => void }) {
       <Button variant="ghost" size="icon" className="lg:hidden" onClick={onOpenMobile} aria-label={t('nav.open')}>
         <Menu className="size-5" aria-hidden />
       </Button>
-      <nav aria-label={t('nav.breadcrumb')} className="me-auto hidden min-w-0 items-center gap-2 text-table text-muted-foreground md:flex">
-        {page && (
-          <>
-            <span className="truncate">{t(page.group)}</span>
-            <span aria-hidden>/</span>
-            <span className="truncate text-section-title text-foreground">{t(page.key)}</span>
-          </>
-        )}
-      </nav>
-      <div className="flex min-w-0 flex-1 items-center justify-end gap-1.5 sm:gap-2 md:flex-none">
+      {page && (
+        <nav aria-label={t('nav.breadcrumb')} className="me-auto hidden min-w-0 items-center gap-2 text-table text-muted-foreground md:flex">
+          <span className="truncate">{t(page.group)}</span>
+          <span aria-hidden>/</span>
+          <span className="truncate text-section-title text-foreground">{t(page.key)}</span>
+        </nav>
+      )}
+      <div className="ms-auto flex min-w-0 flex-1 items-center justify-end gap-1.5 sm:gap-2 md:flex-none">
         <div className="hidden sm:block">
           <LanguageToggle />
         </div>
@@ -328,7 +327,9 @@ export function AppLayout() {
           <Navbar onOpenMobile={() => setMobileOpen(true)} />
           <main id="page-content" className="mx-auto w-full max-w-[1600px] flex-1 scroll-mt-20 p-4 sm:p-6">
             <div key={pathname} className="animate-fade-in">
-              <Outlet />
+              <Suspense fallback={<TableSkeleton />}>
+                <Outlet />
+              </Suspense>
             </div>
           </main>
         </div>

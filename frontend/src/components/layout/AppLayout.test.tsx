@@ -12,7 +12,10 @@ const signedIn = (permissions: string[]) => {
   })
 }
 
-beforeEach(() => localStorage.clear())
+beforeEach(() => {
+  localStorage.clear()
+  document.documentElement.classList.remove('dark')
+})
 afterEach(() => vi.unstubAllGlobals())
 
 test('collapsing the sidebar flips aria-expanded and keeps link names', async () => {
