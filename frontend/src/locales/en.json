@@ -280,6 +280,8 @@
     }
   },
   "audit": {
+    "subtitle": "Every create, update, delete and sign-in, with who did it and the values before and after.",
+    "details": "View details",
     "actor": "User",
     "entityType": "Record type",
     "from": "From",
@@ -287,7 +289,6 @@
     "time": "Date and time",
     "action": "Event",
     "entityId": "Record ID",
-    "changes": "Changes",
     "old_values": "Previous value",
     "new_values": "New value",
     "event": {
