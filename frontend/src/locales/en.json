@@ -13,7 +13,8 @@
     "clearFilters": "Clear filters",
     "noResults": "No results",
     "noData": "No records yet.",
-    "saveChanges": "Save changes"
+    "saveChanges": "Save changes",
+    "name": "Name"
   },
   "app": {
     "name": "Smart Technology HRMS",
@@ -23,9 +24,6 @@
     "main": "Main navigation",
     "open": "Open menu",
     "employees": "Employees",
-    "sites": "Sites",
-    "residences": "Residences",
-    "fares": "Fares",
     "accounts": "User accounts",
     "roles": "Roles and permissions",
     "audit": "Audit log",
@@ -48,9 +46,6 @@
   },
   "page": {
     "employees": "Employees",
-    "sites": "Sites",
-    "residences": "Residences",
-    "fares": "Transport fares",
     "accounts": "User accounts",
     "roles": "Roles and permissions",
     "audit": "Audit log"
@@ -142,10 +137,6 @@
       "military_status": "Military service status",
       "other": "Other"
     },
-    "site_kind": {
-      "work": "Work site",
-      "leave": "Leave"
-    },
     "leave_code": {
       "friday": "Friday",
       "official_holiday": "Official holiday",
@@ -163,12 +154,8 @@
   "site": {
     "add": "Add site",
     "edit": "Edit",
-    "kind": "Site kind",
-    "allKinds": "All kinds",
     "leave_code": "Leave code",
     "active": "Active",
-    "allActive": "All",
-    "inactive": "Inactive",
     "outside_alexandria": "Outside Alexandria",
     "allowances": "Allowances",
     "allowanceHistory": "Allowance history",
@@ -176,15 +163,14 @@
     "value": "Value",
     "addRule": "Add rule",
     "yes": "Yes",
-    "no": "No",
-    "managers": "Managers"
+    "managers": "Managers",
+    "addLeaveType": "Add leave type"
   },
   "residence": {
     "add": "Add residence"
   },
   "fare": {
     "amount": "Fare",
-    "add": "Add fare",
     "tooMany": "More than 100 fares exist. Some may not appear in the table.",
     "residence": "Residence"
   },
@@ -238,8 +224,8 @@
       "assign_manager": "Sites: assign managers"
     },
     "user": {
-      "view": "Accounts: view",
-      "manage": "Accounts: manage"
+      "view": "User accounts: view",
+      "manage": "User accounts: manage"
     },
     "role": {
       "view": "Roles and permissions: view",
@@ -311,6 +297,13 @@
       "leaveTypes": "Leave types",
       "fares": "Transport fares",
       "rules": "Business rules"
+    },
+    "subtitle": "Manage sites, residences, leave types, transport fares and business rules.",
+    "desc": {
+      "sites": "Places where attendance days are recorded.",
+      "residences": "Areas employees travel from to reach a site.",
+      "leaveTypes": "Days recorded instead of a work site, such as Fridays, official holidays and absences.",
+      "fares": "The fare from each residence to each site, effective from its date."
     }
   },
   "status": {

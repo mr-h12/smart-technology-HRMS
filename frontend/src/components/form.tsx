@@ -96,11 +96,12 @@ export function useForm(initial: Row = {}) {
   return { form, setForm, set: (k: string, v: string) => setForm((f) => ({ ...f, [k]: v })) }
 }
 
-/** Loads a list endpoint; `total` lets pages warn when more rows exist than were fetched. */
+/** Loads a list endpoint; `total` lets pages warn when more rows exist than were fetched; `loading` is true until the first answer. */
 export function useList(path: string) {
   const [rows, setRows] = useState<Row[]>([])
   const [total, setTotal] = useState(0)
   const [err, setErr] = useState<unknown>()
+  const [loading, setLoading] = useState(true)
   const reload = useCallback(() => {
     apiList<Row>(path)
       .then((r) => {
@@ -109,17 +110,20 @@ export function useList(path: string) {
         setTotal(r.meta.pagination.total)
       })
       .catch(setErr)
+      .finally(() => setLoading(false))
   }, [path])
   useEffect(reload, [reload])
-  return { rows, total, err, reload }
+  return { rows, total, err, loading, reload }
 }
 
 type FormApi = { values: Row; set: (k: string, v: string) => void; errs: Record<string, string> }
 
-/** Dialog whose form state lives in the body, so it is fresh on every open (Radix unmounts closed content). */
-export function FormDialog({ title, trigger, init, submit, onDone, shown, children, footer = 'common.save' }: {
+/** Dialog whose form state lives in the body, so it is fresh on every open (Radix unmounts closed content). Passing `open` makes it controlled. */
+export function FormDialog({ title, trigger, open: openProp, onOpenChange, init, submit, onDone, shown, children, footer = 'common.save' }: {
   title: string
-  trigger: React.ReactNode
+  trigger?: React.ReactNode
+  open?: boolean
+  onOpenChange?: (open: boolean) => void
   init: Row
   submit: (form: Row) => Promise<unknown>
   onDone: () => void
@@ -127,10 +131,12 @@ export function FormDialog({ title, trigger, init, submit, onDone, shown, childr
   children: (f: FormApi) => React.ReactNode
   footer?: string
 }) {
-  const [open, setOpen] = useState(false)
+  const [own, setOwn] = useState(false)
+  const open = openProp ?? own
+  const setOpen = (o: boolean) => (openProp === undefined ? setOwn(o) : onOpenChange?.(o))
   return (
     <Dialog open={open} onOpenChange={setOpen}>
-      <span onClick={() => setOpen(true)}>{trigger}</span>
+      {trigger && <span onClick={() => setOpen(true)}>{trigger}</span>}
       <DialogContent aria-describedby={undefined}>
         <DialogHeader>
           <DialogTitle>{title}</DialogTitle>

@@ -1,14 +1,12 @@
 import {
-  Bus,
   ChevronDown,
-  House,
   Languages,
   LogOut,
-  MapPin,
   Menu,
   Moon,
   PanelLeft,
   ScrollText,
+  Settings,
   ShieldCheck,
   Sun,
   UserCog,
@@ -31,29 +29,23 @@ import { cn } from '@/lib/utils'
 import { TableSkeleton } from './PageSkeleton'
 import { SegmentedControl } from './SegmentedControl'
 
-export const NAV: { group: string; items: { path: string; key: string; icon: LucideIcon; ability: string }[] }[] = [
-  { group: 'nav.group.hr', items: [{ path: '/employees', key: 'nav.employees', icon: Users, ability: 'employee.view' }] },
-  {
-    group: 'nav.group.settings',
-    items: [
-      { path: '/sites', key: 'nav.sites', icon: MapPin, ability: 'site.view' },
-      { path: '/residences', key: 'nav.residences', icon: House, ability: 'site.view' },
-      { path: '/fares', key: 'nav.fares', icon: Bus, ability: 'site.view' },
-    ],
-  },
+/** An item shows when the user has any of its `abilities`. */
+export const NAV: { group: string; items: { path: string; key: string; icon: LucideIcon; abilities: string[] }[] }[] = [
+  { group: 'nav.group.hr', items: [{ path: '/employees', key: 'nav.employees', icon: Users, abilities: ['employee.view'] }] },
+  { group: 'nav.group.settings', items: [{ path: '/settings', key: 'nav.settings', icon: Settings, abilities: ['site.view', 'setting.view'] }] },
   {
     group: 'nav.group.admin',
     items: [
-      { path: '/console/accounts', key: 'nav.accounts', icon: UserCog, ability: 'user.view' },
-      { path: '/console/roles', key: 'nav.roles', icon: ShieldCheck, ability: 'role.view' },
-      { path: '/console/audit', key: 'nav.audit', icon: ScrollText, ability: 'audit_log.view' },
+      { path: '/console/accounts', key: 'nav.accounts', icon: UserCog, abilities: ['user.view'] },
+      { path: '/console/roles', key: 'nav.roles', icon: ShieldCheck, abilities: ['role.view'] },
+      { path: '/console/audit', key: 'nav.audit', icon: ScrollText, abilities: ['audit_log.view'] },
     ],
   },
 ]
 
 /** The first page the user may open; the fallback is the 1a landing page. */
 export const homePath = (can: (ability: string) => boolean) =>
-  NAV.flatMap((g) => g.items).find((n) => can(n.ability))?.path ?? '/employees'
+  NAV.flatMap((g) => g.items).find((n) => n.abilities.some(can))?.path ?? '/employees'
 
 const FOCUS = 'focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring'
 
@@ -115,7 +107,7 @@ function SidebarNav({ collapsed = false, onNavigate }: { collapsed?: boolean; on
   return (
     <nav aria-label={t('nav.main')} className="flex flex-col">
       {NAV.map(({ group, items }) => {
-        const visible = items.filter((n) => can(n.ability))
+        const visible = items.filter((n) => n.abilities.some(can))
         if (visible.length === 0) return null
         return (
           <div key={group}>

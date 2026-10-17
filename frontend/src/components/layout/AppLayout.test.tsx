@@ -64,3 +64,9 @@ test('the theme item in the profile menu switches the whole app theme', async ()
   await user.click(await screen.findByRole('menuitem', { name: 'الوضع الفاتح' }))
   expect(document.documentElement.classList.contains('dark')).toBe(false)
 })
+
+test('the Settings link shows for setting.view alone', async () => {
+  signedIn(['setting.view.all'])
+  renderApp('/settings')
+  expect(await screen.findByRole('link', { name: 'الإعدادات' })).toBeInTheDocument()
+})

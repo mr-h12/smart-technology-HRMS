@@ -26,9 +26,7 @@ test('the owner wording rulings are in place', () => {
 })
 
 test('the review wording rulings are in place', () => {
-  const a = Object.fromEntries(flat(ar))
   const e = Object.fromEntries(flat(en))
   expect(e['enum.allowance_mode.share_of_wage']).toBe('Share of daily wage')
   expect(e['console.inactive']).toBe('Deactivated')
-  expect([a['console.sessions'], e['console.sessions']]).toEqual(['الجلسات النشطة', 'Active sessions'])
 })

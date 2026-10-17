@@ -11,9 +11,7 @@ const AccountsPage = page(() => import('@/pages/console'), 'AccountsPage')
 const RolesPage = page(() => import('@/pages/console'), 'RolesPage')
 const EmployeesPage = page(() => import('@/pages/employees'), 'EmployeesPage')
 const EmployeeFormPage = page(() => import('@/pages/employees'), 'EmployeeFormPage')
-const SitesPage = page(() => import('@/pages/sites'), 'SitesPage')
-const ResidencesPage = page(() => import('@/pages/sites'), 'ResidencesPage')
-const FaresPage = page(() => import('@/pages/sites'), 'FaresPage')
+const SettingsPage = page(() => import('@/pages/settings'), 'SettingsPage')
 const NotFoundPage = page(() => import('@/pages/pages'), 'NotFoundPage')
 
 function Home() {
@@ -30,9 +28,11 @@ export function AppRoutes() {
         <Route path="employees" element={<EmployeesPage />} />
         <Route path="employees/new" element={<EmployeeFormPage />} />
         <Route path="employees/:id" element={<EmployeeFormPage />} />
-        <Route path="sites" element={<SitesPage />} />
-        <Route path="residences" element={<ResidencesPage />} />
-        <Route path="fares" element={<FaresPage />} />
+        <Route path="settings" element={<SettingsPage />} />
+        {/* old links, kept for one release */}
+        <Route path="sites" element={<Navigate to="/settings?tab=sites" replace />} />
+        <Route path="residences" element={<Navigate to="/settings?tab=residences" replace />} />
+        <Route path="fares" element={<Navigate to="/settings?tab=fares" replace />} />
         <Route path="console/accounts" element={<AccountsPage />} />
         <Route path="console/roles" element={<RolesPage />} />
         <Route path="console/audit" element={<AuditPage />} />

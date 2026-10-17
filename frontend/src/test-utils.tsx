@@ -32,10 +32,8 @@ export const renderApp = (path: string) =>
     </MemoryRouter>,
   )
 
-/** Renders `ui` signed in with exactly these permissions, without the /auth/me round trip. */
-export const renderWithAuth = (ui: React.ReactNode, permissions: string[]) =>
-  render(
-    <MemoryRouter>
-      <AuthContext.Provider value={{ me: me(permissions), loading: false, login: async () => {}, logout: async () => {}, can: (a) => canDo(permissions, a) }}>{ui}</AuthContext.Provider>
-    </MemoryRouter>,
-  )
+/** Renders `ui` signed in with exactly these permissions, without the /auth/me round trip; `path` seeds the router, `router: false` drops it. */
+export const renderWithAuth = (ui: React.ReactNode, permissions: string[], { path = '/', router = true } = {}) => {
+  const auth = <AuthContext.Provider value={{ me: me(permissions), loading: false, login: async () => {}, logout: async () => {}, can: (a) => canDo(permissions, a) }}>{ui}</AuthContext.Provider>
+  return render(router ? <MemoryRouter initialEntries={[path]}>{auth}</MemoryRouter> : auth)
+}
