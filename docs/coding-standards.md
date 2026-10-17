@@ -23,7 +23,7 @@ If a requirement is ambiguous, incomplete, or contradictory, stop and ask for a 
 ## 2. Working Discipline
 
 - Restate each task as observable success criteria before changing code.
-- For any change that spans more than one file, state `step → verification` before editing.
+- For any change that spans more than one file, present `step → verification` and obtain approval before editing.
 - Make the smallest coherent change. Do not mix unrelated refactoring, formatting, dependency upgrades, or dead-code cleanup into feature work.
 - Read only the source sections relevant to the task, but re-read them before changing payroll, leave balances, advances, permissions, period locking, site costing, or generated PDFs.
 - State assumptions explicitly. An unapproved assumption must be visible in the task notes and must not become a hidden business rule.
@@ -39,6 +39,8 @@ Dependencies are enforced by deptrac (`backend/deptrac.layers.yaml`). The allowe
 ```text
 Presentation → Application → Domain
 Application  → Infrastructure → Domain
+Presentation, Application, Infrastructure → SharedContracts (App\Support)
+Domain → nothing
 ```
 
 | Layer | Responsibilities | Must not contain |
@@ -47,8 +49,9 @@ Application  → Infrastructure → Domain
 | Application | Use cases, transaction coordination, authorization invocation, orchestration of interfaces and events. | Framework-specific UI concerns, raw SQL scattered through use cases. |
 | Domain | Entities, value objects, policies, state transitions, calculation rules, domain events. | HTTP, UI, framework (not even Illuminate), storage, queue, or vendor SDK calls. |
 | Infrastructure | Database repositories, file storage, queue, PDF and other external-service adapters. | Unbounded business policy or permission logic. |
+| SharedContracts (`App\Support`) | Small technical contracts used across modules: the response envelope, `Precision`/`Decimal` money helpers, database helpers. May depend only on the framework. | Business rules, module-specific logic. |
 
-Domain depends on nothing. That is the load-bearing rule.
+Domain depends on nothing, not even the framework or `App\Support`. That is the load-bearing rule, and it is why Domain code does money math with plain bcmath on decimal strings (§6). Presentation, Application, and Infrastructure may use SharedContracts. Changing the ruleset needs a deliberate, documented decision, never a quiet edit to make code compile.
 
 ### 3.2 Modules
 
@@ -57,7 +60,7 @@ Code lives under `backend/app/Modules/<Module>/{Domain,Application,Infrastructur
 - A module owns its domain rules, application use cases, persistence interface, and API surface.
 - A module must not import another module's private tables or repositories to change its data.
 - Cross-module work uses declared interfaces or domain events and has an explicit owner for the resulting transaction and audit behavior.
-- Do not create a shared "utils" area for business logic. Place a rule in its owning module, or in `App\Support` when it is a clearly named technical contract (e.g. `Precision`/`Decimal`, the response envelope).
+- Do not create a shared "utils" area for business logic. Place a rule in its owning module, or in `App\Support` when it is a clearly named technical contract (e.g. `Precision`/`Decimal`, the response envelope); it is not reachable from Domain.
 
 ## 4. Naming and Code Clarity
 
@@ -72,22 +75,24 @@ Code lives under `backend/app/Modules/<Module>/{Domain,Application,Infrastructur
 ## 5. Types, Validation, and Data Integrity
 
 - Use strict typing (`declare(strict_types=1)` in PHP, `strict` in TypeScript). Do not introduce untyped escape hatches (`any`, unchecked casts), silent coercion, or implicit nullable values.
-- Validate every untrusted value at the backend boundary: request body, query, header, path parameter, file metadata, queue payload, environment configuration, and imported file rows (fingerprint export, Excel migration).
+- Validate every untrusted value at the backend boundary: request body, query, header, path parameter, file metadata, queue payload, environment configuration, external-adapter responses, and imported file rows (fingerprint export, Excel migration).
 - Validate format and business rules separately: format validation produces field errors; domain validation produces a stable business-rule error code.
 - Enforce invariants in the database as well as in application code: foreign keys, check constraints, unique constraints, required fields, and indexes. Dated histories (employee type, daily wage, manager assignment, shift) must not overlap; enforce it in the database.
 - Treat database constraints as the final authority under concurrent requests. Convert known constraint failures to safe contract errors; never expose raw database messages.
 - Business numbers (month = 30 days, day = 8 hours, overtime ×1.5, lateness multipliers, grace period, shifts, leave entitlements) are **settings**. Read them from settings; never use literals in domain code or UI.
+- Use enum or reference tables (settings, managed lists) for extendable values such as leave day-types, sites, departments, and residences.
 - Never hard-code permissions, employee types' pay rules, sites, leave day-types, or any managed list in UI or domain conditionals. Check permissions by name (`resource.action.scope`), never by role name.
 
 ## 6. Money, Time, and Calculations
 
-- **Float is forbidden for money.** Store as PostgreSQL `NUMERIC(18,6)`; compute in PHP with bcmath decimal strings through the shared `Precision`/`Decimal` helpers.
+- **Float is forbidden for money.** Store as PostgreSQL `NUMERIC(18,6)`; compute in PHP with bcmath on decimal strings. Domain code calls bcmath directly (deptrac forbids it from using `App\Support`); Application and Infrastructure use the shared `Precision`/`Decimal` helpers to cast, validate, and persist amounts.
 - Serialize money as decimal strings at the API boundary. The frontend never parses them into floats for arithmetic.
 - Perform all calculations in the backend domain layer. The frontend may show a server-confirmed result but never becomes the source of truth.
 - **Do not round intermediate values** (the Excel does not). Display 2 decimals; round only where `docs/calculations.md` says so.
 - Apply the documented formula order exactly (`docs/calculations.md`). Payroll must reproduce the Excel results; the October 2026 totals (engineers net 315,451; day laborers net 391,948) are regression fixtures. Every difference from them must trace to a documented Excel error and appear in the Excel-difference report.
 - Insurance (employee and company share) and income tax are **manual HR fields** per employee per period. Blank means nothing is deducted. Do not compute them.
 - **HR override.** HR can override any computed value, with a required reason. An override is stored separately from the computed value, highlighted in the UI, survives recomputation (with an "inputs changed" warning), can be reverted, and is audited with before/after values. Never overwrite the computed value in place.
+- Never recompute a past period with a newer effective-dated daily wage, setting, or site allowance; use the value effective on that day (`docs/adr/0002-daily-wage-on-worker.md`).
 - Historical data imported from Excel is kept as-is. Rows matching a known Excel error carry a visible warning flag; do not correct them.
 - A formula change updates `docs/calculations.md` and the October fixtures in the same PR, and the PR explains the difference.
 - Keep computed amount, override, advance repayment, and net pay semantically separate in code, schema, responses, and UI models. A day's cost is day rate plus that day's extras, summed per site for site costing; leave day-types are their own rows.
@@ -114,7 +119,7 @@ Code lives under `backend/app/Modules/<Module>/{Domain,Application,Infrastructur
 - Paginate every collection. Never implement a "return all" endpoint for business data.
 - Apply authorization before data retrieval or mutation; query filters may narrow scope but never enlarge it.
 - Use stable machine-readable error codes. Localize user-facing messages by request language; clients never parse error text.
-- Require idempotency for creates and actions where a retry would duplicate money or history (payout marks, advance creation, period close, imports).
+- Require idempotency for creates and actions where a retry would duplicate money or history (payout marks, advance creation, period close, imports), and preserve the original response for valid replays.
 - Keep API documentation, request validators, response serializers, and tests aligned. A route is incomplete if it is undocumented; the API will be consumed by the company's CRM later.
 
 ## 9. Authorization, Security, and Privacy
@@ -122,18 +127,18 @@ Code lives under `backend/app/Modules/<Module>/{Domain,Application,Infrastructur
 - Enforce dynamic RBAC at API and row level. Hiding a button is never access control.
 - Employees and workers have no accounts. Accounts are Developer, CEO, HR, and Manager. Only the Developer role creates accounts and sets or changes passwords; there is no self-service reset or change.
 - A manager sees and acts on only the employees assigned to them (dated assignment). Test this on every endpoint that returns or mutates employee-scoped data, including nested resources, downloads, exports, and notifications.
-- Authorize each action on the target record and its current state (for example, nothing is editable in a closed period; clearance is blocked while custody is open).
+- Authorize each action on the target record and its current state, including nested resources, downloads, bulk actions, exports, and async job requests (for example, nothing is editable in a closed period; clearance is blocked while custody is open).
 - Test a negative case for every permission-sensitive operation: a caller without access must be unable to read, infer, mutate, export, or download the data.
 - Salary, national ID, insurance number, and bank account are sensitive. Expose them only to permissions that need them, and keep them out of logs, notifications, error messages, and manager-facing views unless a rule says otherwise.
 - Keep secrets outside source code and logs. Never expose credentials, session tokens, stack traces, SQL, or internal paths in responses.
-- Apply rate limiting and lockout to login; validate input; protect against injection, XSS, and CSRF; use HTTPS even on internal networks.
+- Apply rate limiting to login and API endpoints, plus lockout on login; validate input; protect against injection, XSS, and CSRF; use HTTPS even on internal networks.
 - For uploaded files (scanned signed forms, signature images, imports), validate true MIME type, size, parent-entity permission, and virus-scan result before making them available. Store outside the web root with UUID storage names.
 - Generated PDFs must be built from an explicit data model for that form, so fields the reader may not see (for example other employees' pay, internal HR notes) cannot leak into it.
 
 ## 10. Audit, Logging, and Events
 
 - Audit logs are append-only. Clients never write or alter them directly.
-- Every create, update, delete, approval, override, login, and period lock or reopen writes an audit entry with the actor, event, entity, before and after values, timestamp, IP, device, and request ID where available.
+- Every create, update, delete, approval, override, login, and period lock or reopen writes an audit entry with the actor, event, entity, before and after values, timestamp, IP, device, request ID, and correlation ID where available.
 - Always audit the critical events: overrides (with their reason), period close and reopen (with the reopen reason), role or permission change, account creation and password set, employee type change, manager reassignment, payout marks, advance changes, and edits to past days.
 - Every manager action notifies HR: instantly for requests, warnings, and edits to past days; in a daily digest for routine attendance.
 - Emit domain events after a successful transaction for cross-module effects (leave balance recalculation, notifications, date reminders).
@@ -155,7 +160,7 @@ Code lives under `backend/app/Modules/<Module>/{Domain,Application,Infrastructur
 
 - Run background work on Redis queues, separated by purpose (for example `critical`, `pdf`, `reports`, `maintenance`).
 - Every job declares its input schema, idempotency strategy, retry limit, failure handling, audit and log behavior, and observable status. No scheduled jobs are defined yet; when the plan adds one (daily digest, date reminders), document it before building it.
-- Generate PDFs asynchronously through the browsershot queue, in Arabic with embedded fonts. They must match the client's layouts in `docs/templates/`, be auto-filled from the employee record with masculine or feminine wording from gender, carry a per-form-type serial number, and be stamped with the stored HR or CEO signature image on approval. Retry failures and expose readiness through the API.
+- Generate PDFs asynchronously through the browsershot queue, in Arabic with embedded fonts. They must match the client's layouts in `docs/templates/`, be auto-filled from the employee record with masculine or feminine wording from gender, carry a per-form-type serial number, and be stamped with the stored HR or CEO signature image on approval. Store each generated form as an immutable snapshot with its serial number. Retry failures and expose readiness through the API.
 - Place mail, storage, PDF, fingerprint-file parsing, and every deferred integration behind an interface or adapter. An external outage must fail safely without making the HRMS unavailable.
 - Do not add out-of-scope functionality (employee self-service, a WhatsApp API, a live fingerprint-device connection, CRM integration beyond the optional `crm_user_id`) unless a new approved decision expands scope.
 
@@ -172,7 +177,7 @@ Code lives under `backend/app/Modules/<Module>/{Domain,Application,Infrastructur
 
 ### 13.2 Test rules
 
-- Payroll, leave-balance, insurance, and permission logic ships with PHPUnit tests before merge. A money, permission, state-transition, or multi-table change has no exception from testing.
+- Payroll, leave-balance, insurance, and permission logic ships with PHPUnit tests before merge. A money, permission, state-transition, versioning, or multi-table change has no exception from testing.
 - A payroll formula change updates the October fixtures in the same PR, and the PR explains the difference.
 - For bug fixes, add a regression test that fails before the fix whenever practical.
 - Tests use deterministic dates (fixed `Africa/Cairo` clock), decimal strings, and test identities. They must not depend on current time, external services, production data, or test execution order.
