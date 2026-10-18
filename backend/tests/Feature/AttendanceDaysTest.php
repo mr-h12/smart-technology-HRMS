@@ -131,6 +131,8 @@ class AttendanceDaysTest extends TestCase
         $day($eng, '2026-10-03')->assertJsonPath('data.state', 'missing');               // Saturday, field staff
         $day($this->employee('office'), '2026-10-03')->assertJsonPath('data.leave_code', 'saturday')   // office weekly off
             ->assertJsonPath('data.site_id', $this->leave['saturday']);                                  // «اجازة السبت»
+        $day($this->employee('permanent_worker'), '2026-10-02')->assertJsonPath('data.state', 'derived')   // a leave day: no work-day defaults
+            ->assertJsonPath('data.scheduled_in', null)->assertJsonPath('data.scheduled_out', null)->assertJsonPath('data.transport', 'none');
         $this->putDay($eng, '2026-10-02', ['site_id' => $this->site])->assertJsonPath('data.state', 'stored');   // worked the Friday
     }
 

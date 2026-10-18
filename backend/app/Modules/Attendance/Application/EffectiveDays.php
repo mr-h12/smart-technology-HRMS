@@ -52,7 +52,8 @@ final class EffectiveDays
         $leaveSites = Site::withTrashed()->where('kind', 'leave')->get(['id', 'leave_code', 'active', 'deleted_at']);
         $codeOf = $leaveSites->pluck('leave_code', 'id')->all();
         $activeSite = $leaveSites->filter(fn (Site $s) => $s->active && ! $s->trashed())->pluck('id', 'leave_code')->all();
-        $weeklyOff = $this->weeklyOff($p->group);
+        $settings = $this->rules->all();   // once per period: it is a cache round trip, and this loop runs per cell
+        $weeklyOff = $this->weeklyOff($p->group, $settings);
         $today = self::today();
 
         $days = [];
@@ -69,10 +70,13 @@ final class EffectiveDays
                     $code = $locked ? null : OffDays::leaveCodeFor($date, $weeklyOff, isset($holidays[$date]));
                     $day['state'] = $code !== null ? 'derived' : ($date > $today ? 'future' : 'missing');
                     if ($code !== null) {
+                        // A leave day, as save() would store it: no scheduled times, and a permanent worker's transport is none.
                         $day = [...$day, 'leave_code' => $code, 'site_id' => $activeSite[$code] ?? null];
-                    }
-                    if ($type === EmployeeType::PermanentWorker) {
-                        $day = [...$day, ...$this->workerDefaults($e, $date)];
+                        if ($type === EmployeeType::PermanentWorker) {
+                            $day['transport'] = 'none';
+                        }
+                    } elseif ($type === EmployeeType::PermanentWorker) {
+                        $day = [...$day, ...self::defaults($e, $date, $settings)];
                     }
                 }
                 $days[$e['id']][$date] = $day;
@@ -115,8 +119,17 @@ final class EffectiveDays
      */
     public function workerDefaults(array $employee, string $date): array
     {
+        return self::defaults($employee, $date, $this->rules->all());
+    }
+
+    /**
+     * @param  array<string, mixed>  $employee
+     * @param  array<string, string>  $s  the settings
+     * @return array{scheduled_in: string, scheduled_out: string, transport: string}
+     */
+    private static function defaults(array $employee, string $date, array $s): array
+    {
         $shift = Employment::shiftOn($employee, $date);
-        $s = $this->rules->all();
 
         return ['scheduled_in' => $shift['start'] ?? $s['worker_shift_start'], 'scheduled_out' => $shift['end'] ?? $s['worker_shift_end'], 'transport' => 'full'];
     }
@@ -147,7 +160,7 @@ final class EffectiveDays
             return ['late_minutes' => DayRules::officeLateMinutes($day['in_time'], $start, (int) $s['office_grace_minutes'])];
         }
         if ($type === EmployeeType::PermanentWorker && $day['site_id'] !== null && $day['leave_code'] === null && $day['in_time'] !== null && $day['out_time'] !== null) {
-            $scheduledIn = $day['scheduled_in'] ?? $this->workerDefaults($employee, $day['date'])['scheduled_in'];
+            $scheduledIn = $day['scheduled_in'] ?? self::defaults($employee, $day['date'], $s)['scheduled_in'];
             /** @var numeric-string $dayHours */
             $dayHours = $s['day_hours'];
             $m = DayRules::workerMinutes($scheduledIn, $day['in_time'], $day['out_time'], $dayHours);
@@ -158,10 +171,13 @@ final class EffectiveDays
         return [];
     }
 
-    /** @return list<string> lowercase weekday names */
-    private function weeklyOff(EmployeeType $group): array
+    /**
+     * @param  array<string, string>  $s  the settings
+     * @return list<string> lowercase weekday names
+     */
+    private function weeklyOff(EmployeeType $group, array $s): array
     {
-        $setting = $this->rules->all()[$group === EmployeeType::Office ? 'weekly_off_office' : 'weekly_off_field'] ?? '';
+        $setting = $s[$group === EmployeeType::Office ? 'weekly_off_office' : 'weekly_off_field'] ?? '';
 
         return array_values(array_filter(array_map(fn (string $d) => strtolower(trim($d)), explode(',', $setting))));
     }
