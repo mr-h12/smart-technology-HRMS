@@ -34,22 +34,3 @@ export function UserAvatar({ name, size = 'md', className, ring }: { name: strin
     </span>
   )
 }
-
-export function PersonCell({ name, subtitle, size = 'md', onClick }: { name: string; subtitle?: string; size?: keyof typeof SIZES; onClick?: () => void }) {
-  const content = (
-    <>
-      <UserAvatar name={name} size={size} />
-      <div className="min-w-0 text-start">
-        <div className={cn('truncate text-sm font-medium', onClick && 'group-hover:text-primary')}>{name}</div>
-        {subtitle && <div className="truncate text-xs text-muted-foreground">{subtitle}</div>}
-      </div>
-    </>
-  )
-  return onClick ? (
-    <button type="button" onClick={onClick} className="group flex min-w-0 items-center gap-3 outline-none">
-      {content}
-    </button>
-  ) : (
-    <div className="flex min-w-0 items-center gap-3">{content}</div>
-  )
-}

@@ -1,8 +1,5 @@
 import type { LucideIcon } from 'lucide-react'
-import { ArrowDownRight, ArrowUpRight } from 'lucide-react'
 import type { ReactNode } from 'react'
-import { Card } from '@/components/ui/card'
-import { Skeleton } from '@/components/ui/misc'
 import { cn } from '@/lib/utils'
 
 const TONES = {
@@ -16,56 +13,6 @@ const TONES = {
 }
 
 export type Tone = keyof typeof TONES
-
-interface StatCardProps {
-  label: string
-  value: ReactNode
-  icon: LucideIcon
-  tone?: Tone
-  hint?: ReactNode
-  delta?: { value: string; positive: boolean }
-  footer?: ReactNode
-  loading?: boolean
-  onClick?: () => void
-}
-
-export function StatCard({ label, value, icon: Icon, tone = 'indigo', hint, delta, footer, loading, onClick }: StatCardProps) {
-  return (
-    <Card
-      className={cn('group relative p-5 transition-all', onClick && 'cursor-pointer hover:-translate-y-0.5 hover:shadow-md')}
-      onClick={onClick}
-      role={onClick ? 'button' : undefined}
-      tabIndex={onClick ? 0 : undefined}
-      onKeyDown={onClick ? (e) => e.key === 'Enter' && onClick() : undefined}
-    >
-      <div className="flex items-start justify-between gap-3">
-        <div className="min-w-0">
-          <p className="text-[13px] font-medium text-muted-foreground">{label}</p>
-          {loading ? (
-            <Skeleton className="mt-2 h-8 w-24" />
-          ) : (
-            <p className="mt-1.5 text-[26px] leading-tight font-semibold tracking-tight tabular">{value}</p>
-          )}
-        </div>
-        <div className={cn('flex size-10 shrink-0 items-center justify-center rounded-xl', TONES[tone])}>
-          <Icon className="size-5" />
-        </div>
-      </div>
-      {(hint || delta) && (
-        <div className="mt-3 flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
-          {delta && (
-            <span className={cn('inline-flex items-center gap-0.5 font-medium', delta.positive ? 'text-success' : 'text-destructive')}>
-              {delta.positive ? <ArrowUpRight className="size-3.5 rtl:-scale-x-100" /> : <ArrowDownRight className="size-3.5 rtl:-scale-x-100" />}
-              {delta.value}
-            </span>
-          )}
-          {hint && <span>{hint}</span>}
-        </div>
-      )}
-      {footer && <div className="mt-4">{footer}</div>}
-    </Card>
-  )
-}
 
 export function MiniStat({ label, value, tone = 'slate', icon: Icon }: { label: string; value: ReactNode; tone?: Tone; icon?: LucideIcon }) {
   return (
