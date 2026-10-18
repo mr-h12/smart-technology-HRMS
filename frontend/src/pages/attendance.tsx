@@ -1,27 +1,31 @@
-import { CalendarCheck, CalendarX, ChevronLeft, ChevronRight, Users } from 'lucide-react'
+import { CalendarCheck, CalendarX, ChevronLeft, ChevronRight, Lock, LockOpen, Users } from 'lucide-react'
 import { useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { useSearchParams } from 'react-router-dom'
+import { toast } from 'sonner'
 import { MiniStat } from '@/components/cards/StatCard'
 import { EmptyState } from '@/components/common/EmptyState'
 import { PageHeader } from '@/components/common/PageHeader'
 import { StatusBadge } from '@/components/common/StatusBadge'
-import { ErrorBanner, intlLocale, type Row, SelectField } from '@/components/form'
+import { ErrorBanner, Field, FormDialog, intlLocale, type Row, SelectField, useCairoTime } from '@/components/form'
 import { TableSkeleton } from '@/components/layout/PageSkeleton'
 import { Pagination } from '@/components/tables/Pagination'
 import { Button } from '@/components/ui/button'
 import { Card } from '@/components/ui/card'
+import { Dialog, DialogBody, DialogContent, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog'
+import { Textarea } from '@/components/ui/input'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { cn } from '@/lib/utils'
-import { SITES, useApi, useList } from '@/lib/query'
+import { useAuth } from '@/lib/auth'
+import { SITES, useApi, useList, useSave } from '@/lib/query'
 import { DayEditor } from './attendance-day'
 
 const GROUPS = ['office', 'engineer', 'permanent_worker', 'day_laborer']
 const PER_PAGE = 50
 const TABS = ['grid'] // the import tab joins with the template import
 
-type Period = { group: string; start: string; end: string; prev_start: string; next_start: string | null; is_locked: boolean; missing: number }
+type Period = { group: string; start: string; end: string; prev_start: string; next_start: string | null; is_locked: boolean; lock: { locked_by: { name: string } | null; locked_at: string | null } | null; missing: number }
 type Day = { date: string; state: 'not_employed' | 'stored' | 'derived' | 'future' | 'missing'; site_id: string | null; leave_code: string | null }
 type GridRow = { employee: Row; days: Day[] }
 
@@ -53,13 +57,27 @@ export function AttendancePage() {
   const start = chosen ?? period?.start // the grid follows the URL as soon as an arrow moves it
   const tab = TABS.find((x) => x === params.get('tab')) ?? TABS[0]
   const [day, setDay] = useState<{ employee: { id: string; name_ar: string }; date: string }>()
+  const [dlg, setDlg] = useState<'lock' | 'reopen'>()
+  const { can } = useAuth()
+  const send = useSave()
+  const at = useCairoTime()
 
   return (
     <div className="space-y-6">
       <PageHeader
         title={t('nav.attendance')}
         description={t('attendance.subtitle')}
-        actions={<MiniStat label={t('attendance.missingCount')} value={period?.missing ?? '—'} icon={CalendarX} tone="amber" />}
+        actions={
+          <>
+            <MiniStat label={t('attendance.missingCount')} value={period?.missing ?? '—'} icon={CalendarX} tone="amber" />
+            {period && can('attendance.lock') && (
+              <Button type="button" variant={period.is_locked ? 'outline' : 'default'} className="h-11" onClick={() => setDlg(period.is_locked ? 'reopen' : 'lock')}>
+                {period.is_locked ? <LockOpen aria-hidden /> : <Lock aria-hidden />}
+                {t(period.is_locked ? 'attendance.reopen' : 'attendance.lock')}
+              </Button>
+            )}
+          </>
+        }
       />
       <Tabs value={tab} onValueChange={(v) => set({ tab: v })}>
         <TabsList>
@@ -86,6 +104,11 @@ export function AttendancePage() {
                 {period?.is_locked && <StatusBadge variant="neutral" label={t('attendance.locked')} />}
               </div>
             </div>
+            {period?.is_locked && period.lock && (
+              <p className="border-b px-4 py-2 text-[13px] text-muted-foreground">
+                {t('attendance.lockedBy', { name: period.lock.locked_by?.name ?? '—', time: at(period.lock.locked_at) })}
+              </p>
+            )}
             {!!err && (
               <div className="border-b p-4">
                 <ErrorBanner err={err} shown={[]} />
@@ -95,6 +118,25 @@ export function AttendancePage() {
           </Card>
         </TabsContent>
       </Tabs>
+      {period && dlg === 'lock' && <LockDialog period={period} onClose={() => setDlg(undefined)} />}
+      {period && dlg === 'reopen' && (
+        <FormDialog
+          title={t('attendance.reopenTitle')}
+          open
+          onOpenChange={(o) => !o && setDlg(undefined)}
+          init={{ reason: '' }}
+          submit={(f) => send('/attendance/locks/reopen', { body: { group: period.group, period_start: period.start, reason: f.reason } })}
+          onDone={() => toast.success(t('common.saved'))}
+          shown={['reason']}
+          footer="attendance.reopen"
+        >
+          {({ values, set, errs }) => (
+            <Field name="reason" label={t('attendance.reopenReason')} errs={errs}>
+              {(p) => <Textarea {...p} required maxLength={500} value={values.reason} onChange={(e) => set('reason', e.target.value)} />}
+            </Field>
+          )}
+        </FormDialog>
+      )}
       {day && <DayEditor employee={day.employee} date={day.date} onOpenChange={(o) => !o && setDay(undefined)} />}
     </div>
   )
@@ -166,5 +208,78 @@ function Grid({ group, start, onOpenDay }: { group: string; start: string; onOpe
       </div>
       <Pagination page={page} pageSize={PER_PAGE} total={total} onPageChange={setPage} />
     </>
+  )
+}
+
+/** Locks the period; with missing days it lists them and needs an explicit confirmation (HR may lock before the period ends). */
+function LockDialog({ period, onClose }: { period: Period; onClose: () => void }) {
+  const { t } = useTranslation()
+  const send = useSave()
+  const [confirmed, setConfirmed] = useState(false)
+  const [err, setErr] = useState<unknown>()
+  const [busy, setBusy] = useState(false)
+  const missing = period.missing > 0
+  function lock() {
+    setBusy(true)
+    setErr(undefined)
+    send('/attendance/locks', { body: { group: period.group, period_start: period.start, confirm_missing: confirmed } })
+      .then(() => { toast.success(t('common.saved')); onClose() }, setErr)
+      .finally(() => setBusy(false))
+  }
+  return (
+    <Dialog open onOpenChange={(o) => !o && onClose()}>
+      <DialogContent aria-describedby={undefined}>
+        <DialogHeader>
+          <DialogTitle>{t('attendance.lockTitle')}</DialogTitle>
+        </DialogHeader>
+        <DialogBody className="grid gap-4">
+          <ErrorBanner err={err} shown={[]} />
+          <p className="text-sm">{t('attendance.lockBody')}</p>
+          {missing && (
+            <>
+              <MissingDays group={period.group} start={period.start} />
+              <label className="flex min-h-11 items-center gap-3 text-sm font-medium">
+                <input type="checkbox" required className="size-4" checked={confirmed} onChange={(e) => setConfirmed(e.target.checked)} />
+                {t('attendance.lockConfirmMissing')}
+              </label>
+            </>
+          )}
+        </DialogBody>
+        <DialogFooter>
+          <Button type="button" className="h-11" disabled={busy || (missing && !confirmed)} onClick={lock}>
+            {t('attendance.lock')}
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  )
+}
+
+function MissingDays({ group, start }: { group: string; start: string }) {
+  const { t } = useTranslation()
+  const { rows, total, err, loading } = useList(`/attendance/missing?${new URLSearchParams({ group, period_start: start, per_page: '100' })}`)
+  return (
+    <div className="grid gap-2">
+      <p className="text-sm font-medium">{t('attendance.lockMissing')}</p>
+      <ErrorBanner err={err} shown={[]} />
+      {loading ? (
+        <TableSkeleton rows={3} />
+      ) : (
+        <ul className="divide-y rounded-md border text-sm">
+          {rows.map((d) => (
+            <li key={`${d.employee_id}/${d.date}`} className="flex gap-3 px-3 py-2">
+              <span className="tabular text-muted-foreground">{d.code}</span>
+              <span className="flex-1">{d.name_ar}</span>
+              <span className="tabular">{d.date}</span>
+            </li>
+          ))}
+        </ul>
+      )}
+      {total > rows.length && (
+        <p role="status" className="rounded-md border p-3 text-sm">
+          {t('common.tooMany')}
+        </p>
+      )}
+    </div>
   )
 }
