@@ -111,6 +111,20 @@ test('locking with missing days lists them and needs the confirm checkbox', asyn
   await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument())
 })
 
+test('a long missing-days list scrolls in its own region so the confirm checkbox stays in view', async () => {
+  const many = Array.from({ length: 40 }, (_, i) => ({ employee_id: `e${i}`, code: i, name_ar: `Engineer-${i}`, name_en: `Engineer-${i}`, date: '2026-10-03' }))
+  mockFetch({ ...routes, 'GET /api/v1/attendance/missing': () => json(200, { data: many, meta: { pagination: { ...pagination, total: 40 } } }) })
+  renderWithAuth(<AttendancePage />, lockPerms, { path: '/attendance?group=engineer&tab=grid' })
+  await user.click(await screen.findByRole('button', { name: 'قفل الفترة' }))
+  const dialog = await screen.findByRole('dialog', { name: 'قفل حضور الفترة' })
+  const list = await within(dialog).findByRole('region', { name: 'ما زالت هذه الأيام غير مسجلة:' })
+  expect(within(list).getAllByRole('listitem')).toHaveLength(40)
+  expect(list).toHaveClass('max-h-64', 'overflow-y-auto', 'focus-visible:outline-solid')
+  expect(list).toHaveAttribute('tabindex', '0')
+  const confirm = within(dialog).getByRole('checkbox', { name: 'أؤكد القفل رغم وجود أيام غير مسجلة' })
+  expect(list.compareDocumentPosition(confirm) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+})
+
 test('reopen sends the reason', async () => {
   const reopen = vi.fn((_url: string, init?: RequestInit) =>
     JSON.parse(String(init?.body)).reason === 'Correction'

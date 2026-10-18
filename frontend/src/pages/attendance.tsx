@@ -1,5 +1,5 @@
 import { CalendarCheck, CalendarX, ChevronLeft, ChevronRight, ListChecks, Lock, LockOpen, Users } from 'lucide-react'
-import { useState } from 'react'
+import { useId, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { useSearchParams } from 'react-router-dom'
 import { toast } from 'sonner'
@@ -289,22 +289,26 @@ function LockDialog({ period, onClose }: { period: Period; onClose: () => void }
 function MissingDays({ group, start }: { group: string; start: string }) {
   const { t } = useTranslation()
   const { rows, total, err, loading } = useList(`/attendance/missing?${new URLSearchParams({ group, period_start: start, per_page: '100' })}`)
+  const id = useId()
   return (
     <div className="grid gap-2">
-      <p className="text-sm font-medium">{t('attendance.lockMissing')}</p>
+      <p id={id} className="text-sm font-medium">{t('attendance.lockMissing')}</p>
       <ErrorBanner err={err} shown={[]} />
       {loading ? (
         <TableSkeleton rows={3} />
       ) : (
-        <ul className="divide-y rounded-md border text-sm">
-          {rows.map((d) => (
-            <li key={`${d.employee_id}/${d.date}`} className="flex gap-3 px-3 py-2">
-              <span className="tabular text-muted-foreground">{d.code}</span>
-              <span className="flex-1">{d.name_ar}</span>
-              <span className="tabular">{d.date}</span>
-            </li>
-          ))}
-        </ul>
+        // its own scroll region, so the confirm checkbox and the Lock button stay in view
+        <div role="region" aria-labelledby={id} tabIndex={0} className="max-h-64 overflow-y-auto rounded-md border outline-none focus-visible:outline-2 focus-visible:outline-solid focus-visible:outline-offset-2 focus-visible:outline-ring">
+          <ul className="divide-y text-sm">
+            {rows.map((d) => (
+              <li key={`${d.employee_id}/${d.date}`} className="flex gap-3 px-3 py-2">
+                <span className="tabular text-muted-foreground">{d.code}</span>
+                <span className="flex-1">{d.name_ar}</span>
+                <span className="tabular">{d.date}</span>
+              </li>
+            ))}
+          </ul>
+        </div>
       )}
       {total > rows.length && (
         <p role="status" className="rounded-md border p-3 text-sm">
