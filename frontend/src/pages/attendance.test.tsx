@@ -40,7 +40,7 @@ test('the period range stays on one line and its row wraps instead', async () =>
   renderWithAuth(<AttendancePage />, ['attendance.view.all'], { path: '/attendance?group=engineer&tab=grid' })
   const range = await screen.findByText('من 2026-09-26 إلى 2026-10-25')
   expect(range).toHaveClass('whitespace-nowrap')
-  expect(range.parentElement).toHaveClass('flex-wrap')
+  expect(range.parentElement).toHaveClass('flex-wrap', 'gap-1') // gap-2 pushes the next arrow onto a second line at 375 px ar
 })
 
 test('the period arrows move between periods and keep the group in the URL', async () => {
