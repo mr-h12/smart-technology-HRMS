@@ -175,6 +175,12 @@ test('tabs follow ?tab= and switching shows the other table', async () => {
   expect(await screen.findByText('موقع أ')).toBeInTheDocument()
 })
 
+test('the tab strip wraps from sm up, so no tab label is cut off on a tablet', async () => {
+  mockFetch({ 'GET /api/v1/sites': list(sites) })
+  renderWithAuth(<SettingsPage />, MANAGE)
+  expect(await screen.findByRole('tablist')).toHaveClass('sm:h-auto', 'sm:flex-wrap')
+})
+
 test('an unknown tab falls back to sites', async () => {
   mockFetch({ 'GET /api/v1/sites': list(sites) })
   renderWithAuth(<SettingsPage />, MANAGE, { path: '/settings?tab=bogus' })

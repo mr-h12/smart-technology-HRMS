@@ -136,7 +136,7 @@ export function SettingsPage() {
       <PageHeader title={t('nav.settings')} description={t('settings.subtitle')} />
       {tab && (
         <Tabs value={tab} onValueChange={(v) => setParams({ tab: v }, { replace: true })}>
-          <TabsList>
+          <TabsList className="sm:h-auto sm:flex-wrap">
             {tabs.map(({ value, key, icon: Icon }) => (
               <TabsTrigger key={value} value={value}>
                 <Icon className="size-4" aria-hidden /> {t(key)}
