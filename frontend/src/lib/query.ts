@@ -55,7 +55,8 @@ export function useApi<T = Row>(path: string | null, { fresh = false } = {}) {
 }
 
 /**
- * Returns `save(path, {method, body}, invalidate?)`: sends the write (POST by default) and, on success, marks stale every query
+ * Returns `save(path, {method, body}, invalidate?)`: sends the write (POST by default) and, whether it succeeds or is refused
+ * (a refusal such as 409/422 means the screen is out of date), marks stale every query
  * under each `invalidate` path (default: the path's resource, e.g. '/sites/1' → ['sites']), so what is on screen refetches.
  * Every write is audited, so the audit log is always marked stale too.
  */
@@ -63,9 +64,11 @@ export function useSave() {
   const qc = useQueryClient()
   return useCallback(
     async <T = Row>(path: string, opts: { method?: string; body?: unknown } = {}, invalidate: string[] = [queryKey(path)[0] ?? '']) => {
-      const r = await api<T>(path, { method: 'POST', ...opts })
-      for (const p of [...invalidate, '/audit-log']) void qc.invalidateQueries({ queryKey: queryKey(p) })
-      return r
+      try {
+        return await api<T>(path, { method: 'POST', ...opts })
+      } finally {
+        for (const p of [...invalidate, '/audit-log']) void qc.invalidateQueries({ queryKey: queryKey(p) })
+      }
     },
     [qc],
   )

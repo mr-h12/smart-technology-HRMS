@@ -93,7 +93,7 @@ test('a 409 keeps the typed values and offers the latest version', async () => {
   expect(await screen.findByText('عدّل مستخدم آخر هذا اليوم. حمّل آخر نسخة ثم أعد إدخال تغييراتك.')).toBeInTheDocument()
   expect(screen.getByLabelText('السلفة')).toHaveValue('500')
   await user.click(screen.getByRole('button', { name: 'تحميل آخر نسخة' }))
-  await waitFor(() => expect(get).toHaveBeenCalledTimes(2))
+  await waitFor(() => expect(get).toHaveBeenCalledTimes(3)) // open, the refusal's own refetch (form kept), then the reload
   await waitFor(() => expect(screen.getByLabelText('السلفة')).toHaveValue(''))
 })
 

@@ -77,6 +77,23 @@ test('every save also marks the audit log stale, so the next visit shows the new
   await waitFor(() => expect(calls('/audit-log?page=1')).toBe(2))
 })
 
+test('a refused save still refetches what it touches and the audit log, and still throws', async () => {
+  mockFetch({
+    'GET /api/v1/attendance': () => list([]),
+    'GET /api/v1/audit-log': () => list([]),
+    'PUT /api/v1/attendance/days': () => json(409, { error: { code: 'period_locked', message: 'Locked' } }),
+  })
+  const { result } = renderHook(() => ({ a: useList('/attendance?period=x'), l: useList('/audit-log?page=1'), save: useSave() }), { wrapper })
+  await waitFor(() => expect(result.current.a.loading || result.current.l.loading).toBe(false))
+  let thrown: unknown
+  await act(async () => {
+    await result.current.save('/attendance/days', { method: 'PUT', body: {} }).catch((e) => (thrown = e))
+  })
+  expect(thrown).toMatchObject({ status: 409, code: 'period_locked' })
+  await waitFor(() => expect(calls('/attendance?period=x')).toBe(2))
+  await waitFor(() => expect(calls('/audit-log?page=1')).toBe(2))
+})
+
 test('an older, slower response never overwrites the newer one', async () => {
   const pending: Record<string, (r: Response) => void> = {}
   vi.stubGlobal('fetch', vi.fn((url: string) => new Promise<Response>((resolve) => (pending[url] = resolve))))
