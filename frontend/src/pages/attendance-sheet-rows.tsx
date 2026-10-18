@@ -27,8 +27,11 @@ export const QUICK: [SheetAction, string, LucideIcon, string][] = [
 ]
 const TOTALS = [['worked', 'text-success', 'attendance.sheet.kpi.worked'], ['leave', 'text-info', 'attendance.sheet.kpi.leave'], ['absent', 'text-destructive', 'attendance.sheet.kpi.absent'], ['missing', 'text-warning', 'attendance.state.missing']] as const
 
-/** One page of the day sheet: a table from md up, cards below it. Writes go back through `onApply` (the sheet's `apply()`). */
-export function SheetRows({ rows, office, editable, date, sites, selected, pending, leaveSite, onToggle, onApply, onOpenDay }: {
+/**
+ * One page of the day sheet: a table from md up, cards below it. Writes go back through `onApply` (the sheet's `apply()`).
+ * `cursor` is the keyboard row (J/K): it carries `aria-current` and a ring.
+ */
+export function SheetRows({ rows, office, editable, date, sites, selected, pending, cursor, leaveSite, onToggle, onApply, onOpenDay }: {
   rows: SheetRow[]
   office: boolean
   editable: boolean
@@ -36,6 +39,7 @@ export function SheetRows({ rows, office, editable, date, sites, selected, pendi
   sites: Row[]
   selected: ReadonlySet<string>
   pending: ReadonlySet<string>
+  cursor: string | null
   leaveSite: (code: string) => string | undefined
   onToggle: (ids: string[], on: boolean) => void
   onApply: (action: SheetAction, row: SheetRow, label: string) => void
@@ -77,7 +81,7 @@ export function SheetRows({ rows, office, editable, date, sites, selected, pendi
     return (
       <input key={`${r.employee.id}/${r.day.version}`} type="time" defaultValue={was} disabled={pending.has(r.employee.id)} aria-label={t('attendance.sheet.inTime', { name: name(r) })}
         className={cn(FOCUS, h, 'rounded-md border bg-card px-2 text-sm tabular disabled:opacity-50')}
-        onBlur={(e) => { if (!e.currentTarget.value) e.currentTarget.value = was; commit(e.currentTarget.value) }} onKeyDown={(e) => e.key === 'Enter' && e.currentTarget.blur()} />
+        onBlur={(e) => { if (!e.currentTarget.value) e.currentTarget.value = was; commit(e.currentTarget.value) }} onKeyDown={(e) => { if (e.key === 'Escape') e.currentTarget.value = was; else if (e.key === 'Enter') e.currentTarget.blur() }} />
     )
   }
   const pill = (r: SheetRow) => {
@@ -109,6 +113,8 @@ export function SheetRows({ rows, office, editable, date, sites, selected, pendi
       {t('attendance.sheet.action.details')}
     </Button>
   )
+  // the keyboard cursor: aria-current plus an inset ring (the sheet scrolls it into view)
+  const here = (r: SheetRow) => (r.employee.id === cursor ? true : undefined)
   const totals = (r: SheetRow) => (
     <div className="grid grid-cols-4 gap-3">
       {TOTALS.map(([k, tone, label]) => (
@@ -145,7 +151,7 @@ export function SheetRows({ rows, office, editable, date, sites, selected, pendi
           </TableHeader>
           <TableBody>
             {rows.map((r) => (
-              <TableRow key={r.employee.id} className={cn(selected.has(r.employee.id) && 'bg-accent/60')}>
+              <TableRow key={r.employee.id} aria-current={here(r)} className={cn(selected.has(r.employee.id) && 'bg-accent/60', here(r) && 'ring-2 ring-primary ring-inset')}>
                 {editable && <TableCell className="px-1 py-0 first:ps-2">{check(r)}</TableCell>}
                 <TableCell className="tabular text-muted-foreground">{r.employee.code}</TableCell>
                 <TableCell>
@@ -173,7 +179,7 @@ export function SheetRows({ rows, office, editable, date, sites, selected, pendi
       </div>
       <ul aria-label={t('attendance.employee')} className="divide-y md:hidden">
         {rows.map((r) => (
-          <li key={r.employee.id} className="space-y-3 p-4">
+          <li key={r.employee.id} aria-current={here(r)} className={cn('space-y-3 p-4', here(r) && 'ring-2 ring-primary ring-inset')}>
             <div className="flex items-start justify-between gap-3">
               {editable && <div className="-my-2.5 -ms-2.5">{check(r)}</div>}
               <div className="min-w-0 flex-1">
@@ -190,6 +196,7 @@ export function SheetRows({ rows, office, editable, date, sites, selected, pendi
               {details(r, 'h-11')}
             </div>
             {editable && <div className="grid grid-cols-3 gap-2">{quick(r, 'h-11')}</div>}
+            {editable && noSite({ kind: 'present' }, r) && <p className="-mt-1.5 text-xs text-muted-foreground">{t('attendance.sheet.noLastSite')}</p>}
             <div className="border-t pt-3">
               <p className="mb-1.5 text-[11px] font-medium text-muted-foreground">{t('attendance.sheet.totals')}</p>
               {totals(r)}

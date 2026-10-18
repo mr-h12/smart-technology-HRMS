@@ -1,6 +1,6 @@
 import { useQueryClient } from '@tanstack/react-query'
-import { CheckCheck, ClipboardPaste, Lock, ScanBarcode, Users } from 'lucide-react'
-import { useId, useRef, useState } from 'react'
+import { CheckCheck, ClipboardPaste, Lock, ScanBarcode, Undo2, Users } from 'lucide-react'
+import { useEffect, useId, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { toast } from 'sonner'
 import { EmptyState } from '@/components/common/EmptyState'
@@ -13,7 +13,7 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { ApiError } from '@/lib/api'
 import { useAuth } from '@/lib/auth'
-import { bulkRows, MAX_BATCH, parseBatch, type SheetAction, type SheetRow, statusOf } from '@/lib/day-sheet'
+import { type BulkRow, bulkRows, MAX_BATCH, parseBatch, type SheetAction, type SheetRow, statusOf, undoRows } from '@/lib/day-sheet'
 import { queryKey, SITES, useApi, useSave } from '@/lib/query'
 import { cn } from '@/lib/utils'
 import { BatchPreview, PasteDialog } from './attendance-sheet-command'
@@ -33,6 +33,11 @@ const KPIS: [Filter, string, Status][] = [
   ['leave', 'attendance.sheet.kpi.leave', 'leave'],
   ['absent', 'attendance.sheet.kpi.absent', 'absent'],
 ]
+const UNDO_DEPTH = 15
+// the status keys, in QUICK's order (Present, Absent, Sick); keys match on event.code so they work on an Arabic layout
+const MARK = ['KeyP', 'KeyA', 'KeyS']
+// the shortcuts line: [<kbd> glyphs (code, not i18n), description key under attendance.sheet.keys, needs a writable sheet]
+const KEYS: [string[], string, boolean][] = [[['/'], 'command', false], [['J', 'K'], 'move', false], [['P', 'A', 'S'], 'mark', true], [['E'], 'details', false], [['Ctrl+Z'], 'undo', true], [['Esc'], 'clear', false]]
 const OFFICE_KPIS: [Filter, string, Status][] = [KPIS[0], ['present', 'attendance.sheet.kpi.onTime', 'present'], ['late', 'attendance.sheet.kpi.late', 'late'], KPIS[2], KPIS[3]]
 
 /**
@@ -51,7 +56,9 @@ function showDay(strip: HTMLDivElement | null) {
 /**
  * One group's roster for one date: KPI filters, the period's days, cohorts with their sweeps, then the rows (quick actions,
  * selection, office in-time) with their period totals last. Kept mounted across dates, so the filters stay; page and selection reset.
- * Every write goes through `apply()` and one `POST /attendance/days/bulk`.
+ * Every write goes through `apply()` and one `POST /attendance/days/bulk`, and lands on a session-only undo stack.
+ * Keyboard (one document listener): / command bar, J/K or arrows move the row cursor, P/A/S mark it and advance, E opens
+ * Details, Ctrl/Cmd+Z undoes, Esc clears. No shortcut fires while typing, while a dialog is open, or with Alt/Ctrl/Meta (but Z).
  */
 export function DaySheet({ group, date, period, onDate, onOpenDay }: { group: string; date: string; period?: { group: string; start: string; end: string; is_locked: boolean }; onDate: (date: string) => void; onOpenDay: (employee: Row, date: string) => void }) {
   const { t, i18n } = useTranslation()
@@ -70,11 +77,13 @@ export function DaySheet({ group, date, period, onDate, onOpenDay }: { group: st
   const [pasting, setPasting] = useState(false)
   const [siteChoice, setSiteChoice] = useState('') // the bulk bar's Set site: chosen first, written only by its Apply button
   const unselect = () => { setSelected(new Set()); setSiteChoice('') }
+  const [cursor, setCursor] = useState<string | null>(null) // the keyboard row (employee id)
   const [shownDate, setShownDate] = useState(date)
   if (shownDate !== date) {
     setShownDate(date)
     setPage(1)
     unselect()
+    setCursor(null)
   }
   // employee ids with a write in flight: the ref guards against a double send before React re-renders, the state disables their controls
   const flight = useRef(new Set<string>())
@@ -82,6 +91,21 @@ export function DaySheet({ group, date, period, onDate, onOpenDay }: { group: st
   const daysId = useId()
   const cohortsId = useId()
   const commandId = useId()
+  const commandRef = useRef<HTMLInputElement>(null)
+  const box = useRef<HTMLDivElement>(null)
+  // newest last; each entry carries its own date, so an undo after a date change still writes the day it changed
+  const undos = useRef<(Applied & { date: string })[]>([])
+  const [undoCount, setUndoCount] = useState(0)
+  // the listener is added once and calls the latest render's handler
+  const onKey = useRef<(e: KeyboardEvent) => void>(() => {})
+  useEffect(() => {
+    const listen = (e: KeyboardEvent) => onKey.current(e)
+    document.addEventListener('keydown', listen)
+    return () => document.removeEventListener('keydown', listen)
+  }, [])
+  useEffect(() => {
+    for (const el of box.current?.querySelectorAll('[aria-current="true"]') ?? []) el.scrollIntoView?.({ block: 'nearest' })
+  }, [cursor])
   // the header's period may still be the previous one while the next loads: write only into the period that holds this date
   const editable = !!period && period.group === group && period.start <= date && date <= period.end && !period.is_locked && can('attendance.edit')
   const leaveSite = (code: string) => sites.find((s) => s.kind === 'leave' && s.leave_code === code && s.active)?.id as string | undefined
@@ -89,30 +113,19 @@ export function DaySheet({ group, date, period, onDate, onOpenDay }: { group: st
 
   const name = (r: SheetRow) => localName(r.employee, i18n.language)
 
-  /** The one writer: sends `action` for `chosen` (minus rows in flight or already in that state) and returns what undo needs, or null when nothing was written. */
-  async function apply(action: SheetAction, chosen: SheetRow[], label: string): Promise<Applied | null> {
-    const free = chosen.filter((r) => !flight.current.has(r.employee.id))
-    const { rows: out, skipped } = bulkRows(action, free, leaveSite, office)
-    if (out.length > MAX_BATCH) {
-      toast.error(t('attendance.sheet.toast.tooMany', { max: MAX_BATCH }))
-      return null
-    }
-    if (skipped.length) toast.warning(t('attendance.sheet.toast.skippedNoSite', { count: skipped.length }))
-    if (!out.length) return null
-    const before = out.map((b) => free.find((r) => r.employee.id === b.employee_id)!)
+  /** Sends `out` for `day` with its rows in flight; a 409 names the stale rows' employees with the `conflict` message. Resolves to the new versions, or null. */
+  async function write(day: string, out: BulkRow[], before: SheetRow[], conflict: string) {
     const mark = (on: boolean) => {
       for (const b of out) flight.current[on ? 'add' : 'delete'](b.employee_id)
       setPending(new Set(flight.current))
     }
     mark(true)
     try {
-      const after = await save<Applied['after']>('/attendance/days/bulk', { body: { date, rows: out } })
-      toast.success(t('attendance.sheet.toast.applied', { count: out.length }))
-      return { label, before, after }
+      return await save<Applied['after']>('/attendance/days/bulk', { body: { date: day, rows: out } })
     } catch (e) {
       if (e instanceof ApiError && e.code === 'concurrency_conflict') {
         const names = e.details.flatMap((d) => before[Number(d.field?.split('.')[1])] ?? []).map(name)
-        toast.error(t('attendance.sheet.toast.conflict', { names: new Intl.ListFormat(intlLocale(i18n.language)).format(names) }))
+        toast.error(t(conflict, { names: new Intl.ListFormat(intlLocale(i18n.language)).format(names) }))
       } else toast.error(e instanceof Error ? e.message : String(e))
       return null
     } finally {
@@ -122,6 +135,39 @@ export function DaySheet({ group, date, period, onDate, onOpenDay }: { group: st
     }
   }
 
+  /** The one writer: sends `action` for `chosen` (minus rows in flight or already in that state), pushes it onto the undo stack and returns it, or null when nothing was written. */
+  async function apply(action: SheetAction, chosen: SheetRow[], label: string): Promise<Applied | null> {
+    const free = chosen.filter((r) => !flight.current.has(r.employee.id))
+    const { rows: out, skipped } = bulkRows(action, free, leaveSite, office)
+    if (out.length > MAX_BATCH) {
+      toast.error(t('attendance.sheet.toast.tooMany', { max: MAX_BATCH }))
+      return null
+    }
+    if (skipped.length) toast.warning(t('attendance.sheet.toast.skippedNoSite', { count: skipped.length }))
+    else if (!out.length) toast.info(t('attendance.sheet.toast.nothingToChange'))
+    if (!out.length) return null
+    const before = out.map((b) => free.find((r) => r.employee.id === b.employee_id)!)
+    const after = await write(date, out, before, 'attendance.sheet.toast.conflict')
+    if (!after) return null
+    toast.success(t('attendance.sheet.toast.applied', { count: out.length }))
+    const done = { label, before, after }
+    undos.current = [...undos.current, { ...done, date }].slice(-UNDO_DEPTH)
+    setUndoCount(undos.current.length)
+    return done
+  }
+
+  /** Puts the newest entry's rows back in one bulk write. ponytail: a refused undo (409 or any error) is dropped, not retried; the day stays editable from Details. */
+  async function undo() {
+    const entry = undos.current.at(-1)
+    if (!entry || entry.after.some((a) => flight.current.has(a.employee_id))) return
+    undos.current = undos.current.slice(0, -1)
+    setUndoCount(undos.current.length)
+    const out = undoRows(entry.before, entry.after)
+    const before = out.map((b) => entry.before.find((r) => r.employee.id === b.employee_id)!)
+    if (out.length && (await write(entry.date, out, before, 'attendance.sheet.toast.undoConflict'))) toast.success(t('attendance.sheet.toast.undone', { label: entry.label }))
+  }
+
+  onKey.current = () => {} // no key acts on a sheet that is not on screen (the next date loading, an error); set again below
   if (loading) return <Card><TableSkeleton rows={8} /></Card>
   if (err || !sheet) return <ErrorBanner err={err} shown={[]} />
 
@@ -164,6 +210,7 @@ export function DaySheet({ group, date, period, onDate, onOpenDay }: { group: st
   })
   const bulk = (action: SheetAction, label: string) => void apply(action, picked, label).then((done) => done && unselect())
   const noLeave = (a: SheetAction) => a.kind === 'leave' && !leaveSite(a.code)
+  const noSite = (a: SheetAction, r: SheetRow) => a.kind === 'present' && !office && !r.last_site_id
   // Enter acts on the shown matches only: an ID batch is marked present, a name search only selects (it never writes)
   const command = (e: React.KeyboardEvent<HTMLInputElement>) => {
     if (e.key !== 'Enter' || e.nativeEvent.isComposing || !batch || !editable || !shown.length) return
@@ -172,8 +219,43 @@ export function DaySheet({ group, date, period, onDate, onOpenDay }: { group: st
     else void apply({ kind: 'present' }, shown, `${t('attendance.sheet.action.present')} (${shown.length})`).then((done) => done && setQuery(''))
   }
 
+  // a key does what its button would: P/A/S skip a row whose button is disabled, and a read-only sheet only moves and opens
+  onKey.current = (e) => {
+    if (document.querySelector('[role="dialog"]')) return
+    const typing = e.target instanceof HTMLElement && (e.target.isContentEditable || ['INPUT', 'TEXTAREA', 'SELECT'].includes(e.target.tagName))
+    if (e.code === 'Escape') {
+      unselect()
+      setCursor(null)
+      if (document.activeElement instanceof HTMLElement) document.activeElement.blur()
+      return
+    }
+    if (typing || e.altKey) return
+    if (e.ctrlKey || e.metaKey) {
+      if (e.code === 'KeyZ' && !e.shiftKey && editable) {
+        e.preventDefault()
+        void undo()
+      }
+      return
+    }
+    const at = pageRows.findIndex((r) => r.employee.id === cursor)
+    const row = at < 0 ? undefined : pageRows[at]
+    const move = (by: number) => setCursor(pageRows[at < 0 ? 0 : Math.min(Math.max(at + by, 0), pageRows.length - 1)]?.employee.id ?? null)
+    const quick = QUICK[MARK.indexOf(e.code)]
+    if (e.code === 'Slash') commandRef.current?.focus()
+    else if (e.code === 'KeyJ' || e.code === 'ArrowDown') move(1)
+    else if (e.code === 'KeyK' || e.code === 'ArrowUp') move(-1)
+    else if (e.code === 'KeyE' && row) onOpenDay(row.employee, date)
+    else if (quick && row && editable) {
+      const [action, label] = quick
+      if (pending.has(row.employee.id) || noLeave(action) || noSite(action, row)) return
+      void apply(action, [row], `${t(label)} ${name(row)}`)
+      move(1)
+    } else return
+    e.preventDefault()
+  }
+
   return (
-    <div className="space-y-4">
+    <div ref={box} className="space-y-4">
       {period?.is_locked && (
         <p role="status" className="flex items-center gap-2 rounded-lg border border-info-border bg-info-bg px-4 py-3 text-sm text-info">
           <Lock className="size-4 shrink-0" aria-hidden />
@@ -271,7 +353,7 @@ export function DaySheet({ group, date, period, onDate, onOpenDay }: { group: st
                 <Label htmlFor={commandId}>{t('attendance.sheet.command')}</Label>
                 <div className="relative">
                   <ScanBarcode className="pointer-events-none absolute start-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" aria-hidden />
-                  <Input id={commandId} value={query} autoComplete="off" enterKeyHint="go" placeholder={t('attendance.sheet.commandHint')} className="h-11 ps-9 md:h-9"
+                  <Input ref={commandRef} id={commandId} aria-keyshortcuts="/" value={query} autoComplete="off" enterKeyHint="go" placeholder={t('attendance.sheet.commandHint')} className="h-11 ps-9 md:h-9"
                     onChange={(e) => { setQuery(e.target.value); setPage(1) }} onKeyDown={command} />
                 </div>
               </div>
@@ -281,10 +363,24 @@ export function DaySheet({ group, date, period, onDate, onOpenDay }: { group: st
                   {t('attendance.sheet.paste.button')}
                 </Button>
               )}
+              {editable && (
+                <Button type="button" variant="outline" size="sm" className={cn(FOCUS, 'h-11 md:h-9')} disabled={!undoCount} aria-keyshortcuts="Control+Z Meta+Z" onClick={() => void undo()}>
+                  <Undo2 aria-hidden />
+                  {t('attendance.sheet.undo', { count: undoCount })}
+                </Button>
+              )}
             </div>
             <div role="status" aria-label={t('attendance.sheet.command')} className="flex min-h-6 flex-wrap items-center gap-1.5">
               {batch ? <BatchPreview batch={batch} count={shown.length} /> : editable && <span className="text-xs text-muted-foreground">{t('attendance.sheet.commandHelp')}</span>}
             </div>
+            <ul aria-label={t('attendance.sheet.keys.label')} className="hidden flex-wrap gap-x-4 gap-y-1 text-xs text-muted-foreground lg:flex">
+              {KEYS.filter(([, , write]) => editable || !write).map(([glyphs, key]) => (
+                <li key={key} className="flex items-center gap-1">
+                  {glyphs.map((g) => <kbd key={g} dir="ltr" className="rounded border bg-muted px-1.5 py-0.5 font-mono text-[11px] text-foreground">{g}</kbd>)}
+                  <span>{t(`attendance.sheet.keys.${key}`)}</span>
+                </li>
+              ))}
+            </ul>
           </div>
         )}
         {editable && <PasteDialog open={pasting} onOpenChange={setPasting} rows={rows} leaveSite={leaveSite} onApply={async (action, chosen, label) => !!(await apply(action, chosen, label))} />}
@@ -326,7 +422,7 @@ export function DaySheet({ group, date, period, onDate, onOpenDay }: { group: st
                 </Button>
               </div>
             ))}
-            <SheetRows rows={pageRows} office={office} editable={editable} date={date} sites={sites} selected={selected} pending={pending} leaveSite={leaveSite}
+            <SheetRows rows={pageRows} office={office} editable={editable} date={date} sites={sites} selected={selected} pending={pending} cursor={cursor} leaveSite={leaveSite}
               onToggle={toggle} onApply={(action, r, label) => void apply(action, [r], label)} onOpenDay={onOpenDay} />
             <Pagination page={page} pageSize={PER_PAGE} total={shown.length} onPageChange={setPage} />
           </>

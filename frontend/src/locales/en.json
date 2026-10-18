@@ -551,7 +551,20 @@
         "applied": "{{count}} recorded",
         "skippedNoSite": "{{count}} skipped: no last site. Record them from Details.",
         "tooMany": "At most {{max}} rows can be recorded at once; narrow the choice.",
-        "conflict": "Someone else just changed {{names}}; the sheet was reloaded. Check it and try again."
+        "conflict": "Someone else just changed {{names}}; the sheet was reloaded. Check it and try again.",
+        "nothingToChange": "Nothing to change",
+        "undone": "Undone: {{label}}",
+        "undoConflict": "Someone else has since changed {{names}}; that undo was dropped."
+      },
+      "undo": "Undo ({{count}})",
+      "keys": {
+        "label": "Keyboard shortcuts",
+        "command": "Quick entry",
+        "move": "Move between rows",
+        "mark": "Present, absent, sick",
+        "details": "Details",
+        "undo": "Undo",
+        "clear": "Clear"
       }
     }
   },
