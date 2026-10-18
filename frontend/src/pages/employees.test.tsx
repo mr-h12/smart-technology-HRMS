@@ -263,16 +263,20 @@ test('a record without the sensitive fields hides them, the pay section and the 
   expect(screen.queryByText('سجل تغييرات الأجر')).toBeNull()
 })
 
-test('view-only users get a read-only profile with no pay section or pay history', async () => {
-  const full = { ...emp, gender: 'male', pay_method: 'cash', national_id: '29001011234567', current_pay: null }
+test('view-only users with the data see pay read-only', async () => {
+  const full = { ...emp, gender: 'male', pay_method: 'bank', bank_account: 'EG01', national_id: '29001011234567', current_pay: null,
+    pay_changes: [{ id: 'p1', effective_from: '2026-01-01', salary: '9000.000000', raise: '0', insured_basic: null, daily_wage: null, shift_start: null, shift_end: null }] }
   mockFetch({ 'GET /api/v1/residences': residences, 'GET /api/v1/employees/e1': () => json(200, { data: full }) })
   const { unmount } = renderWithAuth(<EmployeeDetailRoute id="e1" />, ['employee.view.all'], { router: false })
   expect(await screen.findByLabelText('الرقم القومي')).toBeDisabled()
-  expect(screen.queryByText('البيانات المالية')).toBeNull()
+  expect(screen.getByText('البيانات المالية')).toBeInTheDocument()
+  expect(screen.getByLabelText('الحساب البنكي')).toBeDisabled()
+  expect(screen.queryByRole('button', { name: 'حفظ' })).toBeNull()
   unmount()
   renderWithAuth(<EmployeeDetailRoute id="e1" tab="history" />, ['employee.view.all'], { router: false })
-  expect(await screen.findByText('سجل تغييرات نوع الموظف')).toBeInTheDocument()
-  expect(screen.queryByText('سجل تغييرات الأجر')).toBeNull()
+  expect(await screen.findByText('سجل تغييرات الأجر')).toBeInTheDocument()
+  expect(screen.getByRole('row', { name: /2026-01-01/ })).toBeInTheDocument()
+  expect(screen.queryByRole('button', { name: 'إضافة تغيير' })).toBeNull()
 })
 
 test('saving a record that came without the sensitive fields does not send them', async () => {

@@ -299,7 +299,7 @@ export function EmployeeFormPage() {
             )}
           </>
         ))}
-        {(!id || (can('employee.edit') && has('bank_account'))) && section('employee.pay', (
+        {has('bank_account') && section('employee.pay', (
           <>
             <SelectField name="pay_method" label={t('employee.pay_method')} options={PAY_METHODS.map((v) => [v, t(`enum.pay_method.${v}`)])} {...f} />
             <TextField name="bank_account" label={t('employee.bank_account')} {...f} />
@@ -477,11 +477,11 @@ function History({ emp, reload }: { emp: Row; reload: () => void }) {
           </TableBody>
         </Table>
       </Card>
-      {can('employee.edit') && emp.pay_changes && (
+      {emp.pay_changes && (
         <Card className="overflow-hidden">
           <CardHeader>
             <CardTitle>{t('history.pay')}</CardTitle>
-            <ChangeDialog kind="pay" emp={emp} reload={reload} />
+            {can('employee.edit') && <ChangeDialog kind="pay" emp={emp} reload={reload} />}
           </CardHeader>
           <Table>
             <TableHeader>
