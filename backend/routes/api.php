@@ -1,5 +1,6 @@
 <?php
 
+use App\Modules\Attendance\Presentation\AttendanceController;
 use App\Modules\Audit\Presentation\AuditLogController;
 use App\Modules\Employees\Domain\DocumentKind;
 use App\Modules\Employees\Presentation\EmployeeController;
@@ -71,6 +72,19 @@ Route::middleware('auth')->group(function (): void {
     Route::prefix('fares')->controller(FareController::class)->group(function (): void {
         Route::get('/', 'index')->middleware('permission:site.view');
         Route::post('/', 'store')->middleware('permission:site.manage');
+    });
+
+    Route::prefix('attendance')->controller(AttendanceController::class)->group(function (): void {
+        Route::get('period', 'period')->middleware('permission:attendance.view');
+        Route::get('grid', 'grid')->middleware('permission:attendance.view');
+        Route::get('missing', 'missing')->middleware('permission:attendance.view');
+        // A registrar where() would replace whereUuid(), so the date shape goes on each route.
+        Route::middleware([])->whereUuid('employee')->group(function (): void {
+            $date = '\d{4}-\d{2}-\d{2}';
+            Route::get('days/{employee}/{date}', 'show')->middleware(['permission:attendance.view', 'employee.scope'])->where('date', $date);
+            Route::put('days/{employee}/{date}', 'update')->middleware(['permission:attendance.edit', 'employee.scope'])->where('date', $date);
+            Route::delete('days/{employee}/{date}', 'destroy')->middleware(['permission:attendance.edit', 'employee.scope'])->where('date', $date);
+        });
     });
 
     Route::get('audit-log', [AuditLogController::class, 'index'])->middleware('permission:audit_log.view');
