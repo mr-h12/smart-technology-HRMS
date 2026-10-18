@@ -72,6 +72,17 @@ test('the theme item in the profile menu switches the whole app theme', async ()
   expect(document.documentElement.classList.contains('dark')).toBe(false)
 })
 
+test('the Attendance link shows for attendance.view', async () => {
+  signedIn(['employee.view.all'])
+  const { unmount } = renderApp('/employees')
+  await screen.findByRole('link', { name: 'الموظفون' })
+  expect(screen.queryByRole('link', { name: 'الحضور والانصراف' })).toBeNull()
+  unmount()
+  signedIn(['attendance.view.all'])
+  renderApp('/settings')
+  expect(await screen.findByRole('link', { name: 'الحضور والانصراف' })).toBeInTheDocument()
+})
+
 test('the Settings link shows for setting.view alone', async () => {
   signedIn(['setting.view.all'])
   renderApp('/settings')

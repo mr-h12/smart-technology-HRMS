@@ -1,4 +1,5 @@
 import {
+  CalendarCheck,
   ChevronDown,
   Languages,
   LogOut,
@@ -31,8 +32,14 @@ import { SegmentedControl } from './SegmentedControl'
 
 /** An item shows when the user has any of its `abilities`. */
 export const NAV: { group: string; items: { path: string; key: string; icon: LucideIcon; abilities: string[] }[] }[] = [
-  { group: 'nav.group.hr', items: [{ path: '/employees', key: 'nav.employees', icon: Users, abilities: ['employee.view'] }] },
-  { group: 'nav.group.settings', items: [{ path: '/settings', key: 'nav.settings', icon: Settings, abilities: ['site.view', 'setting.view'] }] },
+  {
+    group: 'nav.group.hr',
+    items: [
+      { path: '/employees', key: 'nav.employees', icon: Users, abilities: ['employee.view'] },
+      { path: '/attendance', key: 'nav.attendance', icon: CalendarCheck, abilities: ['attendance.view'] },
+    ],
+  },
+  { group: 'nav.group.settings', items: [{ path: '/settings', key: 'nav.settings', icon: Settings, abilities: ['site.view', 'setting.view', 'attendance.view'] }] },
   {
     group: 'nav.group.admin',
     items: [

@@ -39,7 +39,8 @@
       "settings": "Settings",
       "admin": "System administration"
     },
-    "settings": "Settings"
+    "settings": "Settings",
+    "attendance": "Attendance"
   },
   "toggle": {
     "language": "Language",
@@ -386,5 +387,42 @@
     "wednesday": "Wednesday",
     "thursday": "Thursday",
     "friday": "Friday"
+  },
+  "attendance": {
+    "subtitle": "Each employee's days, by their group's period.",
+    "groupLabel": "Group",
+    "group": {
+      "office": "Office staff",
+      "engineer": "Engineers",
+      "permanent_worker": "Permanent workers",
+      "day_laborer": "Day laborers"
+    },
+    "prevPeriod": "Previous period",
+    "nextPeriod": "Next period",
+    "periodRange": "{{start}} to {{end}}",
+    "employee": "Employee",
+    "missingCount": "Missing days",
+    "locked": "Locked",
+    "present": "Present",
+    "state": {
+      "missing": "Missing",
+      "derived": "Automatic",
+      "future": "Upcoming",
+      "notEmployed": "Not employed"
+    },
+    "short": {
+      "friday": "Fri",
+      "saturday": "Sat",
+      "official_holiday": "Hol",
+      "sick": "Sick",
+      "rest": "Rest",
+      "absent": "Abs",
+      "other": "Other"
+    },
+    "legend": "Legend",
+    "empty": "No employees in this group during this period.",
+    "tab": {
+      "grid": "Period grid"
+    }
   }
 }

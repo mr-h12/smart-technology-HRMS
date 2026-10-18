@@ -39,7 +39,8 @@
       "settings": "الإعدادات",
       "admin": "إدارة النظام"
     },
-    "settings": "الإعدادات"
+    "settings": "الإعدادات",
+    "attendance": "الحضور والانصراف"
   },
   "toggle": {
     "language": "اللغة",
@@ -386,5 +387,42 @@
     "wednesday": "الأربعاء",
     "thursday": "الخميس",
     "friday": "الجمعة"
+  },
+  "attendance": {
+    "subtitle": "سجل أيام كل موظف حسب فترة مجموعته.",
+    "groupLabel": "المجموعة",
+    "group": {
+      "office": "موظفو الشركة",
+      "engineer": "المهندسون",
+      "permanent_worker": "العمال المثبتون",
+      "day_laborer": "عمال اليومية"
+    },
+    "prevPeriod": "الفترة السابقة",
+    "nextPeriod": "الفترة التالية",
+    "periodRange": "من {{start}} إلى {{end}}",
+    "employee": "الموظف",
+    "missingCount": "أيام غير مسجلة",
+    "locked": "مقفلة",
+    "present": "حاضر",
+    "state": {
+      "missing": "غير مسجل",
+      "derived": "تلقائي",
+      "future": "لم يأتِ بعد",
+      "notEmployed": "خارج فترة العمل"
+    },
+    "short": {
+      "friday": "جمعة",
+      "saturday": "سبت",
+      "official_holiday": "رسمية",
+      "sick": "مرضي",
+      "rest": "راحة",
+      "absent": "غ",
+      "other": "أخرى"
+    },
+    "legend": "دليل الخانات",
+    "empty": "لا يوجد موظفون في هذه المجموعة خلال الفترة.",
+    "tab": {
+      "grid": "جدول الفترة"
+    }
   }
 }
