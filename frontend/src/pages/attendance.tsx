@@ -67,8 +67,10 @@ export function AttendancePage() {
   const { can } = useAuth()
   const allowed = can('attendance.view') // without it nothing is fetched and the page is not found
   // the sheet's period is the one holding its date; the grid's is the chosen one
-  // the sheet keeps the last period while the next date's loads, so the header does not blink inside one period
-  const { data: period, err } = useApi<Period>(allowed ? `/attendance/period?${new URLSearchParams(tab === 'sheet' ? { group, date } : { group, ...(chosen && { period_start: chosen }) })}` : null, { keep: tab === 'sheet' })
+  // the sheet keeps the last period while the next date's loads, so the header does not blink inside one period; a kept period
+  // of another group, or one not holding the date, is not current: the header shows loading and offers no arrows or lock until the real one arrives
+  const { data: kept, err } = useApi<Period>(allowed ? `/attendance/period?${new URLSearchParams(tab === 'sheet' ? { group, date } : { group, ...(chosen && { period_start: chosen }) })}` : null, { keep: tab === 'sheet' })
+  const period = tab !== 'sheet' || (kept && kept.group === group && kept.start <= date && date <= kept.end) ? kept : undefined
   const start = chosen ?? period?.start // the grid follows the URL as soon as an arrow moves it
   const move = (to: string) => set(tab === 'sheet' ? { date: to } : { period: to })
   const [day, setDay] = useState<{ employee: { id: string; name_ar: string }; date: string }>()

@@ -530,7 +530,8 @@
         "count": "{{count}} selected",
         "setSite": "Set site",
         "pickSite": "Choose a site",
-        "clear": "Clear"
+        "clear": "Clear",
+        "apply": "Apply"
       },
       "toast": {
         "applied": "{{count}} recorded",

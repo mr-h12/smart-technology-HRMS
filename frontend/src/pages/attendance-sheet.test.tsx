@@ -267,7 +267,11 @@ test('Set site gives the selection the chosen work site; office sheets have no S
   await user.click(within(tbl).getByRole('checkbox', { name: 'تحديد Engineer-3' }))
   const bar = screen.getByRole('group', { name: 'إجراءات المحدد' })
   expect(within(bar).getByRole('combobox', { name: 'تعيين موقع' })).not.toHaveTextContent('غياب') // work sites only
+  const apply = within(bar).getByRole('button', { name: 'تطبيق' })
+  expect(apply).toBeDisabled()
   await user.selectOptions(within(bar).getByRole('combobox', { name: 'تعيين موقع' }), 's1')
+  expect(bulk).not.toHaveBeenCalled() // choosing (an arrow key on a closed select) never writes
+  await user.click(apply)
   await waitFor(() => expect(bulk).toHaveBeenCalledTimes(1))
   expect(sent(bulk).rows).toEqual([{ employee_id: 'e3', version: 2, site_id: 's1' }])
   unmount()
@@ -403,4 +407,44 @@ test('day buttons carry one interpolated label', async () => {
   open()
   const strip = await screen.findByRole('group', { name: 'أيام الفترة' })
   expect(within(strip).getByRole('button', { name: '2026-10-17 — 2 غير مسجل' })).toBeInTheDocument()
+})
+
+test('a KPI or cohort filter change clears the selection, so a bulk action never writes hidden rows', async () => {
+  const bulk = bulkOk()
+  mockFetch({ ...routes, 'POST /api/v1/attendance/days/bulk': bulk })
+  edit()
+  const tbl = await table()
+  await user.click(within(tbl).getByRole('checkbox', { name: 'تحديد Engineer-1' }))
+  await user.click(within(tbl).getByRole('checkbox', { name: 'تحديد Engineer-2' }))
+  await user.click(screen.getByRole('button', { name: /^غير مسجل/ }))
+  expect(screen.queryByRole('group', { name: 'إجراءات المحدد' })).not.toBeInTheDocument()
+  await user.click(within(screen.getByRole('table')).getByRole('checkbox', { name: 'تحديد Engineer-1' }))
+  await user.click(within(screen.getByRole('group', { name: 'حسب آخر موقع' })).getByRole('button', { name: /^Site-1/ }))
+  expect(screen.queryByRole('group', { name: 'إجراءات المحدد' })).not.toBeInTheDocument()
+  expect(bulk).not.toHaveBeenCalled()
+})
+
+test('while another period or group loads, the header shows no stale range, missing count or lock', async () => {
+  let calls = 0
+  mockFetch({ ...routes, 'GET /api/v1/attendance/period': () => (calls++ ? (new Promise(() => {}) as unknown as Response) : json(200, { data: period })) })
+  renderWithAuth(<AttendancePage />, [...EDIT, 'attendance.lock.all'], { path: '/attendance?group=engineer' })
+  await table()
+  expect(await screen.findByRole('button', { name: 'قفل الفترة' })).toBeInTheDocument()
+  await user.click(screen.getByRole('button', { name: 'الفترة السابقة' })) // the date jumps to 2026-08-26, outside the loaded period
+  await waitFor(() => expect(calls).toBe(2))
+  expect(screen.queryByText('من 2026-09-26 إلى 2026-10-25')).not.toBeInTheDocument()
+  expect(screen.queryByRole('button', { name: 'قفل الفترة' })).not.toBeInTheDocument()
+  expect(screen.getByRole('button', { name: 'الفترة السابقة' })).toBeDisabled()
+  expect(screen.getByRole('group', { name: 'أيام غير مسجلة' })).toHaveTextContent('—')
+})
+
+test('a group change does not show the old group\'s period', async () => {
+  let calls = 0
+  mockFetch({ ...routes, 'GET /api/v1/attendance/period': () => (calls++ ? (new Promise(() => {}) as unknown as Response) : json(200, { data: period })) })
+  renderWithAuth(<AttendancePage />, [...EDIT, 'attendance.lock.all'], { path: '/attendance?group=engineer' })
+  expect(await screen.findByRole('button', { name: 'قفل الفترة' })).toBeInTheDocument()
+  await user.selectOptions(screen.getByRole('combobox', { name: 'المجموعة' }), 'office')
+  await waitFor(() => expect(calls).toBe(2))
+  expect(screen.queryByText('من 2026-09-26 إلى 2026-10-25')).not.toBeInTheDocument()
+  expect(screen.queryByRole('button', { name: 'قفل الفترة' })).not.toBeInTheDocument()
 })

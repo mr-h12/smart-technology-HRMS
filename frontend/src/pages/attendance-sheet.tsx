@@ -81,11 +81,13 @@ export function DaySheet({ group, date, period, onDate, onOpenDay }: { group: st
   const [cohort, setCohort] = useState<string | null>(null)
   const [page, setPage] = useState(1)
   const [selected, setSelected] = useState<ReadonlySet<string>>(new Set())
+  const [siteChoice, setSiteChoice] = useState('') // the bulk bar's Set site: chosen first, written only by its Apply button
+  const unselect = () => { setSelected(new Set()); setSiteChoice('') }
   const [shownDate, setShownDate] = useState(date)
   if (shownDate !== date) {
     setShownDate(date)
     setPage(1)
-    setSelected(new Set())
+    unselect()
   }
   // employee ids with a write in flight: the ref guards against a double send before React re-renders, the state disables their controls
   const flight = useRef(new Set<string>())
@@ -158,12 +160,13 @@ export function DaySheet({ group, date, period, onDate, onOpenDay }: { group: st
   const cohortName = (key: string) => (office ? key || t('attendance.sheet.noDepartment') : key ? siteName(key) : t('attendance.sheet.noLastSite'))
   const shown = rows.filter((r) => (filter === 'all' || bucket(status(r)) === filter) && (cohort === null || cohortOf(r) === cohort))
   const pageRows = paginate(shown, page, PER_PAGE)
-  const pick = (f: Filter) => { setFilter(f === filter ? 'all' : f); setPage(1) }
-  const pickCohort = (key: string) => { setCohort(key === cohort ? null : key); setPage(1) }
+  // a filter change drops the selection: a bulk action must never write rows the user can no longer see
+  const pick = (f: Filter) => { setFilter(f === filter ? 'all' : f); setPage(1); unselect() }
+  const pickCohort = (key: string) => { setCohort(key === cohort ? null : key); setPage(1); unselect() }
 
   const isMissing = (r: SheetRow) => status(r) === 'missing'
   const rest = shown.filter(isMissing)
-  const picked = rows.filter((r) => selected.has(r.employee.id))
+  const picked = shown.filter((r) => selected.has(r.employee.id))
   const pageIds = pageRows.map((r) => r.employee.id)
   const pageAll = pageIds.every((id) => selected.has(id))
   const pageSome = pageIds.some((id) => selected.has(id))
@@ -172,7 +175,7 @@ export function DaySheet({ group, date, period, onDate, onOpenDay }: { group: st
     for (const id of ids) next[on ? 'add' : 'delete'](id)
     return next
   })
-  const bulk = (action: SheetAction, label: string) => void apply(action, picked, label).then((done) => done && setSelected(new Set()))
+  const bulk = (action: SheetAction, label: string) => void apply(action, picked, label).then((done) => done && unselect())
   const noLeave = (a: SheetAction) => a.kind === 'leave' && !leaveSite(a.code)
   const check = (r: SheetRow) => (
     <label className="flex size-11 cursor-pointer items-center justify-center">
@@ -344,13 +347,20 @@ export function DaySheet({ group, date, period, onDate, onOpenDay }: { group: st
                     {t(label)}
                   </Button>
                 ))}
+                {/* a closed native select changes on an arrow key or a letter, so choosing never writes; Apply does */}
                 {!office && (
-                  <div className="w-44">
-                    <SelectField name="bulk_site" label={t('attendance.sheet.bulk.setSite')} values={{ bulk_site: '' }} errs={{}} blank={t('attendance.sheet.bulk.pickSite')}
-                      options={workSites.map((s) => [s.id, localName(s, lang)])} set={(_, v) => v && bulk({ kind: 'site', siteId: v }, `${t('attendance.sheet.bulk.setSite')} ${siteName(v)}`)} />
+                  <div className="flex items-end gap-2">
+                    <div className="w-44">
+                      <SelectField name="bulk_site" label={t('attendance.sheet.bulk.setSite')} values={{ bulk_site: siteChoice }} errs={{}} blank={t('attendance.sheet.bulk.pickSite')}
+                        options={workSites.map((s) => [s.id, localName(s, lang)])} set={(_, v) => setSiteChoice(v)} />
+                    </div>
+                    <Button type="button" variant="outline" size="sm" className={cn(FOCUS, 'h-11 md:h-9')} disabled={!siteChoice}
+                      onClick={() => bulk({ kind: 'site', siteId: siteChoice }, `${t('attendance.sheet.bulk.setSite')} ${siteName(siteChoice)}`)}>
+                      {t('attendance.sheet.bulk.apply')}
+                    </Button>
                   </div>
                 )}
-                <Button type="button" variant="ghost" size="sm" className={cn(FOCUS, 'h-11 md:h-9')} onClick={() => setSelected(new Set())}>{t('attendance.sheet.bulk.clear')}</Button>
+                <Button type="button" variant="ghost" size="sm" className={cn(FOCUS, 'h-11 md:h-9')} onClick={unselect}>{t('attendance.sheet.bulk.clear')}</Button>
               </div>
             ) : (
               <div className="flex justify-end border-b px-4 py-3">
