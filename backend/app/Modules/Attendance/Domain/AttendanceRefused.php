@@ -9,15 +9,21 @@ use RuntimeException;
 /** Rendered into the error envelope in bootstrap/app.php from its reason. */
 final class AttendanceRefused extends RuntimeException
 {
-    /** @param  array<string, string>  $params  lang placeholders */
-    private function __construct(public readonly AttendanceRefusal $reason, public readonly array $params)
+    /**
+     * @param  array<string, string>  $params  lang placeholders
+     * @param  list<array{field: string, code: string, message: string}>  $details  the error envelope's details (bulk: which rows)
+     */
+    private function __construct(public readonly AttendanceRefusal $reason, public readonly array $params, public readonly array $details)
     {
         parent::__construct('Attendance refused: '.$reason->value);
     }
 
-    /** @param  array<string, string>  $params */
-    public static function because(AttendanceRefusal $reason, array $params = []): self
+    /**
+     * @param  array<string, string>  $params
+     * @param  list<array{field: string, code: string, message: string}>  $details
+     */
+    public static function because(AttendanceRefusal $reason, array $params = [], array $details = []): self
     {
-        return new self($reason, $params);
+        return new self($reason, $params, $details);
     }
 }

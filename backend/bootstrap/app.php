@@ -77,7 +77,7 @@ return Application::configure(basePath: dirname(__DIR__))
         $exceptions->dontReport(AttendanceRefused::class);
 
         $exceptions->render(fn (AttendanceRefused $e, Request $request) => ApiEnvelope::error(
-            $request, $e->reason->status(), $e->reason->value, __('attendance.refusal.'.$e->reason->value, $e->params),
+            $request, $e->reason->status(), $e->reason->value, __('attendance.refusal.'.$e->reason->value, $e->params), $e->details,
         ));
 
         $exceptions->render(fn (ThrottleRequestsException $e, Request $request) => ApiEnvelope::error(

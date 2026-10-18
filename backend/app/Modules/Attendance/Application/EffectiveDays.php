@@ -115,11 +115,12 @@ final class EffectiveDays
      * A permanent worker's work day without its own values: the pay-row shift, else the settings, and full transport.
      *
      * @param  array<string, mixed>  $employee
+     * @param  array<string, string>  $s  the settings, read once by the caller
      * @return array{scheduled_in: string, scheduled_out: string, transport: string}
      */
-    public function workerDefaults(array $employee, string $date): array
+    public function workerDefaults(array $employee, string $date, array $s): array
     {
-        return self::defaults($employee, $date, $this->rules->all());
+        return self::defaults($employee, $date, $s);
     }
 
     /**

@@ -59,6 +59,20 @@ final class EmployeeRoster
     }
 
     /**
+     * @param  list<string>  $ids
+     * @return array<string, array<string, mixed>> keyed by id; unknown ids are left out
+     */
+    public function findMany(array $ids): array
+    {
+        $rows = [];
+        foreach (Employee::with(['typeChanges', 'payChanges'])->whereKey($ids)->get() as $e) {
+            $rows[(string) $e->id] = $this->row($e);
+        }
+
+        return $rows;
+    }
+
+    /**
      * @param  list<int>  $codes
      * @return array<int, array<string, mixed>>
      */

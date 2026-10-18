@@ -28,12 +28,11 @@ final class DayRules
     public static function violations(EmployeeType $type, ?array $site, array $fields): array
     {
         $violations = [];
-        $isLeave = $site !== null && $site['kind'] === 'leave';
         if ($site === null) {
             if ($type !== EmployeeType::Office) {
                 $violations[] = ['field' => 'site_id', 'code' => 'site_required'];
             }
-        } elseif ($type === EmployeeType::Office && ! $isLeave) {
+        } elseif ($type === EmployeeType::Office && $site['kind'] !== 'leave') {
             $violations[] = ['field' => 'site_id', 'code' => 'site_not_allowed'];
         } elseif (! $site['active']) {
             $violations[] = ['field' => 'site_id', 'code' => 'site_inactive'];
@@ -42,7 +41,7 @@ final class DayRules
         // Later checks see only the fields that passed field_not_allowed.
         $accepted = [];
         foreach ($fields as $field => $value) {
-            if (! self::allowed($type, $site, $isLeave, $field, $value)) {
+            if (! self::allows($type, $site, $field, $value)) {
                 $violations[] = ['field' => $field, 'code' => 'field_not_allowed'];
             } elseif (self::outOfBounds($field, $value)) {
                 $violations[] = ['field' => $field, 'code' => 'out_of_bounds'];
@@ -88,13 +87,17 @@ final class DayRules
         ];
     }
 
-    /** @param  array{kind: string, outside_alexandria: bool, active: bool}|null  $site */
-    private static function allowed(EmployeeType $type, ?array $site, bool $isLeave, string $field, int|string $value): bool
+    /**
+     * Whether the type takes this field on this site (null: office present); ignores bounds and the site's active flag.
+     *
+     * @param  array{kind: string, outside_alexandria: bool, active: bool}|null  $site
+     */
+    public static function allows(EmployeeType $type, ?array $site, string $field, int|string $value): bool
     {
         if (! in_array($field, self::FIELDS[$type->value], true)) {
             return false;
         }
-        if ($isLeave) {
+        if ($site !== null && $site['kind'] === 'leave') {
             return in_array($field, self::LEAVE_DAY_FIELDS, true) || ($field === 'transport' && $value === 'none');
         }
 

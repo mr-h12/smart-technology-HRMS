@@ -57,6 +57,17 @@ class DayRulesTest extends TestCase
         $this->assertSame([], DayRules::violations(EmployeeType::PermanentWorker, self::WORK, ['in_time' => '20:00', 'out_time' => '04:00']));
     }
 
+    public function test_allows_matches_the_field_rules(): void
+    {
+        $inside = [...self::WORK, 'outside_alexandria' => false];
+        $this->assertFalse(DayRules::allows(EmployeeType::Engineer, $inside, 'outside_minutes', 30));
+        $this->assertTrue(DayRules::allows(EmployeeType::Engineer, self::WORK, 'outside_minutes', 30));
+        $this->assertTrue(DayRules::allows(EmployeeType::PermanentWorker, self::LEAVE, 'transport', 'none'));
+        $this->assertFalse(DayRules::allows(EmployeeType::PermanentWorker, self::LEAVE, 'transport', 'full'));
+        $this->assertFalse(DayRules::allows(EmployeeType::Office, null, 'note', 'n'));
+        $this->assertTrue(DayRules::allows(EmployeeType::Office, null, 'in_time', '09:00'));
+    }
+
     public function test_computed_minutes(): void
     {
         $this->assertSame(['late' => 30, 'ot' => 30], DayRules::workerMinutes('20:00', '20:30', '05:00', '8'));
