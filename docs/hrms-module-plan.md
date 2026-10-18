@@ -32,6 +32,12 @@ Smart Technology runs HR and payroll today on 6 hand-built Excel workbooks (anal
 | Migration | Everything extractable from the Excel files; history imported as-is, with a **warning flag beside each known error** (the 16 in the analysis doc) |
 | Period lock | Locked after HR close + CEO approval; only HR can reopen, with a reason (audit-logged) |
 | Extra demo modules | Recruitment, performance, training and assets are IN scope as lite versions (no applicant portal, no self-review) |
+| Attendance entry (1c) | For now HR alone records attendance, for every employee type including office staff. The manager screen is a later item (Release 1, item 5) |
+| Attendance day | One record per employee per day: one site or one leave day-type (office staff: present, with no site, or a leave day-type). A second site goes in the note. Absent (غ) is a leave day-type, never a flag. A day with no record is missing, never absence |
+| Attendance dates | HR enters or edits any day of an open period up to today (Cairo time). No future dates |
+| Attendance periods | Per group: office the calendar month, engineers and permanent workers the 26th → 25th, day laborers 1–15 and 16–end. The attendance lock is per (group, period) |
+| Attendance lock | HR locks one group's period in one action, after confirming the missing days; nobody edits until HR reopens with a reason. Weekly off days and official holidays are derived on read while the period is open and stored at lock. ⚠️ HR may lock a period before it ends (open with the owner). ⚠️ Reopening keeps the stored derived days; a later holiday or weekly-off change does not refresh them on re-lock (open with the owner) |
+| Attendance concurrency | Each day carries a `version`; a write with a stale version returns `409 concurrency_conflict`, never an overwrite. Days are never hard-deleted; clearing a day is an audited update |
 
 ## Modules by release
 
@@ -52,12 +58,20 @@ Smart Technology runs HR and payroll today on 6 hand-built Excel workbooks (anal
    - Contract dates, document expiry dates, hiring-documents checklist, termination date + reason.
    - HR notes.
 4. **Sites & rates**: sites (deduplicated from both workbooks), leave day-types, site allowance rules, residence×site fares + per-worker overrides, manager↔sites assignment.
-5. **Manager attendance** (mobile-friendly), per employee per day:
-   - Site or leave type.
-   - In/out times.
-   - Late / OT / outside-city minutes.
-   - Absence.
-   - Advance taken that day.
+5. **HR attendance (1c)**: HR records every employee type for now, per employee per day:
+   - Site or leave day-type; office staff are present or on a leave day-type.
+   - The fields of the employee's type (in/out times, late / OT / outside-Alexandria minutes or amount, transport, advance amount, note).
+   - The Excel template: download, fill, upload with a preview, confirm.
+   - Official holidays, kept in Settings.
+   - The attendance lock per group and period; HR reopens with a reason.
+   - The missing-days bell. Job `attendance:alert-missing` runs at 21:00 Cairo time and notifies the users holding `attendance.edit.all`:
+     - Input: the date.
+     - Idempotent on (user, type, date), so a re-run is a no-op.
+     - 3 tries with 60 s / 300 s backoff, on the `maintenance` queue.
+     - Failures are logged. The counts are cumulative, so the next run covers a failed day.
+   - Later, separate items:
+     - **Manager mobile screen**: the manager enters today only, and past days are HR-only. «زي امبارح» quick fill; the manager's own sites only; the «تم التوقيع» sign-off per employee period, after which only HR edits; HR returns a period with a notification to the manager; an alert to HR when a manager skips a day.
+     - **Paste site attendance messages**: HR pastes a site's attendance message in a fixed format, and the system parses it per person.
 6. **Leave**: balances and rules above, recorded by the manager, HR approves or escalates.
 7. **Notifications**: in-app, instant + daily digest.
 8. **Migration step 1**: employees, sites, rates, fares, opening leave balances, open advance balances.
@@ -105,6 +119,7 @@ Smart Technology runs HR and payroll today on 6 hand-built Excel workbooks (anal
 5. **Custody register**: mobile line, devices, etc. Clearance is blocked until every item is returned.
 6. **Onboarding**: job offer → documents checklist → 90-day probation review.
 7. **Offboarding**: resignation/termination → clearance → final settlement → experience certificate.
+8. **Attendance sign-off upload**: the scanned paper sign-off of an attendance period, stored with the employee's documents.
 
 ### Release 4 — end of Month 4: Talent, reports, hardening
 1. **Recruitment (lite)**: jobs, pipeline Applied → Hired, interviews.

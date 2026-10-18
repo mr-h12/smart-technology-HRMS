@@ -31,6 +31,7 @@ For a day laborer, the day rate is the worker's own daily wage (section 4), not 
 - Net late minutes = Σ daily late − exemption (entered by HR)
 - Lateness deduction = net late minutes × minute rate × **1** (office multiplier)
 - The import flags missing punches and early leave (check-out before shift end); HR confirms or edits each flag.
+- Office lateness from in time: max(0, in − shift start − **15** grace), where shift start is **09:00** (`office_shift_start`) or the pay-row override. It is shown as a minutes hint; the fingerprint import fills the same fields in Release 2.
 
 **Additions**
 - Overtime = OT minutes × minute rate × **1.5**. OT minutes are suggested from check-out − shift end; HR confirms.
@@ -63,15 +64,27 @@ Each day records: site, OT minutes, late minutes, minutes worked outside Alexand
 
 Outside-Alex minutes are paid at ×1, with no multiplier, as in the Excel.
 
+## 2a. Derived off days
+- Weekly off per type: **Friday + Saturday** for office staff, **Friday** for the field types.
+- Each weekly off weekday is derived as the leave day-type with the same code: Friday → «اجازة الجمعة», Saturday → «اجازة السبت».
+- Official holidays come from the holiday list. When a weekly off day is also a holiday, the holiday wins.
+- A derived day is a leave day: no scheduled times, and a permanent worker's transport is none.
+- Derived on read while the period is open; stored at lock. HR can record the day instead (a site, if the person worked).
+- Reopening keeps the stored days. ⚠️ A later holiday or weekly-off change does not refresh them when the period is locked again; is that right?
+- A derived day is never an absence.
+
 ## 3. Permanent workers (عمال مثبتين): 26th → 25th
 Each day records: scheduled in/out (default **08:00–16:00**), actual in/out, site, outside-Alex money, transport (full / half / none), advance. Weekly off **Friday**.
+
+- Scheduled in/out are stored on each day; they default to **08:00–16:00** (`worker_shift_start`/`worker_shift_end`) or the pay-row override. Late and OT minutes are computed from actual vs scheduled and shown as hints.
+- ⚠️ Late minutes do not wrap around midnight: scheduled 00:00 with arrival 23:50 the day before gives 1,430 late minutes; scheduled 23:50 with arrival 00:10 gives 0. Must a scheduled start that crosses midnight wrap?
 
 - Hours worked = actual out − actual in. If out is earlier than in, the shift crossed midnight: add 24 h.
 - Late hours = actual in − scheduled in (if positive)
 - Lateness money = late hours × hour rate × **2**
 - OT hours = max(0, hours worked − **8**)
 - OT money = OT hours × hour rate × **1.5** + outside-Alex money
-- Transport = fare (section 4 fare rule) for full, fare ÷ 2 for half. The manager picks per day; default full.
+- Transport = fare (section 4 fare rule) for full, fare ÷ 2 for half. The manager picks per day; default full, including on a missing or future work day. A leave day stores none.
 - Day cost = day rate + OT money (site costing)
 - Net = salary + Σ OT money + Σ transport − Σ lateness − absence − deduction − insurance − tax − advance installments
 
