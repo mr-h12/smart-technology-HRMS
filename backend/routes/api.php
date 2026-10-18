@@ -1,6 +1,8 @@
 <?php
 
 use App\Modules\Attendance\Presentation\AttendanceController;
+use App\Modules\Attendance\Presentation\AttendanceLockController;
+use App\Modules\Attendance\Presentation\HolidayController;
 use App\Modules\Audit\Presentation\AuditLogController;
 use App\Modules\Employees\Domain\DocumentKind;
 use App\Modules\Employees\Presentation\EmployeeController;
@@ -84,6 +86,20 @@ Route::middleware('auth')->group(function (): void {
             Route::get('days/{employee}/{date}', 'show')->middleware(['permission:attendance.view', 'employee.scope'])->where('date', $date);
             Route::put('days/{employee}/{date}', 'update')->middleware(['permission:attendance.edit', 'employee.scope'])->where('date', $date);
             Route::delete('days/{employee}/{date}', 'destroy')->middleware(['permission:attendance.edit', 'employee.scope'])->where('date', $date);
+        });
+    });
+
+    Route::prefix('attendance/locks')->controller(AttendanceLockController::class)->group(function (): void {
+        Route::post('/', 'store')->middleware('permission:attendance.lock');
+        Route::post('reopen', 'reopen')->middleware('permission:attendance.lock');
+    });
+
+    Route::prefix('attendance/holidays')->controller(HolidayController::class)->group(function (): void {
+        Route::get('/', 'index')->middleware('permission:attendance.view');
+        Route::post('/', 'store')->middleware('permission:holiday.manage');
+        Route::middleware([])->whereUuid('holiday')->group(function (): void {
+            Route::patch('{holiday}', 'update')->middleware('permission:holiday.manage');
+            Route::delete('{holiday}', 'destroy')->middleware('permission:holiday.manage');
         });
     });
 

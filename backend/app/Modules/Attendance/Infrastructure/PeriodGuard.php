@@ -22,6 +22,12 @@ final class PeriodGuard
         }
     }
 
+    /** The lock-taker's form: waits for every open write on the period and blocks new ones until the caller's transaction ends. */
+    public static function exclusive(Period $p): void
+    {
+        DB::select('select pg_advisory_xact_lock(hashtextextended(?, 0))', [self::key($p)]);
+    }
+
     public static function isLocked(Period $p): bool
     {
         return AttendanceLock::where(['employee_type' => $p->group->value, 'period_start' => $p->start])->whereNull('reopened_at')->exists();

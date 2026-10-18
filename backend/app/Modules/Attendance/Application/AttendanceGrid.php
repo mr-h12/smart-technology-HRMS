@@ -109,7 +109,7 @@ final class AttendanceGrid
         return $missing;
     }
 
-    private function periodAt(EmployeeType $g, ?string $start): Period
+    public function periodAt(EmployeeType $g, ?string $start): Period
     {
         if ($start === null) {
             return Period::containing($g, EffectiveDays::today());
