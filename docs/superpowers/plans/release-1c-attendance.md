@@ -1193,6 +1193,308 @@ Also confirm as the Manager dev account that there is no الحضور والان
 
 ---
 
+# Slice 2b — Day sheet (roll-call tab) + Gate 2 fixes
+
+Owner-approved 2026-10-19. Source: the owner's mockup `~/hrms-attendance/index.html` (interaction reference only; do
+not copy its Tailwind CDN / vanilla JS). Rulings P26–P32 are in the ledger. Every implementer and reviewer is Opus;
+UI tasks also load `ui-ux-pro-max:ui-ux-pro-max`. Order: 15, 16, 18, 17, 19, 20, 21, 30, 24, 25, 22, 23, 27, 26, 29, 32, 33, 28, 31, then Gate 2b.
+
+**Slice 2b constraints (in addition to the Global Constraints above):**
+- Every day-sheet write goes through `POST /attendance/days/bulk`, including single-row quick actions and the inline time, so undo has one shape.
+- Keyboard shortcuts match on `event.code` (`KeyJ`, `KeyK`, `KeyP`, `KeyA`, `KeyS`, `KeyE`, `Slash`, `KeyZ`, plus `ArrowUp`/`ArrowDown`/`Escape`). They never fire while focus is in an input, textarea, select or contenteditable, never while a `[role="dialog"]` is open, and never with Alt/Ctrl/Meta except Ctrl/Cmd+Z.
+- Status colours on the new screen use `bg-<status>-bg border-<status>-border text-<status>` (tokens added in Task 17). Other components are not migrated.
+- Every new focusable class string carries `focus-visible:outline-solid` (P24).
+- `<kbd>` glyphs (`J`, `K`, `P`, `A`, `S`, `E`, `/`, `Ctrl+Z`) are code constants; their descriptions go through i18n.
+- "Missing" (no record) and "absent" (leave code `absent`, غ) are always different states with different looks.
+
+**API added in this slice (under `/api/v1`, inside `auth`):**
+
+`GET /attendance/sheet?group=<type>&date=YYYY-MM-DD` — `permission:attendance.view`; `date > today` (Cairo) → 422 `future_date`. One unpaginated resource (P26), `ApiEnvelope::single`.
+```json
+{"data":{
+  "group":"engineer","date":"2026-10-18",
+  "days":[{"date":"2026-09-26","missing":3}],
+  "rows":[{
+    "employee":{"id":"uuid","code":12,"name_ar":"…","name_en":"Engineer-1","department":null},
+    "day":{"state":"stored|derived|missing","source":"entered","version":3,"site_id":"uuid","leave_code":null,
+           "in_time":"08:00","out_time":null,"scheduled_in":null,"scheduled_out":null,"late_minutes":null,
+           "ot_minutes":null,"outside_minutes":null,"outside_amount":null,"transport":null,"advance_amount":null,"note":null},
+    "hints":{"late_minutes":25},
+    "last_site_id":"uuid|null",
+    "totals":{"worked":12,"leave":4,"absent":1,"missing":2}
+  }]
+}}
+```
+`days` has one entry per period date (future dates → 0). Rows `not_employed` on the date are left out; ordered by code.
+
+`GET /attendance/period?group=&date=` — new optional `date` (`prohibits:period_start`); returns the period containing the date, same shape as today.
+
+`POST /attendance/days/bulk` — `permission:attendance.edit` plus a per-row own-scope check.
+```json
+{"date":"2026-10-18","rows":[
+  {"employee_id":"uuid","version":3,"site_id":"uuid"},
+  {"employee_id":"uuid","version":null,"site_id":null,"in_time":"09:20"},
+  {"employee_id":"uuid","version":4,"clear":true}
+]}
+```
+- 200 `{"data":[{"employee_id":"uuid","version":4},{"employee_id":"uuid","version":1},{"employee_id":"uuid","version":null}]}` in request order (`version` null after a clear).
+- 409 `concurrency_conflict` with `details:[{"field":"rows.0","code":"concurrency_conflict","message":"…"}, …]` listing every stale row; nothing written (P27).
+- 422 `validation_failed` (`rows.N.site_id`, `rows`, `rows.N.employee_id`), or `future_date` / `employee_not_active` with `details` naming `rows.N`.
+- 423 `period_locked`. 404 unknown employee or outside the caller's own scope.
+
+### Task 15: Day sheet read endpoint
+
+**Files:**
+- Modify `backend/app/Modules/Attendance/Application/AttendanceGrid.php`: add `sheet()`, private `lastSites()`, `public const LAST_SITE_DAYS = 7`, `periodAt(EmployeeType $g, ?string $start, ?string $date = null): Period`; inject `BusinessRules`.
+- Modify `backend/app/Modules/Attendance/Application/EffectiveDays.php`: `hints()` becomes public and takes `array $settings` (read once by the caller); `effectiveDay()` passes `$this->rules->all()`.
+- Modify `backend/app/Modules/Employees/Application/EmployeeRoster.php`: `row()` adds `'department' => $e->department`.
+- Modify `backend/app/Modules/Attendance/Presentation/AttendanceController.php`: add `sheet()`; add `date` to `periodRules()` (`prohibits:period_start`).
+- Modify `backend/routes/api.php`: `Route::get('sheet', 'sheet')->middleware('permission:attendance.view')`.
+- Create `backend/tests/Feature/AttendanceSheetTest.php` (use `AttendanceFixtures`, `cairo('2026-10-20 12:00')`, `signIn('hr')` as the existing attendance tests do).
+
+**Interfaces:**
+- `AttendanceGrid::sheet(EmployeeType $g, string $date): array{group: string, date: string, days: list<array{date: string, missing: int}>, rows: list<array>}` — response shape in the slice header.
+- `EffectiveDays::hints(EmployeeType $type, array $employee, array $day, array $settings): array<string,int>`
+- `sheet()` loads the roster once (`allOfType($g, $p->start, $p->end)`), calls `EffectiveDays::forPeriod` once, reads settings once, runs `lastSites` as one query: `select distinct on (d.employee_id) d.employee_id, d.site_id … join sites s on s.id=d.site_id and s.kind='work' and s.active and s.deleted_at is null where d.deleted_at is null and d.employee_id in (…) and d.date between date−7 and date−1 order by d.employee_id, d.date desc`. Skip it for the office group (office → null).
+- P31 last site: latest live stored day in `[date−7, date−1]` with an active work site; derived and leave days skipped; may cross period boundaries.
+- P32 totals over the whole period as of today: worked = stored and `leave_code` null (work site or office present); leave = stored or derived with `leave_code` set and ≠ `absent`; absent = stored `absent`; missing = state `missing` (future never counted).
+- The day row carries every stored value plus `version` (null when not stored). Office rows carry `hints.late_minutes` from the same function `EffectiveDays::hints` uses today (per-employee shift override honoured).
+
+- [ ] **Step 1: failing tests**
+  - `test_the_sheet_lists_the_groups_employees_for_the_date_with_their_day_and_version` — stored engineer → `rows.0.day.state` `stored`, `day.version` 1, `day.in_time` `08:00`, `employee.department` set; ordered by code.
+  - `test_not_employed_rows_are_left_out` — hired after the date absent; mid-period type change hides the row on the other type's dates.
+  - `test_last_site_is_the_latest_stored_work_site_in_the_seven_days_before` — Thursday Site-1 + derived Friday → Saturday `last_site_id` Site-1; a stored sick day between is skipped; site deactivated since → null; work day 8 days back → null; office → null.
+  - `test_period_totals_count_worked_leave_absent_and_missing` — 2 work, 1 derived Friday, 1 stored sick, 1 stored absent, rest missing up to today → exact; future not counted; office present = worked.
+  - `test_the_day_strip_counts_missing_days_per_date` — one entry per period date; counts match.
+  - `test_office_rows_carry_the_lateness_hint` — in 09:40, shift 09:00, grace 15 → 25; per-employee shift 10:00 honoured.
+  - `test_a_future_date_is_refused` — 422 `future_date`.
+  - `test_ceo_reads_the_sheet_and_a_manager_is_refused` — 200 / 403.
+  - `test_the_sheet_runs_the_same_number_of_queries_for_one_or_three_employees` — `DB::enableQueryLog`, equal counts.
+  - `test_period_accepts_a_date` — `period?group=engineer&date=2026-10-01` → `data.start` `2026-09-26`.
+- [ ] **Step 2:** `docker compose exec app php artisan test --filter=AttendanceSheetTest` → FAIL.
+- [ ] **Step 3:** implement. Mark `// ponytail: whole group in PHP (~1,000 × 31 cells); move counts to SQL if a group outgrows it`.
+- [ ] **Step 4: Gates** B-test, B-pint, B-stan, B-deptrac.
+- [ ] **Step 5:** commit "Add the attendance day sheet endpoint".
+
+### Task 16: Bulk day write
+
+**Files:**
+- Modify `backend/app/Modules/Attendance/Application/AttendanceDays.php`: extract `private function write(array $employee, string $date, array $input, string $source, bool $keepUnsent, ?array $settings = null): int` and `private function clearRow(...)` from `save`/`clear` (behaviour unchanged except P29); add `public const BULK_MAX_ROWS = 500`, `public const BULK_FORMAT`, `public function bulk(string $date, array $rows): array`.
+- Modify `backend/app/Modules/Attendance/Domain/DayRules.php`: expose `allows(EmployeeType $type, ?array $site, string $field, int|string $value): bool` (`isLeave` derived inside).
+- Modify `backend/app/Modules/Attendance/Domain/AttendanceRefused.php`: `public readonly array $details`; `because($reason, $params = [], $details = [])`. Modify `backend/bootstrap/app.php` render to pass `$e->details`.
+- Modify `backend/app/Modules/Employees/Application/EmployeeRoster.php`: `findMany(list<string> $ids): array<string, array>` (one query).
+- Modify `AttendanceController.php`: `bulk()` validates `BULK_FORMAT`; if `RequestScope::ownerId($request)` is not null, every row must pass `EmployeeService::isManagedBy` else `ModelNotFoundException` (404), as `EnsureEmployeeInScope` does.
+- Modify `routes/api.php`: `Route::post('days/bulk', 'bulk')->middleware('permission:attendance.edit')`, placed before the `{employee}` routes.
+- Create `backend/tests/Feature/AttendanceBulkTest.php`; modify `backend/tests/Unit/DayRulesTest.php`.
+
+**Interfaces / rules:**
+- `BULK_FORMAT`: `date` required `date_format:Y-m-d`; `rows` required array min 1 max 500; `rows.*.employee_id` required uuid distinct; `rows.*.clear` sometimes accepted; `rows.*.version` nullable integer min 1, required when `clear`; `rows.*.site_id` present unless clear, plus `FORMAT['site_id']`; every other `FORMAT` field prefixed `rows.*.`.
+- `bulk()` returns `list<array{employee_id: string, version: ?int}>` in request order. One `DB::transaction`; rows processed in `employee_id` order (stable lock order); `ConcurrencyConflict` and `ValidationException` collected per row (re-keyed `rows.N.`) and thrown once after the loop so nothing commits; conflicts are reported before validation errors. A `UniqueConstraintViolationException` → 409 without details. Other refusals (423, 422 future_date, employee_not_active) abort at the first row and name it in `details`.
+- Settings read once for the whole request (`workerDefaults` takes them).
+- **P28 keep rule** (`$keepUnsent`, bulk only): same kind of day as the live row (work→work, leave→leave, office present→present) keeps every unsent value that `DayRules::allows()` accepts on the new site; kind change keeps only `note` and `advance_amount` (those the type has). Look up the live row's site kind with `Site::withTrashed()`. Single PUT keeps PUT semantics. A permanent worker moving from a leave day to a work site gets transport `full` again (not the kept `none`).
+- **P29:** fill everything except `version`; if the row is not dirty, return its version unwritten (applies to the shared `write()`, so the single PUT also stops bumping unchanged rows).
+
+- [ ] **Step 1: failing tests** (date 2026-10-18; Site-1 work site; leave types from fixtures)
+  - `test_bulk_writes_every_row_in_one_request_and_returns_new_versions` — 3 missing engineers → 200, versions 1, stored.
+  - `test_a_permanent_worker_marked_present_gets_shift_defaults_and_full_transport` — `{site_id}` only → `scheduled_in` `08:00`, transport `full`.
+  - `test_a_stale_row_fails_the_whole_request_and_lists_every_conflict` — rows 1 and 2 stale → 409, `error.details.*.field` = [`rows.1`,`rows.2`]; row 0 not written; audit_log count unchanged.
+  - `test_rule_violations_are_reported_per_row_and_nothing_is_written` — office row with a work site → 422 `rows.0.site_id`.
+  - `test_a_status_change_keeps_note_and_advance_and_drops_times` — engineer stored with in/out, note, advance 500 → absent site → note kept, `advance_amount` `500.000000`, `in_time` null.
+  - `test_an_office_time_edit_keeps_the_out_time` — office present 09:00–17:00 → `{site_id:null,in_time:'09:20'}` → out_time `17:00`.
+  - `test_a_sick_permanent_worker_marked_present_gets_full_transport_again`.
+  - `test_clear_rows_restore_the_missing_or_derived_day` — missing → stored → clear → `missing`; Friday → clear → `derived`.
+  - `test_an_unchanged_row_writes_nothing` — same values incl. advance → version unchanged, no audit row.
+  - `test_a_locked_period_refuses_the_whole_request` — 423.
+  - `test_a_future_date_is_refused`.
+  - `test_more_than_500_rows_is_refused` — 422 field `rows`.
+  - `test_duplicate_employee_rows_are_refused`.
+  - `test_every_written_day_has_its_own_audit_entry` — 3 rows → 3 CREATED entries.
+  - `test_ceo_and_manager_are_refused` — 403.
+  - `test_an_own_scope_user_cannot_reach_another_managers_employee` — test-created `attendance.edit.own` grant (as `ManagerScopeTest`) → 404.
+  - Unit `test_allows_matches_the_field_rules` — engineer `outside_minutes` on inside site false; permanent worker `transport:'none'` on leave true, `'full'` false; office `note` false.
+- [ ] **Step 2:** run → FAIL. **Step 3:** implement (`// ponytail: ~6 queries per row; preload sites and locks if 500-row requests get slow`). **Step 4:** gates B-*. **Step 5:** commit "Add the bulk attendance day write".
+
+### Task 17: Status tokens and the day sheet layout (read-only)
+
+**Files:**
+- Modify `frontend/src/index.css`: in `:root` add `--success-bg #eef8f1`, `--success-border #bbf7d0`, `--warning-bg #fff6ed`, `--warning-border #fed7aa`, `--info-bg #eff6ff`, `--info-border #bfdbfe`, `--destructive-bg #fef3f2`, `--destructive-border #fecdca`; in `.dark` add `color-mix(in srgb, var(--<status>) 14%, var(--card))` for `-bg` and `40%` for `-border`; map all 8 in `@theme inline` as `--color-<status>-bg` / `--color-<status>-border`. Check text contrast ≥ 4.5:1 on the new bg tokens in both themes.
+- Modify `frontend/src/components/form.tsx`: `localName(row: Row, lang: string, fallback?: string): string` — `name_en` in English when set, else `fallback`, else `name_ar`.
+- Modify `frontend/src/pages/attendance.tsx`: `TABS = ['sheet','grid']`, default `sheet`; URL `?date=` (default `cairoToday()`; malformed or future → today); on the sheet tab the header period comes from `/attendance/period?group&date=`; render `<DaySheet>`; `onOpenDay` shared with the grid (DayEditor reused).
+- Modify `frontend/src/locales/{ar,en}.json` (keys under `attendance.tab.sheet` and `attendance.sheet.*`, see table at the end of the slice).
+- Create `frontend/src/pages/attendance-sheet.tsx` and `frontend/src/pages/attendance-sheet.test.tsx`.
+
+**Interfaces:**
+- `export type SheetRow` = the API `rows[]` item. `export function DaySheet({ group, date, period, onDate, onOpenDay })`.
+- Layout, top to bottom (information hierarchy from the mockup):
+  - KPI buttons (`aria-pressed`, act as filters). Field groups: total (with "N of M recorded" and a progress bar), missing, worked (at a site), leave, absent. Office: total, missing, on time, late, leave, absent (on time = office present with `hints.late_minutes` 0 or absent; late > 0).
+  - Day strip: one button per period date (day number, narrow weekday, missing count); selected date `aria-current="date"`; future disabled; clicking sets `date=`.
+  - Cohort strip: field groups by `last_site_id` (site name via `SITES`, else `noLastSite`); office by `department` (null → `noDepartment`); each shows done/total with a bar and filters on click.
+  - Rows: ≥md a `Table` — checkbox placeholder (Task 19), ID, employee (`<span class="flex items-center gap-2"><span class="tabular">{code}</span><bdi>{name}</bdi></span>`, department below), office in-time (text; Task 19 makes it editable), status (status pill using the new tokens + site chip), actions placeholder, then the **period totals cell last** (worked / leave / absent / missing). <md cards with the totals block at the **bottom**. Switch with CSS (`hidden md:block` / `md:hidden`), no JS media query.
+  - Client-side pagination 50 rows (`paginate`, `Pagination` from `components/tables/Pagination.tsx`); page resets when a filter changes.
+  - Locked period → banner `attendance.sheet.locked`. Loading `TableSkeleton`, errors `ErrorBanner`, empty `EmptyState`.
+- Missing rows look different from absent rows (missing = warning tokens + "؟"/missing label; absent = destructive tokens + غ).
+
+- [ ] **Step 1: tests first** (fixture: 3 engineers — missing / stored Site-1 / stored absent; office fixture with department + late hint)
+  - `the day sheet is the default tab and ?tab=grid shows the grid`
+  - `the KPI cards count the rows and filter them` (click Missing → only the missing row; `aria-pressed` true)
+  - `period totals sit in the last cell of each row and at the bottom of each card`
+  - `the day strip marks the date and disables future days` + clicking a day puts `date=` in the fetch URL
+  - `field cohorts group by last site and office cohorts by department` (incl. both "none" labels)
+  - `51 rows paginate at 50`
+  - `the employee code sits in its own element apart from the name` (`getByText('Engineer-1').tagName === 'BDI'`)
+  - `a locked period shows the read-only banner`
+- [ ] **Steps 2–4:** run → FAIL, implement, gate F. **Step 5:** commit "Add the attendance day sheet tab".
+
+### Task 18: Pure day-sheet helpers
+
+**Files:** Create `frontend/src/lib/day-sheet.ts`, `frontend/src/lib/day-sheet.test.ts`.
+
+**Interfaces:**
+- `export const MAX_BATCH = 500`
+- `export function parseBatch(input: string, rows: SheetRow[]): { matches: SheetRow[]; unknown: string[]; capped: boolean }` — run `asciiDigits` (`components/form.tsx`) first; split on `/[\s,;،]+/`; if every token matches `/^\d+([-–]\d+)?$/` it is an ID batch: ranges min..max, expansion capped at 500 across the whole input (`capped` true when hit), `unknown` = single IDs not on the sheet, matches de-duplicated in input order. Otherwise a case-insensitive substring search over `${code} ${name_ar} ${name_en} ${department}`.
+- `export type BulkRow = { employee_id: string; version: number | null; clear?: true; site_id?: string | null } & Partial<Record<DayValue, string | number | null>>`
+- `export type SheetAction = {kind:'present'} | {kind:'leave', code:'absent'|'sick'} | {kind:'site', siteId:string} | {kind:'time', in_time:string}`
+- `export function bulkRows(action: SheetAction, rows: SheetRow[], leaveSite: (code: string) => string | undefined): { rows: BulkRow[]; skipped: SheetRow[] }` — present: office → `site_id:null`; field → `last_site_id`, else skipped. Rows already in the target state are left out. `version` passed through from `row.day.version`.
+- `export function undoRows(before: SheetRow[], after: {employee_id: string; version: number | null}[]): BulkRow[]` — stored before → `site_id` + every value with the new version; otherwise → `{clear:true, version}`; rows whose version did not change are left out.
+- `export function statusOf(r: SheetRow): 'missing'|'present'|'late'|'absent'|'leave'|'derived'` — office late from `hints.late_minutes > 0`.
+- `SheetRow` may be declared here and imported by `attendance-sheet.tsx` (Task 17) — keep one declaration.
+
+- [ ] **Tests first:** parseBatch — `'12'`; `'1, 3, 6'`; `'1-5'`; `'5-1'`; `'1-99999'` → ≤500 + `capped`; `'١٢'`; `'1،3'`; newline-separated; `'99999'` → `unknown:['99999']`; blank → none; `'engineer-1'` case-insensitive; department match. bulkRows — present uses `last_site_id`, skips rows without; office present `site_id:null`; already present at that site left out; absent uses `leaveSite('absent')` + version; time → `{site_id:null,in_time}`. undoRows — stored before restores every value + new version; missing/derived before → clear; unchanged version left out. statusOf — office late from hints.
+- Gate F. Commit "Add the day sheet parser and row builders".
+
+### Task 19: Row actions, selection, sweeps, office in-time
+
+**Files:** `frontend/src/pages/attendance-sheet.tsx`, its test, locales.
+
+**Behaviour:**
+- One writer `apply(action, rows, label)`: `bulkRows` → over 500 → toast `tooMany`; else `useSave` POST `/attendance/days/bulk` `{date, rows}`; success → toast `applied` (+ `skippedNoSite` when skipped); 409 → toast `conflict` naming the employees from `details` (map `rows.N` back), then refetch; keeps a `pending` set of employee ids and never sends a row already in flight. Returns the before/after needed by Task 21's undo.
+- Row actions: Present (P), Absent (A), Sick (S), Details buttons, each `aria-label` includes the name; desktop `h-9`, mobile `h-11`; Sick disabled when no active `sick` leave type. Details opens the existing `DayEditor`.
+- Selection: checkbox column (raw `<input type="checkbox">` in a `label` ≥ 44×44), select-all for the visible page (`indeterminate`), a bulk bar while anything is selected: Present, Absent, Sick, "Set site" (`SelectField` of active work sites, field groups only), Clear.
+- Sweeps: each cohort has a button applying Present with the cohort's site to its **missing** members; a "Mark the rest" button applies Present to the missing rows of the current filter.
+- Office: inline `<input type="time">`; on change applies `{kind:'time'}`.
+- Read-only (`period.is_locked` or `!can('attendance.edit')`): no checkboxes, actions, sweeps or time inputs; Details opens a read-only DayEditor.
+
+- [ ] **Tests first:** `P on a missing engineer posts his last site in one bulk request` (assert body); `a cohort sweep marks only the missing members of that site`; `selected rows get Absent with the absent leave type and the bar shows the count`; `select-all picks only the visible page`; `a 409 names the conflicting employees and refetches the sheet`; `an office in-time edit posts site null and the time`; `a row without a last site is skipped with a toast`; `a locked period or a reader sees no write controls` (both).
+- Gate F. Commit "Add quick marking and sweeps to the day sheet".
+
+### Task 20: Command bar and paste dialog
+
+**Files:** `frontend/src/pages/attendance-sheet.tsx`, its test, locales.
+
+**Behaviour:**
+- Command input above the list (label `attendance.sheet.command`): typing filters the list to `parseBatch` matches and shows a preview chip (N matched, unknown IDs, capped notice); Enter on an ID batch applies Present, on a name search selects the matches and writes nothing; the input clears after an apply.
+- Paste button → `Dialog` (`components/ui/dialog.tsx`) with a textarea; newlines become spaces before parsing; Present / Absent / Sick buttons apply to the matches; toast reports unknown IDs.
+- [ ] **Tests first:** `Enter on a range marks those employee IDs present`; `a name search selects the matches and writes nothing`; `the paste dialog applies Absent to the pasted list and reports unknown IDs`; `a capped range says only the first 500 were used`.
+- Gate F. Commit "Add the command bar and paste to the day sheet".
+
+### Task 21: Keyboard and undo
+
+**Files:** `frontend/src/pages/attendance-sheet.tsx`, its test, locales.
+
+**Behaviour:**
+- One `keydown` listener on `document` inside `DaySheet`, following the slice 2b key rules: `Slash` focuses the command input; `KeyJ`/`ArrowDown`, `KeyK`/`ArrowUp` move the cursor over the visible page (`aria-current="true"`, ring class, `scrollIntoView?.({block:'nearest'})`); `KeyP`/`KeyA`/`KeyS` act on the cursor row then advance; `KeyE` opens the DayEditor; Ctrl/Cmd+`KeyZ` undoes; `Escape` clears selection and cursor and blurs. Read-only: navigation and E only.
+- Undo: `useRef` stack, max 15, oldest dropped; entry `{label, date, before: SheetRow[], after}`; undo sends `undoRows(before, after)` to the bulk endpoint for that entry's date; 409 → toast `undoConflict` and drop the entry. Undo button shows "Undo (n)", disabled when empty. A shortcuts line (`<kbd>` + i18n descriptions) shows at lg and up.
+- [ ] **Tests first:** `J then P marks the first row and moves the cursor to the second`; `a status key acts on an Arabic layout` (`fireEvent.keyDown(document,{key:'ح',code:'KeyP'})`); `keys do nothing while typing in the command bar or while the day editor is open`; `Ctrl+Z restores the previous day` (body `{clear:true,version:1}` for a previously missing row); `an undo refused with 409 is dropped with a message`; `the undo stack keeps the last 15`; `Escape clears the selection`; `Ctrl+P is left to the browser` (no request).
+- Gate F. Commit "Add keyboard marking and undo to the day sheet".
+
+### Task 22: Keep the employee code apart from the name in the grid (Gate 2 defect 1)
+- `frontend/src/pages/attendance.tsx`: the grid's sticky employee cell becomes `<span class="flex items-center gap-2"><span class="tabular text-muted-foreground">{code}</span><bdi>{name}</bdi></span>`.
+- Test first (`attendance.test.tsx`): `getByText('Engineer-1').tagName === 'BDI'` (use a Latin-named fixture). Gate F. Commit.
+
+### Task 23: Keep the period range on one line (Gate 2 defect 2)
+- `attendance.tsx`: `whitespace-nowrap` on the period range label; the picker row gets `flex-wrap`. Test first: the label has `whitespace-nowrap`. Gate F. Commit.
+
+### Task 24: Mobile nav close button overlaps the brand (Gate 2 defect 3)
+- `frontend/src/components/layout/AppLayout.tsx`: `SidebarHeader` accepts `className`; the mobile sheet passes `pe-14`. Test first (`AppLayout.test.tsx`): the header inside the open sheet has `pe-14`. Gate F. Commit.
+
+### Task 25: Settings tabs truncate at 1024 (Gate 2 defect 4)
+- `frontend/src/pages/settings.tsx`: `TabsList className="sm:h-auto sm:flex-wrap"` (phones keep the scroll). Test first (`settings.test.tsx`): tablist has `sm:flex-wrap`. Gate F. Commit.
+
+### Task 26: Read-only day editor looks editable (Gate 2 defect 5)
+- `frontend/src/pages/attendance-day.tsx`: when read-only and not locked, show a note `attendance.day.readOnlyNote`; the form container adds `[&_input:disabled]:bg-muted [&_textarea:disabled]:bg-muted [&_select:disabled]:bg-muted`. Locales ar/en.
+- Test first: the CEO (view only) sees the note, inputs disabled, no Save. Gate F. Commit.
+
+### Task 27: Derived cells are faint in dark mode (Gate 2 defect 6)
+- `attendance.tsx`: `LOOK.derived` = `border border-dashed border-muted-foreground/60 text-muted-foreground` (legend too). Test first: derived cell has `border-muted-foreground/60`. Gate F. Commit.
+
+### Task 28: English screens show Arabic names (Gate 2 defect 7)
+- Use `localName` (Task 17) for site names in the grid, the day editor, the sheet chips and cohorts, and for employee names. Leave types seeded without `name_en` fall back to new keys `attendance.leaveName.<code>` (friday, saturday, official_holiday, sick, rest, absent, other).
+- Files: `pages/attendance.tsx`, `attendance-day.tsx`, `attendance-sheet.tsx`, locales, tests. Test first: in `en` the grid shows `Site-1 EN` and a seeded leave type shows `Friday`. Gate F. Commit.
+
+### Task 29: Notes keep their trailing zeros (Task 7 minor)
+- `attendance-day.tsx`: `asText` strips trailing zeros only for `outside_amount` and `advance_amount`. Test first: note `3.50` stays `3.50`; advance `500.000000` shows `500`. Gate F. Commit.
+
+### Task 30: Refresh attendance after a refused save (Task 8 minor)
+- `frontend/src/lib/query.ts`: `useSave` invalidates in `finally`, so a refusal also refetches. Test first (`lib/query.test.tsx`): a 409 save still invalidates `['attendance']` and the audit log. Gate F. Commit.
+
+### Task 32: Manager `/attendance` shows a permission-error shell (capture defect #6)
+- `frontend/src/pages/attendance.tsx` (check first how other gated routes/pages handle a missing permission and reuse that): without `attendance.view`, render the app's existing no-access / not-found page instead of the page shell. Test first: a user without `attendance.view` sees no group select and no 403 banner. Gate F. Commit.
+
+### Task 33: Long lock dialog hides the confirm checkbox (capture defect #8)
+- `attendance.tsx` `MissingDays`: the list sits in a `max-h-64 overflow-y-auto` region (focusable, labelled) so the confirm checkbox and the Lock button stay visible below it. Test first: with many missing days the list container has the scroll classes and the checkbox renders after it. Gate F. Commit.
+
+### Task 31: Same-PR docs
+- `docs/calculations.md`: new §13 "Attendance day sheet (display only)" — P32 totals, P31 last site, office on time / late = the §1 lateness hint is 0 / above 0.
+- `CONTEXT.md` ("Work and attendance"): **Day sheet** (كشف اليوم) — one group's attendance for one date, where HR marks many employees at once. _Avoid_: roll call, check-in screen. **Last site** (آخر موقع) — the work site of an employee's latest recorded work day in the 7 days before a date. _Avoid_: yesterday's site.
+- `docs/hrms-module-plan.md` "Attendance entry (1c)" row: add "a day sheet per group and date with bulk marking (cohort sweeps, ID lists, ranges, paste) and a session undo; the period grid stays".
+- Gate F. Commit "Document the attendance day sheet".
+
+**Locale keys (Tasks 17–21; ar | en):**
+
+| Key | ar | en |
+|---|---|---|
+| `attendance.tab.sheet` | كشف اليوم | Day sheet |
+| `attendance.sheet.kpi.total` | الإجمالي | Total |
+| `attendance.sheet.kpi.accounted` | {{done}} من {{total}} مسجل | {{done}} of {{total}} recorded |
+| `attendance.sheet.kpi.worked` | في موقع | At a site |
+| `attendance.sheet.kpi.onTime` | في الموعد | On time |
+| `attendance.sheet.kpi.late` | متأخر | Late |
+| `attendance.sheet.kpi.leave` | إجازة | Leave |
+| `attendance.sheet.kpi.absent` | غياب | Absent |
+| `attendance.sheet.days` | أيام الفترة | Period days |
+| `attendance.sheet.cohortsSite` | حسب آخر موقع | By last site |
+| `attendance.sheet.cohortsDept` | حسب القسم | By department |
+| `attendance.sheet.noLastSite` | بدون موقع سابق | No last site |
+| `attendance.sheet.noDepartment` | بدون قسم | No department |
+| `attendance.sheet.sweep` | تسجيل الباقين | Mark the rest |
+| `attendance.sheet.command` | الرقم الوظيفي أو الاسم أو قائمة أو نطاق | Employee ID, name, list or range |
+| `attendance.sheet.matched` | {{count}} مطابق | {{count}} matched |
+| `attendance.sheet.unknown` | أرقام غير موجودة: {{ids}} | Unknown IDs: {{ids}} |
+| `attendance.sheet.capped` | استُخدمت أول 500 رقم فقط | Only the first 500 IDs were used |
+| `attendance.sheet.paste` | لصق أرقام | Paste IDs |
+| `attendance.sheet.action.present` | حاضر | Present |
+| `attendance.sheet.action.absent` | غائب | Absent |
+| `attendance.sheet.action.sick` | مرضي | Sick |
+| `attendance.sheet.action.details` | التفاصيل | Details |
+| `attendance.sheet.action.setSite` | تعيين موقع | Set site |
+| `attendance.sheet.selected` | {{count}} محدد | {{count}} selected |
+| `attendance.sheet.selectRow` | تحديد {{name}} | Select {{name}} |
+| `attendance.sheet.selectPage` | تحديد الصفوف الظاهرة | Select visible rows |
+| `attendance.sheet.clearSelection` | إلغاء التحديد | Clear selection |
+| `attendance.sheet.applied` | تم تسجيل {{count}} | {{count}} saved |
+| `attendance.sheet.skippedNoSite` | {{count}} بدون موقع سابق؛ اختر الموقع من التفاصيل | {{count}} have no last site; choose it in Details |
+| `attendance.sheet.conflict` | تغيّرت أيام بعد التحميل ({{names}})؛ لم يُحفظ شيء وتم تحديث الكشف | Days changed after loading ({{names}}); nothing was saved and the sheet was refreshed |
+| `attendance.sheet.tooMany` | الحد الأقصى 500 موظف في المرة الواحدة | At most 500 employees at once |
+| `attendance.sheet.undo` | تراجع | Undo |
+| `attendance.sheet.undoCount` | تراجع ({{count}}) | Undo ({{count}}) |
+| `attendance.sheet.undone` | تم التراجع | Undone |
+| `attendance.sheet.undoConflict` | تغيّر اليوم منذ ذلك الحين؛ تعذّر التراجع | The day changed since; undo is not possible |
+| `attendance.sheet.inTime` | وقت حضور {{name}} | In time for {{name}} |
+| `attendance.sheet.lateBy` | متأخر {{minutes}} د | Late {{minutes}} min |
+| `attendance.sheet.lastSite` | آخر موقع: {{site}} | Last site: {{site}} |
+| `attendance.sheet.totals` | إجمالي الفترة | Period totals |
+| `attendance.sheet.locked` | الفترة مقفلة؛ الكشف للعرض فقط. | This period is locked; the sheet is read-only. |
+| `attendance.sheet.noMatch` | لا يوجد موظفون مطابقون. | No employees match. |
+| `attendance.sheet.shortcuts.*` | بحث، صف، حاضر، غائب، مرضي، تفاصيل، تراجع | Search, row, present, absent, sick, details, undo |
+
+Reuse existing `attendance.state.missing` / `attendance.short.absent` where they fit.
+
+### Gate 2b (controller)
+1. Gates B-test, B-pint, B-stan, B-deptrac, F.
+2. `docker compose up -d`, `php artisan migrate`, `db:seed --class=AttendanceDemoSeeder`; `preview_start frontend`; Playwright from the npx cache (install nothing).
+3. Every screen at 375 / 1024 / 1440 × ar / en × light / dark into `.claude/gate-1c-2b/<n>-<screen>-<width>-<lang>-<theme>.png`, HR unless noted. New: S1 sheet engineer; S2 sheet office; S3 selection (3 rows); S4 command `1-3`; S5 paste dialog (not submitted); S6 after one P (toast, "Undo (1)"), then undo; S7 keyboard cursor on row 3; S8 locked (previous engineer period, locked then reopened with "Gate 2b screenshots"); S9 CEO read-only sheet + editor note. Re-shoot 1–12 from Gate 2.
+4. Console + network checked; data writes in `capture-log.md`. Post the shots; wait for the owner. Slice 3 waits.
+
 # Slice 3 — Excel template and import with preview
 
 ### Task 10: Template download
