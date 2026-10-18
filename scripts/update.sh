@@ -16,7 +16,6 @@
 #   3. gunzip -c backups/pre-update-<file>.sql.gz | docker compose exec -T postgres psql -v ON_ERROR_STOP=1 -U <POSTGRES_USER> -d <POSTGRES_DB>
 #      (restore into an empty database; drop and recreate it first if it already has tables)
 set -euo pipefail
-umask 077
 
 STEP=start
 step() { STEP="$*"; echo; echo "==> $STEP"; }
@@ -54,8 +53,8 @@ step "Database dump"
 mkdir -p backups
 dump="backups/pre-update-$(date +%Y%m%d-%H%M%S)-$(echo "$old_sha" | cut -c1-7).sql.gz"
 docker compose up -d --wait postgres
-docker compose exec -T postgres pg_dump -U "$db_user" "$db_name" | gzip > "$dump"
-gunzip -c "$dump" | grep -q 'CREATE TABLE public.migrations' || die "dump has no migrations table: wrong or empty database (check the compose project name)"
+(umask 077; docker compose exec -T postgres pg_dump -U "$db_user" "$db_name" | gzip > "$dump")
+gunzip -c "$dump" | grep 'CREATE TABLE public.migrations' >/dev/null || die "dump has no migrations table: wrong or empty database (check the compose project name)"
 echo "Dump written to $dump"
 
 step "Update the code"
@@ -77,7 +76,6 @@ docker compose up -d --build --remove-orphans
 step "Composer install"
 # vendor/ lives on the bind mount and may be stale or missing.
 docker compose exec -T app composer install --no-interaction --prefer-dist
-docker compose exec -T app chown -R www-data:www-data storage bootstrap/cache
 
 step "Migrate and clear caches"
 docker compose exec -T app php artisan migrate --force
@@ -87,6 +85,7 @@ docker compose exec -T app php artisan cache:clear
 
 step "Restart workers and scheduler"
 docker compose restart worker-critical worker-pdf worker-reports worker-maintenance scheduler
+docker compose exec -T app chown -R www-data:www-data storage bootstrap/cache
 
 step "Health check (up to 30 s)"
 i=0
