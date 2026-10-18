@@ -29,6 +29,12 @@ test('the grid shows each employee per day with missing and derived days marked'
   expect(screen.getByRole('group', { name: 'أيام غير مسجلة' })).toHaveTextContent('19')
 })
 
+test('the grid isolates a Latin name from the employee code so RTL does not glue them', async () => {
+  mockFetch(routes)
+  renderWithAuth(<AttendancePage />, ['attendance.view.all'], { path: '/attendance?group=engineer&tab=grid' })
+  expect((await screen.findByText('Engineer-1')).tagName).toBe('BDI')
+})
+
 test('the period arrows move between periods and keep the group in the URL', async () => {
   const grid = vi.fn((_url: string) => json(200, { data: rows, meta: { pagination } }))
   mockFetch({ ...routes, 'GET /api/v1/attendance/grid': grid })

@@ -205,8 +205,10 @@ function Grid({ group, start, onOpenDay }: { group: string; start: string; onOpe
           {grid.map(({ employee, days }) => (
             <TableRow key={employee.id}>
               <TableCell className="sticky start-0 z-10 bg-card">
-                <span className="me-2 tabular text-muted-foreground">{employee.code}</span>
-                {employee.name_ar}
+                <span className="flex items-center gap-2">
+                  <span className="tabular text-muted-foreground">{employee.code}</span>
+                  <bdi>{employee.name_ar}</bdi>
+                </span>
               </TableCell>
               {days.map((d) => {
                 const text = label(d)
