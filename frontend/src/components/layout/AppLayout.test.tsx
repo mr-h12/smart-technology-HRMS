@@ -1,4 +1,4 @@
-import { screen } from '@testing-library/react'
+import { screen, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { afterEach, beforeEach, expect, test, vi } from 'vitest'
 import { json, me, mockFetch, pagination, renderApp } from '@/test-utils'
@@ -87,4 +87,13 @@ test('the Settings link shows for setting.view alone', async () => {
   signedIn(['setting.view.all'])
   renderApp('/settings')
   expect(await screen.findByRole('link', { name: 'الإعدادات' })).toBeInTheDocument()
+})
+
+test('the mobile nav header keeps the close button lane clear of the brand', async () => {
+  signedIn(['employee.view.all'])
+  renderApp('/employees')
+  await user.click(await screen.findByRole('button', { name: 'فتح القائمة' }))
+  const sheet = await screen.findByRole('dialog')
+  expect(sheet).toHaveClass('w-72')
+  expect(within(sheet).getByRole('link', { name: 'سمارت تكنولوجي لإدارة الموارد البشرية' }).parentElement).toHaveClass('pe-14')
 })

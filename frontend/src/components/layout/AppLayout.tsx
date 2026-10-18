@@ -175,11 +175,11 @@ function SidebarNav({ collapsed = false, onNavigate }: { collapsed?: boolean; on
 }
 
 /** Sidebar header: the CRM puts the collapse control here, beside the product name. */
-function SidebarHeader({ collapsed = false, onToggleCollapse }: { collapsed?: boolean; onToggleCollapse?: () => void }) {
+function SidebarHeader({ collapsed = false, onToggleCollapse, className }: { collapsed?: boolean; onToggleCollapse?: () => void; className?: string }) {
   const { t } = useTranslation()
   const { can } = useAuth()
   return (
-    <div className={cn('flex min-h-16 items-center gap-3 border-b py-3', collapsed ? 'justify-center px-0' : 'px-4')}>
+    <div className={cn('flex min-h-16 items-center gap-3 border-b py-3', collapsed ? 'justify-center px-0' : 'px-4', className)}>
       {onToggleCollapse ? (
         <button
           type="button"
@@ -336,10 +336,11 @@ export function AppLayout() {
         </div>
 
         <Sheet open={mobileOpen} onOpenChange={setMobileOpen}>
-          <SheetContent side="left" className="w-64 p-0">
+          <SheetContent side="left" className="w-72 p-0">
             <SheetTitle className="sr-only">{t('nav.main')}</SheetTitle>
             <SheetDescription className="sr-only">{t('app.name')}</SheetDescription>
-            <SidebarHeader />
+            {/* pe-14 keeps the brand out of the 44 px close button's lane */}
+            <SidebarHeader className="pe-14" />
             <div className="flex-1 overflow-y-auto overscroll-contain px-2 py-3">
               <SidebarNav onNavigate={() => setMobileOpen(false)} />
             </div>
