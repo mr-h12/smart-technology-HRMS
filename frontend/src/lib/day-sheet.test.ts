@@ -48,15 +48,20 @@ test('parseBatch splits on newlines', () => {
 })
 
 test('parseBatch reports single codes that are not on the sheet', () => {
-  expect(parseBatch('99999', sheet)).toEqual({ matches: [], unknown: ['99999'], capped: false })
+  expect(parseBatch('99999', sheet)).toEqual({ matches: [], unknown: ['99999'], capped: false, byName: false })
 })
 
 test('parseBatch matches nothing on blank input', () => {
-  expect(parseBatch('  ', sheet)).toEqual({ matches: [], unknown: [], capped: false })
+  expect(parseBatch('  ', sheet)).toEqual({ matches: [], unknown: [], capped: false, byName: false })
 })
 
 test('parseBatch searches names case-insensitively', () => {
   expect(parseBatch('engineer-1', [row(1), row(2)]).matches.map((r) => r.employee.code)).toEqual([1])
+})
+
+test('parseBatch says when it searched by name, so a name never writes', () => {
+  expect(parseBatch('engineer', sheet).byName).toBe(true)
+  expect(parseBatch('1-3, 7', sheet).byName).toBe(false)
 })
 
 test('parseBatch searches the department', () => {

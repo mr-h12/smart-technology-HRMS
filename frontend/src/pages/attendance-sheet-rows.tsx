@@ -1,4 +1,5 @@
 import { CalendarOff, Check, CircleHelp, Clock, type LucideIcon, Stethoscope, UserX } from 'lucide-react'
+import { useId } from 'react'
 import { useTranslation } from 'react-i18next'
 import { localName, type Row } from '@/components/form'
 import { Button } from '@/components/ui/button'
@@ -52,6 +53,9 @@ export function SheetRows({ rows, office, editable, date, sites, selected, pendi
   const pageAll = pageIds.every((id) => selected.has(id))
   const pageSome = pageIds.some((id) => selected.has(id))
   const noLeave = (a: SheetAction) => a.kind === 'leave' && !leaveSite(a.code)
+  // a field row is present at its last site; without one there is nowhere to put it (bulk paths skip such rows with a toast)
+  const noSite = (a: SheetAction, r: SheetRow) => a.kind === 'present' && !office && !r.last_site_id
+  const noSiteId = useId()
   const check = (r: SheetRow) => (
     <label className="flex size-11 cursor-pointer items-center justify-center">
       <input type="checkbox" className={cn(FOCUS, 'size-4 accent-primary')} checked={selected.has(r.employee.id)} onChange={(e) => onToggle([r.employee.id], e.target.checked)} />
@@ -60,7 +64,8 @@ export function SheetRows({ rows, office, editable, date, sites, selected, pendi
   )
   // compact: icon-only below xl, so the desktop row fits beside the totals; the aria-label always names the action and the employee
   const quick = (r: SheetRow, h: string, compact = false) => QUICK.map(([action, label, Icon, tone]) => (
-    <Button key={label} type="button" variant="outline" size="sm" className={cn(FOCUS, h, 'px-2.5', tone)} disabled={pending.has(r.employee.id) || noLeave(action)}
+    <Button key={label} type="button" variant="outline" size="sm" className={cn(FOCUS, h, 'px-2.5', tone)} disabled={pending.has(r.employee.id) || noLeave(action) || noSite(action, r)}
+      {...(noSite(action, r) && { title: t('attendance.sheet.noLastSite'), 'aria-describedby': noSiteId })}
       aria-label={t('attendance.sheet.rowAction', { action: t(label), name: name(r) })} onClick={() => onApply(action, r, `${t(label)} ${name(r)}`)}>
       <Icon aria-hidden />
       <span className={cn(compact && 'hidden xl:inline')}>{t(label)}</span>
@@ -117,6 +122,7 @@ export function SheetRows({ rows, office, editable, date, sites, selected, pendi
 
   return (
     <>
+      {editable && !office && <span id={noSiteId} className="sr-only">{t('attendance.sheet.noLastSite')}</span>}
       <div className="hidden md:block">
         <Table>
           <TableHeader>

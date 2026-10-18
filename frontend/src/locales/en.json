@@ -533,6 +533,19 @@
         "clear": "Clear",
         "apply": "Apply"
       },
+      "command": "Quick entry",
+      "commandHint": "Employee ID, list (12, 15), range (1001-1050) or name",
+      "commandHelp": "Enter marks the IDs present; a name only selects the matches.",
+      "matched": "{{count}} matched",
+      "unknown": "Not on this sheet: {{ids}}",
+      "capped": "Only the first {{max}} IDs were used",
+      "paste": {
+        "button": "Paste IDs",
+        "title": "Paste employee IDs",
+        "hint": "Paste IDs from Excel or WhatsApp: one per line, comma-separated, or ranges.",
+        "label": "Employee IDs",
+        "idsOnly": "Paste employee IDs only; names are not recorded from here."
+      },
       "toast": {
         "applied": "{{count}} recorded",
         "skippedNoSite": "{{count}} skipped: no last site. Record them from Details.",

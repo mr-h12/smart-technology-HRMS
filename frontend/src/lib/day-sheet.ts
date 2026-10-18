@@ -20,14 +20,14 @@ export type SheetAction = { kind: 'present' } | { kind: 'leave'; code: 'absent' 
 
 export const MAX_BATCH = 500
 
-/** A command-bar or pasted batch: employee codes (single, lists, ranges) or else a name search. */
-export function parseBatch(input: string, rows: SheetRow[]): { matches: SheetRow[]; unknown: string[]; capped: boolean } {
+/** A command-bar or pasted batch: employee codes (single, lists, ranges) or else a name search (`byName`; it must never write). */
+export function parseBatch(input: string, rows: SheetRow[]): { matches: SheetRow[]; unknown: string[]; capped: boolean; byName: boolean } {
   const text = asciiDigits(input).trim()
   const tokens = text.split(/[\s,;،]+/).filter(Boolean)
   if (!tokens.every((t) => /^\d+([-–]\d+)?$/.test(t))) {
     const q = text.toLowerCase()
     const matches = rows.filter((r) => `${r.employee.code} ${r.employee.name_ar} ${r.employee.name_en ?? ''} ${r.employee.department ?? ''}`.toLowerCase().includes(q))
-    return { matches, unknown: [], capped: false }
+    return { matches, unknown: [], capped: false, byName: true }
   }
   const byCode = new Map(rows.map((r) => [r.employee.code, r]))
   const matches = new Set<SheetRow>()
@@ -47,7 +47,7 @@ export function parseBatch(input: string, rows: SheetRow[]): { matches: SheetRow
       else if (lo === hi) unknown.add(t)
     }
   }
-  return { matches: [...matches], unknown: [...unknown], capped }
+  return { matches: [...matches], unknown: [...unknown], capped, byName: false }
 }
 
 const hhmm = (t: string | number | null) => (t == null ? null : String(t).slice(0, 5))

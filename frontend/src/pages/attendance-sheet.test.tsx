@@ -345,13 +345,21 @@ test('an office in-time edit posts site null and the time', async () => {
   expect(sent(bulk)).toEqual({ date: '2026-10-18', rows: [{ employee_id: 'e11', version: null, site_id: null, in_time: '09:20' }] })
 })
 
-test('a row without a last site is skipped with a toast', async () => {
+test('a field row without a last site has its Present button disabled with the reason; a bulk Present skips it with a toast', async () => {
   const bulk = bulkOk()
   mockFetch({ ...routes, 'POST /api/v1/attendance/days/bulk': bulk })
   edit()
-  await user.click(within(await table()).getByRole('button', { name: 'حاضر Engineer-3' }))
+  const tbl = await table()
+  const present = within(tbl).getByRole('button', { name: 'حاضر Engineer-3' })
+  expect(present).toBeDisabled()
+  expect(present).toHaveAccessibleDescription('بدون موقع سابق')
+  expect(within(tbl).getByRole('button', { name: 'حاضر Engineer-1' })).toBeEnabled()
+  await user.click(within(tbl).getByRole('checkbox', { name: 'تحديد Engineer-1' }))
+  await user.click(within(tbl).getByRole('checkbox', { name: 'تحديد Engineer-3' }))
+  await user.click(within(screen.getByRole('group', { name: 'إجراءات المحدد' })).getByRole('button', { name: 'حاضر' }))
   expect(toast.warning).toHaveBeenCalledWith('تم تخطي 1 بدون موقع سابق؛ سجّلهم من التفاصيل.')
-  expect(bulk).not.toHaveBeenCalled()
+  await waitFor(() => expect(bulk).toHaveBeenCalledTimes(1))
+  expect(sent(bulk).rows).toEqual([{ employee_id: 'e1', version: null, site_id: 's1' }])
 })
 
 test.each([
@@ -447,4 +455,85 @@ test('a group change does not show the old group\'s period', async () => {
   await waitFor(() => expect(calls).toBe(2))
   expect(screen.queryByText('من 2026-09-26 إلى 2026-10-25')).not.toBeInTheDocument()
   expect(screen.queryByRole('button', { name: 'قفل الفترة' })).not.toBeInTheDocument()
+})
+
+const command = () => screen.getByRole('textbox', { name: 'إدخال سريع' })
+const crew = Array.from({ length: 5 }, (_, i) => row(i + 1, `Engineer-${i + 1}`, {}, { last_site_id: 's1' }))
+
+test('Enter on a range marks those employee IDs present', async () => {
+  const bulk = bulkOk()
+  mockFetch({ ...routes, 'GET /api/v1/attendance/sheet': () => sheet(crew), 'POST /api/v1/attendance/days/bulk': bulk })
+  edit()
+  await table()
+  await user.type(command(), '2-4')
+  expect(within(screen.getByRole('table')).getAllByRole('row')).toHaveLength(4) // header + the 3 matches
+  expect(screen.getByRole('status', { name: 'إدخال سريع' })).toHaveTextContent('3 مطابق')
+  await user.keyboard('{Enter}')
+  await waitFor(() => expect(bulk).toHaveBeenCalledTimes(1))
+  expect(sent(bulk)).toEqual({ date: '2026-10-18', rows: ['e2', 'e3', 'e4'].map((employee_id) => ({ employee_id, version: null, site_id: 's1' })) })
+  await waitFor(() => expect(command()).toHaveValue(''))
+})
+
+test('a name search selects the matches and writes nothing', async () => {
+  const bulk = bulkOk()
+  const rows = [row(1, 'Ahmed Ali', {}, { last_site_id: 's1' }), row(2, 'Omar Said', {}, { last_site_id: 's1' }), row(3, 'Ahmed Samir', {}, { last_site_id: 's1' })]
+  mockFetch({ ...routes, 'GET /api/v1/attendance/sheet': () => sheet(rows), 'POST /api/v1/attendance/days/bulk': bulk })
+  edit()
+  await table()
+  await user.type(command(), 'ahmed{Enter}')
+  const tbl = screen.getByRole('table')
+  expect(within(tbl).getAllByRole('row')).toHaveLength(3)
+  expect(within(tbl).getByRole('checkbox', { name: 'تحديد Ahmed Ali' })).toBeChecked()
+  expect(within(tbl).getByRole('checkbox', { name: 'تحديد Ahmed Samir' })).toBeChecked()
+  expect(screen.getByRole('group', { name: 'إجراءات المحدد' })).toHaveTextContent('2 محدد')
+  expect(command()).toHaveValue('ahmed')
+  expect(bulk).not.toHaveBeenCalled()
+})
+
+test('the paste dialog applies Absent to the pasted list and reports unknown IDs', async () => {
+  const bulk = bulkOk()
+  mockFetch({ ...routes, 'POST /api/v1/attendance/days/bulk': bulk })
+  edit()
+  await table()
+  await user.click(screen.getByRole('button', { name: 'لصق أرقام' }))
+  const dialog = screen.getByRole('dialog', { name: 'لصق الأرقام الوظيفية' })
+  await user.type(within(dialog).getByRole('textbox', { name: 'الأرقام الوظيفية' }), '1{Enter}2{Enter}99')
+  expect(within(dialog).getByRole('status')).toHaveTextContent('2 مطابق')
+  await user.click(within(dialog).getByRole('button', { name: 'غياب' }))
+  await waitFor(() => expect(bulk).toHaveBeenCalledTimes(1))
+  expect(sent(bulk).rows).toEqual([{ employee_id: 'e1', version: null, site_id: 'sa' }, { employee_id: 'e2', version: 1, site_id: 'sa' }])
+  await waitFor(() => expect(toast.warning).toHaveBeenCalledWith('غير موجود في الكشف: 99'))
+  await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument())
+})
+
+test('the paste dialog never writes a name search', async () => {
+  mockFetch(routes)
+  edit()
+  await table()
+  await user.click(screen.getByRole('button', { name: 'لصق أرقام' }))
+  const dialog = screen.getByRole('dialog', { name: 'لصق الأرقام الوظيفية' })
+  await user.type(within(dialog).getByRole('textbox', { name: 'الأرقام الوظيفية' }), 'Engineer')
+  for (const b of ['حاضر', 'غياب', 'مرضي']) expect(within(dialog).getByRole('button', { name: b })).toBeDisabled()
+})
+
+test('a capped range says only the first 500 were used', async () => {
+  mockFetch(routes)
+  edit()
+  await table()
+  await user.type(command(), '1-600')
+  expect(screen.getByRole('status', { name: 'إدخال سريع' })).toHaveTextContent('استُخدم أول 500 رقم فقط')
+})
+
+test.each([
+  ['a locked period', EDIT, { ...period, is_locked: true }],
+  ['a reader', ['attendance.view.all'], period],
+])('%s can filter with the command bar but Enter writes nothing and there is no paste', async (_, perms, p) => {
+  const bulk = bulkOk()
+  mockFetch({ ...routes, 'GET /api/v1/attendance/period': () => json(200, { data: p }), 'POST /api/v1/attendance/days/bulk': bulk })
+  open('/attendance?group=engineer', perms)
+  await table()
+  expect(screen.queryByRole('button', { name: 'لصق أرقام' })).not.toBeInTheDocument()
+  await user.type(command(), '1{Enter}')
+  expect(within(screen.getByRole('table')).getAllByRole('row')).toHaveLength(2)
+  expect(bulk).not.toHaveBeenCalled()
 })

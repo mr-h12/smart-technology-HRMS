@@ -1,5 +1,5 @@
 import { useQueryClient } from '@tanstack/react-query'
-import { CheckCheck, Lock, Users } from 'lucide-react'
+import { CheckCheck, ClipboardPaste, Lock, ScanBarcode, Users } from 'lucide-react'
 import { useId, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { toast } from 'sonner'
@@ -9,11 +9,14 @@ import { TableSkeleton } from '@/components/layout/PageSkeleton'
 import { paginate, Pagination } from '@/components/tables/Pagination'
 import { Button } from '@/components/ui/button'
 import { Card } from '@/components/ui/card'
+import { Input } from '@/components/ui/input'
+import { Label } from '@/components/ui/label'
 import { ApiError } from '@/lib/api'
 import { useAuth } from '@/lib/auth'
-import { bulkRows, MAX_BATCH, type SheetAction, type SheetRow, statusOf } from '@/lib/day-sheet'
+import { bulkRows, MAX_BATCH, parseBatch, type SheetAction, type SheetRow, statusOf } from '@/lib/day-sheet'
 import { queryKey, SITES, useApi, useSave } from '@/lib/query'
 import { cn } from '@/lib/utils'
+import { BatchPreview, PasteDialog } from './attendance-sheet-command'
 import { FOCUS, LOOK, QUICK, SheetRows, type Status } from './attendance-sheet-rows'
 
 type Filter = 'all' | 'missing' | 'present' | 'late' | 'leave' | 'absent'
@@ -63,6 +66,8 @@ export function DaySheet({ group, date, period, onDate, onOpenDay }: { group: st
   const [cohort, setCohort] = useState<string | null>(null)
   const [page, setPage] = useState(1)
   const [selected, setSelected] = useState<ReadonlySet<string>>(new Set())
+  const [query, setQuery] = useState('') // the command bar: filters the list; Enter writes only an ID batch
+  const [pasting, setPasting] = useState(false)
   const [siteChoice, setSiteChoice] = useState('') // the bulk bar's Set site: chosen first, written only by its Apply button
   const unselect = () => { setSelected(new Set()); setSiteChoice('') }
   const [shownDate, setShownDate] = useState(date)
@@ -76,6 +81,7 @@ export function DaySheet({ group, date, period, onDate, onOpenDay }: { group: st
   const [pending, setPending] = useState<ReadonlySet<string>>(new Set())
   const daysId = useId()
   const cohortsId = useId()
+  const commandId = useId()
   // the header's period may still be the previous one while the next loads: write only into the period that holds this date
   const editable = !!period && period.group === group && period.start <= date && date <= period.end && !period.is_locked && can('attendance.edit')
   const leaveSite = (code: string) => sites.find((s) => s.kind === 'leave' && s.leave_code === code && s.active)?.id as string | undefined
@@ -140,7 +146,9 @@ export function DaySheet({ group, date, period, onDate, onOpenDay }: { group: st
   }
   const cohorts = [...groups].sort(([a], [b]) => Number(!a) - Number(!b)) // "none" last
   const cohortName = (key: string) => (office ? key || t('attendance.sheet.noDepartment') : key ? siteName(key) : t('attendance.sheet.noLastSite'))
-  const shown = rows.filter((r) => (filter === 'all' || bucket(status(r)) === filter) && (cohort === null || cohortOf(r) === cohort))
+  const batch = query.trim() ? parseBatch(query, rows) : null
+  const hits = batch && new Set(batch.matches)
+  const shown = rows.filter((r) => (filter === 'all' || bucket(status(r)) === filter) && (cohort === null || cohortOf(r) === cohort) && (!hits || hits.has(r)))
   const pageRows = paginate(shown, page, PER_PAGE)
   // a filter change drops the selection: a bulk action must never write rows the user can no longer see
   const pick = (f: Filter) => { setFilter(f === filter ? 'all' : f); setPage(1); unselect() }
@@ -156,6 +164,13 @@ export function DaySheet({ group, date, period, onDate, onOpenDay }: { group: st
   })
   const bulk = (action: SheetAction, label: string) => void apply(action, picked, label).then((done) => done && unselect())
   const noLeave = (a: SheetAction) => a.kind === 'leave' && !leaveSite(a.code)
+  // Enter acts on the shown matches only: an ID batch is marked present, a name search only selects (it never writes)
+  const command = (e: React.KeyboardEvent<HTMLInputElement>) => {
+    if (e.key !== 'Enter' || e.nativeEvent.isComposing || !batch || !editable || !shown.length) return
+    e.preventDefault()
+    if (batch.byName) setSelected(new Set(shown.map((r) => r.employee.id)))
+    else void apply({ kind: 'present' }, shown, `${t('attendance.sheet.action.present')} (${shown.length})`).then((done) => done && setQuery(''))
+  }
 
   return (
     <div className="space-y-4">
@@ -249,6 +264,30 @@ export function DaySheet({ group, date, period, onDate, onOpenDay }: { group: st
       )}
 
       <Card className="overflow-hidden">
+        {rows.length > 0 && (
+          <div className="space-y-2 border-b px-4 py-3">
+            <div className="flex flex-wrap items-end gap-2">
+              <div className="flex min-w-0 flex-1 basis-64 flex-col gap-1.5">
+                <Label htmlFor={commandId}>{t('attendance.sheet.command')}</Label>
+                <div className="relative">
+                  <ScanBarcode className="pointer-events-none absolute start-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" aria-hidden />
+                  <Input id={commandId} value={query} autoComplete="off" enterKeyHint="go" placeholder={t('attendance.sheet.commandHint')} className="h-11 ps-9 md:h-9"
+                    onChange={(e) => { setQuery(e.target.value); setPage(1) }} onKeyDown={command} />
+                </div>
+              </div>
+              {editable && (
+                <Button type="button" variant="outline" size="sm" className={cn(FOCUS, 'h-11 md:h-9')} onClick={() => setPasting(true)}>
+                  <ClipboardPaste aria-hidden />
+                  {t('attendance.sheet.paste.button')}
+                </Button>
+              )}
+            </div>
+            <div role="status" aria-label={t('attendance.sheet.command')} className="flex min-h-6 flex-wrap items-center gap-1.5">
+              {batch ? <BatchPreview batch={batch} count={shown.length} /> : editable && <span className="text-xs text-muted-foreground">{t('attendance.sheet.commandHelp')}</span>}
+            </div>
+          </div>
+        )}
+        {editable && <PasteDialog open={pasting} onOpenChange={setPasting} rows={rows} leaveSite={leaveSite} onApply={async (action, chosen, label) => !!(await apply(action, chosen, label))} />}
         {!rows.length ? (
           <EmptyState icon={Users} title={t('attendance.empty')} />
         ) : !shown.length ? (
