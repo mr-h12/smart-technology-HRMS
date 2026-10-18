@@ -1,11 +1,15 @@
 import { screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { afterEach, expect, test, vi } from 'vitest'
+import i18n from '@/i18n'
 import { json, mockFetch, pagination, renderWithAuth } from '@/test-utils'
 import { AttendancePage } from './attendance'
 
 const user = userEvent.setup()
-afterEach(() => vi.unstubAllGlobals())
+afterEach(() => {
+  vi.unstubAllGlobals()
+  return i18n.changeLanguage('ar')
+})
 
 const period = { group: 'engineer', start: '2026-09-26', end: '2026-10-25', prev_start: '2026-08-26', next_start: null, is_locked: false, lock: null, missing: 19 }
 const cell = (date: string, state: string, extra = {}) => ({ date, state, source: state === 'stored' ? 'entered' : null, site_id: null, leave_code: null, ...extra })
@@ -160,4 +164,30 @@ test('lock controls need attendance.lock', async () => {
   expect(await screen.findByRole('button', { name: 'Engineer-1 2026-10-01: Site-1' })).toBeInTheDocument()
   expect(screen.queryByRole('button', { name: 'قفل الفترة' })).not.toBeInTheDocument()
   expect(screen.queryByRole('button', { name: 'إعادة فتح الفترة' })).not.toBeInTheDocument()
+})
+
+// the employee and the site each have distinct Arabic and English names
+const bilingual = {
+  ...routes,
+  'GET /api/v1/attendance/grid': () => json(200, { data: [{ employee: { id: 'e1', code: 1, name_ar: 'مهندس-1', name_en: 'Engineer-1 EN' }, days: [cell('2026-10-01', 'stored', { site_id: 's1' })] }], meta: { pagination } }),
+  'GET /api/v1/sites': () => json(200, { data: [{ ...sites[0], name_ar: 'موقع-1', name_en: 'Site-1 EN' }], meta: { pagination } }),
+  'GET /api/v1/attendance/days/e1/2026-10-01': () => new Promise<Response>(() => {}) as unknown as Response, // the title shows while the day loads
+  'GET /api/v1/attendance/missing': () => json(200, { data: [{ employee_id: 'e1', code: 1, name_ar: 'مهندس-1', name_en: 'Engineer-1 EN', date: '2026-10-03' }], meta: { pagination } }),
+}
+
+test('in English the grid, its day editor and the missing list show the English site and employee names', async () => {
+  mockFetch(bilingual)
+  await i18n.changeLanguage('en')
+  renderWithAuth(<AttendancePage />, lockPerms, { path: '/attendance?group=engineer&tab=grid' })
+  await user.click(await screen.findByRole('button', { name: 'Engineer-1 EN 2026-10-01: Site-1 EN' }))
+  expect(await screen.findByRole('dialog', { name: '2026-10-01 — Engineer-1 EN' })).toBeInTheDocument()
+  await user.keyboard('{Escape}')
+  await user.click(screen.getByRole('button', { name: 'Lock period' }))
+  expect(await within(await screen.findByRole('dialog')).findByRole('listitem')).toHaveTextContent('Engineer-1 EN')
+})
+
+test('in Arabic the grid keeps the Arabic site and employee names', async () => {
+  mockFetch(bilingual)
+  renderWithAuth(<AttendancePage />, ['attendance.view.all'], { path: '/attendance?group=engineer&tab=grid' })
+  expect(await screen.findByRole('button', { name: 'مهندس-1 2026-10-01: موقع-1' })).toBeInTheDocument()
 })

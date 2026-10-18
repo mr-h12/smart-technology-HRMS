@@ -2,7 +2,7 @@ import { useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { toast } from 'sonner'
 import { StatusBadge } from '@/components/common/StatusBadge'
-import { ErrorBanner, Field, type Row, SelectField, TextField, toErrs, useForm } from '@/components/form'
+import { ErrorBanner, Field, localName, type Row, SelectField, TextField, toErrs, useForm } from '@/components/form'
 import { TableSkeleton } from '@/components/layout/PageSkeleton'
 import { Button } from '@/components/ui/button'
 import { Textarea } from '@/components/ui/input'
@@ -29,7 +29,7 @@ const asText = (f: string, v: unknown) => (v == null ? '' : AMOUNTS.includes(f) 
 const toBody = (f: string, v: string) => (v === '' ? null : MINUTES.includes(f) && /^\d+$/.test(v) ? Number.parseInt(v, 10) : v)
 
 /** One employee's day in a sheet. "Load latest" remounts the body, which refetches the day before the form starts again. */
-export function DayEditor({ employee, date, onOpenChange }: { employee: { id: string; name_ar: string }; date: string; onOpenChange: (open: boolean) => void }) {
+export function DayEditor({ employee, date, onOpenChange }: { employee: Row; date: string; onOpenChange: (open: boolean) => void }) {
   const [gen, setGen] = useState(0)
   return (
     <Sheet open onOpenChange={onOpenChange}>
@@ -40,8 +40,8 @@ export function DayEditor({ employee, date, onOpenChange }: { employee: { id: st
   )
 }
 
-function DayBody({ employee, date, onDone, onReload }: { employee: { id: string; name_ar: string }; date: string; onDone: () => void; onReload: () => void }) {
-  const { t } = useTranslation()
+function DayBody({ employee, date, onDone, onReload }: { employee: Row; date: string; onDone: () => void; onReload: () => void }) {
+  const { t, i18n } = useTranslation()
   const path = `/attendance/days/${employee.id}/${date}`
   const day = useApi<Day>(path, { fresh: true })
   const sites = useApi<Row[]>(SITES) // shared with the grid
@@ -50,7 +50,7 @@ function DayBody({ employee, date, onDone, onReload }: { employee: { id: string;
   return (
     <>
       <div className="flex flex-wrap items-center gap-2 border-b p-5 pe-14">
-        <SheetTitle>{t('attendance.day.title', { date, name: employee.name_ar })}</SheetTitle>
+        <SheetTitle>{t('attendance.day.title', { date, name: localName(employee, i18n.language) })}</SheetTitle>
         {ready && day.data?.source && <StatusBadge variant="neutral" label={t(`attendance.source.${day.data.source}`)} />}
       </div>
       {ready ? (
@@ -67,7 +67,7 @@ function DayBody({ employee, date, onDone, onReload }: { employee: { id: string;
 
 /** Starts from the day as the server sent it (its defaults included) and sends only the fields the chosen site allows. */
 function DayForm({ day, sites, path, loadErr, onDone, onReload }: { day: Day; sites: Row[]; path: string; loadErr?: unknown; onDone: () => void; onReload: () => void }) {
-  const { t } = useTranslation()
+  const { t, i18n } = useTranslation()
   const { can } = useAuth()
   const send = useSave()
   const { form, set } = useForm({ site_id: day.site_id ?? '', ...Object.fromEntries(VALUES.map((f) => [f, asText(f, day[f])])) })
@@ -80,9 +80,12 @@ function DayForm({ day, sites, path, loadErr, onDone, onReload }: { day: Day; si
   const shown = (site?.kind === 'leave' ? day.leave_day_fields : day.fields).filter((f) => !OUTSIDE.includes(f) || site?.outside_alexandria)
   const errs = toErrs(err)
   const conflict = err instanceof ApiError && err.status === 409
+  // the seeded leave types have no name_en: in English they fall back to their code's name
+  const siteName = (s: Row) => localName(s, i18n.language, s.leave_code ? t(`attendance.leaveName.${s.leave_code}`) : undefined)
   // a stored day keeps its site in the list even after the site is deactivated
-  const usable = (kind: string): Options => sites.filter((s) => s.kind === kind && (s.active || s.id === day.site_id)).map((s) => [s.id, s.name_ar])
-  const leaveName = sites.find((s) => s.id === day.site_id)?.name_ar ?? t(`attendance.short.${day.leave_code}`, { defaultValue: day.leave_code })
+  const usable = (kind: string): Options => sites.filter((s) => s.kind === kind && (s.active || s.id === day.site_id)).map((s) => [s.id, siteName(s)])
+  const daySite = sites.find((s) => s.id === day.site_id)
+  const leaveName = daySite ? siteName(daySite) : t(`attendance.short.${day.leave_code}`, { defaultValue: day.leave_code })
   const leaveGroup: [string, Options] = [t('attendance.day.leaveTypes'), usable('leave')]
   const siteChoices = day.type === 'office'
     ? { options: [['', t('attendance.present')]] as Options, groups: [leaveGroup] }

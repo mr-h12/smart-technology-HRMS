@@ -1,6 +1,7 @@
 import { fireEvent, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { afterEach, beforeEach, expect, test, vi } from 'vitest'
+import i18n from '@/i18n'
 import { json, mockFetch, pagination, renderWithAuth } from '@/test-utils'
 import { AttendancePage } from './attendance'
 
@@ -16,6 +17,7 @@ afterEach(() => {
   vi.useRealTimers()
   vi.unstubAllGlobals()
   vi.clearAllMocks()
+  return i18n.changeLanguage('ar')
 })
 
 const period = { group: 'engineer', start: '2026-09-26', end: '2026-10-25', prev_start: '2026-08-26', next_start: null, is_locked: false, lock: null, missing: 4 }
@@ -771,4 +773,23 @@ test('no key acts while the next date loads', async () => {
   await waitFor(() => expect(calls).toBe(2))
   key('KeyP')
   expect(bulk).not.toHaveBeenCalled()
+})
+
+test('in English the site chips, cohorts, last site and toasts use the English names', async () => {
+  const en = (r: ReturnType<typeof row>, n: number) => ({ ...r, employee: { ...r.employee, name_ar: `مهندس-${n}`, name_en: `Engineer-${n} EN` } })
+  const bulk = vi.fn(() => json(409, { error: { code: 'concurrency_conflict', message: 'stale', details: [{ field: 'rows.0', code: 'concurrency_conflict', message: 'stale' }] } }))
+  mockFetch({
+    ...routes,
+    'GET /api/v1/attendance/sheet': () => sheet([en(engineers[0], 1), en(engineers[1], 2)]),
+    'GET /api/v1/sites': () => json(200, { data: [{ ...sites[0], name_ar: 'موقع-1', name_en: 'Site-1 EN' }, sites[1]], meta: { pagination } }),
+    'POST /api/v1/attendance/days/bulk': bulk,
+  })
+  await i18n.changeLanguage('en')
+  edit()
+  const tbl = await table()
+  expect(within(tbl).getByText('Site-1 EN')).toBeInTheDocument() // Engineer-2's present chip
+  expect(within(tbl).getByText('Last site: Site-1 EN')).toBeInTheDocument()
+  expect(within(screen.getByRole('group', { name: 'By last site' })).getByRole('button', { name: /^Site-1 EN/ })).toBeInTheDocument()
+  await user.click(within(tbl).getByRole('button', { name: 'Absent: Engineer-1 EN' }))
+  await waitFor(() => expect(toast.error).toHaveBeenCalledWith('Someone else just changed Engineer-1 EN; the sheet was reloaded. Check it and try again.'))
 })

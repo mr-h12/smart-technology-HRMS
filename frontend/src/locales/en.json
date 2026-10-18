@@ -449,6 +449,15 @@
       "absent": "Abs",
       "other": "Other"
     },
+    "leaveName": {
+      "friday": "Friday",
+      "saturday": "Saturday",
+      "official_holiday": "Official holiday",
+      "sick": "Sick leave",
+      "rest": "Rest",
+      "absent": "Absent",
+      "other": "Other"
+    },
     "legend": "Legend",
     "empty": "No employees in this group during this period.",
     "tab": {

@@ -7,7 +7,7 @@ import { MiniStat } from '@/components/cards/StatCard'
 import { EmptyState } from '@/components/common/EmptyState'
 import { PageHeader } from '@/components/common/PageHeader'
 import { StatusBadge } from '@/components/common/StatusBadge'
-import { cairoToday, ErrorBanner, Field, FormDialog, intlLocale, type Row, SelectField, useCairoTime } from '@/components/form'
+import { cairoToday, ErrorBanner, Field, FormDialog, intlLocale, localName, type Row, SelectField, useCairoTime } from '@/components/form'
 import { TableSkeleton } from '@/components/layout/PageSkeleton'
 import { Pagination } from '@/components/tables/Pagination'
 import { Button } from '@/components/ui/button'
@@ -73,12 +73,12 @@ export function AttendancePage() {
   const period = tab !== 'sheet' || (kept && kept.group === group && kept.start <= date && date <= kept.end) ? kept : undefined
   const start = chosen ?? period?.start // the grid follows the URL as soon as an arrow moves it
   const move = (to: string) => set(tab === 'sheet' ? { date: to } : { period: to })
-  const [day, setDay] = useState<{ employee: { id: string; name_ar: string }; date: string }>()
+  const [day, setDay] = useState<{ employee: Row; date: string }>()
   const [dlg, setDlg] = useState<'lock' | 'reopen'>()
   const send = useSave()
   const at = useCairoTime()
   if (!allowed) return <NotFoundPage />
-  const openDay = (e: Row, d: string) => setDay({ employee: { id: e.id, name_ar: e.name_ar }, date: d })
+  const openDay = (e: Row, d: string) => setDay({ employee: e, date: d })
   // group, period arrows and lock line: shared by both tabs; the arrows move the grid's period or the sheet's date
   const bar = (
     <>
@@ -181,7 +181,10 @@ function Grid({ group, start, onOpenDay }: { group: string; start: string; onOpe
   const { data: sites = [] } = useApi<Row[]>(SITES)
   const grid = rows as GridRow[]
   const weekday = new Intl.DateTimeFormat(intlLocale(i18n.language), { weekday: 'narrow', timeZone: 'UTC' })
-  const siteName = (id: string) => sites.find((s) => s.id === id)?.name_ar ?? '—'
+  const siteName = (id: string) => {
+    const s = sites.find((x) => x.id === id)
+    return s ? localName(s, i18n.language) : '—'
+  }
   const label = (d: Day) => {
     const state = STATE_KEY[d.state]
     if (state) return t(state)
@@ -212,7 +215,7 @@ function Grid({ group, start, onOpenDay }: { group: string; start: string; onOpe
               <TableCell className="sticky start-0 z-10 bg-card">
                 <span className="flex items-center gap-2">
                   <span className="tabular text-muted-foreground">{employee.code}</span>
-                  <bdi>{employee.name_ar}</bdi>
+                  <bdi>{localName(employee, i18n.language)}</bdi>
                 </span>
               </TableCell>
               {days.map((d) => {
@@ -220,7 +223,7 @@ function Grid({ group, start, onOpenDay }: { group: string; start: string; onOpe
                 const off = d.state === 'future' || d.state === 'not_employed'
                 return (
                   <TableCell key={d.date} className="px-0.5 py-1 first:ps-0.5 last:pe-0.5">
-                    <button type="button" disabled={off} aria-label={`${employee.name_ar} ${d.date}: ${text}`} className={cn(CELL, LOOK[d.state])} onClick={() => onOpenDay(employee, d.date)}>
+                    <button type="button" disabled={off} aria-label={`${localName(employee, i18n.language)} ${d.date}: ${text}`} className={cn(CELL, LOOK[d.state])} onClick={() => onOpenDay(employee, d.date)}>
                       {off ? <span aria-hidden>—</span> : text}
                     </button>
                   </TableCell>
@@ -289,7 +292,7 @@ function LockDialog({ period, onClose }: { period: Period; onClose: () => void }
 }
 
 function MissingDays({ group, start }: { group: string; start: string }) {
-  const { t } = useTranslation()
+  const { t, i18n } = useTranslation()
   const { rows, total, err, loading } = useList(`/attendance/missing?${new URLSearchParams({ group, period_start: start, per_page: '100' })}`)
   const id = useId()
   return (
@@ -305,7 +308,7 @@ function MissingDays({ group, start }: { group: string; start: string }) {
             {rows.map((d) => (
               <li key={`${d.employee_id}/${d.date}`} className="flex gap-3 px-3 py-2">
                 <span className="tabular text-muted-foreground">{d.code}</span>
-                <span className="flex-1">{d.name_ar}</span>
+                <span className="flex-1">{localName(d, i18n.language)}</span>
                 <span className="tabular">{d.date}</span>
               </li>
             ))}

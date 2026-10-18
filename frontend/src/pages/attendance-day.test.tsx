@@ -1,13 +1,17 @@
 import { screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { afterEach, expect, test, vi } from 'vitest'
+import i18n from '@/i18n'
 import { json, mockFetch, renderWithAuth } from '@/test-utils'
 import { DayEditor } from './attendance-day'
 vi.mock('sonner', () => ({ toast: { success: vi.fn() }, Toaster: () => null }))
 import { toast } from 'sonner'
 
 const user = userEvent.setup()
-afterEach(() => vi.unstubAllGlobals())
+afterEach(() => {
+  vi.unstubAllGlobals()
+  return i18n.changeLanguage('ar')
+})
 const pg = (total = 1) => ({ page: 1, per_page: 100, total, total_pages: 1, has_next_page: false, has_previous_page: false })
 const list = (data: unknown[], total = data.length) => () => json(200, { data, meta: { pagination: pg(total) } })
 const body = (fn: { mock: { calls: unknown[][] } }) => JSON.parse((fn.mock.calls[0] as [string, RequestInit])[1].body as string)
@@ -177,4 +181,15 @@ test('clearing a stored day sends its version', async () => {
   await user.click(await screen.findByRole('button', { name: 'مسح اليوم' }))
   await waitFor(() => expect(onOpenChange).toHaveBeenCalledWith(false))
   expect(del.mock.calls[0][0]).toContain('version=3')
+})
+
+test('in English the title, the site options and a seeded leave type without an English name use English', async () => {
+  const bilingual = [{ ...sites[0], name_ar: 'موقع-1', name_en: 'Site-1 EN' }, sites[2]] // the seeded leave types have no name_en
+  mockFetch({ ...routes(day({ state: 'derived', site_id: 'lf', leave_code: 'friday' })), 'GET /api/v1/sites': list(bilingual) })
+  await i18n.changeLanguage('en')
+  renderWithAuth(<DayEditor employee={{ id: 'e1', name_ar: 'مهندس-1', name_en: 'Engineer-1 EN' }} date="2026-10-01" onOpenChange={() => {}} />, EDIT)
+  await screen.findByLabelText('Site or day type')
+  expect(screen.getByRole('dialog', { name: '2026-10-01 — Engineer-1 EN' })).toHaveTextContent('This day was set automatically (Friday).')
+  expect(screen.getByRole('option', { name: 'Site-1 EN' })).toBeInTheDocument()
+  expect(screen.getByRole('option', { name: 'Friday' })).toHaveValue('lf')
 })
