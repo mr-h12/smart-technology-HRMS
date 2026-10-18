@@ -64,7 +64,8 @@ export function AttendancePage() {
       return p
     }, { replace: true })
   // the sheet's period is the one holding its date; the grid's is the chosen one
-  const { data: period, err } = useApi<Period>(`/attendance/period?${new URLSearchParams(tab === 'sheet' ? { group, date } : { group, ...(chosen && { period_start: chosen }) })}`)
+  // the sheet keeps the last period while the next date's loads, so the header does not blink inside one period
+  const { data: period, err } = useApi<Period>(`/attendance/period?${new URLSearchParams(tab === 'sheet' ? { group, date } : { group, ...(chosen && { period_start: chosen }) })}`, { keep: tab === 'sheet' })
   const start = chosen ?? period?.start // the grid follows the URL as soon as an arrow moves it
   const move = (to: string) => set(tab === 'sheet' ? { date: to } : { period: to })
   const [day, setDay] = useState<{ employee: { id: string; name_ar: string }; date: string }>()
@@ -134,7 +135,7 @@ export function AttendancePage() {
         </TabsList>
         <TabsContent value="sheet" className="space-y-4">
           <Card className="overflow-hidden [&>:last-child]:border-b-0">{bar}</Card>
-          <DaySheet key={`${group}/${date}`} group={group} date={date} period={period} onDate={(d) => set({ date: d })} onOpenDay={openDay} />
+          <DaySheet key={group} group={group} date={date} period={period} onDate={(d) => set({ date: d })} onOpenDay={openDay} />
         </TabsContent>
         <TabsContent value="grid">
           <Card className="overflow-hidden">

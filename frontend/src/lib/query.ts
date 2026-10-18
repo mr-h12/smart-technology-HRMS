@@ -45,11 +45,12 @@ export function useList(path: string) {
  * `fresh` is for a form that starts from this record: it refetches on every mount even when the cache is fresh, and `ready`
  * turns true once an answer has arrived after the mount (it stays true after that, whatever later refetches do). Start the
  * form from `data` only when `ready`; a cached copy is never fresh enough to seed a form.
+ * `keep` shows the previous path's `data` while a new path loads (a header that must not blink); check that it is the record you asked for.
  */
-export function useApi<T = Row>(path: string | null, { fresh = false } = {}) {
+export function useApi<T = Row>(path: string | null, { fresh = false, keep = false } = {}) {
   const qc = useQueryClient()
   const mountedAt = useRef(Date.now())
-  const q = useQuery({ queryKey: queryKey(path ?? ''), queryFn: path === null ? skipToken : fetchEnvelope(path), ...(fresh && { refetchOnMount: 'always' as const }) })
+  const q = useQuery({ queryKey: queryKey(path ?? ''), queryFn: path === null ? skipToken : fetchEnvelope(path), ...(fresh && { refetchOnMount: 'always' as const }), ...(keep && { placeholderData: keepPreviousData }) })
   const reload = useCallback(() => void (path !== null && qc.invalidateQueries({ queryKey: queryKey(path) })), [qc, path])
   return { data: q.data?.data as T | undefined, err: q.error ?? undefined, loading: q.isLoading, reload, ready: q.dataUpdatedAt >= mountedAt.current }
 }

@@ -507,13 +507,37 @@
       "noLastSite": "No last site",
       "noDepartment": "No department",
       "action": {
-        "details": "Details"
+        "details": "Details",
+        "present": "Present",
+        "absent": "Absent",
+        "sick": "Sick"
       },
       "lateBy": "Late {{minutes}} min",
       "lastSite": "Last site: {{site}}",
       "totals": "Period totals",
       "locked": "This period is locked; the sheet is read-only.",
-      "noMatch": "No employees match."
+      "noMatch": "No employees match.",
+      "dayLabel": "{{date}} — {{count}} not recorded",
+      "rowAction": "{{action}}: {{name}}",
+      "select": "Select {{name}}",
+      "selectPage": "Select this page",
+      "inTime": "In time, {{name}}",
+      "rest": "Mark the rest present ({{count}})",
+      "sweep": "All present",
+      "sweepFor": "Mark the rest of {{cohort}} present",
+      "bulk": {
+        "label": "Selection actions",
+        "count": "{{count}} selected",
+        "setSite": "Set site",
+        "pickSite": "Choose a site",
+        "clear": "Clear"
+      },
+      "toast": {
+        "applied": "{{count}} recorded",
+        "skippedNoSite": "{{count}} skipped: no last site. Record them from Details.",
+        "tooMany": "At most {{max}} rows can be recorded at once; narrow the choice.",
+        "conflict": "Someone else just changed {{names}}; the sheet was reloaded. Check it and try again."
+      }
     }
   },
   "holiday": {
