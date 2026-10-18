@@ -32,7 +32,7 @@ Smart Technology runs HR and payroll today on 6 hand-built Excel workbooks (anal
 | Migration | Everything extractable from the Excel files; history imported as-is, with a **warning flag beside each known error** (the 16 in the analysis doc) |
 | Period lock | Locked after HR close + CEO approval; only HR can reopen, with a reason (audit-logged) |
 | Extra demo modules | Recruitment, performance, training and assets are IN scope as lite versions (no applicant portal, no self-review) |
-| Attendance entry (1c) | For now HR alone records attendance, for every employee type including office staff. The manager screen is a later item (Release 1, item 5) |
+| Attendance entry (1c) | For now HR alone records attendance, for every employee type including office staff. The manager screen is a later item (Release 1, item 5). HR gets a day sheet per group and date with bulk marking (cohort sweeps, ID lists, ranges, paste) and a session undo; the period grid stays |
 | Attendance day | One record per employee per day: one site or one leave day-type (office staff: present, with no site, or a leave day-type). A second site goes in the note. Absent (غ) is a leave day-type, never a flag. A day with no record is missing, never absence |
 | Attendance dates | HR enters or edits any day of an open period up to today (Cairo time). No future dates |
 | Attendance periods | Per group: office the calendar month, engineers and permanent workers the 26th → 25th, day laborers 1–15 and 16–end. The attendance lock is per (group, period) |

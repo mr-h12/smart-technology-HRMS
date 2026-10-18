@@ -68,6 +68,14 @@ _Avoid_: public holiday, vacation
 A weekly off day or official holiday the system fills in until HR records the day; stored at lock.
 _Avoid_: default day, auto row
 
+**Day sheet** (كشف اليوم):
+One group's attendance for one date, where HR marks many employees at once.
+_Avoid_: roll call, check-in screen
+
+**Last site** (آخر موقع):
+The work site of an employee's latest recorded work day in the 7 days before a date.
+_Avoid_: yesterday's site
+
 ## Pay
 
 **Salary** (المرتب):
