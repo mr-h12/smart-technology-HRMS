@@ -130,6 +130,24 @@ test('the day strip marks the date and disables future days', async () => {
   expect(get.mock.calls.at(-1)?.[0]).toContain('group=engineer')
 })
 
+test('the day strip scrolls itself to the date once, never the page and never again on a re-render', async () => {
+  // jsdom has no layout: the selected day sits 244px past the strip's end, everything else inside it
+  vi.spyOn(Element.prototype, 'getBoundingClientRect').mockImplementation(function (this: Element) {
+    return (this.getAttribute('aria-current') === 'date' ? { left: 500, right: 544 } : { left: 0, right: 300 }) as DOMRect
+  })
+  const scroll = vi.spyOn(Element.prototype, 'scrollBy')
+  mockFetch(routes)
+  open()
+  const strip = await screen.findByRole('group', { name: 'أيام الفترة' })
+  const own = () => scroll.mock.contexts.filter((el) => el === strip)
+  expect(own()).toHaveLength(1)
+  expect(scroll).toHaveBeenCalledWith({ left: 244 })
+  await user.click(screen.getByRole('button', { name: /^غير مسجل/ })) // a re-render
+  await user.click(screen.getByRole('button', { name: /^غير مسجل/ }))
+  expect(own()).toHaveLength(1)
+  vi.restoreAllMocks()
+})
+
 test('field cohorts group by last site and office cohorts by department', async () => {
   mockFetch(routes)
   open()

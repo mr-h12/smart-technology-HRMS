@@ -38,6 +38,18 @@ const KPIS: [Filter, string, Status][] = [
 const OFFICE_KPIS: [Filter, string, Status][] = [KPIS[0], ['present', 'attendance.sheet.kpi.onTime', 'present'], ['late', 'attendance.sheet.kpi.late', 'late'], KPIS[2], KPIS[3]]
 const TOTALS = [['worked', 'text-success', 'attendance.sheet.kpi.worked'], ['leave', 'text-info', 'attendance.sheet.kpi.leave'], ['absent', 'text-destructive', 'attendance.sheet.kpi.absent'], ['missing', 'text-warning', 'attendance.state.missing']] as const
 
+/**
+ * Scrolls the day strip sideways to the selected day; only the strip, never the page. A module-level ref is stable, so React
+ * calls it once when the strip mounts, not on every render (DaySheet is keyed by date). scrollBy is in screen pixels, so RTL works.
+ */
+function showDay(strip: HTMLDivElement | null) {
+  const day = strip?.querySelector('[aria-current="date"]')?.getBoundingClientRect()
+  const box = strip?.getBoundingClientRect()
+  if (!day || !box) return
+  const dx = day.left < box.left ? day.left - box.left : day.right > box.right ? day.right - box.right : 0
+  if (dx) strip!.scrollBy({ left: dx })
+}
+
 /** One group's roster for one date (read-only for now): KPI filters, the period's days, cohorts, then the rows with their period totals last. */
 export function DaySheet({ group, date, period, onDate, onOpenDay }: { group: string; date: string; period?: { is_locked: boolean }; onDate: (date: string) => void; onOpenDay: (employee: Row, date: string) => void }) {
   const { t, i18n } = useTranslation()
@@ -158,13 +170,12 @@ export function DaySheet({ group, date, period, onDate, onOpenDay }: { group: st
 
       <Card>
         <p id={daysId} className="px-4 pt-3 text-xs font-medium text-muted-foreground">{t('attendance.sheet.days')}</p>
-        <div role="group" aria-labelledby={daysId} className="flex gap-1.5 overflow-x-auto p-3 pt-2 scrollbar-thin">
+        <div ref={showDay} role="group" aria-labelledby={daysId} className="flex gap-1.5 overflow-x-auto p-3 pt-2 scrollbar-thin">
           {sheet.days.map((d) => {
             const current = d.date === date
             return (
               <button
                 key={d.date}
-                ref={current ? (el) => el?.scrollIntoView?.({ block: 'nearest', inline: 'nearest' }) : undefined}
                 type="button"
                 disabled={d.date > today}
                 aria-current={current ? 'date' : undefined}
