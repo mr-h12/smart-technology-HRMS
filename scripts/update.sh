@@ -11,10 +11,12 @@
 #
 # Roll back by hand:
 #   1. git switch <old branch> && git reset --hard <old SHA>   (both are printed by this script)
+#      On the first run from Release 1a the printed old SHA is already the perf tip: use git switch main (515b042).
 #   2. docker compose up -d --build
-#   3. gunzip -c backups/pre-update-<file>.sql.gz | docker compose exec -T postgres psql -U <POSTGRES_USER> -d <POSTGRES_DB>
+#   3. gunzip -c backups/pre-update-<file>.sql.gz | docker compose exec -T postgres psql -v ON_ERROR_STOP=1 -U <POSTGRES_USER> -d <POSTGRES_DB>
 #      (restore into an empty database; drop and recreate it first if it already has tables)
 set -euo pipefail
+umask 077
 
 STEP=start
 step() { STEP="$*"; echo; echo "==> $STEP"; }
@@ -42,28 +44,19 @@ fi
 old_branch=$(git rev-parse --abbrev-ref HEAD)
 old_sha=$(git rev-parse HEAD)
 branch=${1:-$old_branch}
-if [ "$branch" = main ] || [ "$branch" = HEAD ]; then branch=feature/perf-architecture; fi
 db_user=$(envval POSTGRES_USER)
 db_name=$(envval POSTGRES_DB)
 app_port=$(envval APP_PORT)
 app_port=${app_port:-8000}
 echo "Branch: $branch (currently $old_branch at $old_sha)"
 
-dump=none
 step "Database dump"
-if docker compose ps --status running --services | grep -qx postgres; then
-  [ -n "$db_user" ] && [ -n "$db_name" ] || die "POSTGRES_USER or POSTGRES_DB is missing from .env"
-  mkdir -p backups
-  dump="backups/pre-update-$(date +%Y%m%d-%H%M%S)-$(echo "$old_sha" | cut -c1-7).sql.gz"
-  docker compose exec -T postgres pg_dump -U "$db_user" "$db_name" | gzip > "$dump"
-  if [ "$(gunzip -c "$dump" | wc -c)" -eq 0 ]; then
-    rm -f "$dump"
-    die "the database dump is empty"
-  fi
-  echo "Dump written to $dump"
-else
-  echo "postgres is not running, skipping the dump"
-fi
+mkdir -p backups
+dump="backups/pre-update-$(date +%Y%m%d-%H%M%S)-$(echo "$old_sha" | cut -c1-7).sql.gz"
+docker compose up -d --wait postgres
+docker compose exec -T postgres pg_dump -U "$db_user" "$db_name" | gzip > "$dump"
+gunzip -c "$dump" | grep -q 'CREATE TABLE public.migrations' || die "dump has no migrations table: wrong or empty database (check the compose project name)"
+echo "Dump written to $dump"
 
 step "Update the code"
 git fetch origin
@@ -79,20 +72,12 @@ echo "New SHA: $new_sha"
 echo "Commits pulled: $(git rev-list --count "$old_sha..$new_sha")"
 
 step "Build and start the containers"
-docker compose build
-docker compose up -d --remove-orphans
-
-step "Wait for the database (up to 90 s)"
-i=0
-until docker compose exec -T app php artisan migrate:status >/dev/null 2>&1; do
-  i=$((i + 1))
-  [ "$i" -lt 45 ] || die "the app could not reach the database after 90 s"
-  sleep 2
-done
+docker compose up -d --build --remove-orphans
 
 step "Composer install"
 # vendor/ lives on the bind mount and may be stale or missing.
 docker compose exec -T app composer install --no-interaction --prefer-dist
+docker compose exec -T app chown -R www-data:www-data storage bootstrap/cache
 
 step "Migrate and clear caches"
 docker compose exec -T app php artisan migrate --force
@@ -102,9 +87,6 @@ docker compose exec -T app php artisan cache:clear
 
 step "Restart workers and scheduler"
 docker compose restart worker-critical worker-pdf worker-reports worker-maintenance scheduler
-
-step "Build the frontend"
-(cd frontend && npm ci && npm run build)
 
 step "Health check (up to 30 s)"
 i=0
@@ -121,6 +103,9 @@ if [ "$users" = 0 ]; then
   echo "There are no users yet. Create the first Developer account:"
   echo '  docker compose exec app php artisan identity:create-user you@example.com --name="Your Name" --role=developer'
 fi
+
+step "Build the frontend"
+(cd frontend && npm ci && npm run build)
 
 echo
 echo "Done. Old SHA: $old_sha ($old_branch). New SHA: $new_sha ($branch). Dump: $dump. Health: OK."
