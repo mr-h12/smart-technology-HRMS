@@ -24,6 +24,7 @@ test('the grid shows each employee per day with missing and derived days marked'
   expect(await screen.findByRole('button', { name: 'Engineer-1 2026-10-01: Site-1' })).toBeEnabled()
   expect(screen.getByRole('button', { name: 'Engineer-1 2026-10-02: جمعة' })).toHaveClass('border-dashed')
   expect(screen.getByRole('button', { name: 'Engineer-1 2026-10-03: غير مسجل' })).toHaveClass('bg-warning/15')
+  expect(screen.getByRole('button', { name: 'Engineer-1 2026-10-01: Site-1' })).toHaveClass('focus-visible:outline-solid') // outline-none alone would hide the focus ring
   expect(screen.getByRole('button', { name: 'Engineer-1 2026-10-21: لم يأتِ بعد' })).toBeDisabled()
   expect(screen.getByRole('group', { name: 'أيام غير مسجلة' })).toHaveTextContent('19')
 })

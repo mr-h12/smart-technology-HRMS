@@ -33,7 +33,7 @@ const LOOK: Record<Day['state'], string> = {
   future: 'text-muted-foreground opacity-50',
   not_employed: 'text-muted-foreground opacity-50',
 }
-const CELL = 'block min-h-11 w-full min-w-11 max-w-28 truncate rounded-md px-1.5 text-center text-xs transition-colors outline-none focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring disabled:cursor-not-allowed'
+const CELL = 'block min-h-11 w-full min-w-11 max-w-28 truncate rounded-md px-1.5 text-center text-xs transition-colors outline-none focus-visible:outline-2 focus-visible:outline-solid focus-visible:outline-offset-2 focus-visible:outline-ring disabled:cursor-not-allowed'
 
 /** HR's attendance page, URL state `?group=&period=&tab=`; the group defaults to engineers, the period to the current one. */
 export function AttendancePage() {
