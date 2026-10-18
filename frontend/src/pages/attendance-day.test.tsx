@@ -150,8 +150,23 @@ test('read-only when the period is locked or without attendance.edit', async () 
   expect(await siteSelect()).toBeDisabled()
   expect(screen.getByLabelText('ملاحظات')).toBeDisabled()
   expect(screen.getByLabelText('السلفة')).toBeDisabled()
-  expect(screen.getByText('للعرض فقط: لا تملك صلاحية تعديل الحضور.')).toBeInTheDocument()
+  const note = screen.getByText('للعرض فقط: لا تملك صلاحية تعديل الحضور.')
+  expect(note.parentElement).toHaveClass('[&_:disabled]:opacity-100') // full-strength values on the muted fill
   expect(screen.queryByRole('button', { name: 'حفظ' })).toBeNull()
+})
+
+test('a view-only user in a locked period sees only the locked note', async () => {
+  mockFetch(routes(day({ period: { start: '2026-09-26', end: '2026-10-25', is_locked: true } })))
+  open(['attendance.view.all'])
+  expect(await siteSelect()).toBeDisabled()
+  expect(screen.getByText('الفترة مقفلة، ولا يمكن تعديل أيامها.')).toBeInTheDocument()
+  expect(screen.queryByText('للعرض فقط: لا تملك صلاحية تعديل الحضور.')).toBeNull()
+})
+
+test('an editable form keeps the dimmed disabled style', async () => {
+  mockFetch(routes(day()))
+  open()
+  expect((await siteSelect()).closest('.overflow-y-auto')).not.toHaveClass('[&_:disabled]:opacity-100')
 })
 
 test('clearing a stored day sends its version', async () => {

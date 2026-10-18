@@ -119,7 +119,8 @@ function DayForm({ day, sites, path, loadErr, onDone, onReload }: { day: Day; si
 
   return (
     <>
-      <div className="grid flex-1 content-start gap-4 overflow-y-auto p-5 [&_input]:h-11 [&_select]:h-11 [&_input:disabled]:bg-muted [&_textarea:disabled]:bg-muted [&_select:disabled]:bg-muted">
+      {/* read-only: the controls' own disabled:opacity-50 would wash out the muted fill and the values */}
+      <div className={`grid flex-1 content-start gap-4 overflow-y-auto p-5 [&_input]:h-11 [&_select]:h-11 [&_input:disabled]:bg-muted [&_textarea:disabled]:bg-muted [&_select:disabled]:bg-muted ${readOnly ? '[&_:disabled]:opacity-100' : ''}`}>
         {locked && <p className="rounded-md bg-muted p-3 text-sm">{t('attendance.day.lockedNote')}</p>}
         {readOnly && !locked && <p className="rounded-md bg-muted p-3 text-sm">{t('attendance.day.readOnlyNote')}</p>}
         {day.state === 'derived' && <p className="rounded-md bg-muted p-3 text-sm">{t('attendance.day.derivedNote', { type: leaveName })}</p>}
