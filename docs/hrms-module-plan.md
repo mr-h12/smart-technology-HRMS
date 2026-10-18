@@ -12,7 +12,7 @@ Smart Technology runs HR and payroll today on 6 hand-built Excel workbooks (anal
 | Language | Arabic + English (RTL/LTR) |
 | Users | 7 accounts: 1 CEO, 1 HR, 5 managers. **No employee or worker accounts.** Developer role can add accounts |
 | Roles | Developer (super-admin) > CEO > HR > Manager. HR can edit everything a manager enters |
-| Data entry | Manager records attendance, absence, lateness, leave and requests for their own employees. Each employee belongs to exactly one manager |
+| Data entry | Manager records attendance, absence, lateness, leave and requests for their own employees. Each employee belongs to exactly one manager; attendance is HR-only for now (see Attendance entry (1c)) |
 | Approvals | Manager → HR → (HR decides) CEO, or HR approves alone |
 | HR alerts | Instant for requests, warnings and edits to past days; daily digest for routine attendance |
 | Fingerprint | Office staff only; HR uploads the device's Excel export; 15-min grace; shift 09:00–17:00 (per-employee override); import flags missing punches / early leave / OT, HR confirms. Office attendance is HR's, not the managers' |
@@ -36,7 +36,7 @@ Smart Technology runs HR and payroll today on 6 hand-built Excel workbooks (anal
 | Attendance day | One record per employee per day: one site or one leave day-type (office staff: present, with no site, or a leave day-type). A second site goes in the note. Absent (غ) is a leave day-type, never a flag. A day with no record is missing, never absence |
 | Attendance dates | HR enters or edits any day of an open period up to today (Cairo time). No future dates |
 | Attendance periods | Per group: office the calendar month, engineers and permanent workers the 26th → 25th, day laborers 1–15 and 16–end. The attendance lock is per (group, period) |
-| Attendance lock | HR locks one group's period in one action, after confirming the missing days; nobody edits until HR reopens with a reason. Weekly off days and official holidays are derived on read while the period is open and stored at lock. ⚠️ HR may lock a period before it ends (open with the owner). ⚠️ Reopening keeps the stored derived days; a later holiday or weekly-off change does not refresh them on re-lock (open with the owner) |
+| Attendance lock | HR locks one group's period in one action, after confirming the missing days; nobody edits until HR reopens with a reason. Weekly off days and official holidays are derived on read while the period is open and stored at lock. ⚠️ (owner) HR may lock a period before it ends. ⚠️ (owner) Reopening keeps the stored derived days; a later holiday or weekly-off change does not refresh them on re-lock |
 | Attendance concurrency | Each day carries a `version`; a write with a stale version returns `409 concurrency_conflict`, never an overwrite. Days are never hard-deleted; clearing a day is an audited update |
 
 ## Modules by release
