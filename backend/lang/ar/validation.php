@@ -184,7 +184,7 @@ return [
         'raise' => 'العلاوة',
         'insured_basic' => 'الأساسي التأميني',
         'daily_wage' => 'الأجر اليومي',
-        'shift_start' => 'بدء الوردية',
+        'shift_start' => 'بداية الوردية',
         'shift_end' => 'انتهاء الوردية',
         'received_at' => 'تاريخ الاستلام',
         'expires_at' => 'تاريخ الانتهاء',
