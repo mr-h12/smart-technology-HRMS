@@ -477,6 +477,7 @@
       "derivedNote": "This day was set automatically ({{type}}). Choose a site if the employee worked.",
       "missingNote": "This day is not recorded yet.",
       "lockedNote": "The period is locked; its days cannot be edited.",
+      "readOnlyNote": "View only: you do not have permission to edit attendance.",
       "clear": "Clear day",
       "conflict": "Someone else changed this day. Load the latest version, then re-enter your changes.",
       "loadLatest": "Load latest"

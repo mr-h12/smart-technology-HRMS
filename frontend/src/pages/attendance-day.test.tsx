@@ -133,13 +133,16 @@ test('read-only when the period is locked or without attendance.edit', async () 
   expect(await siteSelect()).toBeDisabled()
   expect(screen.getByLabelText('السلفة')).toBeDisabled()
   expect(screen.getByText('الفترة مقفلة، ولا يمكن تعديل أيامها.')).toBeInTheDocument()
+  expect(screen.queryByText('للعرض فقط: لا تملك صلاحية تعديل الحضور.')).toBeNull() // one note, not both
   expect(screen.queryByRole('button', { name: 'حفظ' })).toBeNull()
   first.unmount()
 
   mockFetch(routes(day()))
-  open(['attendance.view.all'])
+  open(['attendance.view.all']) // the CEO: view only
   expect(await siteSelect()).toBeDisabled()
   expect(screen.getByLabelText('ملاحظات')).toBeDisabled()
+  expect(screen.getByLabelText('السلفة')).toBeDisabled()
+  expect(screen.getByText('للعرض فقط: لا تملك صلاحية تعديل الحضور.')).toBeInTheDocument()
   expect(screen.queryByRole('button', { name: 'حفظ' })).toBeNull()
 })
 

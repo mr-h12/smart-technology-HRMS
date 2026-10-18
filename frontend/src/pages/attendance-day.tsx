@@ -118,8 +118,9 @@ function DayForm({ day, sites, path, loadErr, onDone, onReload }: { day: Day; si
 
   return (
     <>
-      <div className="grid flex-1 content-start gap-4 overflow-y-auto p-5 [&_input]:h-11 [&_select]:h-11">
+      <div className="grid flex-1 content-start gap-4 overflow-y-auto p-5 [&_input]:h-11 [&_select]:h-11 [&_input:disabled]:bg-muted [&_textarea:disabled]:bg-muted [&_select:disabled]:bg-muted">
         {locked && <p className="rounded-md bg-muted p-3 text-sm">{t('attendance.day.lockedNote')}</p>}
+        {readOnly && !locked && <p className="rounded-md bg-muted p-3 text-sm">{t('attendance.day.readOnlyNote')}</p>}
         {day.state === 'derived' && <p className="rounded-md bg-muted p-3 text-sm">{t('attendance.day.derivedNote', { type: leaveName })}</p>}
         {day.state === 'missing' && <p className="rounded-md bg-muted p-3 text-sm">{t('attendance.day.missingNote')}</p>}
         <ErrorBanner err={loadErr} shown={[]} />
