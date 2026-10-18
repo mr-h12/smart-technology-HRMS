@@ -88,7 +88,7 @@ final class FareService
     {
         $key = ['residence_id' => $data['residence_id'], 'site_id' => $data['site_id'], 'effective_from' => $data['effective_from']];
         if (Fare::where($key)->exists()) {
-            throw ValidationException::withMessages(['effective_from' => 'A fare already exists on this date.']);
+            throw ValidationException::withMessages(['effective_from' => __('errors.duplicate_date')]);
         }
 
         return $this->row(Fare::create($data));
@@ -103,7 +103,7 @@ final class FareService
         $employee = Employee::findOrFail($employeeId);
         $key = ['employee_id' => $employee->getKey(), 'site_id' => $data['site_id'], 'effective_from' => $data['effective_from']];
         if (EmployeeFareOverride::where($key)->exists()) {
-            throw ValidationException::withMessages(['effective_from' => 'An override already exists on this date.']);
+            throw ValidationException::withMessages(['effective_from' => __('errors.duplicate_date')]);
         }
 
         return $this->row(EmployeeFareOverride::create([...$data, 'employee_id' => $employee->getKey()]));

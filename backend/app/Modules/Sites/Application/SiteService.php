@@ -89,11 +89,11 @@ final class SiteService
     {
         $site = Site::findOrFail($id);
         if ($site->allowanceRules()->where('effective_from', $data['effective_from'])->exists()) {
-            throw ValidationException::withMessages(['effective_from' => 'A rule already exists on this date.']);
+            throw ValidationException::withMessages(['effective_from' => __('errors.duplicate_date')]);
         }
         $none = $data['mode'] === AllowanceMode::None->value;
         if (! $none && blank($data['value'] ?? null)) {
-            throw ValidationException::withMessages(['value' => 'Value is required unless mode is none.']);
+            throw ValidationException::withMessages(['value' => __('errors.allowance_value_required')]);
         }
         $site->allowanceRules()->create([...$data, 'value' => $none ? '0' : $data['value']]);
 
@@ -134,10 +134,10 @@ final class SiteService
     {
         $leave = $site->kind === SiteKind::Leave->value;
         if ($leave && blank($site->leave_code)) {
-            throw ValidationException::withMessages(['leave_code' => 'Leave code is required for leave sites.']);
+            throw ValidationException::withMessages(['leave_code' => __('errors.leave_code_required')]);
         }
         if (! $leave && filled($site->leave_code)) {
-            throw ValidationException::withMessages(['leave_code' => 'Leave code is only for leave sites.']);
+            throw ValidationException::withMessages(['leave_code' => __('errors.leave_code_not_allowed')]);
         }
     }
 }

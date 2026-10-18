@@ -166,7 +166,7 @@ final class EmployeeService
         $types = $employee->typeChanges->map(fn ($t) => $this->row($t))->all();
         $type = EffectiveDated::at($types, $data['effective_from']);
         if ($type === null) {
-            throw ValidationException::withMessages(['effective_from' => 'The employee has no type in force on this date.']);
+            throw ValidationException::withMessages(['effective_from' => __('errors.no_type_on_date')]);
         }
         $pay = $this->payRow($data);
         $this->assertPay(EmployeeType::from($type['type']), $pay);
@@ -215,7 +215,7 @@ final class EmployeeService
     private function assertBank(array $data): void
     {
         if (($data['pay_method'] ?? PayMethod::Cash->value) === PayMethod::Bank->value && blank($data['bank_account'] ?? null)) {
-            throw ValidationException::withMessages(['bank_account' => 'Bank account is required when paying by bank.']);
+            throw ValidationException::withMessages(['bank_account' => __('errors.bank_account_required')]);
         }
     }
 
@@ -224,7 +224,10 @@ final class EmployeeService
     {
         $need = $type === EmployeeType::DayLaborer ? 'daily_wage' : 'salary';
         if (blank($pay[$need] ?? null)) {
-            throw ValidationException::withMessages([$need => "{$need} is required for {$type->value}."]);
+            throw ValidationException::withMessages([$need => __('errors.pay_field_required', [
+                'field' => __('validation.attributes.'.$need),
+                'type' => __('errors.employee_type.'.$type->value),
+            ])]);
         }
     }
 
@@ -232,7 +235,7 @@ final class EmployeeService
     private function assertFreeDate($relation, string $date): void
     {
         if ($relation->where('effective_from', $date)->exists()) {
-            throw ValidationException::withMessages(['effective_from' => 'A change already exists on this date.']);
+            throw ValidationException::withMessages(['effective_from' => __('errors.duplicate_date')]);
         }
     }
 

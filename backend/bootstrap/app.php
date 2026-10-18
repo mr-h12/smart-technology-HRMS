@@ -2,6 +2,7 @@
 
 use App\Http\Middleware\AddRequestId;
 use App\Http\Middleware\ForgetResolvedGuards;
+use App\Http\Middleware\SetLocaleFromRequest;
 use App\Modules\Employees\Presentation\EnsureEmployeeInScope;
 use App\Modules\Identity\Domain\Authentication\AuthenticationRefused;
 use App\Modules\Identity\Domain\Rbac\AuthorizationRefused;
@@ -31,6 +32,7 @@ return Application::configure(basePath: dirname(__DIR__))
         // Global, not api-group: unmatched routes (404) never enter the api group.
         $middleware->prepend(AddRequestId::class);
         $middleware->append(ForgetResolvedGuards::class);
+        $middleware->api(prepend: [SetLocaleFromRequest::class]);
         // No login route to redirect to: an API guest gets the 401 envelope.
         $middleware->redirectGuestsTo(fn (Request $r) => $r->is('api/*') ? null : '/');
         $middleware->alias(['permission' => AuthorizePermission::class, 'employee.scope' => EnsureEmployeeInScope::class]);
@@ -41,7 +43,7 @@ return Application::configure(basePath: dirname(__DIR__))
         );
 
         $exceptions->render(fn (ValidationException $e, Request $request) => ApiEnvelope::error(
-            $request, 422, 'validation_failed', 'The given data was invalid.',
+            $request, 422, 'validation_failed', __('errors.validation_failed'),
             collect($e->errors())->flatMap(fn (array $messages, string $field) => array_map(
                 fn (string $m) => ['field' => $field, 'code' => 'invalid', 'message' => $m],
                 $messages,
@@ -49,11 +51,11 @@ return Application::configure(basePath: dirname(__DIR__))
         ));
 
         $exceptions->render(fn (ModelNotFoundException|NotFoundHttpException $e, Request $request) => ApiEnvelope::error(
-            $request, 404, 'not_found', 'Resource not found.',
+            $request, 404, 'not_found', __('errors.not_found'),
         ));
 
         $exceptions->render(fn (AuthenticationException $e, Request $request) => ApiEnvelope::error(
-            $request, 401, 'unauthenticated', 'Unauthenticated.',
+            $request, 401, 'unauthenticated', __('errors.unauthenticated'),
         ));
 
         // An expected answer, not a fault: logging it would also write the email, IP and user agent.
@@ -82,7 +84,7 @@ return Application::configure(basePath: dirname(__DIR__))
 
             return ApiEnvelope::error(
                 $request, 500, 'server_error',
-                config('app.debug') ? $e->getMessage() : 'Server error.',
+                config('app.debug') ? $e->getMessage() : __('errors.server_error'),
             );
         });
     })->create();
