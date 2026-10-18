@@ -83,6 +83,14 @@ test('a derived day names its leave type and starts from it', async () => {
   expect(screen.queryByRole('button', { name: 'مسح اليوم' })).toBeNull()
 })
 
+test('only the amounts lose their trailing zeros; a note shows as typed', async () => {
+  mockFetch(routes(day({ state: 'stored', source: 'entered', version: 1, site_id: 's1', advance_amount: '500.000000', note: '3.50' })))
+  open()
+  await siteSelect()
+  expect(screen.getByLabelText('السلفة')).toHaveValue('500')
+  expect(screen.getByLabelText('ملاحظات')).toHaveValue('3.50')
+})
+
 test('a 409 keeps the typed values and offers the latest version', async () => {
   const get = vi.fn(() => json(200, { data: day() }))
   mockFetch(routes(day(), { [`GET ${URL}`]: get, [`PUT ${URL}`]: () => json(409, { error: { code: 'concurrency_conflict', message: 'conflict' } }) }))

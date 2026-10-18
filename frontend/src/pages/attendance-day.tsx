@@ -22,8 +22,9 @@ const TRANSPORT = ['full', 'half', 'none']
 // lateness is computed from the in time, overtime from the out time, so each hint sits under that time
 const HINT: Record<string, [hint: string, key: string]> = { in_time: ['late_minutes', 'attendance.day.hintLate'], out_time: ['ot_minutes', 'attendance.day.hintOt'] }
 
-/** "500.000000" → "500" by string surgery: money never goes through a float. */
-const asText = (v: unknown) => (v == null ? '' : typeof v === 'string' && /^\d+\.\d+$/.test(v) ? v.replace(/\.?0+$/, '') : String(v))
+const AMOUNTS = ['outside_amount', 'advance_amount']
+/** Amounts: "500.000000" → "500" by string surgery (money never goes through a float). Every other field shows as typed. */
+const asText = (f: string, v: unknown) => (v == null ? '' : AMOUNTS.includes(f) && typeof v === 'string' && /^\d+\.\d+$/.test(v) ? v.replace(/\.?0+$/, '') : String(v))
 /** Blank → null; minutes as integers (anything else goes as typed, so the server names the field). */
 const toBody = (f: string, v: string) => (v === '' ? null : MINUTES.includes(f) && /^\d+$/.test(v) ? Number.parseInt(v, 10) : v)
 
@@ -69,7 +70,7 @@ function DayForm({ day, sites, path, loadErr, onDone, onReload }: { day: Day; si
   const { t } = useTranslation()
   const { can } = useAuth()
   const send = useSave()
-  const { form, set } = useForm({ site_id: day.site_id ?? '', ...Object.fromEntries(VALUES.map((f) => [f, asText(day[f])])) })
+  const { form, set } = useForm({ site_id: day.site_id ?? '', ...Object.fromEntries(VALUES.map((f) => [f, asText(f, day[f])])) })
   const [err, setErr] = useState<unknown>()
   const [busy, setBusy] = useState(false)
   const [version] = useState(day.version) // the version the form started from; only "Load latest" (a remount) moves it, so a refetch after a 409 cannot turn the next Save into an overwrite
