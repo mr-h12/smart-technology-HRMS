@@ -81,11 +81,11 @@ export function AttendancePage() {
         <div className="sm:w-56">
           <SelectField name="group" label={t('attendance.groupLabel')} values={{ group }} set={(_, v) => set({ group: v, period: null })} errs={{}} options={GROUPS.map((g) => [g, t(`attendance.group.${g}`)])} />
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex flex-wrap items-center gap-2">
           <Button variant="outline" size="icon" className="size-11" disabled={!period} onClick={() => period && move(period.prev_start)} aria-label={t('attendance.prevPeriod')}>
             <ChevronLeft className="rtl:-scale-x-100" aria-hidden />
           </Button>
-          <span className="px-1 text-sm font-medium tabular">
+          <span className="px-1 text-sm font-medium whitespace-nowrap tabular">
             {period ? t('attendance.periodRange', { start: period.start, end: period.end }) : '—'}
           </span>
           <Button variant="outline" size="icon" className="size-11" disabled={!period?.next_start} onClick={() => period?.next_start && move(period.next_start)} aria-label={t('attendance.nextPeriod')}>
