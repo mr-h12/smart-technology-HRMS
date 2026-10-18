@@ -48,7 +48,7 @@ final class EmployeeController
 
     public function show(Request $request, string $employee): JsonResponse
     {
-        return ApiEnvelope::single($request, $this->employees->show($employee));
+        return ApiEnvelope::single($request, $this->employees->show($employee, RequestScope::ownerId($request)));
     }
 
     public function update(Request $request, string $employee): JsonResponse

@@ -44,6 +44,38 @@ class ManagerScopeTest extends TestCase
         $this->assign($e1, $b, '2026-11-01')->assertStatus(403);              // managers cannot reassign
     }
 
+    public function test_managers_never_receive_pay_identity_or_hr_notes(): void
+    {
+        $this->travelTo('2026-10-17 09:00:00');
+        $a = $this->makeUser('manager');
+        $this->signIn('hr');
+        $e = $this->postJson('/api/v1/employees', [
+            'name_ar' => 'أ', 'gender' => 'male', 'type' => 'engineer', 'effective_from' => '2026-01-01', 'salary' => '9000',
+            'national_id' => '29001011234567', 'insurance_no' => '123', 'pay_method' => 'bank', 'bank_account' => 'EG01', 'hr_notes' => 'سري',
+        ])->assertCreated()->json('data.id');
+        $this->assign($e, $a, '2026-10-01');
+        $hidden = ['national_id', 'insurance_no', 'bank_account', 'hr_notes'];
+
+        $hr = $this->getJson("/api/v1/employees/$e")->assertOk()->json('data');
+        $hrList = $this->getJson('/api/v1/employees')->json('data.0');
+        $this->assertNotNull($hr['current_pay']['salary']);
+        $this->assertNotEmpty($hr['pay_changes']);
+        foreach ($hidden as $key) {
+            $this->assertNotNull($hr[$key], $key);
+            $this->assertNotNull($hrList[$key], $key);
+        }
+
+        $this->actingAs($a, 'api');
+        $list = $this->getJson('/api/v1/employees')->assertJsonCount(1, 'data')->json('data.0');
+        $show = $this->getJson("/api/v1/employees/$e")->assertOk()->json('data');
+        foreach ([...$hidden, 'current_pay', 'pay_changes'] as $key) {
+            $this->assertArrayNotHasKey($key, $list, "list: $key");
+            $this->assertArrayNotHasKey($key, $show, "show: $key");
+        }
+        $this->getJson('/api/v1/employees?search=2900101')->assertJsonCount(0, 'data');   // no inferring the ID by search
+        $this->getJson('/api/v1/employees?search=أ')->assertJsonCount(1, 'data');
+    }
+
     public function test_reassignment_follows_the_cairo_date(): void
     {
         $this->travelTo('2026-10-17 12:00:00');

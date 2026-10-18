@@ -246,3 +246,42 @@ test('a residences load failure shows the banner', async () => {
   createForm()
   expect(await screen.findByRole('alert')).toHaveTextContent('تعذر التحميل')
 })
+
+// An own-scoped (manager) record arrives without national_id, insurance_no, bank_account, hr_notes, current_pay and pay_changes.
+const scoped = { id: 'e1', name_ar: 'أحمد', gender: 'male', phone: '0100', pay_method: 'cash', current_type: 'office', type_changes: [], documents: [], current_manager: null, manager_assignments: [] }
+const sensitive = ['الرقم القومي', 'الرقم التأميني', 'ملاحظات الموارد البشرية', 'الحساب البنكي', 'طريقة صرف المرتب']
+
+test('a record without the sensitive fields hides them, the pay section and the pay history', async () => {
+  mockFetch({ 'GET /api/v1/residences': residences, 'GET /api/v1/employees/e1': () => json(200, { data: scoped }) })
+  const { unmount } = renderWithAuth(<EmployeeDetailRoute id="e1" />, ['employee.view.own'], { router: false })
+  expect(await screen.findByLabelText('رقم الهاتف')).toBeDisabled()
+  for (const label of sensitive) expect(screen.queryByLabelText(label)).toBeNull()
+  expect(screen.queryByText('البيانات المالية')).toBeNull()
+  unmount()
+  renderWithAuth(<EmployeeDetailRoute id="e1" tab="history" />, ['employee.view.own'], { router: false })
+  expect(await screen.findByText('سجل تغييرات نوع الموظف')).toBeInTheDocument()
+  expect(screen.queryByText('سجل تغييرات الأجر')).toBeNull()
+})
+
+test('view-only users get a read-only profile with no pay section or pay history', async () => {
+  const full = { ...emp, gender: 'male', pay_method: 'cash', national_id: '29001011234567', current_pay: null }
+  mockFetch({ 'GET /api/v1/residences': residences, 'GET /api/v1/employees/e1': () => json(200, { data: full }) })
+  const { unmount } = renderWithAuth(<EmployeeDetailRoute id="e1" />, ['employee.view.all'], { router: false })
+  expect(await screen.findByLabelText('الرقم القومي')).toBeDisabled()
+  expect(screen.queryByText('البيانات المالية')).toBeNull()
+  unmount()
+  renderWithAuth(<EmployeeDetailRoute id="e1" tab="history" />, ['employee.view.all'], { router: false })
+  expect(await screen.findByText('سجل تغييرات نوع الموظف')).toBeInTheDocument()
+  expect(screen.queryByText('سجل تغييرات الأجر')).toBeNull()
+})
+
+test('saving a record that came without the sensitive fields does not send them', async () => {
+  const patch = vi.fn(() => json(200, { data: scoped }))
+  mockFetch({ 'GET /api/v1/residences': residences, 'GET /api/v1/employees/e1': () => json(200, { data: scoped }), 'PATCH /api/v1/employees/e1': patch })
+  renderWithAuth(<EmployeeDetailRoute id="e1" />, ['employee.view.own', 'employee.edit.all'], { router: false })
+  await user.click(await screen.findByRole('button', { name: 'حفظ' }))
+  await waitFor(() => expect(patch).toHaveBeenCalled())
+  const body = JSON.parse((patch.mock.calls[0] as unknown as [string, RequestInit])[1].body as string)
+  for (const k of ['national_id', 'insurance_no', 'bank_account', 'hr_notes']) expect(body).not.toHaveProperty(k)
+  expect(body).toMatchObject({ name_ar: 'أحمد', phone: '0100' })
+})

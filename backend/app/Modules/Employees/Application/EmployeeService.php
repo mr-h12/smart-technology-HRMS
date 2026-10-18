@@ -29,6 +29,9 @@ final class EmployeeService
 
     private const PAY_FIELDS = ['effective_from', 'salary', 'raise', 'insured_basic', 'daily_wage', 'shift_start', 'shift_end'];
 
+    /** Coding standard §9: kept out of own-scoped (manager-facing) responses. */
+    private const SENSITIVE = ['national_id', 'insurance_no', 'bank_account', 'hr_notes'];
+
     /**
      * @param  array{type?: string, search?: string, per_page?: int}  $filters
      * @return array{data: list<array<string, mixed>>, pagination: array{page: int, per_page: int, total: int, total_pages: int, has_next_page: bool, has_previous_page: bool}}
@@ -50,14 +53,14 @@ final class EmployeeService
             $query->where(fn (Builder $q) => $q
                 ->where('name_ar', 'ilike', $like)
                 ->orWhere('name_en', 'ilike', $like)
-                ->orWhere('national_id', 'like', $like)
+                ->when($ownerId === null, fn (Builder $q) => $q->orWhere('national_id', 'like', $like))
                 ->orWhereRaw('code::text = ?', [$filters['search']]));
         }
 
         $page = $query->paginate(min(max($filters['per_page'] ?? 20, 1), 100));
 
         return [
-            'data' => array_values($page->getCollection()->map(fn (Employee $e) => $this->summary($e))->all()),
+            'data' => array_values($page->getCollection()->map(fn (Employee $e) => $this->summary($e, $ownerId === null))->all()),
             'pagination' => [
                 'page' => $page->currentPage(),
                 'per_page' => $page->perPage(),
@@ -95,8 +98,11 @@ final class EmployeeService
         return $this->show($id);
     }
 
-    /** @return array<string, mixed> */
-    public function show(string $id): array
+    /**
+     * @param  string|null  $ownerId  set for own-scoped callers: pay and sensitive identity fields are left out
+     * @return array<string, mixed>
+     */
+    public function show(string $id, ?string $ownerId = null): array
     {
         $e = Employee::with(['typeChanges', 'payChanges', 'documents', 'managerAssignments.manager'])->findOrFail($id);
         $types = $e->typeChanges->sortBy('effective_from')->values()->map(fn ($t) => $this->row($t))->all();
@@ -109,13 +115,13 @@ final class EmployeeService
         ])->all();
         $today = self::today();
         $manager = EffectiveDated::at($managers, $today);
+        $full = $ownerId === null;
 
         return [
-            ...$this->summary($e),
+            ...$this->summary($e, $full),
             'current_type' => EffectiveDated::at($types, $today)['type'] ?? null,
-            'current_pay' => EffectiveDated::at($pays, $today),
+            ...($full ? ['current_pay' => EffectiveDated::at($pays, $today), 'pay_changes' => $pays] : []),
             'type_changes' => $types,
-            'pay_changes' => $pays,
             'current_manager' => $manager === null ? null : ['id' => $manager['manager_id'], 'name' => $manager['manager_name']],
             'manager_assignments' => $managers,
             'documents' => $e->documents->sortBy('kind')->values()->map(fn ($d) => $this->row($d))->all(),
@@ -253,9 +259,9 @@ final class EmployeeService
     }
 
     /** @return array<string, mixed> */
-    private function summary(Employee $e): array
+    private function summary(Employee $e, bool $full): array
     {
-        return Arr::except($e->toArray(), [...self::HIDDEN, 'type_changes', 'pay_changes', 'documents', 'manager_assignments']);
+        return Arr::except($e->toArray(), [...self::HIDDEN, 'type_changes', 'pay_changes', 'documents', 'manager_assignments', ...($full ? [] : self::SENSITIVE)]);
     }
 
     /** @return array<string, mixed> */

@@ -222,6 +222,9 @@ export function EmployeeFormPage() {
   const [residences, setResidences] = useState<Row[]>([])
   const [err, setErr] = useState<unknown>()
   const errs = toErrs(err)
+  // An own-scoped (manager) record comes without the sensitive identity and pay fields; never render or send what was not received.
+  const has = (k: string) => !emp || k in emp
+  const editable = can(id ? 'employee.edit' : 'employee.create')
 
   const fill = useCallback(
     (e: Row) => {
@@ -244,7 +247,7 @@ export function EmployeeFormPage() {
     try {
       if (id) {
         // PATCH: blank clears a nullable field; name_ar/gender/pay_method must stay set
-        const body = Object.fromEntries(IDENTITY.map((k) => [k, form[k] === '' && !['name_ar', 'gender', 'pay_method'].includes(k) ? null : form[k]]))
+        const body = Object.fromEntries(IDENTITY.filter(has).map((k) => [k, form[k] === '' && !['name_ar', 'gender', 'pay_method'].includes(k) ? null : form[k]]))
         fill(await api<Row>(`/employees/${id}`, { method: 'PATCH', body }))
       } else {
         const e = await api<Row>('/employees', { method: 'POST', body: clean(form, [...IDENTITY, ...payFields(form.type), 'type', 'effective_from']) })
@@ -256,7 +259,7 @@ export function EmployeeFormPage() {
   }
 
   const f = { values: form, set, errs }
-  const shown = [...IDENTITY, ...(id ? [] : [...payFields(form.type), 'type', 'effective_from'])]
+  const shown = [...IDENTITY.filter(has), ...(id ? [] : [...payFields(form.type), 'type', 'effective_from'])]
   const section = (title: string, fields: React.ReactNode) => (
     <Card>
       <CardHeader>
@@ -268,45 +271,49 @@ export function EmployeeFormPage() {
   const profile = (
     <form onSubmit={save} className="space-y-6">
       <ErrorBanner err={err} shown={shown} />
-      {section('employee.identity', (
-        <>
-          <TextField name="name_ar" label={t('employee.name_ar')} {...f} />
-          <TextField name="name_en" label={t('employee.name_en')} {...f} />
-          <TextField name="fingerprint_name" label={t('employee.fingerprint_name')} {...f} />
-          <SelectField name="gender" label={t('employee.gender')} options={GENDERS.map((v) => [v, t(`enum.gender.${v}`)])} {...f} />
-          <TextField name="national_id" label={t('employee.national_id')} inputMode="numeric" {...f} />
-          <TextField name="insurance_no" label={t('employee.insurance_no')} {...f} />
-          <TextField name="phone" label={t('employee.phone')} {...f} />
-          <TextField name="address" label={t('employee.address')} {...f} />
-        </>
-      ))}
-      {section('employee.placement', (
-        <>
-          <TextField name="department" label={t('employee.department')} {...f} />
-          <SelectField name="residence_id" label={t('employee.residence')} blank options={residences.map((r) => [r.id, r.name_ar])} {...f} />
-          <TextField name="hire_date" label={t('employee.hire_date')} type="date" {...f} />
-          <TextField name="contract_end_date" label={t('employee.contract_end_date')} type="date" {...f} />
-          <TextField name="termination_date" label={t('employee.termination_date')} type="date" {...f} />
-          <TextField name="termination_reason" label={t('employee.termination_reason')} {...f} />
-          <Field name="hr_notes" label={t('employee.hr_notes')} errs={errs}>
-            {(p) => <Textarea {...p} value={form.hr_notes ?? ''} onChange={(e) => set('hr_notes', e.target.value)} />}
-          </Field>
-        </>
-      ))}
-      {section('employee.pay', (
-        <>
-          <SelectField name="pay_method" label={t('employee.pay_method')} options={PAY_METHODS.map((v) => [v, t(`enum.pay_method.${v}`)])} {...f} />
-          <TextField name="bank_account" label={t('employee.bank_account')} {...f} />
-          {!id && (
-            <>
-              <SelectField name="type" label={t('employee.type')} options={TYPES.map((v) => [v, t(`enum.type.${v}`)])} {...f} />
-              <TextField name="effective_from" label={t('change.effective_from')} type="date" {...f} />
-              <PayFields type={form.type} {...f} />
-            </>
-          )}
-        </>
-      ))}
-      {can(id ? 'employee.edit' : 'employee.create') && (
+      <fieldset disabled={!editable} className="min-w-0 space-y-6">
+        {section('employee.identity', (
+          <>
+            <TextField name="name_ar" label={t('employee.name_ar')} {...f} />
+            <TextField name="name_en" label={t('employee.name_en')} {...f} />
+            <TextField name="fingerprint_name" label={t('employee.fingerprint_name')} {...f} />
+            <SelectField name="gender" label={t('employee.gender')} options={GENDERS.map((v) => [v, t(`enum.gender.${v}`)])} {...f} />
+            {has('national_id') && <TextField name="national_id" label={t('employee.national_id')} inputMode="numeric" {...f} />}
+            {has('insurance_no') && <TextField name="insurance_no" label={t('employee.insurance_no')} {...f} />}
+            <TextField name="phone" label={t('employee.phone')} {...f} />
+            <TextField name="address" label={t('employee.address')} {...f} />
+          </>
+        ))}
+        {section('employee.placement', (
+          <>
+            <TextField name="department" label={t('employee.department')} {...f} />
+            <SelectField name="residence_id" label={t('employee.residence')} blank options={residences.map((r) => [r.id, r.name_ar])} {...f} />
+            <TextField name="hire_date" label={t('employee.hire_date')} type="date" {...f} />
+            <TextField name="contract_end_date" label={t('employee.contract_end_date')} type="date" {...f} />
+            <TextField name="termination_date" label={t('employee.termination_date')} type="date" {...f} />
+            <TextField name="termination_reason" label={t('employee.termination_reason')} {...f} />
+            {has('hr_notes') && (
+              <Field name="hr_notes" label={t('employee.hr_notes')} errs={errs}>
+                {(p) => <Textarea {...p} value={form.hr_notes ?? ''} onChange={(e) => set('hr_notes', e.target.value)} />}
+              </Field>
+            )}
+          </>
+        ))}
+        {(!id || (can('employee.edit') && has('bank_account'))) && section('employee.pay', (
+          <>
+            <SelectField name="pay_method" label={t('employee.pay_method')} options={PAY_METHODS.map((v) => [v, t(`enum.pay_method.${v}`)])} {...f} />
+            <TextField name="bank_account" label={t('employee.bank_account')} {...f} />
+            {!id && (
+              <>
+                <SelectField name="type" label={t('employee.type')} options={TYPES.map((v) => [v, t(`enum.type.${v}`)])} {...f} />
+                <TextField name="effective_from" label={t('change.effective_from')} type="date" {...f} />
+                <PayFields type={form.type} {...f} />
+              </>
+            )}
+          </>
+        ))}
+      </fieldset>
+      {editable && (
         <div className="flex justify-end">
           <Button type="submit">{t('common.save')}</Button>
         </div>
@@ -470,33 +477,35 @@ function History({ emp, reload }: { emp: Row; reload: () => void }) {
           </TableBody>
         </Table>
       </Card>
-      <Card className="overflow-hidden">
-        <CardHeader>
-          <CardTitle>{t('history.pay')}</CardTitle>
-          {can('employee.edit') && <ChangeDialog kind="pay" emp={emp} reload={reload} />}
-        </CardHeader>
-        <Table>
-          <TableHeader>
-            <TableRow>
-              {['effective_from', ...PAY].map((c) => (
-                <TableHead key={c}>{t(c === 'effective_from' ? 'change.effective_from' : `pay.${c}`)}</TableHead>
-              ))}
-            </TableRow>
-          </TableHeader>
-          <TableBody>
-            {emp.pay_changes.map((c: Row) => (
-              <TableRow key={c.id}>
-                <TableCell>{c.effective_from}</TableCell>
-                {['salary', 'raise', 'insured_basic', 'daily_wage'].map((k) => (
-                  <TableCell key={k}>{money(c[k])}</TableCell>
+      {can('employee.edit') && emp.pay_changes && (
+        <Card className="overflow-hidden">
+          <CardHeader>
+            <CardTitle>{t('history.pay')}</CardTitle>
+            <ChangeDialog kind="pay" emp={emp} reload={reload} />
+          </CardHeader>
+          <Table>
+            <TableHeader>
+              <TableRow>
+                {['effective_from', ...PAY].map((c) => (
+                  <TableHead key={c}>{t(c === 'effective_from' ? 'change.effective_from' : `pay.${c}`)}</TableHead>
                 ))}
-                <TableCell>{cell(c.shift_start)}</TableCell>
-                <TableCell>{cell(c.shift_end)}</TableCell>
               </TableRow>
-            ))}
-          </TableBody>
-        </Table>
-      </Card>
+            </TableHeader>
+            <TableBody>
+              {emp.pay_changes.map((c: Row) => (
+                <TableRow key={c.id}>
+                  <TableCell>{c.effective_from}</TableCell>
+                  {['salary', 'raise', 'insured_basic', 'daily_wage'].map((k) => (
+                    <TableCell key={k}>{money(c[k])}</TableCell>
+                  ))}
+                  <TableCell>{cell(c.shift_start)}</TableCell>
+                  <TableCell>{cell(c.shift_end)}</TableCell>
+                </TableRow>
+              ))}
+            </TableBody>
+          </Table>
+        </Card>
+      )}
     </div>
   )
 }
