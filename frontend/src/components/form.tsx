@@ -77,7 +77,8 @@ export function TextField({ name, label, values, set, errs, ns = '', ...rest }: 
   )
 }
 
-export function SelectField({ name, label, values, set, errs, options, blank, disabled }: { name: string; label: string; values: Row; set: (k: string, v: string) => void; errs: Errs; options: [string, string][]; blank?: boolean | string; disabled?: boolean }) {
+/** `groups` render as `<optgroup>`s after the plain `options`. */
+export function SelectField({ name, label, values, set, errs, options, groups, blank, disabled }: { name: string; label: string; values: Row; set: (k: string, v: string) => void; errs: Errs; options: [string, string][]; groups?: [label: string, options: [string, string][]][]; blank?: boolean | string; disabled?: boolean }) {
   return (
     <Field name={name} label={label} errs={errs}>
       {(p) => (
@@ -87,6 +88,15 @@ export function SelectField({ name, label, values, set, errs, options, blank, di
             <option key={v} value={v}>
               {l}
             </option>
+          ))}
+          {groups?.map(([g, opts]) => (
+            <optgroup key={g} label={g}>
+              {opts.map(([v, l]) => (
+                <option key={v} value={v}>
+                  {l}
+                </option>
+              ))}
+            </optgroup>
           ))}
         </select>
       )}

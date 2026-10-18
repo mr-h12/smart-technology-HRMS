@@ -11,7 +11,7 @@ test('ar and en have the same keys', () => {
 })
 
 test('Arabic copy has no Latin letters outside placeholders', () => {
-  const allowed = ['console.ip']
+  const allowed = ['console.ip', 'attendance.source.imported'] // product names: IP, Excel
   const latin = flat(ar).filter(([k, v]) => !allowed.includes(k) && /[A-Za-z]/.test(v.replace(/\{\{\w+\}\}/g, '')))
   expect(latin).toEqual([])
 })

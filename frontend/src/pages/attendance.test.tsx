@@ -60,3 +60,12 @@ test('a locked period shows the badge and an empty group says so', async () => {
   expect(screen.getByText('مقفلة')).toBeInTheDocument()
   expect(screen.getByRole('combobox', { name: 'المجموعة' })).toHaveValue('engineer')
 })
+
+test('clicking a day opens its editor', async () => {
+  mockFetch({ ...routes, 'GET /api/v1/attendance/days/e1/2026-10-03': () => json(200, { data: { ...cell('2026-10-03', 'missing'), employee_id: 'e1', type: 'engineer', version: null,
+    fields: ['in_time', 'out_time'], leave_day_fields: [], hints: {}, period: { start: '2026-09-26', end: '2026-10-25', is_locked: false } } }) })
+  renderWithAuth(<AttendancePage />, ['attendance.view.all', 'attendance.edit.all'], { path: '/attendance?group=engineer' })
+  await user.click(await screen.findByRole('button', { name: 'Engineer-1 2026-10-03: غير مسجل' }))
+  expect(await screen.findByRole('dialog', { name: 'يوم 2026-10-03 — Engineer-1' })).toBeInTheDocument()
+  expect(await screen.findByLabelText('وقت الحضور')).toBeEnabled()
+})

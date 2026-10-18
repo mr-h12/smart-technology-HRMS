@@ -29,7 +29,7 @@ export function SheetContent({
       >
         {children}
         {!hideClose && (
-          <SheetPrimitive.Close className="absolute top-4 end-4 rounded-md p-1 text-muted-foreground transition hover:bg-muted hover:text-foreground">
+          <SheetPrimitive.Close className="absolute top-2 end-2 grid size-11 place-items-center rounded-md text-muted-foreground transition outline-none hover:bg-muted hover:text-foreground focus-visible:outline-2 focus-visible:outline-solid focus-visible:outline-offset-2 focus-visible:outline-ring">
             <X className="size-4" />
             <span className="sr-only">{t('common.close')}</span>
           </SheetPrimitive.Close>

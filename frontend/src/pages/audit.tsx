@@ -42,7 +42,7 @@ function Details({ entry, onClose }: { entry: Row; onClose: () => void }) {
   return (
     <Sheet open onOpenChange={(o) => !o && onClose()}>
       <SheetContent side="right" className="sm:max-w-[440px]">
-        <div className="space-y-1 border-b p-5 pe-12">
+        <div className="space-y-1 border-b p-5 pe-14">
           <SheetTitle>
             {label.event(entry)} · {label.entity(entry)}
           </SheetTitle>

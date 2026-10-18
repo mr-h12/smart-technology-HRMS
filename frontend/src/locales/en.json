@@ -423,6 +423,42 @@
     "empty": "No employees in this group during this period.",
     "tab": {
       "grid": "Period grid"
+    },
+    "day": {
+      "title": "{{date}} — {{name}}",
+      "siteOrType": "Site or day type",
+      "chooseSite": "Choose a site or day type",
+      "workSites": "Work sites",
+      "leaveTypes": "Leave types",
+      "in_time": "In time",
+      "out_time": "Out time",
+      "scheduled_in": "Scheduled in",
+      "scheduled_out": "Scheduled out",
+      "late_minutes": "Late minutes",
+      "ot_minutes": "Overtime minutes",
+      "outside_minutes": "Minutes outside Alexandria",
+      "outside_amount": "Outside-Alexandria amount",
+      "transport": "Transport",
+      "advance_amount": "Advance",
+      "note": "Note",
+      "hintLate": "Computed lateness: {{minutes}} min",
+      "hintOt": "Computed overtime: {{minutes}} min",
+      "derivedNote": "This day was set automatically ({{type}}). Choose a site if the employee worked.",
+      "missingNote": "This day is not recorded yet.",
+      "lockedNote": "The period is locked; its days cannot be edited.",
+      "clear": "Clear day",
+      "conflict": "Someone else changed this day. Load the latest version, then re-enter your changes.",
+      "loadLatest": "Load latest"
+    },
+    "transport": {
+      "full": "Full",
+      "half": "Half",
+      "none": "None"
+    },
+    "source": {
+      "entered": "Entered",
+      "imported": "Imported",
+      "derived": "Automatic"
     }
   }
 }

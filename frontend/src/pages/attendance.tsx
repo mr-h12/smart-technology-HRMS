@@ -14,10 +14,10 @@ import { Card } from '@/components/ui/card'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { cn } from '@/lib/utils'
-import { useApi, useList } from '@/lib/query'
+import { SITES, useApi, useList } from '@/lib/query'
+import { DayEditor } from './attendance-day'
 
 const GROUPS = ['office', 'engineer', 'permanent_worker', 'day_laborer']
-const SITES = '/sites?per_page=100' // names the work sites in the cells
 const PER_PAGE = 50
 const TABS = ['grid'] // the import tab joins with the template import
 
@@ -52,6 +52,7 @@ export function AttendancePage() {
   const { data: period, err } = useApi<Period>(`/attendance/period?${new URLSearchParams({ group, ...(chosen && { period_start: chosen }) })}`)
   const start = chosen ?? period?.start // the grid follows the URL as soon as an arrow moves it
   const tab = TABS.find((x) => x === params.get('tab')) ?? TABS[0]
+  const [day, setDay] = useState<{ employee: { id: string; name_ar: string }; date: string }>()
 
   return (
     <div className="space-y-6">
@@ -90,15 +91,14 @@ export function AttendancePage() {
                 <ErrorBanner err={err} shown={[]} />
               </div>
             )}
-            {start ? <Grid key={`${group}/${start}`} group={group} start={start} onOpenDay={noop} /> : !err && <TableSkeleton rows={8} />}
+            {start ? <Grid key={`${group}/${start}`} group={group} start={start} onOpenDay={(e, date) => setDay({ employee: { id: e.id, name_ar: e.name_ar }, date })} /> : !err && <TableSkeleton rows={8} />}
           </Card>
         </TabsContent>
       </Tabs>
+      {day && <DayEditor employee={day.employee} date={day.date} onOpenChange={(o) => !o && setDay(undefined)} />}
     </div>
   )
 }
-
-const noop = () => {} // the day editor arrives with the next task
 
 /** One page of the period grid: a sticky employee column, then one button per day. */
 function Grid({ group, start, onOpenDay }: { group: string; start: string; onOpenDay: (employee: Row, date: string) => void }) {

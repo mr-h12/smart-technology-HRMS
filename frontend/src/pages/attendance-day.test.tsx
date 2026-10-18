@@ -1,0 +1,131 @@
+import { screen, waitFor } from '@testing-library/react'
+import userEvent from '@testing-library/user-event'
+import { afterEach, expect, test, vi } from 'vitest'
+import { json, mockFetch, renderWithAuth } from '@/test-utils'
+import { DayEditor } from './attendance-day'
+vi.mock('sonner', () => ({ toast: { success: vi.fn() }, Toaster: () => null }))
+import { toast } from 'sonner'
+
+const user = userEvent.setup()
+afterEach(() => vi.unstubAllGlobals())
+const pg = (total = 1) => ({ page: 1, per_page: 100, total, total_pages: 1, has_next_page: false, has_previous_page: false })
+const list = (data: unknown[], total = data.length) => () => json(200, { data, meta: { pagination: pg(total) } })
+const body = (fn: { mock: { calls: unknown[][] } }) => JSON.parse((fn.mock.calls[0] as [string, RequestInit])[1].body as string)
+
+const EDIT = ['attendance.view.all', 'attendance.edit.all']
+const URL = '/api/v1/attendance/days/e1/2026-10-01'
+const day = (over = {}) => ({ employee_id: 'e1', date: '2026-10-01', type: 'engineer', state: 'missing', source: null, version: null, site_id: null, leave_code: null,
+  in_time: null, out_time: null, scheduled_in: null, scheduled_out: null, late_minutes: null, ot_minutes: null, outside_minutes: null, outside_amount: null, transport: null, advance_amount: null, note: null,
+  fields: ['in_time', 'out_time', 'late_minutes', 'ot_minutes', 'outside_minutes', 'advance_amount', 'note'], leave_day_fields: ['advance_amount', 'note'], hints: {},
+  period: { start: '2026-09-26', end: '2026-10-25', is_locked: false }, ...over })
+const sites = [{ id: 's1', name_ar: 'Site-1', kind: 'work', outside_alexandria: false, active: true }, { id: 's2', name_ar: 'Site-2', kind: 'work', outside_alexandria: true, active: true },
+  { id: 'lf', name_ar: 'Leave-friday', kind: 'leave', leave_code: 'friday', active: true }]
+const routes = (d: object, extra = {}) => ({ [`GET ${URL}`]: () => json(200, { data: d }), 'GET /api/v1/sites': list(sites), ...extra })
+const open = (permissions = EDIT, onOpenChange = () => {}) =>
+  renderWithAuth(<DayEditor employee={{ id: 'e1', name_ar: 'Engineer-1' }} date="2026-10-01" onOpenChange={onOpenChange} />, permissions)
+const siteSelect = () => screen.findByLabelText('الموقع أو نوع اليوم')
+
+test('an engineer day saves its fields with the version', async () => {
+  const put = vi.fn(() => json(200, { data: day({ state: 'stored', version: 1, site_id: 's2' }) }))
+  const onOpenChange = vi.fn()
+  mockFetch(routes(day(), { [`PUT ${URL}`]: put }))
+  open(EDIT, onOpenChange)
+  const select = await siteSelect()
+  expect(screen.getByRole('dialog', { name: 'يوم 2026-10-01 — Engineer-1' })).toHaveTextContent('لم يُسجَّل هذا اليوم بعد.')
+  await user.selectOptions(select, 's2')
+  await user.type(screen.getByLabelText('دقائق العمل خارج الإسكندرية'), '٣٠')
+  await user.type(screen.getByLabelText('السلفة'), '500')
+  await user.click(screen.getByRole('button', { name: 'حفظ' }))
+  expect(body(put)).toMatchObject({ version: null, site_id: 's2', outside_minutes: 30, advance_amount: '500', in_time: null })
+  await waitFor(() => expect(onOpenChange).toHaveBeenCalledWith(false))
+  expect(toast.success).toHaveBeenCalledWith('تم حفظ التغييرات.')
+})
+
+test('choosing a leave type hides times and minutes', async () => {
+  const put = vi.fn(() => json(200, { data: day() }))
+  mockFetch(routes(day(), { [`PUT ${URL}`]: put }))
+  open()
+  await user.selectOptions(await siteSelect(), 'lf')
+  expect(screen.queryByLabelText('وقت الحضور')).toBeNull()
+  expect(screen.queryByLabelText('دقائق التأخير')).toBeNull()
+  await user.type(screen.getByLabelText('السلفة'), '100')
+  await user.click(screen.getByRole('button', { name: 'حفظ' }))
+  expect(body(put)).toEqual({ version: null, site_id: 'lf', advance_amount: '100', note: null })
+})
+
+test('the outside-Alexandria field shows only for an outside site', async () => {
+  mockFetch(routes(day()))
+  open()
+  await user.selectOptions(await siteSelect(), 's1')
+  expect(screen.queryByLabelText('دقائق العمل خارج الإسكندرية')).toBeNull()
+  await user.selectOptions(await siteSelect(), 's2')
+  expect(screen.getByLabelText('دقائق العمل خارج الإسكندرية')).toBeInTheDocument()
+})
+
+test('an office day offers present and the leave types, not the work sites', async () => {
+  mockFetch(routes(day({ type: 'office', fields: ['in_time', 'out_time'], leave_day_fields: [], hints: { late_minutes: 15 }, state: 'stored', source: 'imported', version: 2, in_time: '09:30' })))
+  open()
+  expect(await siteSelect()).toHaveValue('')
+  expect(screen.getByRole('option', { name: 'حاضر' })).toHaveValue('')
+  expect(screen.getByRole('option', { name: 'Leave-friday' })).toBeInTheDocument()
+  expect(screen.queryByRole('option', { name: 'Site-1' })).toBeNull()
+  expect(screen.getByLabelText('وقت الحضور')).toHaveValue('09:30')
+  expect(screen.getByText('تأخير محسوب: 15 دقيقة')).toBeInTheDocument()
+  expect(screen.getByText('مستورد من Excel')).toBeInTheDocument()
+})
+
+test('a derived day names its leave type and starts from it', async () => {
+  mockFetch(routes(day({ state: 'derived', site_id: 'lf', leave_code: 'friday', advance_amount: '250.500000' })))
+  open()
+  expect(await siteSelect()).toHaveValue('lf')
+  expect(screen.getByText('سُجِّل هذا اليوم تلقائيًا (Leave-friday). اختر موقعًا إذا عمل الموظف فيه.')).toBeInTheDocument()
+  expect(screen.getByLabelText('السلفة')).toHaveValue('250.5')
+  expect(screen.queryByRole('button', { name: 'مسح اليوم' })).toBeNull()
+})
+
+test('a 409 keeps the typed values and offers the latest version', async () => {
+  const get = vi.fn(() => json(200, { data: day() }))
+  mockFetch(routes(day(), { [`GET ${URL}`]: get, [`PUT ${URL}`]: () => json(409, { error: { code: 'concurrency_conflict', message: 'conflict' } }) }))
+  open()
+  await user.selectOptions(await siteSelect(), 's1')
+  await user.type(screen.getByLabelText('السلفة'), '500')
+  await user.click(screen.getByRole('button', { name: 'حفظ' }))
+  expect(await screen.findByText('عدّل مستخدم آخر هذا اليوم. حمّل آخر نسخة ثم أعد إدخال تغييراتك.')).toBeInTheDocument()
+  expect(screen.getByLabelText('السلفة')).toHaveValue('500')
+  await user.click(screen.getByRole('button', { name: 'تحميل آخر نسخة' }))
+  await waitFor(() => expect(get).toHaveBeenCalledTimes(2))
+  await waitFor(() => expect(screen.getByLabelText('السلفة')).toHaveValue(''))
+})
+
+test('server field errors show under their fields', async () => {
+  mockFetch(routes(day(), { [`PUT ${URL}`]: () => json(422, { error: { code: 'validation_failed', message: 'x', details: [{ field: 'site_id', code: 'site_required', message: 'اختر موقعًا.' }] } }) }))
+  open()
+  await user.click(await screen.findByRole('button', { name: 'حفظ' }))
+  expect(await siteSelect()).toHaveAccessibleDescription('اختر موقعًا.')
+})
+
+test('read-only when the period is locked or without attendance.edit', async () => {
+  mockFetch(routes(day({ period: { start: '2026-09-26', end: '2026-10-25', is_locked: true } })))
+  const first = open()
+  expect(await siteSelect()).toBeDisabled()
+  expect(screen.getByLabelText('السلفة')).toBeDisabled()
+  expect(screen.getByText('الفترة مقفلة، ولا يمكن تعديل أيامها.')).toBeInTheDocument()
+  expect(screen.queryByRole('button', { name: 'حفظ' })).toBeNull()
+  first.unmount()
+
+  mockFetch(routes(day()))
+  open(['attendance.view.all'])
+  expect(await siteSelect()).toBeDisabled()
+  expect(screen.getByLabelText('ملاحظات')).toBeDisabled()
+  expect(screen.queryByRole('button', { name: 'حفظ' })).toBeNull()
+})
+
+test('clearing a stored day sends its version', async () => {
+  const del = vi.fn((_url: string) => json(200, { data: day() }))
+  const onOpenChange = vi.fn()
+  mockFetch(routes(day({ state: 'stored', source: 'entered', version: 3, site_id: 's1' }), { [`DELETE ${URL}`]: del }))
+  open(EDIT, onOpenChange)
+  await user.click(await screen.findByRole('button', { name: 'مسح اليوم' }))
+  await waitFor(() => expect(onOpenChange).toHaveBeenCalledWith(false))
+  expect(del.mock.calls[0][0]).toContain('version=3')
+})
