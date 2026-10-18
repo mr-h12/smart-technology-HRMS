@@ -21,6 +21,7 @@ import { useAuth } from '@/lib/auth'
 import { SITES, useApi, useList, useSave } from '@/lib/query'
 import { DayEditor } from './attendance-day'
 import { DaySheet } from './attendance-sheet'
+import { NotFoundPage } from './pages'
 
 const GROUPS = ['office', 'engineer', 'permanent_worker', 'day_laborer']
 const PER_PAGE = 50
@@ -63,16 +64,18 @@ export function AttendancePage() {
       }
       return p
     }, { replace: true })
+  const { can } = useAuth()
+  const allowed = can('attendance.view') // without it nothing is fetched and the page is not found
   // the sheet's period is the one holding its date; the grid's is the chosen one
   // the sheet keeps the last period while the next date's loads, so the header does not blink inside one period
-  const { data: period, err } = useApi<Period>(`/attendance/period?${new URLSearchParams(tab === 'sheet' ? { group, date } : { group, ...(chosen && { period_start: chosen }) })}`, { keep: tab === 'sheet' })
+  const { data: period, err } = useApi<Period>(allowed ? `/attendance/period?${new URLSearchParams(tab === 'sheet' ? { group, date } : { group, ...(chosen && { period_start: chosen }) })}` : null, { keep: tab === 'sheet' })
   const start = chosen ?? period?.start // the grid follows the URL as soon as an arrow moves it
   const move = (to: string) => set(tab === 'sheet' ? { date: to } : { period: to })
   const [day, setDay] = useState<{ employee: { id: string; name_ar: string }; date: string }>()
   const [dlg, setDlg] = useState<'lock' | 'reopen'>()
-  const { can } = useAuth()
   const send = useSave()
   const at = useCairoTime()
+  if (!allowed) return <NotFoundPage />
   const openDay = (e: Row, d: string) => setDay({ employee: { id: e.id, name_ar: e.name_ar }, date: d })
   // group, period arrows and lock line: shared by both tabs; the arrows move the grid's period or the sheet's date
   const bar = (

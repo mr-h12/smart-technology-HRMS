@@ -130,6 +130,16 @@ test('reopen sends the reason', async () => {
   expect(within(dialog).getByLabelText('سبب إعادة الفتح')).toHaveAttribute('aria-invalid', 'true')
 })
 
+test('without attendance.view the page is the not-found page, not a shell around a 403', async () => {
+  const forbidden = vi.fn(() => json(403, { error: { code: 'forbidden', message: 'forbidden' } }))
+  mockFetch({ 'GET /api/v1/attendance/period': forbidden })
+  renderWithAuth(<AttendancePage />, ['employee.view.own'], { path: '/attendance' })
+  expect(await screen.findByRole('heading', { name: 'الصفحة غير موجودة' })).toBeInTheDocument()
+  expect(screen.queryByRole('combobox', { name: 'المجموعة' })).not.toBeInTheDocument()
+  expect(screen.queryByRole('alert')).not.toBeInTheDocument()
+  expect(forbidden).not.toHaveBeenCalled()
+})
+
 test('lock controls need attendance.lock', async () => {
   mockFetch(routes)
   renderWithAuth(<AttendancePage />, ['attendance.view.all', 'attendance.edit.all'], { path: '/attendance?group=engineer&tab=grid' })
