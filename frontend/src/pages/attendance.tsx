@@ -1,4 +1,4 @@
-import { CalendarCheck, CalendarX, ChevronLeft, ChevronRight, Lock, LockOpen, Users } from 'lucide-react'
+import { CalendarCheck, CalendarX, ChevronLeft, ChevronRight, ListChecks, Lock, LockOpen, Users } from 'lucide-react'
 import { useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { useSearchParams } from 'react-router-dom'
@@ -7,7 +7,7 @@ import { MiniStat } from '@/components/cards/StatCard'
 import { EmptyState } from '@/components/common/EmptyState'
 import { PageHeader } from '@/components/common/PageHeader'
 import { StatusBadge } from '@/components/common/StatusBadge'
-import { ErrorBanner, Field, FormDialog, intlLocale, type Row, SelectField, useCairoTime } from '@/components/form'
+import { cairoToday, ErrorBanner, Field, FormDialog, intlLocale, type Row, SelectField, useCairoTime } from '@/components/form'
 import { TableSkeleton } from '@/components/layout/PageSkeleton'
 import { Pagination } from '@/components/tables/Pagination'
 import { Button } from '@/components/ui/button'
@@ -20,10 +20,11 @@ import { cn } from '@/lib/utils'
 import { useAuth } from '@/lib/auth'
 import { SITES, useApi, useList, useSave } from '@/lib/query'
 import { DayEditor } from './attendance-day'
+import { DaySheet } from './attendance-sheet'
 
 const GROUPS = ['office', 'engineer', 'permanent_worker', 'day_laborer']
 const PER_PAGE = 50
-const TABS = ['grid'] // the import tab joins with the template import
+const TABS = ['sheet', 'grid'] // the import tab joins with the template import
 
 type Period = { group: string; start: string; end: string; prev_start: string; next_start: string | null; is_locked: boolean; lock: { locked_by: { name: string } | null; locked_at: string | null } | null; missing: number }
 type Day = { date: string; state: 'not_employed' | 'stored' | 'derived' | 'future' | 'missing'; site_id: string | null; leave_code: string | null }
@@ -39,12 +40,21 @@ const LOOK: Record<Day['state'], string> = {
 }
 const CELL = 'block min-h-11 w-full min-w-11 max-w-28 truncate rounded-md px-1.5 text-center text-xs transition-colors outline-none focus-visible:outline-2 focus-visible:outline-solid focus-visible:outline-offset-2 focus-visible:outline-ring disabled:cursor-not-allowed'
 
-/** HR's attendance page, URL state `?group=&period=&tab=`; the group defaults to engineers, the period to the current one. */
+/** `?date=` when it is a real date not after today in Cairo, else today. */
+function pickDate(s: string | null) {
+  const today = cairoToday()
+  const d = new Date(`${s}T00:00:00Z`)
+  return s && s <= today && !Number.isNaN(d.getTime()) && d.toISOString().slice(0, 10) === s ? s : today
+}
+
+/** HR's attendance page, URL state `?group=&period=&date=&tab=`; the group defaults to engineers, the grid's period to the current one, the sheet's date to today. */
 export function AttendancePage() {
   const { t } = useTranslation()
   const [params, setParams] = useSearchParams()
   const group = GROUPS.find((g) => g === params.get('group')) ?? 'engineer'
   const chosen = params.get('period')
+  const date = pickDate(params.get('date'))
+  const tab = TABS.find((x) => x === params.get('tab')) ?? TABS[0]
   const set = (patch: Record<string, string | null>) =>
     setParams((p) => {
       for (const [k, v] of Object.entries(patch)) {
@@ -53,14 +63,48 @@ export function AttendancePage() {
       }
       return p
     }, { replace: true })
-  const { data: period, err } = useApi<Period>(`/attendance/period?${new URLSearchParams({ group, ...(chosen && { period_start: chosen }) })}`)
+  // the sheet's period is the one holding its date; the grid's is the chosen one
+  const { data: period, err } = useApi<Period>(`/attendance/period?${new URLSearchParams(tab === 'sheet' ? { group, date } : { group, ...(chosen && { period_start: chosen }) })}`)
   const start = chosen ?? period?.start // the grid follows the URL as soon as an arrow moves it
-  const tab = TABS.find((x) => x === params.get('tab')) ?? TABS[0]
+  const move = (to: string) => set(tab === 'sheet' ? { date: to } : { period: to })
   const [day, setDay] = useState<{ employee: { id: string; name_ar: string }; date: string }>()
   const [dlg, setDlg] = useState<'lock' | 'reopen'>()
   const { can } = useAuth()
   const send = useSave()
   const at = useCairoTime()
+  const openDay = (e: Row, d: string) => setDay({ employee: { id: e.id, name_ar: e.name_ar }, date: d })
+  // group, period arrows and lock line: shared by both tabs; the arrows move the grid's period or the sheet's date
+  const bar = (
+    <>
+      <div className="flex flex-col gap-3 border-b p-4 sm:flex-row sm:items-end">
+        <div className="sm:w-56">
+          <SelectField name="group" label={t('attendance.groupLabel')} values={{ group }} set={(_, v) => set({ group: v, period: null })} errs={{}} options={GROUPS.map((g) => [g, t(`attendance.group.${g}`)])} />
+        </div>
+        <div className="flex items-center gap-2">
+          <Button variant="outline" size="icon" className="size-11" disabled={!period} onClick={() => period && move(period.prev_start)} aria-label={t('attendance.prevPeriod')}>
+            <ChevronLeft className="rtl:-scale-x-100" aria-hidden />
+          </Button>
+          <span className="px-1 text-sm font-medium tabular">
+            {period ? t('attendance.periodRange', { start: period.start, end: period.end }) : '—'}
+          </span>
+          <Button variant="outline" size="icon" className="size-11" disabled={!period?.next_start} onClick={() => period?.next_start && move(period.next_start)} aria-label={t('attendance.nextPeriod')}>
+            <ChevronRight className="rtl:-scale-x-100" aria-hidden />
+          </Button>
+          {period?.is_locked && <StatusBadge variant="neutral" label={t('attendance.locked')} />}
+        </div>
+      </div>
+      {period?.is_locked && period.lock && (
+        <p className="border-b px-4 py-2 text-[13px] text-muted-foreground">
+          {t('attendance.lockedBy', { name: period.lock.locked_by?.name ?? '—', time: at(period.lock.locked_at) })}
+        </p>
+      )}
+      {!!err && (
+        <div className="border-b p-4">
+          <ErrorBanner err={err} shown={[]} />
+        </div>
+      )}
+    </>
+  )
 
   return (
     <div className="space-y-6">
@@ -81,40 +125,21 @@ export function AttendancePage() {
       />
       <Tabs value={tab} onValueChange={(v) => set({ tab: v })}>
         <TabsList>
+          <TabsTrigger value="sheet">
+            <ListChecks className="size-4" aria-hidden /> {t('attendance.tab.sheet')}
+          </TabsTrigger>
           <TabsTrigger value="grid">
             <CalendarCheck className="size-4" aria-hidden /> {t('attendance.tab.grid')}
           </TabsTrigger>
         </TabsList>
+        <TabsContent value="sheet" className="space-y-4">
+          <Card className="overflow-hidden [&>:last-child]:border-b-0">{bar}</Card>
+          <DaySheet key={`${group}/${date}`} group={group} date={date} period={period} onDate={(d) => set({ date: d })} onOpenDay={openDay} />
+        </TabsContent>
         <TabsContent value="grid">
           <Card className="overflow-hidden">
-            <div className="flex flex-col gap-3 border-b p-4 sm:flex-row sm:items-end">
-              <div className="sm:w-56">
-                <SelectField name="group" label={t('attendance.groupLabel')} values={{ group }} set={(_, v) => set({ group: v, period: null })} errs={{}} options={GROUPS.map((g) => [g, t(`attendance.group.${g}`)])} />
-              </div>
-              <div className="flex items-center gap-2">
-                <Button variant="outline" size="icon" className="size-11" disabled={!period} onClick={() => period && set({ period: period.prev_start })} aria-label={t('attendance.prevPeriod')}>
-                  <ChevronLeft className="rtl:-scale-x-100" aria-hidden />
-                </Button>
-                <span className="px-1 text-sm font-medium tabular">
-                  {period ? t('attendance.periodRange', { start: period.start, end: period.end }) : '—'}
-                </span>
-                <Button variant="outline" size="icon" className="size-11" disabled={!period?.next_start} onClick={() => period?.next_start && set({ period: period.next_start })} aria-label={t('attendance.nextPeriod')}>
-                  <ChevronRight className="rtl:-scale-x-100" aria-hidden />
-                </Button>
-                {period?.is_locked && <StatusBadge variant="neutral" label={t('attendance.locked')} />}
-              </div>
-            </div>
-            {period?.is_locked && period.lock && (
-              <p className="border-b px-4 py-2 text-[13px] text-muted-foreground">
-                {t('attendance.lockedBy', { name: period.lock.locked_by?.name ?? '—', time: at(period.lock.locked_at) })}
-              </p>
-            )}
-            {!!err && (
-              <div className="border-b p-4">
-                <ErrorBanner err={err} shown={[]} />
-              </div>
-            )}
-            {start ? <Grid key={`${group}/${start}`} group={group} start={start} onOpenDay={(e, date) => setDay({ employee: { id: e.id, name_ar: e.name_ar }, date })} /> : !err && <TableSkeleton rows={8} />}
+            {bar}
+            {start ? <Grid key={`${group}/${start}`} group={group} start={start} onOpenDay={openDay} /> : !err && <TableSkeleton rows={8} />}
           </Card>
         </TabsContent>
       </Tabs>

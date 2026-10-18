@@ -452,7 +452,8 @@
     "legend": "دليل الخانات",
     "empty": "لا يوجد موظفون في هذه المجموعة خلال الفترة.",
     "tab": {
-      "grid": "جدول الفترة"
+      "grid": "جدول الفترة",
+      "sheet": "كشف اليوم"
     },
     "day": {
       "title": "يوم {{date}} — {{name}}",
@@ -489,6 +490,30 @@
       "entered": "إدخال يدوي",
       "imported": "مستورد من Excel",
       "derived": "تلقائي"
+    },
+    "sheet": {
+      "kpi": {
+        "total": "الإجمالي",
+        "accounted": "{{done}} من {{total}} مسجل",
+        "worked": "في موقع",
+        "onTime": "في الموعد",
+        "late": "متأخر",
+        "leave": "إجازة",
+        "absent": "غياب"
+      },
+      "days": "أيام الفترة",
+      "cohortsSite": "حسب آخر موقع",
+      "cohortsDept": "حسب القسم",
+      "noLastSite": "بدون موقع سابق",
+      "noDepartment": "بدون قسم",
+      "action": {
+        "details": "التفاصيل"
+      },
+      "lateBy": "متأخر {{minutes}} د",
+      "lastSite": "آخر موقع: {{site}}",
+      "totals": "إجمالي الفترة",
+      "locked": "الفترة مقفلة؛ الكشف للعرض فقط.",
+      "noMatch": "لا يوجد موظفون مطابقون."
     }
   },
   "holiday": {

@@ -20,7 +20,7 @@ const routes = {
 
 test('the grid shows each employee per day with missing and derived days marked', async () => {
   mockFetch(routes)
-  renderWithAuth(<AttendancePage />, ['attendance.view.all'], { path: '/attendance?group=engineer' })
+  renderWithAuth(<AttendancePage />, ['attendance.view.all'], { path: '/attendance?group=engineer&tab=grid' })
   expect(await screen.findByRole('button', { name: 'Engineer-1 2026-10-01: Site-1' })).toBeEnabled()
   expect(screen.getByRole('button', { name: 'Engineer-1 2026-10-02: جمعة' })).toHaveClass('border-dashed')
   expect(screen.getByRole('button', { name: 'Engineer-1 2026-10-03: غير مسجل' })).toHaveClass('bg-warning/15')
@@ -32,7 +32,7 @@ test('the grid shows each employee per day with missing and derived days marked'
 test('the period arrows move between periods and keep the group in the URL', async () => {
   const grid = vi.fn((_url: string) => json(200, { data: rows, meta: { pagination } }))
   mockFetch({ ...routes, 'GET /api/v1/attendance/grid': grid })
-  renderWithAuth(<AttendancePage />, ['attendance.view.all'], { path: '/attendance?group=engineer' })
+  renderWithAuth(<AttendancePage />, ['attendance.view.all'], { path: '/attendance?group=engineer&tab=grid' })
   expect(await screen.findByRole('button', { name: 'الفترة التالية' })).toBeDisabled()
   await user.click(screen.getByRole('button', { name: 'الفترة السابقة' }))
   await waitFor(() => expect(grid.mock.calls.at(-1)?.[0]).toContain('period_start=2026-08-26'))
@@ -43,7 +43,7 @@ test('a weekday code without a leave type and an office present day still get a 
   const office = [{ employee: { id: 'e2', code: 2, name_ar: 'Office-1', name_en: 'Office-1' },
     days: [cell('2026-10-01', 'stored'), cell('2026-10-02', 'derived', { leave_code: 'thursday' }), cell('2026-10-04', 'not_employed')] }]
   mockFetch({ ...routes, 'GET /api/v1/attendance/grid': () => json(200, { data: office, meta: { pagination } }) })
-  renderWithAuth(<AttendancePage />, ['attendance.view.all'], { path: '/attendance?group=office' })
+  renderWithAuth(<AttendancePage />, ['attendance.view.all'], { path: '/attendance?group=office&tab=grid' })
   expect(await screen.findByRole('button', { name: 'Office-1 2026-10-01: حاضر' })).toBeEnabled()
   expect(screen.getByRole('button', { name: 'Office-1 2026-10-02: thursday' })).toBeInTheDocument()
   expect(screen.getByRole('button', { name: 'Office-1 2026-10-04: خارج فترة العمل' })).toBeDisabled()
@@ -55,7 +55,7 @@ test('a locked period shows the badge and an empty group says so', async () => {
     'GET /api/v1/attendance/period': () => json(200, { data: { ...period, is_locked: true } }),
     'GET /api/v1/attendance/grid': () => json(200, { data: [], meta: { pagination: { ...pagination, total: 0 } } }),
   })
-  renderWithAuth(<AttendancePage />, ['attendance.view.all'], { path: '/attendance' })
+  renderWithAuth(<AttendancePage />, ['attendance.view.all'], { path: '/attendance?tab=grid' })
   expect(await screen.findByText('لا يوجد موظفون في هذه المجموعة خلال الفترة.')).toBeInTheDocument()
   expect(screen.getByText('مقفلة')).toBeInTheDocument()
   expect(screen.getByRole('combobox', { name: 'المجموعة' })).toHaveValue('engineer')
@@ -64,7 +64,7 @@ test('a locked period shows the badge and an empty group says so', async () => {
 test('clicking a day opens its editor', async () => {
   mockFetch({ ...routes, 'GET /api/v1/attendance/days/e1/2026-10-03': () => json(200, { data: { ...cell('2026-10-03', 'missing'), employee_id: 'e1', type: 'engineer', version: null,
     fields: ['in_time', 'out_time'], leave_day_fields: [], hints: {}, period: { start: '2026-09-26', end: '2026-10-25', is_locked: false } } }) })
-  renderWithAuth(<AttendancePage />, ['attendance.view.all', 'attendance.edit.all'], { path: '/attendance?group=engineer' })
+  renderWithAuth(<AttendancePage />, ['attendance.view.all', 'attendance.edit.all'], { path: '/attendance?group=engineer&tab=grid' })
   await user.click(await screen.findByRole('button', { name: 'Engineer-1 2026-10-03: غير مسجل' }))
   expect(await screen.findByRole('dialog', { name: 'يوم 2026-10-03 — Engineer-1' })).toBeInTheDocument()
   expect(await screen.findByLabelText('وقت الحضور')).toBeEnabled()
@@ -80,7 +80,7 @@ test('locking with missing days lists them and needs the confirm checkbox', asyn
     'GET /api/v1/attendance/missing': () => json(200, { data: [{ employee_id: 'e1', code: 1, name_ar: 'Engineer-1', name_en: 'Engineer-1', date: '2026-10-03' }], meta: { pagination } }),
     'POST /api/v1/attendance/locks': lock,
   })
-  renderWithAuth(<AttendancePage />, lockPerms, { path: '/attendance?group=engineer' })
+  renderWithAuth(<AttendancePage />, lockPerms, { path: '/attendance?group=engineer&tab=grid' })
   await user.click(await screen.findByRole('button', { name: 'قفل الفترة' }))
   const dialog = await screen.findByRole('dialog', { name: 'قفل حضور الفترة' })
   expect(within(dialog).getByText('بعد القفل لا يمكن لأي مستخدم تعديل أيام هذه الفترة حتى يُعاد فتحها.')).toBeInTheDocument()
@@ -103,7 +103,7 @@ test('reopen sends the reason', async () => {
       ? json(422, { error: { code: 'validation_failed', message: 'invalid', details: [{ field: 'reason', code: 'invalid', message: 'Reason too short.' }] } })
       : json(200, { data: period }))
   mockFetch({ ...routes, 'GET /api/v1/attendance/period': () => json(200, { data: lockedPeriod }), 'POST /api/v1/attendance/locks/reopen': reopen })
-  renderWithAuth(<AttendancePage />, lockPerms, { path: '/attendance?group=engineer' })
+  renderWithAuth(<AttendancePage />, lockPerms, { path: '/attendance?group=engineer&tab=grid' })
   expect(await screen.findByText(/قفلها HR-1 في/)).toBeInTheDocument()
   expect(screen.queryByRole('button', { name: 'قفل الفترة' })).not.toBeInTheDocument()
   await user.click(screen.getByRole('button', { name: 'إعادة فتح الفترة' }))
@@ -118,7 +118,7 @@ test('reopen sends the reason', async () => {
 
 test('lock controls need attendance.lock', async () => {
   mockFetch(routes)
-  renderWithAuth(<AttendancePage />, ['attendance.view.all', 'attendance.edit.all'], { path: '/attendance?group=engineer' })
+  renderWithAuth(<AttendancePage />, ['attendance.view.all', 'attendance.edit.all'], { path: '/attendance?group=engineer&tab=grid' })
   expect(await screen.findByRole('button', { name: 'Engineer-1 2026-10-01: Site-1' })).toBeInTheDocument()
   expect(screen.queryByRole('button', { name: 'قفل الفترة' })).not.toBeInTheDocument()
   expect(screen.queryByRole('button', { name: 'إعادة فتح الفترة' })).not.toBeInTheDocument()

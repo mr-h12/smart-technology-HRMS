@@ -452,7 +452,8 @@
     "legend": "Legend",
     "empty": "No employees in this group during this period.",
     "tab": {
-      "grid": "Period grid"
+      "grid": "Period grid",
+      "sheet": "Day sheet"
     },
     "day": {
       "title": "{{date}} — {{name}}",
@@ -489,6 +490,30 @@
       "entered": "Entered",
       "imported": "Imported",
       "derived": "Automatic"
+    },
+    "sheet": {
+      "kpi": {
+        "total": "Total",
+        "accounted": "{{done}} of {{total}} recorded",
+        "worked": "At a site",
+        "onTime": "On time",
+        "late": "Late",
+        "leave": "Leave",
+        "absent": "Absent"
+      },
+      "days": "Period days",
+      "cohortsSite": "By last site",
+      "cohortsDept": "By department",
+      "noLastSite": "No last site",
+      "noDepartment": "No department",
+      "action": {
+        "details": "Details"
+      },
+      "lateBy": "Late {{minutes}} min",
+      "lastSite": "Last site: {{site}}",
+      "totals": "Period totals",
+      "locked": "This period is locked; the sheet is read-only.",
+      "noMatch": "No employees match."
     }
   },
   "holiday": {

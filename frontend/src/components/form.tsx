@@ -30,6 +30,9 @@ export function ErrorBanner({ err, shown }: { err: unknown; shown: string[] }) {
   ) : null
 }
 
+/** A record's name in the UI language: in English `name_en` when set, else `fallback`, else `name_ar`; Arabic always shows `name_ar`. */
+export const localName = (row: Row, lang: string, fallback?: string): string => (lang === 'en' ? row.name_en || fallback || row.name_ar : row.name_ar)
+
 /** Intl locale for a UI language; Arabic keeps Latin digits. */
 export const intlLocale = (lng: string) => (lng === 'ar' ? 'ar-EG-u-nu-latn' : lng)
 
