@@ -244,7 +244,7 @@ function RoleDialog() {
   )
 }
 
-const ACTIONS = ['view', 'create', 'edit', 'delete', 'assign_manager', 'manage']
+const ACTIONS = ['view', 'create', 'edit', 'delete', 'assign_manager', 'manage', 'lock']
 
 /** One row per resource, one column per action; keyed by role and its grants so a saved role resets the controls. */
 function Matrix({ role, perms, editable }: { role: Row; perms: Row[]; editable: boolean }) {

@@ -330,7 +330,7 @@ test('site.manage alone shows no managers action', async () => {
 const rules = {
   month_days: '30', day_hours: '8', overtime_multiplier: '1.5',
   lateness_multiplier_office: '1', lateness_multiplier_engineer: '1.5', lateness_multiplier_permanent_worker: '2', lateness_multiplier_day_laborer: '2',
-  office_grace_minutes: '15', office_shift_start: '09:00', office_shift_end: '17:00',
+  office_grace_minutes: '15', office_shift_start: '09:00', office_shift_end: '17:00', worker_shift_start: '08:00', worker_shift_end: '16:00',
   weekly_off_office: 'friday,saturday', weekly_off_field: 'friday',
   leave_days_under_one_year: '10', leave_days_one_year_plus: '21', leave_casual_days: '6',
 }
@@ -342,6 +342,8 @@ test('rules tab loads the settings, saves typed values and toasts', async () => 
   renderWithAuth(<SettingsPage />, RULES, { path: '/settings?tab=rules' })
   const grace = await screen.findByLabelText('فترة السماح للتأخير (دقيقة)')
   expect(grace).toHaveValue('15')
+  expect(screen.getByLabelText('بدء وردية العمال المثبتين')).toHaveAttribute('type', 'time')
+  expect(screen.getByLabelText('انتهاء وردية العمال المثبتين')).toHaveValue('16:00')
   expect(screen.getByRole('button', { name: 'حفظ التغييرات' })).toBeDisabled()
   await user.clear(grace)
   await user.type(grace, '٢٠')
@@ -425,4 +427,70 @@ test('the managers dialog ticks the managers as they are now, not as cached', as
   managers = [{ id: 'u1', name: 'خالد' }, { id: 'u2', name: 'سامي' }]
   await open()
   await waitFor(() => expect(screen.getByRole('checkbox', { name: 'سامي' })).toBeChecked())
+})
+
+test('the leave-type dialog offers the Saturday code', async () => {
+  mockFetch({ 'GET /api/v1/sites': list([]) })
+  renderWithAuth(<SettingsPage />, MANAGE, { path: '/settings?tab=leave-types' })
+  await user.click(await screen.findByRole('button', { name: 'إضافة نوع إجازة' }))
+  expect(within(screen.getByLabelText('كود الإجازة')).getByRole('option', { name: 'السبت' })).toHaveValue('saturday')
+})
+
+const HOLIDAYS = ['attendance.view.all', 'holiday.manage.all']
+const lockedPeriod = () => json(423, { error: { code: 'period_locked', message: 'فترة الحضور مقفلة ولا يمكن تعديلها.' } })
+
+test('holidays tab lists, adds and shows a locked-period refusal', async () => {
+  let n = 0
+  const post = vi.fn(() => (n++ === 0 ? json(201, { data: {} }) : lockedPeriod()))
+  mockFetch({ 'GET /api/v1/attendance/holidays': list([{ id: 'h1', date: '2026-10-06', name: 'Holiday-1' }]), 'POST /api/v1/attendance/holidays': post })
+  renderWithAuth(<SettingsPage />, HOLIDAYS, { path: '/settings?tab=holidays' })
+  expect(await screen.findByRole('row', { name: /2026-10-06.*Holiday-1/ })).toBeInTheDocument()
+  expect(urlWith('/attendance/holidays')).toContain('per_page=100')
+  const add = async (date: string, name: string) => {
+    await user.click(screen.getByRole('button', { name: 'إضافة إجازة رسمية' }))
+    await user.type(screen.getByLabelText('التاريخ'), date)
+    await user.type(screen.getByLabelText('اسم الإجازة'), name)
+    await user.click(screen.getByRole('button', { name: 'حفظ' }))
+  }
+  await add('2026-10-20', 'Holiday-2')
+  await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull())
+  expect(body(post)).toEqual({ date: '2026-10-20', name: 'Holiday-2' })
+  await add('2026-10-21', 'Holiday-3')
+  expect(await within(screen.getByRole('dialog')).findByRole('alert')).toHaveTextContent('فترة الحضور مقفلة ولا يمكن تعديلها.')
+})
+
+test('a holiday is edited and deleted from its row menu', async () => {
+  const patch = vi.fn(() => json(200, { data: {} }))
+  const del = vi.fn(() => new Response(null, { status: 204 }))
+  mockFetch({ 'GET /api/v1/attendance/holidays': list([{ id: 'h1', date: '2026-10-06', name: 'Holiday-1' }]), 'PATCH /api/v1/attendance/holidays/h1': patch, 'DELETE /api/v1/attendance/holidays/h1': del })
+  renderWithAuth(<SettingsPage />, HOLIDAYS, { path: '/settings?tab=holidays' })
+  await rowMenu('Holiday-1')
+  await user.click(await screen.findByRole('menuitem', { name: 'تعديل' }))
+  expect(screen.getByRole('dialog', { name: 'تعديل الإجازة الرسمية' })).toBeInTheDocument()
+  await user.clear(screen.getByLabelText('اسم الإجازة'))
+  await user.type(screen.getByLabelText('اسم الإجازة'), 'Holiday-9')
+  await user.click(screen.getByRole('button', { name: 'حفظ' }))
+  expect(body(patch)).toEqual({ date: '2026-10-06', name: 'Holiday-9' })
+  await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull())
+  await rowMenu('Holiday-1')
+  await user.click(await screen.findByRole('menuitem', { name: 'حذف' }))
+  expect(screen.getByRole('dialog', { name: 'حذف الإجازة الرسمية «Holiday-1»؟' })).toBeInTheDocument()
+  await user.click(screen.getByRole('button', { name: 'حذف' }))
+  await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull())
+  expect(del).toHaveBeenCalledTimes(1)
+})
+
+test('holiday controls need holiday.manage', async () => {
+  mockFetch({ 'GET /api/v1/attendance/holidays': list([{ id: 'h1', date: '2026-10-06', name: 'Holiday-1' }]) })
+  renderWithAuth(<SettingsPage />, ['attendance.view.all'], { path: '/settings?tab=holidays' })
+  expect(await screen.findByText('Holiday-1')).toBeInTheDocument()
+  expect(screen.queryByRole('button', { name: 'إضافة إجازة رسمية' })).toBeNull()
+  expect(screen.queryByRole('button', { name: 'الإجراءات' })).toBeNull()
+})
+
+test('a user with only attendance.view lands on the holidays tab', async () => {
+  mockFetch({ 'GET /api/v1/attendance/holidays': list([]) })
+  renderWithAuth(<SettingsPage />, ['attendance.view.all'], { path: '/settings' })
+  expect(await screen.findByRole('tab', { name: 'الإجازات الرسمية' })).toHaveAttribute('aria-selected', 'true')
+  expect(screen.getAllByRole('tab')).toHaveLength(1)
 })

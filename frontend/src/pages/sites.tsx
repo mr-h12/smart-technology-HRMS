@@ -15,12 +15,12 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { useAuth } from '@/lib/auth'
 import { RESIDENCES, USERS, useApi, useSave } from '@/lib/query'
 
-const LEAVE_CODES = ['friday', 'official_holiday', 'sick', 'rest', 'absent', 'other']
+const LEAVE_CODES = ['friday', 'saturday', 'official_holiday', 'sick', 'rest', 'absent', 'other']
 const MODES = ['none', 'share_of_wage', 'fixed']
 const LIST = '?per_page=100' // server max; these lists are small, the notice below covers overflow
-const PAGE = 12
+export const PAGE = 12
 
-const Notice = ({ show, text }: { show: boolean; text: string }) =>
+export const Notice = ({ show, text }: { show: boolean; text: string }) =>
   show ? (
     <p role="status" className="rounded-md border p-3 text-sm">
       {text}
@@ -28,7 +28,7 @@ const Notice = ({ show, text }: { show: boolean; text: string }) =>
   ) : null
 
 /** The card every settings list shares: header with an optional add button, banners, skeleton, table or empty state, pagination. */
-function ListCard({ title, description, action, err, loading, empty, icon, notice, page, children }: {
+export function ListCard({ title, description, action, err, loading, empty, icon, notice, page, children }: {
   title: string
   description: string
   action?: ReactNode

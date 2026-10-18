@@ -158,7 +158,8 @@
       "sick": "Sick leave",
       "rest": "Rest day",
       "absent": "Absent",
-      "other": "Other"
+      "other": "Other",
+      "saturday": "Saturday"
     },
     "allowance_mode": {
       "none": "No allowance",
@@ -270,7 +271,9 @@
       "user": "User accounts",
       "role": "Roles and permissions",
       "audit_log": "Audit log",
-      "setting": "Business rules"
+      "setting": "Business rules",
+      "attendance": "Attendance",
+      "holiday": "Official holidays"
     },
     "action": {
       "view": "View",
@@ -278,7 +281,16 @@
       "edit": "Edit",
       "delete": "Delete",
       "assign_manager": "Assign manager",
-      "manage": "Manage"
+      "manage": "Manage",
+      "lock": "Lock"
+    },
+    "attendance": {
+      "view": "Attendance: view",
+      "edit": "Attendance: edit",
+      "lock": "Attendance: lock period"
+    },
+    "holiday": {
+      "manage": "Official holidays: manage"
     }
   },
   "audit": {
@@ -311,7 +323,9 @@
       "ROLE_CREATED": "Role created",
       "ROLE_UPDATED": "Role updated",
       "ROLE_PERMISSIONS_UPDATED": "Role permissions updated",
-      "SITE_MANAGERS_UPDATED": "Site managers updated"
+      "SITE_MANAGERS_UPDATED": "Site managers updated",
+      "ATTENDANCE_LOCKED": "Attendance period locked",
+      "ATTENDANCE_REOPENED": "Attendance period reopened"
     },
     "entity": {
       "employees": "Employees",
@@ -326,7 +340,10 @@
       "fares": "Fares",
       "users": "Accounts",
       "roles": "Roles",
-      "settings": "Business rules"
+      "settings": "Business rules",
+      "attendance_days": "Attendance days",
+      "attendance_locks": "Attendance locks",
+      "official_holidays": "Official holidays"
     }
   },
   "settings": {
@@ -335,7 +352,8 @@
       "residences": "Residences",
       "leaveTypes": "Leave types",
       "fares": "Transport fares",
-      "rules": "Business rules"
+      "rules": "Business rules",
+      "holidays": "Official holidays"
     },
     "subtitle": "Manage sites, residences, leave types, transport fares and business rules.",
     "desc": {
@@ -343,7 +361,8 @@
       "residences": "Areas employees travel from to reach a site.",
       "leaveTypes": "Days recorded instead of a work site, such as Fridays, official holidays and absences.",
       "fares": "The fare from each residence to each site, effective from its date.",
-      "rules": "The numbers payroll, lateness and leave calculations rely on."
+      "rules": "The numbers payroll, lateness and leave calculations rely on.",
+      "holidays": "Days recorded automatically as an official holiday for everyone."
     }
   },
   "status": {
@@ -377,7 +396,9 @@
     "weekly_off_field": "Weekly rest: site staff",
     "leave_days_under_one_year": "Leave days, under one year of service",
     "leave_days_one_year_plus": "Leave days, one year of service or more",
-    "leave_casual_days": "Casual leave days"
+    "leave_casual_days": "Casual leave days",
+    "worker_shift_start": "Permanent workers' shift start",
+    "worker_shift_end": "Permanent workers' shift end"
   },
   "weekday": {
     "saturday": "Saturday",
@@ -469,5 +490,13 @@
       "imported": "Imported",
       "derived": "Automatic"
     }
+  },
+  "holiday": {
+    "add": "Add holiday",
+    "edit": "Edit holiday",
+    "date": "Date",
+    "name": "Holiday name",
+    "delete": "Delete",
+    "deleteConfirm": "Delete the official holiday \"{{name}}\"?"
   }
 }
