@@ -171,7 +171,7 @@ class HotPathTest extends TestCase
     public function test_foreign_keys_and_search_columns_are_indexed(): void
     {
         $indexes = DB::table('pg_indexes')->where('schemaname', 'public')->pluck('indexdef', 'indexname');
-        foreach (['user_sessions.user_id', 'users.role_id', 'fares.site_id', 'manager_sites.site_id', 'employee_manager_assignments.manager_id', 'role_permissions.permission_id', 'employees.residence_id', 'employee_fare_overrides.site_id'] as $column) {
+        foreach (['user_sessions.user_id', 'users.role_id', 'fares.site_id', 'manager_sites.site_id', 'employee_manager_assignments.manager_id', 'role_permissions.permission_id', 'employees.residence_id', 'employee_fare_overrides.site_id', 'attendance_days.site_id'] as $column) {
             [$table, $col] = explode('.', $column);
             $this->assertArrayHasKey("{$table}_{$col}_index", $indexes, $column);
         }

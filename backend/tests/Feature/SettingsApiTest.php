@@ -16,7 +16,7 @@ class SettingsApiTest extends TestCase
     {
         $this->signIn('hr');
         $this->getJson('/api/v1/settings')->assertOk()
-            ->assertJsonCount(15, 'data')
+            ->assertJsonCount(17, 'data')
             ->assertJsonPath('data.month_days', '30')
             ->assertJsonPath('data.day_hours', '8')
             ->assertJsonPath('data.overtime_multiplier', '1.5')
@@ -27,6 +27,8 @@ class SettingsApiTest extends TestCase
             ->assertJsonPath('data.office_grace_minutes', '15')
             ->assertJsonPath('data.office_shift_start', '09:00')
             ->assertJsonPath('data.office_shift_end', '17:00')
+            ->assertJsonPath('data.worker_shift_start', '08:00')
+            ->assertJsonPath('data.worker_shift_end', '16:00')
             ->assertJsonPath('data.weekly_off_office', 'friday,saturday')
             ->assertJsonPath('data.weekly_off_field', 'friday')
             ->assertJsonPath('data.leave_days_under_one_year', '10')

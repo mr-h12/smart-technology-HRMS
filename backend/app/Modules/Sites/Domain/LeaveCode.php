@@ -7,6 +7,7 @@ namespace App\Modules\Sites\Domain;
 enum LeaveCode: string
 {
     case Friday = 'friday';
+    case Saturday = 'saturday';
     case OfficialHoliday = 'official_holiday';
     case Sick = 'sick';
     case Rest = 'rest';

@@ -139,5 +139,10 @@ final class SiteService
         if (! $leave && filled($site->leave_code)) {
             throw ValidationException::withMessages(['leave_code' => __('errors.leave_code_not_allowed')]);
         }
+        // sites_active_leave_code_unique is the guarantee; this turns the common case into a field error.
+        if ($leave && $site->active !== false && Site::where(['kind' => SiteKind::Leave->value, 'leave_code' => $site->leave_code, 'active' => true])
+            ->when($site->exists, fn (Builder $q) => $q->whereKeyNot($site->getKey()))->exists()) {
+            throw ValidationException::withMessages(['leave_code' => __('errors.leave_code_taken')]);
+        }
     }
 }
