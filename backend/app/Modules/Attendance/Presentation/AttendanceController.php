@@ -26,13 +26,13 @@ final class AttendanceController
     {
         $q = $request->validate($this->periodRules());
 
-        return ApiEnvelope::single($request, $this->grid->period(EmployeeType::from($q['group']), $q['period_start'] ?? null));
+        return ApiEnvelope::single($request, $this->grid->period(EmployeeType::from($q['group']), $q['period_start'] ?? null, $q['date'] ?? null));
     }
 
     public function grid(Request $request): JsonResponse
     {
         $q = $request->validate([...$this->periodRules(), 'per_page' => ['sometimes', 'integer', 'min:1'], 'page' => ['sometimes', 'integer', 'min:1']]);
-        $r = $this->grid->grid(EmployeeType::from($q['group']), $q['period_start'] ?? null, (int) ($q['per_page'] ?? 20), (int) ($q['page'] ?? 1));
+        $r = $this->grid->grid(EmployeeType::from($q['group']), $q['period_start'] ?? null, (int) ($q['per_page'] ?? 20), (int) ($q['page'] ?? 1), $q['date'] ?? null);
 
         return ApiEnvelope::collection($request, $r['data'], $r['pagination']);
     }
@@ -40,9 +40,16 @@ final class AttendanceController
     public function missing(Request $request): JsonResponse
     {
         $q = $request->validate([...$this->periodRules(), 'per_page' => ['sometimes', 'integer', 'min:1'], 'page' => ['sometimes', 'integer', 'min:1']]);
-        $r = $this->grid->missing(EmployeeType::from($q['group']), $q['period_start'] ?? null, (int) ($q['per_page'] ?? 20));
+        $r = $this->grid->missing(EmployeeType::from($q['group']), $q['period_start'] ?? null, (int) ($q['per_page'] ?? 20), $q['date'] ?? null);
 
         return ApiEnvelope::collection($request, $r['data'], $r['pagination']);
+    }
+
+    public function sheet(Request $request): JsonResponse
+    {
+        $q = $request->validate(['group' => ['required', Rule::enum(EmployeeType::class)], 'date' => ['required', 'date_format:Y-m-d']]);
+
+        return ApiEnvelope::single($request, $this->grid->sheet(EmployeeType::from($q['group']), $q['date']));
     }
 
     public function show(Request $request, string $employee, string $date): JsonResponse
@@ -71,7 +78,7 @@ final class AttendanceController
     /** @return array<string, array<mixed>> */
     private function periodRules(): array
     {
-        return ['group' => ['required', Rule::enum(EmployeeType::class)], 'period_start' => ['sometimes', 'date_format:Y-m-d']];
+        return ['group' => ['required', Rule::enum(EmployeeType::class)], 'period_start' => ['sometimes', 'date_format:Y-m-d'], 'date' => ['sometimes', 'date_format:Y-m-d', 'prohibits:period_start']];
     }
 
     /** The route only checks the shape; 2026-02-30 is refused here. */

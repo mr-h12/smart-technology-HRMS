@@ -80,6 +80,7 @@ Route::middleware('auth')->group(function (): void {
         Route::get('period', 'period')->middleware('permission:attendance.view');
         Route::get('grid', 'grid')->middleware('permission:attendance.view');
         Route::get('missing', 'missing')->middleware('permission:attendance.view');
+        Route::get('sheet', 'sheet')->middleware('permission:attendance.view');
         // A registrar where() would replace whereUuid(), so the date shape goes on each route.
         Route::middleware([])->whereUuid('employee')->group(function (): void {
             $date = '\d{4}-\d{2}-\d{2}';

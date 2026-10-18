@@ -106,7 +106,7 @@ final class EffectiveDays
             ...$day,
             'fields' => $fields,
             'leave_day_fields' => array_values(array_intersect($fields, DayRules::LEAVE_DAY_FIELDS)),
-            'hints' => (object) $this->hints($type, $employee, $day),
+            'hints' => (object) $this->hints($type, $employee, $day, $this->rules->all()),
             'period' => ['start' => $period->start, 'end' => $period->end, 'is_locked' => PeriodGuard::isLocked($period)],
         ];
     }
@@ -149,11 +149,11 @@ final class EffectiveDays
     /**
      * @param  array<string, mixed>  $employee
      * @param  array<string, mixed>  $day
+     * @param  array<string, string>  $s  the settings, read once by the caller
      * @return array<string, int>
      */
-    private function hints(EmployeeType $type, array $employee, array $day): array
+    public function hints(EmployeeType $type, array $employee, array $day, array $s): array
     {
-        $s = $this->rules->all();
         if ($type === EmployeeType::Office && $day['in_time'] !== null) {
             $start = Employment::shiftOn($employee, $day['date'])['start'] ?? $s['office_shift_start'];
 

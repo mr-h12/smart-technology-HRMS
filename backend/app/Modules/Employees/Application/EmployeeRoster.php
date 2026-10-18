@@ -12,7 +12,7 @@ use Illuminate\Database\Eloquent\Builder;
 
 /**
  * Read model of live employees with their dated types and shifts, so other modules never query Employees' tables.
- * A row is {id: string, code: int, name_ar: string, name_en: ?string, hire_date: ?string, termination_date: ?string,
+ * A row is {id: string, code: int, name_ar: string, name_en: ?string, department: ?string, hire_date: ?string, termination_date: ?string,
  * types: list<{type, effective_from}>, shifts: list<{effective_from, shift_start: ?HH:MM, shift_end: ?HH:MM}>}.
  */
 final class EmployeeRoster
@@ -84,6 +84,7 @@ final class EmployeeRoster
             'code' => (int) $e->code,
             'name_ar' => (string) $e->name_ar,
             'name_en' => $e->name_en,
+            'department' => $e->department,
             'hire_date' => $e->hire_date,
             'termination_date' => $e->termination_date,
             'types' => array_values($e->typeChanges->sortBy('effective_from')->map(fn (EmployeeTypeChange $t) => [
