@@ -346,7 +346,7 @@ export function ResidencesTab() {
   )
 }
 
-/** Greatest effective_from <= today (Cairo) per residence x site; the list is not date-filtered server-side. */
+/** Fares keyed by residence x site. `?date=` already makes the server send only the row in force per pair; the date check here is a redundant guard. */
 function inForce(fares: Row[], today: string) {
   const best = new Map<string, Row>()
   for (const f of fares) {
