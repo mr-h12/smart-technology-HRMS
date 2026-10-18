@@ -33,7 +33,7 @@ type GridRow = { employee: Row; days: Day[] }
 const STATE_KEY: Partial<Record<Day['state'], string>> = { missing: 'attendance.state.missing', future: 'attendance.state.future', not_employed: 'attendance.state.notEmployed' }
 const LOOK: Record<Day['state'], string> = {
   stored: 'hover:bg-muted',
-  derived: 'border border-dashed text-muted-foreground hover:bg-muted',
+  derived: 'border border-dashed border-muted-foreground/60 text-muted-foreground hover:bg-muted',
   missing: 'bg-warning/15 text-warning ring-1 ring-warning/40 hover:bg-warning/25',
   future: 'text-muted-foreground opacity-50',
   not_employed: 'text-muted-foreground opacity-50',
