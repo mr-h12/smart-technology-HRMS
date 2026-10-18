@@ -97,6 +97,29 @@ test('a 409 keeps the typed values and offers the latest version', async () => {
   await waitFor(() => expect(screen.getByLabelText('السلفة')).toHaveValue(''))
 })
 
+test('after a 409, Save and Clear keep the version the form started from until Load latest', async () => {
+  const get = vi.fn(() => json(200, { data: day({ state: 'stored', source: 'entered', version: get.mock.calls.length > 1 ? 2 : 1, site_id: 's1' }) })) // every refetch brings the other user's version 2
+  const conflict = () => json(409, { error: { code: 'concurrency_conflict', message: 'conflict' } })
+  const put = vi.fn(conflict)
+  const del = vi.fn(conflict)
+  mockFetch(routes(day(), { [`GET ${URL}`]: get, [`PUT ${URL}`]: put, [`DELETE ${URL}`]: del }))
+  open()
+  await siteSelect()
+  await user.click(screen.getByRole('button', { name: 'حفظ' }))
+  await screen.findByRole('button', { name: 'تحميل آخر نسخة' })
+  await waitFor(() => expect(get).toHaveBeenCalledTimes(2))
+  await user.click(screen.getByRole('button', { name: 'حفظ' }))
+  await waitFor(() => expect(put).toHaveBeenCalledTimes(2))
+  expect(put.mock.calls.map((c) => JSON.parse(((c as unknown[])[1] as RequestInit).body as string).version)).toEqual([1, 1])
+  await user.click(screen.getByRole('button', { name: 'مسح اليوم' }))
+  await waitFor(() => expect(del).toHaveBeenCalledTimes(1))
+  expect(String((del.mock.calls[0] as unknown[])[0])).toContain('version=1')
+  await user.click(screen.getByRole('button', { name: 'تحميل آخر نسخة' }))
+  await user.click(await screen.findByRole('button', { name: 'حفظ' }))
+  await waitFor(() => expect(put).toHaveBeenCalledTimes(3))
+  expect(JSON.parse((put.mock.calls[2] as unknown[] as [string, RequestInit])[1].body as string).version).toBe(2)
+})
+
 test('server field errors show under their fields', async () => {
   mockFetch(routes(day(), { [`PUT ${URL}`]: () => json(422, { error: { code: 'validation_failed', message: 'x', details: [{ field: 'site_id', code: 'site_required', message: 'اختر موقعًا.' }] } }) }))
   open()

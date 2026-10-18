@@ -72,6 +72,7 @@ function DayForm({ day, sites, path, loadErr, onDone, onReload }: { day: Day; si
   const { form, set } = useForm({ site_id: day.site_id ?? '', ...Object.fromEntries(VALUES.map((f) => [f, asText(day[f])])) })
   const [err, setErr] = useState<unknown>()
   const [busy, setBusy] = useState(false)
+  const [version] = useState(day.version) // the version the form started from; only "Load latest" (a remount) moves it, so a refetch after a 409 cannot turn the next Save into an overwrite
   const locked = !!day.period?.is_locked
   const readOnly = locked || !can('attendance.edit')
   const site = sites.find((s) => s.id === form.site_id)
@@ -93,8 +94,8 @@ function DayForm({ day, sites, path, loadErr, onDone, onReload }: { day: Day; si
       .then(() => { toast.success(t('common.saved')); onDone() }, setErr)
       .finally(() => setBusy(false))
   }
-  const save = () => run(() => send(path, { method: 'PUT', body: { version: day.version, site_id: form.site_id || null, ...Object.fromEntries(shown.map((f) => [f, toBody(f, form[f])])) } }))
-  const clear = () => run(() => send(`${path}?version=${day.version}`, { method: 'DELETE' }))
+  const save = () => run(() => send(path, { method: 'PUT', body: { version, site_id: form.site_id || null, ...Object.fromEntries(shown.map((f) => [f, toBody(f, form[f])])) } }))
+  const clear = () => run(() => send(`${path}?version=${version}`, { method: 'DELETE' }))
 
   function field(f: string) {
     const label = t(`attendance.day.${f}`)
