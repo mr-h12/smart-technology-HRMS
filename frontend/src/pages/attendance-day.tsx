@@ -9,12 +9,12 @@ import { Textarea } from '@/components/ui/input'
 import { Sheet, SheetContent, SheetTitle } from '@/components/ui/sheet'
 import { ApiError } from '@/lib/api'
 import { useAuth } from '@/lib/auth'
+import { DAY_VALUES as VALUES } from '@/lib/day-sheet'
 import { SITES, useApi, useSave } from '@/lib/query'
 
 type Day = Row & { fields: string[]; leave_day_fields: string[]; hints: Record<string, number>; period: { is_locked: boolean } | null }
 type Options = [string, string][]
 
-const VALUES = ['in_time', 'out_time', 'scheduled_in', 'scheduled_out', 'late_minutes', 'ot_minutes', 'outside_minutes', 'outside_amount', 'transport', 'advance_amount', 'note']
 const TIMES = ['in_time', 'out_time', 'scheduled_in', 'scheduled_out']
 const MINUTES = ['late_minutes', 'ot_minutes', 'outside_minutes']
 const OUTSIDE = ['outside_minutes', 'outside_amount']
