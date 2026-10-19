@@ -11,7 +11,7 @@ test('ar and en have the same keys', () => {
 })
 
 test('Arabic copy has no Latin letters outside placeholders', () => {
-  const allowed = ['console.ip', 'attendance.source.imported'] // product names: IP, Excel
+  const allowed = ['console.ip', 'attendance.source.imported', 'attendance.sheet.paste.hint'] // product names: IP, Excel, WhatsApp
   const latin = flat(ar).filter(([k, v]) => !allowed.includes(k) && /[A-Za-z]/.test(v.replace(/\{\{\w+\}\}/g, '')))
   expect(latin).toEqual([])
 })
@@ -24,6 +24,7 @@ test('the owner wording rulings are in place', () => {
   expect(a['enum.pay_method.bank']).toBe('تحويل بنكي')
   expect(a['settings.tab.leaveTypes']).toBe('أنواع الإجازات')
   expect(a['employee.code']).toBe('الرقم الوظيفي')
+  expect(a['attendance.sheet.paste.hint']).toMatch(/Excel.*WhatsApp/) // P25: product names stay Latin
 })
 
 test('the review wording rulings are in place', () => {

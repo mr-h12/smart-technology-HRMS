@@ -81,7 +81,7 @@ function DayForm({ day, sites, path, loadErr, onDone, onReload }: { day: Day; si
   const errs = toErrs(err)
   const conflict = err instanceof ApiError && err.status === 409
   // the seeded leave types have no name_en: in English they fall back to their code's name
-  const siteName = (s: Row) => localName(s, i18n.language, s.leave_code ? t(`attendance.leaveName.${s.leave_code}`) : undefined)
+  const siteName = (s: Row) => localName(s, i18n.language, s.leave_code ? t(`attendance.leaveName.${s.leave_code}`, { defaultValue: s.name_ar }) : undefined)
   // a stored day keeps its site in the list even after the site is deactivated
   const usable = (kind: string): Options => sites.filter((s) => s.kind === kind && (s.active || s.id === day.site_id)).map((s) => [s.id, siteName(s)])
   const daySite = sites.find((s) => s.id === day.site_id)

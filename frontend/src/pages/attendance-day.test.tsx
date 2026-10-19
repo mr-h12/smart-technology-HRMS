@@ -193,3 +193,12 @@ test('in English the title, the site options and a seeded leave type without an 
   expect(screen.getByRole('option', { name: 'Site-1 EN' })).toBeInTheDocument()
   expect(screen.getByRole('option', { name: 'Friday' })).toHaveValue('lf')
 })
+
+test('in English a leave type with an unknown code and no English name shows its Arabic name, not a key', async () => {
+  const custom = [...sites, { id: 'lu', name_ar: 'إجازة-1', kind: 'leave', leave_code: 'unpaid', active: true }]
+  mockFetch({ ...routes(day()), 'GET /api/v1/sites': list(custom) })
+  await i18n.changeLanguage('en')
+  open()
+  await screen.findByLabelText('Site or day type')
+  expect(screen.getByRole('option', { name: 'إجازة-1' })).toHaveValue('lu')
+})

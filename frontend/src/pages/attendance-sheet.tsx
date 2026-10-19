@@ -115,7 +115,7 @@ export function DaySheet({ group, date, period, onDate, onOpenDay }: { group: st
 
   const name = (r: SheetRow) => localName(r.employee, i18n.language)
 
-  /** Sends `out` for `day` with its rows in flight; a 409 names the stale rows' employees with the `conflict` message. Resolves to the new versions, or null. */
+  /** Sends `out` for `day` with its rows in flight; a 409 names the stale rows' employees with the `conflict` message, any other refusal names each refused row's employee. Resolves to the new versions, or null. */
   async function write(day: string, out: BulkRow[], before: SheetRow[], conflict: string) {
     const mark = (on: boolean) => {
       for (const b of out) flight.current[on ? 'add' : 'delete'](b.employee_id)
@@ -125,9 +125,13 @@ export function DaySheet({ group, date, period, onDate, onOpenDay }: { group: st
     try {
       return await save<Applied['after']>('/attendance/days/bulk', { body: { date: day, rows: out } })
     } catch (e) {
+      // a detail's field is rows.N or rows.N.<field>, N indexing `out` (and so `before`)
+      const who = (d: { field?: string | null }) => (d.field?.startsWith('rows.') ? before[Number(d.field.split('.')[1])] : undefined)
       if (e instanceof ApiError && e.code === 'concurrency_conflict') {
-        const names = e.details.flatMap((d) => before[Number(d.field?.split('.')[1])] ?? []).map(name)
+        const names = e.details.flatMap((d) => who(d) ?? []).map(name)
         toast.error(t(conflict, { names: new Intl.ListFormat(intlLocale(i18n.language)).format(names) }))
+      } else if (e instanceof ApiError && e.details.some(who)) {
+        toast.error(e.details.map((d) => { const r = who(d); return r ? t('attendance.sheet.toast.rowError', { name: name(r), message: d.message }) : d.message }).join(' '))
       } else toast.error(e instanceof Error ? e.message : String(e))
       return null
     } finally {
@@ -174,12 +178,12 @@ export function DaySheet({ group, date, period, onDate, onOpenDay }: { group: st
     const from = new Map(before.map((r) => [r.employee.id, r.day.version]))
     const to = new Map(done.map((a) => [a.employee_id, a.version]))
     undos.current = undos.current.map((u) => (u.date !== entry.date ? u : { ...u, after: u.after.map((a) => (to.has(a.employee_id) && from.get(a.employee_id) === a.version ? { ...a, version: to.get(a.employee_id) ?? null } : a)) }))
-    toast.success(t('attendance.sheet.toast.undone', { label: entry.label }))
+    toast.success(entry.date === date ? t('attendance.sheet.toast.undone', { label: entry.label }) : t('attendance.sheet.toast.undoneOn', { label: entry.label, date: entry.date }))
   }
 
   onKey.current = () => {} // no key acts on a sheet that is not on screen (the next date loading, an error); set again below
   if (loading) return <Card><TableSkeleton rows={8} /></Card>
-  if (err || !sheet) return <ErrorBanner err={err} shown={[]} />
+  if (!sheet) return <ErrorBanner err={err} shown={[]} />
 
   const lang = i18n.language
   const today = cairoToday()
@@ -226,14 +230,16 @@ export function DaySheet({ group, date, period, onDate, onOpenDay }: { group: st
     if (e.key !== 'Enter' || e.nativeEvent.isComposing || !batch || !editable || !shown.length) return
     e.preventDefault()
     if (batch.byName) setSelected(new Set(shown.map((r) => r.employee.id)))
-    else void apply({ kind: 'present' }, shown, `${t('attendance.sheet.action.present')} (${shown.length})`).then((done) => done && setQuery(''))
+    else void apply({ kind: 'present' }, shown, t('attendance.sheet.actionCount', { action: t('attendance.sheet.action.present'), count: shown.length })).then((done) => done && setQuery(''))
   }
 
   // a key does what its button would: P/A/S skip a row whose button is disabled, and a read-only sheet only moves and opens
   onKey.current = (e) => {
     if (document.querySelector('[role="dialog"],[role="alertdialog"],[role="menu"]')) return
     if (e.repeat && !MOVE.includes(e.code)) return
-    const typing = e.target instanceof HTMLElement && (e.target.isContentEditable || ['INPUT', 'TEXTAREA', 'SELECT'].includes(e.target.tagName))
+    // text entry only: a checkbox, radio or button input keeps the shortcuts
+    const el = e.target
+    const typing = el instanceof HTMLElement && (el.isContentEditable || ['TEXTAREA', 'SELECT'].includes(el.tagName) || (el instanceof HTMLInputElement && !['checkbox', 'radio', 'button'].includes(el.type)))
     if (e.code === 'Escape') {
       unselect()
       setCursor(null)
@@ -259,7 +265,7 @@ export function DaySheet({ group, date, period, onDate, onOpenDay }: { group: st
     else if (quick && row && editable) {
       const [action, label] = quick
       if (pending.has(row.employee.id) || noLeave(action) || noSite(action, row)) return
-      void apply(action, [row], `${t(label)} ${name(row)}`)
+      void apply(action, [row], t('attendance.sheet.actionOn', { action: t(label), name: name(row) }))
       move(1)
     } else return
     e.preventDefault()
@@ -267,6 +273,8 @@ export function DaySheet({ group, date, period, onDate, onOpenDay }: { group: st
 
   return (
     <div ref={box} className="space-y-4">
+      {/* a failed background refetch: the last good sheet stays under the error */}
+      <ErrorBanner err={err} shown={[]} />
       {period?.is_locked && (
         <p role="status" className="flex items-center gap-2 rounded-lg border border-info-border bg-info-bg px-4 py-3 text-sm text-info">
           <Lock className="size-4 shrink-0" aria-hidden />
@@ -275,7 +283,7 @@ export function DaySheet({ group, date, period, onDate, onOpenDay }: { group: st
       )}
 
       <div className={cn('grid grid-cols-2 gap-2.5 sm:grid-cols-3', office ? 'lg:grid-cols-6' : 'lg:grid-cols-5')}>
-        <button type="button" aria-pressed={filter === 'all'} onClick={() => pick('all')} className={cn(FOCUS, 'col-span-2 rounded-lg border bg-card p-3 text-start shadow-1 transition-colors hover:border-primary sm:col-span-1 aria-pressed:border-primary aria-pressed:ring-1 aria-pressed:ring-primary')}>
+        <button type="button" aria-pressed={filter === 'all'} onClick={() => { pick('all'); setCohort(null) }} className={cn(FOCUS, 'col-span-2 rounded-lg border bg-card p-3 text-start shadow-1 transition-colors hover:border-primary sm:col-span-1 aria-pressed:border-primary aria-pressed:ring-1 aria-pressed:ring-primary')}>
           <span className="flex items-center justify-between gap-2">
             <span className="text-xs font-medium text-muted-foreground">{t('attendance.sheet.kpi.total')}</span>
             <Users className="size-4 text-muted-foreground" aria-hidden />
@@ -343,7 +351,7 @@ export function DaySheet({ group, date, period, onDate, onOpenDay }: { group: st
                 </button>
                 {/* a field cohort sweeps to its own site; the "no last site" cohort has none to sweep to */}
                 {editable && (office || key) && (
-                  <Button type="button" variant="outline" size="sm" className={cn(FOCUS, 'h-9 text-success')} disabled={done === total}
+                  <Button type="button" variant="outline" size="sm" className={cn(FOCUS, 'h-11 text-success md:h-9')} disabled={done === total}
                     aria-label={t('attendance.sheet.sweepFor', { cohort: cohortName(key) })}
                     onClick={() => void apply({ kind: 'present' }, rows.filter((r) => cohortOf(r) === key && isMissing(r)), t('attendance.sheet.sweepFor', { cohort: cohortName(key) }))}>
                     <CheckCheck aria-hidden />
@@ -375,7 +383,7 @@ export function DaySheet({ group, date, period, onDate, onOpenDay }: { group: st
                 </Button>
               )}
               {editable && (
-                <Button type="button" variant="outline" size="sm" className={cn(FOCUS, 'h-11 md:h-9')} disabled={!undoCount || pending.size > 0} aria-keyshortcuts="Control+Z Meta+Z" onClick={() => void undo()}>
+                <Button type="button" variant="outline" size="sm" className={cn(FOCUS, 'h-11 md:h-9 aria-disabled:cursor-not-allowed aria-disabled:opacity-50')} aria-disabled={!undoCount || pending.size > 0} aria-keyshortcuts="Control+Z Meta+Z" onClick={() => void undo()}>
                   <Undo2 aria-hidden />
                   {t('attendance.sheet.undo', { count: undoCount })}
                 </Button>
@@ -418,7 +426,7 @@ export function DaySheet({ group, date, period, onDate, onOpenDay }: { group: st
                         options={workSites.map((s) => [s.id, localName(s, lang)])} set={(_, v) => setSiteChoice(v)} />
                     </div>
                     <Button type="button" variant="outline" size="sm" className={cn(FOCUS, 'h-11 md:h-9')} disabled={!siteChoice}
-                      onClick={() => bulk({ kind: 'site', siteId: siteChoice }, `${t('attendance.sheet.bulk.setSite')} ${siteName(siteChoice)}`)}>
+                      onClick={() => bulk({ kind: 'site', siteId: siteChoice }, t('attendance.sheet.actionOn', { action: t('attendance.sheet.bulk.setSite'), name: siteName(siteChoice) }))}>
                       {t('attendance.sheet.bulk.apply')}
                     </Button>
                   </div>

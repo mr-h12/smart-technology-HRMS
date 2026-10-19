@@ -240,6 +240,7 @@ test('a cohort sweep marks only the missing members of that site', async () => {
   mockFetch({ ...routes, 'GET /api/v1/attendance/sheet': () => sheet(rows), 'POST /api/v1/attendance/days/bulk': bulk })
   edit()
   await table()
+  expect(screen.getByRole('button', { name: 'تسجيل باقي Site-1 حاضرين' })).toHaveClass('h-11', 'md:h-9') // a 44 px touch target below md
   await user.click(screen.getByRole('button', { name: 'تسجيل باقي Site-1 حاضرين' }))
   await waitFor(() => expect(bulk).toHaveBeenCalledTimes(1))
   expect(sent(bulk).rows).toEqual([{ employee_id: 'e1', version: null, site_id: 's1' }])
@@ -667,7 +668,7 @@ test('Ctrl+Z restores the previous day', async () => {
   expect(sent(bulk, 1)).toEqual({ date: '2026-10-18', rows: [{ employee_id: 'e1', clear: true, version: 1 }] })
   await waitFor(() => expect(toast.success).toHaveBeenCalledWith('تم التراجع: حاضر Engineer-1'))
   expect(undoButton()).toHaveTextContent('تراجع (0)')
-  expect(undoButton()).toBeDisabled()
+  expect(undoButton()).toHaveAttribute('aria-disabled', 'true')
 })
 
 test('undo rewrites a stored day in full, from the button too', async () => {
@@ -675,7 +676,7 @@ test('undo rewrites a stored day in full, from the button too', async () => {
   mockFetch({ ...routes, 'POST /api/v1/attendance/days/bulk': bulk })
   edit()
   await user.click(within(await table()).getByRole('button', { name: 'غياب Engineer-2' }))
-  await waitFor(() => expect(undoButton()).toBeEnabled())
+  await waitFor(() => expect(undoButton()).toHaveAttribute('aria-disabled', 'false'))
   await user.click(undoButton())
   await waitFor(() => expect(bulk).toHaveBeenCalledTimes(2))
   expect(sent(bulk, 1).rows).toEqual([{ employee_id: 'e2', version: 9, site_id: 's1', in_time: null, out_time: null, scheduled_in: null, scheduled_out: null, late_minutes: null, ot_minutes: null, outside_minutes: null, outside_amount: null, transport: null, advance_amount: null, note: null }])
@@ -688,11 +689,11 @@ test('an undo refused with 409 is dropped with a message', async () => {
   mockFetch({ ...routes, 'POST /api/v1/attendance/days/bulk': bulk })
   edit()
   await user.click(within(await table()).getByRole('button', { name: 'حاضر Engineer-1' }))
-  await waitFor(() => expect(undoButton()).toBeEnabled())
+  await waitFor(() => expect(undoButton()).toHaveAttribute('aria-disabled', 'false'))
   key('KeyZ', { metaKey: true })
   await waitFor(() => expect(toast.error).toHaveBeenCalledWith('تغيّر يوم Engineer-1 بعد ذلك؛ تعذّر التراجع وحُذف من القائمة.'))
   expect(undoButton()).toHaveTextContent('تراجع (0)')
-  expect(undoButton()).toBeDisabled()
+  expect(undoButton()).toHaveAttribute('aria-disabled', 'true')
 })
 
 test('the undo stack keeps the last 15', async () => {
@@ -787,7 +788,7 @@ test('Ctrl+Z does nothing while a write is in flight', async () => {
   await waitFor(() => expect(undoButton()).toHaveTextContent('تراجع (1)'))
   await user.click(within(screen.getByRole('table')).getByRole('button', { name: 'غياب Engineer-2' }))
   await waitFor(() => expect(bulk).toHaveBeenCalledTimes(2))
-  expect(undoButton()).toBeDisabled()
+  expect(undoButton()).toHaveAttribute('aria-disabled', 'true')
   key('KeyZ', { ctrlKey: true })
   await new Promise((r) => setTimeout(r, 20))
   expect(bulk).toHaveBeenCalledTimes(2) // the Engineer-1 entry is not undone under the pending write
@@ -905,4 +906,90 @@ test('in English the site chips, cohorts, last site and toasts use the English n
   expect(within(screen.getByRole('group', { name: 'By last site' })).getByRole('button', { name: /^Site-1 EN/ })).toBeInTheDocument()
   await user.click(within(tbl).getByRole('button', { name: 'Absent: Engineer-1 EN' }))
   await waitFor(() => expect(toast.error).toHaveBeenCalledWith('Someone else just changed Engineer-1 EN; the sheet was reloaded. Check it and try again.'))
+})
+
+test('a status key still marks after a click on a row checkbox', async () => {
+  const bulk = bulkOk()
+  mockFetch({ ...routes, 'POST /api/v1/attendance/days/bulk': bulk })
+  edit()
+  await table()
+  key('KeyJ')
+  const box = within(screen.getByRole('table')).getByRole('checkbox', { name: 'تحديد Engineer-1' })
+  await user.click(box)
+  fireEvent.keyDown(box, { code: 'KeyP', key: 'p' })
+  await waitFor(() => expect(bulk).toHaveBeenCalledTimes(1))
+  expect(sent(bulk).rows).toEqual([{ employee_id: 'e1', version: null, site_id: 's1' }])
+})
+
+test('a leave day with an unknown code is named from its leave type, in Arabic and English', async () => {
+  const custom = [...sites, { id: 'su', name_ar: 'إجازة-1', name_en: 'Leave-1 EN', kind: 'leave', leave_code: 'unpaid', active: true }]
+  mockFetch({
+    ...routes,
+    'GET /api/v1/attendance/sheet': () => sheet([row(4, 'Engineer-4', { state: 'stored', source: 'entered', version: 1, site_id: 'su', leave_code: 'unpaid' })]),
+    'GET /api/v1/sites': () => json(200, { data: custom, meta: { pagination } }),
+  })
+  const { unmount } = open()
+  expect(await within(await table()).findByText('إجازة-1')).toBeInTheDocument()
+  unmount()
+  await i18n.changeLanguage('en')
+  open()
+  expect(await within(await table()).findByText('Leave-1 EN')).toBeInTheDocument()
+})
+
+test('a failed refetch keeps the sheet on screen under the error', async () => {
+  let calls = 0
+  mockFetch({ ...routes, 'GET /api/v1/attendance/sheet': () => (calls++ ? json(500, { error: { code: 'server_error', message: 'Server down' } }) : sheet(engineers)), 'POST /api/v1/attendance/days/bulk': bulkOk() })
+  edit()
+  await user.click(within(await table()).getByRole('button', { name: 'حاضر Engineer-1' }))
+  expect(await screen.findByRole('alert')).toHaveTextContent('Server down')
+  expect(within(screen.getByRole('table')).getByText('Engineer-2')).toBeInTheDocument()
+})
+
+test('the Total card clears the cohort filter too', async () => {
+  mockFetch(routes)
+  open()
+  await table()
+  const cohorts = screen.getByRole('group', { name: 'حسب آخر موقع' })
+  await user.click(within(cohorts).getByRole('button', { name: /^Site-1/ }))
+  expect(within(screen.getByRole('table')).getAllByRole('row')).toHaveLength(3) // header + Engineer-1, Engineer-2
+  await user.click(screen.getByRole('button', { name: /^الإجمالي/ }))
+  expect(within(cohorts).getByRole('button', { name: /^Site-1/ })).toHaveAttribute('aria-pressed', 'false')
+  expect(within(screen.getByRole('table')).getAllByRole('row')).toHaveLength(4)
+})
+
+test('an undo of another day names that day in its toast', async () => {
+  const bulk = bulkOk()
+  mockFetch({ ...routes, 'POST /api/v1/attendance/days/bulk': bulk })
+  edit()
+  await user.click(within(await table()).getByRole('button', { name: 'حاضر Engineer-1' }))
+  await waitFor(() => expect(undoButton()).toHaveTextContent('تراجع (1)'))
+  await user.click(within(screen.getByRole('group', { name: 'أيام الفترة' })).getByRole('button', { name: /^2026-10-17/ }))
+  await table()
+  key('KeyZ', { ctrlKey: true })
+  await waitFor(() => expect(toast.success).toHaveBeenCalledWith('تم التراجع: حاضر Engineer-1 (2026-10-18)'))
+})
+
+test('a refused row names its employee with the reason', async () => {
+  const bulk = vi.fn(() => json(422, { error: { code: 'validation_failed', message: 'Invalid', details: [{ field: 'rows.0.site_id', code: 'site_inactive', message: 'هذا الموقع غير نشط.' }] } }))
+  mockFetch({ ...routes, 'POST /api/v1/attendance/days/bulk': bulk })
+  edit()
+  await user.click(within(await table()).getByRole('button', { name: 'حاضر Engineer-1' }))
+  await waitFor(() => expect(toast.error).toHaveBeenCalledWith('Engineer-1: هذا الموقع غير نشط.'))
+})
+
+test('Enter on Undo keeps focus on the button while the undo is in flight', async () => {
+  const bulk = vi.fn((_url: string, init?: RequestInit) => (bulk.mock.calls.length === 1
+    ? json(200, { data: JSON.parse(String(init?.body)).rows.map((r: { employee_id: string }) => ({ employee_id: r.employee_id, version: 1 })) })
+    : (new Promise(() => {}) as unknown as Response))) // the undo never answers
+  mockFetch({ ...routes, 'POST /api/v1/attendance/days/bulk': bulk })
+  edit()
+  await user.click(within(await table()).getByRole('button', { name: 'حاضر Engineer-1' }))
+  await waitFor(() => expect(undoButton()).toHaveTextContent('تراجع (1)'))
+  undoButton().focus()
+  await user.keyboard('{Enter}')
+  await waitFor(() => expect(bulk).toHaveBeenCalledTimes(2))
+  // a native `disabled` is what drops focus to <body> in a browser; jsdom keeps it, so the attribute itself is checked
+  expect(undoButton()).not.toBeDisabled()
+  expect(undoButton()).toHaveAttribute('aria-disabled', 'true')
+  expect(document.activeElement).toBe(undoButton())
 })

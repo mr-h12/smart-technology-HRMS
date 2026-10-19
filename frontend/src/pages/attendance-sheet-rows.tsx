@@ -53,6 +53,11 @@ export function SheetRows({ rows, office, editable, date, sites, selected, pendi
     return s ? localName(s, lang) : '—'
   }
   const status = (r: SheetRow) => statusOf(r, office)
+  // the day's leave type (a derived day has no site: its code's leave type); the seeded ones have no name_en, so English falls back to the code's name
+  const leaveName = (r: SheetRow, code: string) => {
+    const s = sites.find((x) => x.id === r.day.site_id) ?? sites.find((x) => x.kind === 'leave' && x.leave_code === code)
+    return s ? localName(s, lang, t(`attendance.leaveName.${code}`, { defaultValue: s.name_ar })) : t(`attendance.leaveName.${code}`, { defaultValue: code })
+  }
   const pageIds = rows.map((r) => r.employee.id)
   const pageAll = pageIds.every((id) => selected.has(id))
   const pageSome = pageIds.some((id) => selected.has(id))
@@ -70,14 +75,14 @@ export function SheetRows({ rows, office, editable, date, sites, selected, pendi
   const quick = (r: SheetRow, h: string, compact = false) => QUICK.map(([action, label, Icon, tone]) => (
     <Button key={label} type="button" variant="outline" size="sm" className={cn(FOCUS, h, 'px-2.5', tone)} disabled={pending.has(r.employee.id) || noLeave(action) || noSite(action, r)}
       {...(noSite(action, r) && { title: t('attendance.sheet.noLastSite'), 'aria-describedby': noSiteId })}
-      aria-label={t('attendance.sheet.rowAction', { action: t(label), name: name(r) })} onClick={() => onApply(action, r, `${t(label)} ${name(r)}`)}>
+      aria-label={t('attendance.sheet.rowAction', { action: t(label), name: name(r) })} onClick={() => onApply(action, r, t('attendance.sheet.actionOn', { action: t(label), name: name(r) }))}>
       <Icon aria-hidden />
       <span className={cn(compact && 'hidden xl:inline')}>{t(label)}</span>
     </Button>
   ))
   const inTime = (r: SheetRow, h: string) => {
     const was = r.day.in_time ? String(r.day.in_time).slice(0, 5) : ''
-    const commit = (v: string) => v && v !== was && onApply({ kind: 'time', in_time: v }, r, `${t('attendance.day.in_time')} ${name(r)}`)
+    const commit = (v: string) => v && v !== was && onApply({ kind: 'time', in_time: v }, r, t('attendance.sheet.actionOn', { action: t('attendance.day.in_time'), name: name(r) }))
     return (
       <input key={`${r.employee.id}/${r.day.version}`} type="time" defaultValue={was} disabled={pending.has(r.employee.id)} aria-label={t('attendance.sheet.inTime', { name: name(r) })}
         className={cn(FOCUS, h, 'rounded-md border bg-card px-2 text-sm tabular disabled:opacity-50')}
@@ -92,7 +97,7 @@ export function SheetRows({ rows, office, editable, date, sites, selected, pendi
       : s === 'present' ? t('attendance.present')
       : s === 'late' ? t('attendance.sheet.lateBy', { minutes: r.hints.late_minutes })
       : s === 'absent' ? t('attendance.sheet.kpi.absent')
-      : leave ? t(`attendance.short.${leave}`, { defaultValue: leave }) : t('attendance.state.derived')
+      : leave ? leaveName(r, leave) : t('attendance.state.derived')
     return (
       <span className={cn('inline-flex items-center gap-1 rounded-md border px-2 py-0.5 text-xs font-semibold whitespace-nowrap', cls, text)}>
         <Icon className="size-3.5 shrink-0" aria-hidden />
