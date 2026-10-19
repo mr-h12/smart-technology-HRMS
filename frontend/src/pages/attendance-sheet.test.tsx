@@ -713,21 +713,26 @@ test('the undo stack keeps the last 15', async () => {
   expect(undone).toEqual(Array.from({ length: 15 }, (_, i) => `e${16 - i}`)) // newest first; e1 was dropped
 })
 
-/** A tiny server for Engineer-1 that refuses a stale version, like the endpoint; `meddle` has someone else edit the row right after our first write. */
+/**
+ * A tiny server for Engineer-1 that refuses a stale version, like the endpoint. Versions are per day: 2026-10-17 starts stored
+ * at v1, other days have no record. `meddle` has someone else edit the row right after our first write.
+ */
 function oneRow(meddle = false) {
-  let cur: number | null = null
-  let n = 0
-  let day: object = {}
-  const store = (site: string | null) => { cur = ++n; day = { state: 'stored', source: 'entered', version: cur, site_id: site, leave_code: site === 'sa' ? 'absent' : null } }
+  const days = new Map<string, { cur: number | null; n: number; day: object }>()
+  const at = (date: string) => days.get(date) ?? days.set(date, { cur: null, n: 0, day: {} }).get(date)!
+  const store = (d: ReturnType<typeof at>, site: string | null) => { d.cur = ++d.n; d.day = { state: 'stored', source: 'entered', version: d.cur, site_id: site, leave_code: site === 'sa' ? 'absent' : null } }
+  store(at('2026-10-17'), 's1')
   const bulk = vi.fn((_url: string, init?: RequestInit) => {
-    const [r] = JSON.parse(String(init?.body)).rows
-    if (r.version !== cur) return json(409, { error: { code: 'concurrency_conflict', message: 'stale', details: [{ field: 'rows.0', code: 'concurrency_conflict', message: 'stale' }] } })
-    if (r.clear) { cur = null; day = {} } else store(r.site_id)
-    const version = cur
-    if (meddle && bulk.mock.calls.length === 1) store('s1')
+    const { date, rows: [r] } = JSON.parse(String(init?.body))
+    const d = at(date)
+    if (r.version !== d.cur) return json(409, { error: { code: 'concurrency_conflict', message: 'stale', details: [{ field: 'rows.0', code: 'concurrency_conflict', message: 'stale' }] } })
+    if (r.clear) { d.cur = null; d.day = {} } else store(d, r.site_id)
+    const version = d.cur
+    if (meddle && bulk.mock.calls.length === 1) store(d, 's1')
     return json(200, { data: [{ employee_id: r.employee_id, version }] })
   })
-  mockFetch({ ...routes, 'GET /api/v1/attendance/sheet': () => sheet([row(1, 'Engineer-1', day, { last_site_id: 's1' }), engineers[1]]), 'POST /api/v1/attendance/days/bulk': bulk })
+  const get = (url: string) => sheet([row(1, 'Engineer-1', at(new URL(url, 'http://x').searchParams.get('date')!).day, { last_site_id: 's1' }), engineers[1]])
+  mockFetch({ ...routes, 'GET /api/v1/attendance/sheet': get, 'POST /api/v1/attendance/days/bulk': bulk })
   return bulk
 }
 const presentThenAbsent = async () => {
@@ -756,6 +761,22 @@ test('an older undo still conflicts when someone else changed the row between th
   await waitFor(() => expect(toast.error).toHaveBeenCalledWith('تغيّر يوم Engineer-1 بعد ذلك؛ تعذّر التراجع وحُذف من القائمة.'))
 })
 
+test('an undo on one day never rebases the same employee\'s entry for another day', async () => {
+  const bulk = oneRow()
+  edit()
+  await user.click(within(await table()).getByRole('button', { name: 'حاضر Engineer-1' })) // 2026-10-18: a new row at v1
+  await waitFor(() => expect(undoButton()).toHaveTextContent('تراجع (1)'))
+  await user.click(within(screen.getByRole('group', { name: 'أيام الفترة' })).getByRole('button', { name: /^2026-10-17/ }))
+  await user.click(within(await table()).getByRole('button', { name: 'غياب Engineer-1' })) // 2026-10-17: v1 → v2
+  await waitFor(() => expect(undoButton()).toHaveTextContent('تراجع (2)'))
+  key('KeyZ', { ctrlKey: true }) // 2026-10-17 back to v1's day, now v3
+  await waitFor(() => expect(undoButton()).toHaveTextContent('تراجع (1)'))
+  key('KeyZ', { ctrlKey: true })
+  await waitFor(() => expect(undoButton()).toHaveTextContent('تراجع (0)'))
+  expect(sent(bulk, 3)).toEqual({ date: '2026-10-18', rows: [{ employee_id: 'e1', clear: true, version: 1 }] })
+  expect(toast.error).not.toHaveBeenCalled()
+})
+
 test('Ctrl+Z does nothing while a write is in flight', async () => {
   const bulk = vi.fn((_url: string, init?: RequestInit) => (bulk.mock.calls.length === 1
     ? json(200, { data: JSON.parse(String(init?.body)).rows.map((r: { employee_id: string }) => ({ employee_id: r.employee_id, version: 1 })) })
@@ -766,6 +787,7 @@ test('Ctrl+Z does nothing while a write is in flight', async () => {
   await waitFor(() => expect(undoButton()).toHaveTextContent('تراجع (1)'))
   await user.click(within(screen.getByRole('table')).getByRole('button', { name: 'غياب Engineer-2' }))
   await waitFor(() => expect(bulk).toHaveBeenCalledTimes(2))
+  expect(undoButton()).toBeDisabled()
   key('KeyZ', { ctrlKey: true })
   await new Promise((r) => setTimeout(r, 20))
   expect(bulk).toHaveBeenCalledTimes(2) // the Engineer-1 entry is not undone under the pending write

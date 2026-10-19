@@ -170,10 +170,10 @@ export function DaySheet({ group, date, period, onDate, onOpenDay }: { group: st
     if (!out.length) return
     const done = await write(entry.date, out, before, 'attendance.sheet.toast.undoConflict')
     if (!done) return
-    // an older entry that left a row at the version this undo started from now expects the version this undo wrote
+    // an older entry for the same date that left a row at the version this undo started from now expects the version this undo wrote (versions are per employee and date)
     const from = new Map(before.map((r) => [r.employee.id, r.day.version]))
     const to = new Map(done.map((a) => [a.employee_id, a.version]))
-    undos.current = undos.current.map((u) => ({ ...u, after: u.after.map((a) => (to.has(a.employee_id) && from.get(a.employee_id) === a.version ? { ...a, version: to.get(a.employee_id) ?? null } : a)) }))
+    undos.current = undos.current.map((u) => (u.date !== entry.date ? u : { ...u, after: u.after.map((a) => (to.has(a.employee_id) && from.get(a.employee_id) === a.version ? { ...a, version: to.get(a.employee_id) ?? null } : a)) }))
     toast.success(t('attendance.sheet.toast.undone', { label: entry.label }))
   }
 
@@ -375,7 +375,7 @@ export function DaySheet({ group, date, period, onDate, onOpenDay }: { group: st
                 </Button>
               )}
               {editable && (
-                <Button type="button" variant="outline" size="sm" className={cn(FOCUS, 'h-11 md:h-9')} disabled={!undoCount} aria-keyshortcuts="Control+Z Meta+Z" onClick={() => void undo()}>
+                <Button type="button" variant="outline" size="sm" className={cn(FOCUS, 'h-11 md:h-9')} disabled={!undoCount || pending.size > 0} aria-keyshortcuts="Control+Z Meta+Z" onClick={() => void undo()}>
                   <Undo2 aria-hidden />
                   {t('attendance.sheet.undo', { count: undoCount })}
                 </Button>
