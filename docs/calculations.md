@@ -159,22 +159,22 @@ Day cost comes from the engineer (section 2), permanent worker (section 3) or da
 - Late permission: max duration and max count per month are **settings** (blank = no limit). ⚠️ values from the client.
 - Early leave: a one-day permission, or a permanent shift change that updates the employee's shift on approval.
 
-## 13. Attendance day sheet (display only)
-What the day sheet (كشف اليوم) shows for one group and date. None of it feeds payroll.
+## 13. Attendance day sheet
+What the day sheet (كشف اليوم) shows for one group and date, then how it saves. The shown values are display only: none of them feeds payroll.
 
 - Last site (آخر موقع) = the site of the employee's latest stored day from date − 7 to date − 1 whose site is an active work site. Derived days and leave day-types are skipped. Office staff have no last site. The 7-day window is a fixed constant, not a setting.
 - Period totals per employee, over the period's dates up to today (later dates are not counted):
   - worked = stored days with no leave day-type (a site, or office present)
   - leave = stored or derived days with a leave day-type other than absent (غ)
   - absent = stored days marked absent (غ)
-  - missing = days with no record
+  - missing = days with no stored and no derived record (a derived day, such as a weekly off or an official holiday, is never missing)
 - Missing per date = number of employees whose day on that date is missing. Future dates count 0.
 - Office on time / late: a present office day is on time when the section 1 lateness hint is 0 and late when it is above 0. A present day with no in time counts as on time.
 
 The sheet saves through bulk marking, under the same day rules as single-day entry:
 - All or nothing: if any row is stale (changed since loading) or breaks a rule, nothing is saved and every stale row is reported.
 - At most 500 rows per save. This is a technical limit in code, not a setting.
-- Keep rule for values a row does not send: a day of the same kind (work, leave, office present) keeps the values its new site allows; a change of kind keeps only the note and the advance.
+- Keep rule (P28) for values a row does not send: a day of the same kind (work, leave, office present) keeps the values its new site allows; a change of kind keeps only the note and the advance. It applies to bulk writes only; single-day entry stores an unsent value as empty.
 - A row that changes nothing writes nothing: no new version and no audit entry. This also applies to single-day entry.
 
 ## Not calculated by the system
