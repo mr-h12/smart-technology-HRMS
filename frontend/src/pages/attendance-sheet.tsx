@@ -36,6 +36,8 @@ const KPIS: [Filter, string, Status][] = [
 const UNDO_DEPTH = 15
 // the status keys, in QUICK's order (Present, Absent, Sick); keys match on event.code so they work on an Arabic layout
 const MARK = ['KeyP', 'KeyA', 'KeyS']
+// the only keys that act again while held: holding P must not mark row after row, nor Ctrl+Z drain the stack
+const MOVE = ['KeyJ', 'KeyK', 'ArrowDown', 'ArrowUp']
 // the shortcuts line: [<kbd> glyphs (code, not i18n), description key under attendance.sheet.keys, needs a writable sheet]
 const KEYS: [string[], string, boolean][] = [[['/'], 'command', false], [['J', 'K'], 'move', false], [['P', 'A', 'S'], 'mark', true], [['E'], 'details', false], [['Ctrl+Z'], 'undo', true], [['Esc'], 'clear', false]]
 const OFFICE_KPIS: [Filter, string, Status][] = [KPIS[0], ['present', 'attendance.sheet.kpi.onTime', 'present'], ['late', 'attendance.sheet.kpi.late', 'late'], KPIS[2], KPIS[3]]
@@ -58,7 +60,7 @@ function showDay(strip: HTMLDivElement | null) {
  * selection, office in-time) with their period totals last. Kept mounted across dates, so the filters stay; page and selection reset.
  * Every write goes through `apply()` and one `POST /attendance/days/bulk`, and lands on a session-only undo stack.
  * Keyboard (one document listener): / command bar, J/K or arrows move the row cursor, P/A/S mark it and advance, E opens
- * Details, Ctrl/Cmd+Z undoes, Esc clears. No shortcut fires while typing, while a dialog is open, or with Alt/Ctrl/Meta (but Z).
+ * Details, Ctrl/Cmd+Z undoes, Esc clears. No shortcut fires while typing, while a dialog or menu is open, or with Alt/Ctrl/Meta (but Z).
  */
 export function DaySheet({ group, date, period, onDate, onOpenDay }: { group: string; date: string; period?: { group: string; start: string; end: string; is_locked: boolean }; onDate: (date: string) => void; onOpenDay: (employee: Row, date: string) => void }) {
   const { t, i18n } = useTranslation()
@@ -159,12 +161,20 @@ export function DaySheet({ group, date, period, onDate, onOpenDay }: { group: st
   /** Puts the newest entry's rows back in one bulk write. ponytail: a refused undo (409 or any error) is dropped, not retried; the day stays editable from Details. */
   async function undo() {
     const entry = undos.current.at(-1)
-    if (!entry || entry.after.some((a) => flight.current.has(a.employee_id))) return
+    // any write in flight blocks undo: its entry is pushed only when it lands, so the newest entry may not be the newest write yet
+    if (!entry || flight.current.size) return
     undos.current = undos.current.slice(0, -1)
     setUndoCount(undos.current.length)
     const out = undoRows(entry.before, entry.after)
     const before = out.map((b) => entry.before.find((r) => r.employee.id === b.employee_id)!)
-    if (out.length && (await write(entry.date, out, before, 'attendance.sheet.toast.undoConflict'))) toast.success(t('attendance.sheet.toast.undone', { label: entry.label }))
+    if (!out.length) return
+    const done = await write(entry.date, out, before, 'attendance.sheet.toast.undoConflict')
+    if (!done) return
+    // an older entry that left a row at the version this undo started from now expects the version this undo wrote
+    const from = new Map(before.map((r) => [r.employee.id, r.day.version]))
+    const to = new Map(done.map((a) => [a.employee_id, a.version]))
+    undos.current = undos.current.map((u) => ({ ...u, after: u.after.map((a) => (to.has(a.employee_id) && from.get(a.employee_id) === a.version ? { ...a, version: to.get(a.employee_id) ?? null } : a)) }))
+    toast.success(t('attendance.sheet.toast.undone', { label: entry.label }))
   }
 
   onKey.current = () => {} // no key acts on a sheet that is not on screen (the next date loading, an error); set again below
@@ -221,7 +231,8 @@ export function DaySheet({ group, date, period, onDate, onOpenDay }: { group: st
 
   // a key does what its button would: P/A/S skip a row whose button is disabled, and a read-only sheet only moves and opens
   onKey.current = (e) => {
-    if (document.querySelector('[role="dialog"]')) return
+    if (document.querySelector('[role="dialog"],[role="alertdialog"],[role="menu"]')) return
+    if (e.repeat && !MOVE.includes(e.code)) return
     const typing = e.target instanceof HTMLElement && (e.target.isContentEditable || ['INPUT', 'TEXTAREA', 'SELECT'].includes(e.target.tagName))
     if (e.code === 'Escape') {
       unselect()

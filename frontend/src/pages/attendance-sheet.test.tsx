@@ -690,7 +690,7 @@ test('an undo refused with 409 is dropped with a message', async () => {
   await user.click(within(await table()).getByRole('button', { name: 'حاضر Engineer-1' }))
   await waitFor(() => expect(undoButton()).toBeEnabled())
   key('KeyZ', { metaKey: true })
-  await waitFor(() => expect(toast.error).toHaveBeenCalledWith('عدّل مستخدم آخر Engineer-1 بعد ذلك؛ تعذّر التراجع وحُذف من القائمة.'))
+  await waitFor(() => expect(toast.error).toHaveBeenCalledWith('تغيّر يوم Engineer-1 بعد ذلك؛ تعذّر التراجع وحُذف من القائمة.'))
   expect(undoButton()).toHaveTextContent('تراجع (0)')
   expect(undoButton()).toBeDisabled()
 })
@@ -711,6 +711,97 @@ test('the undo stack keeps the last 15', async () => {
   }
   const undone = bulk.mock.calls.slice(16).map((_, i) => sent(bulk, 16 + i).rows[0].employee_id)
   expect(undone).toEqual(Array.from({ length: 15 }, (_, i) => `e${16 - i}`)) // newest first; e1 was dropped
+})
+
+/** A tiny server for Engineer-1 that refuses a stale version, like the endpoint; `meddle` has someone else edit the row right after our first write. */
+function oneRow(meddle = false) {
+  let cur: number | null = null
+  let n = 0
+  let day: object = {}
+  const store = (site: string | null) => { cur = ++n; day = { state: 'stored', source: 'entered', version: cur, site_id: site, leave_code: site === 'sa' ? 'absent' : null } }
+  const bulk = vi.fn((_url: string, init?: RequestInit) => {
+    const [r] = JSON.parse(String(init?.body)).rows
+    if (r.version !== cur) return json(409, { error: { code: 'concurrency_conflict', message: 'stale', details: [{ field: 'rows.0', code: 'concurrency_conflict', message: 'stale' }] } })
+    if (r.clear) { cur = null; day = {} } else store(r.site_id)
+    const version = cur
+    if (meddle && bulk.mock.calls.length === 1) store('s1')
+    return json(200, { data: [{ employee_id: r.employee_id, version }] })
+  })
+  mockFetch({ ...routes, 'GET /api/v1/attendance/sheet': () => sheet([row(1, 'Engineer-1', day, { last_site_id: 's1' }), engineers[1]]), 'POST /api/v1/attendance/days/bulk': bulk })
+  return bulk
+}
+const presentThenAbsent = async () => {
+  edit()
+  await user.click(within(await table()).getByRole('button', { name: 'حاضر Engineer-1' }))
+  await waitFor(() => expect(undoButton()).toHaveTextContent('تراجع (1)'))
+  await user.click(within(screen.getByRole('table')).getByRole('button', { name: 'غياب Engineer-1' }))
+  await waitFor(() => expect(undoButton()).toHaveTextContent('تراجع (2)'))
+  key('KeyZ', { ctrlKey: true })
+  await waitFor(() => expect(undoButton()).toHaveTextContent('تراجع (1)'))
+  key('KeyZ', { ctrlKey: true })
+  await waitFor(() => expect(undoButton()).toHaveTextContent('تراجع (0)'))
+}
+
+test('two undos on the same row each send the version the last write returned', async () => {
+  const bulk = oneRow()
+  await presentThenAbsent()
+  expect(sent(bulk, 3).rows).toEqual([{ employee_id: 'e1', clear: true, version: 3 }])
+  expect(toast.error).not.toHaveBeenCalled()
+})
+
+test('an older undo still conflicts when someone else changed the row between the two writes', async () => {
+  const bulk = oneRow(true)
+  await presentThenAbsent()
+  expect(sent(bulk, 3).rows).toEqual([{ employee_id: 'e1', clear: true, version: 1 }]) // not moved onto the other user's change
+  await waitFor(() => expect(toast.error).toHaveBeenCalledWith('تغيّر يوم Engineer-1 بعد ذلك؛ تعذّر التراجع وحُذف من القائمة.'))
+})
+
+test('Ctrl+Z does nothing while a write is in flight', async () => {
+  const bulk = vi.fn((_url: string, init?: RequestInit) => (bulk.mock.calls.length === 1
+    ? json(200, { data: JSON.parse(String(init?.body)).rows.map((r: { employee_id: string }) => ({ employee_id: r.employee_id, version: 1 })) })
+    : (new Promise(() => {}) as unknown as Response))) // the second write never answers
+  mockFetch({ ...routes, 'POST /api/v1/attendance/days/bulk': bulk })
+  edit()
+  await user.click(within(await table()).getByRole('button', { name: 'حاضر Engineer-1' }))
+  await waitFor(() => expect(undoButton()).toHaveTextContent('تراجع (1)'))
+  await user.click(within(screen.getByRole('table')).getByRole('button', { name: 'غياب Engineer-2' }))
+  await waitFor(() => expect(bulk).toHaveBeenCalledTimes(2))
+  key('KeyZ', { ctrlKey: true })
+  await new Promise((r) => setTimeout(r, 20))
+  expect(bulk).toHaveBeenCalledTimes(2) // the Engineer-1 entry is not undone under the pending write
+  expect(undoButton()).toHaveTextContent('تراجع (1)')
+})
+
+test('a held key acts once, but a held J keeps moving', async () => {
+  const bulk = bulkOk()
+  mockFetch({ ...routes, 'POST /api/v1/attendance/days/bulk': bulk })
+  edit()
+  await table()
+  key('KeyJ')
+  key('KeyA')
+  key('KeyA', { repeat: true })
+  key('KeyJ', { repeat: true })
+  expect(rowOf('Engineer-3')).toHaveAttribute('aria-current', 'true')
+  await waitFor(() => expect(undoButton()).toHaveTextContent('تراجع (1)'))
+  key('KeyZ', { ctrlKey: true, repeat: true })
+  await new Promise((r) => setTimeout(r, 20))
+  expect(bulk).toHaveBeenCalledTimes(1)
+})
+
+test('no key writes while a menu or an alert dialog is open', async () => {
+  const bulk = bulkOk()
+  mockFetch({ ...routes, 'POST /api/v1/attendance/days/bulk': bulk })
+  edit()
+  await table()
+  key('KeyJ')
+  for (const role of ['menu', 'alertdialog']) {
+    const el = document.body.appendChild(Object.assign(document.createElement('div'), { role }))
+    el.setAttribute('role', role)
+    key('KeyP')
+    key('KeyA')
+    el.remove()
+  }
+  expect(bulk).not.toHaveBeenCalled()
 })
 
 test('Escape clears the selection and the cursor', async () => {
