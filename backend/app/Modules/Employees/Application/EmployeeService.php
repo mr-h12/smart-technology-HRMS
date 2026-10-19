@@ -25,7 +25,8 @@ final class EmployeeService
 
     private const CURRENT_TYPE = '(select t.type from employee_type_changes t where t.employee_id = employees.id and t.deleted_at is null and t.effective_from <= ? order by t.effective_from desc limit 1)';
 
-    private const CURRENT_MANAGER = '(select m.manager_id from employee_manager_assignments m where m.employee_id = employees.id and m.deleted_at is null and m.effective_from <= ? order by m.effective_from desc limit 1)';
+    /** Binds today's date; also used by EmployeeRoster's own-scope filter. */
+    public const CURRENT_MANAGER = '(select m.manager_id from employee_manager_assignments m where m.employee_id = employees.id and m.deleted_at is null and m.effective_from <= ? order by m.effective_from desc limit 1)';
 
     private const PAY_FIELDS = ['effective_from', 'salary', 'raise', 'insured_basic', 'daily_wage', 'shift_start', 'shift_end'];
 

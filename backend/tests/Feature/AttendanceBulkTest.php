@@ -154,6 +154,18 @@ class AttendanceBulkTest extends TestCase
         $this->bulk($rows)->assertStatus(422)->assertJsonPath('error.details.0.field', 'rows');
     }
 
+    public function test_string_keyed_rows_are_refused_and_nothing_is_written(): void
+    {
+        [$a, $b] = [$this->employee('engineer'), $this->employee('engineer')];
+        $audits = DB::table('audit_log')->count();
+        foreach ([['x' => ['employee_id' => $a, 'site_id' => $this->site]], ['x' => ['employee_id' => $a, 'site_id' => $this->site], 'y' => ['employee_id' => $b, 'site_id' => $this->site]]] as $rows) {
+            $this->postJson('/api/v1/attendance/days/bulk', ['date' => self::DATE, 'rows' => $rows])
+                ->assertStatus(422)->assertJsonPath('error.code', 'validation_failed')->assertJsonPath('error.details.0.field', 'rows');
+        }
+        $this->assertSame(0, AttendanceDay::count());
+        $this->assertSame($audits, DB::table('audit_log')->count());
+    }
+
     public function test_duplicate_employee_rows_are_refused(): void
     {
         $eng = $this->employee('engineer');

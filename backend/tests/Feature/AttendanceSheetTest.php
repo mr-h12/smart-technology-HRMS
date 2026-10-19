@@ -3,6 +3,8 @@
 namespace Tests\Feature;
 
 use App\Modules\Employees\Application\EmployeeService;
+use App\Modules\Identity\Infrastructure\Eloquent\Permission;
+use App\Modules\Identity\Infrastructure\Eloquent\Role;
 use App\Modules\Sites\Infrastructure\Eloquent\Site;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\DB;
@@ -126,12 +128,50 @@ class AttendanceSheetTest extends TestCase
         $this->sheet('engineer', '2026-10-21')->assertStatus(422)->assertJsonPath('error.code', 'future_date');
     }
 
+    public function test_a_bad_or_missing_group_or_date_is_refused(): void
+    {
+        foreach (['group=engineer', 'date=2026-10-18', 'group=nobody&date=2026-10-18', 'group=engineer&date=2026-02-30', 'group=engineer&date=18-10-2026'] as $q) {
+            $this->getJson("/api/v1/attendance/sheet?{$q}")->assertStatus(422)->assertJsonPath('error.code', 'validation_failed');
+        }
+        $this->getJson('/api/v1/attendance/sheet?date=2026-10-18')->assertJsonPath('error.details.0.field', 'group');
+        $this->getJson('/api/v1/attendance/sheet?group=engineer&date=2026-02-30')->assertJsonPath('error.details.0.field', 'date');
+    }
+
+    public function test_hints_is_an_empty_object_when_there_is_no_hint(): void
+    {
+        $this->employee('engineer');
+        $this->assertStringContainsString('"hints":{}', (string) $this->sheet('engineer', '2026-10-18')->assertOk()->getContent());
+    }
+
     public function test_ceo_reads_the_sheet_and_a_manager_is_refused(): void
     {
         $this->signIn('ceo');
         $this->sheet('engineer', '2026-10-18')->assertOk();
         $this->signIn('manager');
         $this->sheet('engineer', '2026-10-18')->assertStatus(403);
+    }
+
+    public function test_an_own_scope_reader_sees_only_their_employees_on_every_read(): void
+    {
+        $role = Role::create(['slug' => 'site-lead', 'name' => 'Site lead', 'name_ar' => 'مشرف']);
+        $role->permissions()->attach(Permission::create(['resource' => 'attendance', 'action' => 'view', 'scope' => 'own'])->getKey());
+        [$lead, $other] = [$this->makeUser('site-lead'), $this->makeUser('manager')];
+        [$mine, $theirs] = [$this->employee('engineer', '2026-10-19'), $this->employee('engineer', '2026-10-19')];
+        $this->postJson("/api/v1/employees/{$mine}/manager-assignments", ['manager_id' => $lead->id, 'effective_from' => '2026-10-01'])->assertCreated();
+        $this->postJson("/api/v1/employees/{$theirs}/manager-assignments", ['manager_id' => $other->id, 'effective_from' => '2026-10-01'])->assertCreated();
+        $q = 'group=engineer&date=2026-10-20';
+
+        // HR (`.all`) sees both: 2 missing days each (10-19, 10-20).
+        $this->getJson("/api/v1/attendance/sheet?{$q}")->assertJsonCount(2, 'data.rows');
+        $this->getJson("/api/v1/attendance/period?{$q}")->assertJsonPath('data.missing', 4);
+
+        $this->actingAs($lead, 'api');
+        $sheet = $this->getJson("/api/v1/attendance/sheet?{$q}")->assertOk()->assertJsonCount(1, 'data.rows')->assertJsonPath('data.rows.0.employee.id', $mine);
+        $this->assertSame(['2026-10-19' => 1, '2026-10-20' => 1], array_filter(array_column($sheet->json('data.days'), 'missing', 'date')));
+        $this->getJson("/api/v1/attendance/grid?{$q}")->assertOk()->assertJsonCount(1, 'data')->assertJsonPath('data.0.employee.id', $mine)
+            ->assertJsonPath('meta.pagination.total', 1);
+        $this->getJson("/api/v1/attendance/missing?{$q}")->assertOk()->assertJsonCount(2, 'data')->assertJsonPath('data.0.employee_id', $mine);
+        $this->getJson("/api/v1/attendance/period?{$q}")->assertOk()->assertJsonPath('data.missing', 2);
     }
 
     public function test_the_sheet_runs_the_same_number_of_queries_for_one_or_three_employees(): void

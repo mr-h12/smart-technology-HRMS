@@ -30,13 +30,13 @@ final class AttendanceController
     {
         $q = $request->validate($this->periodRules());
 
-        return ApiEnvelope::single($request, $this->grid->period(EmployeeType::from($q['group']), $q['period_start'] ?? null, $q['date'] ?? null));
+        return ApiEnvelope::single($request, $this->grid->period(EmployeeType::from($q['group']), $q['period_start'] ?? null, $q['date'] ?? null, RequestScope::ownerId($request)));
     }
 
     public function grid(Request $request): JsonResponse
     {
         $q = $request->validate([...$this->periodRules(), 'per_page' => ['sometimes', 'integer', 'min:1'], 'page' => ['sometimes', 'integer', 'min:1']]);
-        $r = $this->grid->grid(EmployeeType::from($q['group']), $q['period_start'] ?? null, (int) ($q['per_page'] ?? 20), (int) ($q['page'] ?? 1), $q['date'] ?? null);
+        $r = $this->grid->grid(EmployeeType::from($q['group']), $q['period_start'] ?? null, (int) ($q['per_page'] ?? 20), (int) ($q['page'] ?? 1), $q['date'] ?? null, RequestScope::ownerId($request));
 
         return ApiEnvelope::collection($request, $r['data'], $r['pagination']);
     }
@@ -44,7 +44,7 @@ final class AttendanceController
     public function missing(Request $request): JsonResponse
     {
         $q = $request->validate([...$this->periodRules(), 'per_page' => ['sometimes', 'integer', 'min:1'], 'page' => ['sometimes', 'integer', 'min:1']]);
-        $r = $this->grid->missing(EmployeeType::from($q['group']), $q['period_start'] ?? null, (int) ($q['per_page'] ?? 20), $q['date'] ?? null);
+        $r = $this->grid->missing(EmployeeType::from($q['group']), $q['period_start'] ?? null, (int) ($q['per_page'] ?? 20), $q['date'] ?? null, RequestScope::ownerId($request));
 
         return ApiEnvelope::collection($request, $r['data'], $r['pagination']);
     }
@@ -53,7 +53,7 @@ final class AttendanceController
     {
         $q = $request->validate(['group' => ['required', Rule::enum(EmployeeType::class)], 'date' => ['required', 'date_format:Y-m-d']]);
 
-        return ApiEnvelope::single($request, $this->grid->sheet(EmployeeType::from($q['group']), $q['date']));
+        return ApiEnvelope::single($request, $this->grid->sheet(EmployeeType::from($q['group']), $q['date'], RequestScope::ownerId($request)));
     }
 
     public function show(Request $request, string $employee, string $date): JsonResponse

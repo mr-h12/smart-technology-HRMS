@@ -19,7 +19,7 @@ use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\ValidationException;
 use InvalidArgumentException;
 
-/** The period header, the HR grid, the day sheet and the missing days of one group's period. */
+/** The period header, the HR grid, the day sheet and the missing days of one group's period; $ownerId (own scope) narrows each to that manager's employees. */
 final class AttendanceGrid
 {
     /** The last site looks this many days back from the sheet date (P31). */
@@ -28,7 +28,7 @@ final class AttendanceGrid
     public function __construct(private readonly EmployeeRoster $roster, private readonly EffectiveDays $days, private readonly BusinessRules $rules) {}
 
     /** @return array{group: string, start: string, end: string, prev_start: string, next_start: ?string, is_locked: bool, lock: ?array<string, mixed>, missing: int} */
-    public function period(EmployeeType $g, ?string $start, ?string $date = null): array
+    public function period(EmployeeType $g, ?string $start, ?string $date = null, ?string $ownerId = null): array
     {
         $p = $this->periodAt($g, $start, $date);
         $next = $p->next();
@@ -41,15 +41,15 @@ final class AttendanceGrid
             'next_start' => $next->start > EffectiveDays::today() ? null : $next->start,
             'is_locked' => PeriodGuard::isLocked($p),
             'lock' => $this->lock($p),
-            'missing' => count($this->missingDays($p)),
+            'missing' => count($this->missingDays($p, $ownerId)),
         ];
     }
 
     /** @return array{data: list<array<string, mixed>>, pagination: array{page: int, per_page: int, total: int, total_pages: int, has_next_page: bool, has_previous_page: bool}} */
-    public function grid(EmployeeType $g, ?string $start, int $perPage, int $page, ?string $date = null): array
+    public function grid(EmployeeType $g, ?string $start, int $perPage, int $page, ?string $date = null, ?string $ownerId = null): array
     {
         $p = $this->periodAt($g, $start, $date);
-        $roster = $this->roster->ofType($g, $p->start, $p->end, $perPage, $page);
+        $roster = $this->roster->ofType($g, $p->start, $p->end, $perPage, $page, $ownerId);
         $days = $this->days->forPeriod($p, $roster['data']);
 
         return [
@@ -65,9 +65,9 @@ final class AttendanceGrid
     }
 
     /** @return array{data: list<array{employee_id: string, code: int, name_ar: string, name_en: ?string, date: string}>, pagination: array{page: int, per_page: int, total: int, total_pages: int, has_next_page: bool, has_previous_page: bool}} */
-    public function missing(EmployeeType $g, ?string $start, int $perPage, ?string $date = null): array
+    public function missing(EmployeeType $g, ?string $start, int $perPage, ?string $date = null, ?string $ownerId = null): array
     {
-        $all = $this->missingDays($this->periodAt($g, $start, $date));
+        $all = $this->missingDays($this->periodAt($g, $start, $date), $ownerId);
         $perPage = min(max($perPage, 1), 100);
         $page = Paginator::resolveCurrentPage();
         $total = count($all);
@@ -88,7 +88,7 @@ final class AttendanceGrid
      *
      * @return array{group: string, date: string, days: list<array{date: string, missing: int}>, rows: list<array<string, mixed>>}
      */
-    public function sheet(EmployeeType $g, string $date): array
+    public function sheet(EmployeeType $g, string $date, ?string $ownerId = null): array
     {
         $today = EffectiveDays::today();
         if ($date > $today) {
@@ -96,7 +96,7 @@ final class AttendanceGrid
         }
         // ponytail: whole group in PHP (~1,000 × 31 cells); move counts to SQL if a group outgrows it
         $p = Period::containing($g, $date);
-        $employees = $this->roster->allOfType($g, $p->start, $p->end);
+        $employees = $this->roster->allOfType($g, $p->start, $p->end, $ownerId);
         $days = $this->days->forPeriod($p, $employees);
         $settings = $this->rules->all();
         $employed = array_values(array_filter($employees, fn (array $e) => $days[$e['id']][$date]['state'] !== 'not_employed'));
@@ -180,10 +180,10 @@ final class AttendanceGrid
     }
 
     /** @return list<array{employee_id: string, code: int, name_ar: string, name_en: ?string, date: string}> by code then date */
-    private function missingDays(Period $p): array
+    private function missingDays(Period $p, ?string $ownerId = null): array
     {
         // ponytail: in-PHP count over ~100 employees × 31 days; move to SQL if a group grows past ~1,000
-        $employees = $this->roster->allOfType($p->group, $p->start, $p->end);
+        $employees = $this->roster->allOfType($p->group, $p->start, $p->end, $ownerId);
         $days = $this->days->forPeriod($p, $employees);
         $missing = [];
         foreach ($employees as $e) {

@@ -27,9 +27,9 @@ final class EmployeeRoster
             employees.termination_date, ?::date))';
 
     /** @return array{data: list<array<string, mixed>>, pagination: array{page: int, per_page: int, total: int, total_pages: int, has_next_page: bool, has_previous_page: bool}} */
-    public function ofType(EmployeeType $type, string $from, string $to, int $perPage, int $page): array
+    public function ofType(EmployeeType $type, string $from, string $to, int $perPage, int $page, ?string $managedBy = null): array
     {
-        $result = $this->employedAs($type, $from, $to)->paginate(min(max($perPage, 1), 100), ['*'], 'page', max($page, 1));
+        $result = $this->employedAs($type, $from, $to, $managedBy)->paginate(min(max($perPage, 1), 100), ['*'], 'page', max($page, 1));
 
         return [
             'data' => array_values($result->getCollection()->map(fn (Employee $e) => $this->row($e))->all()),
@@ -45,9 +45,9 @@ final class EmployeeRoster
     }
 
     /** @return list<array<string, mixed>> */
-    public function allOfType(EmployeeType $type, string $from, string $to): array
+    public function allOfType(EmployeeType $type, string $from, string $to, ?string $managedBy = null): array
     {
-        return array_values($this->employedAs($type, $from, $to)->get()->map(fn (Employee $e) => $this->row($e))->all());
+        return array_values($this->employedAs($type, $from, $to, $managedBy)->get()->map(fn (Employee $e) => $this->row($e))->all());
     }
 
     /** @return array<string, mixed>|null */
@@ -60,7 +60,7 @@ final class EmployeeRoster
 
     /**
      * @param  list<string>  $ids
-     * @return array<string, array<string, mixed>> keyed by id; unknown ids are left out
+     * @return array<array-key, array<string, mixed>> keyed by id (a UUID, so never cast to int); unknown ids are left out
      */
     public function findMany(array $ids): array
     {
@@ -82,10 +82,12 @@ final class EmployeeRoster
             ->mapWithKeys(fn (Employee $e) => [(int) $e->code => $this->row($e)])->all();
     }
 
-    /** @return Builder<Employee> */
-    private function employedAs(EmployeeType $type, string $from, string $to): Builder
+    /** @return Builder<Employee> narrowed, when $managedBy is set, to the employees that user manages today (as `employee.scope`) */
+    private function employedAs(EmployeeType $type, string $from, string $to, ?string $managedBy): Builder
     {
-        return Employee::with(['typeChanges', 'payChanges'])->whereRaw(self::EMPLOYED_AS, [$type->value, $from, $to])->orderBy('code');
+        return Employee::with(['typeChanges', 'payChanges'])->whereRaw(self::EMPLOYED_AS, [$type->value, $from, $to])
+            ->when($managedBy !== null, fn (Builder $q) => $q->whereRaw(EmployeeService::CURRENT_MANAGER.' = ?', [now('Africa/Cairo')->toDateString(), $managedBy]))
+            ->orderBy('code');
     }
 
     /** @return array<string, mixed> */

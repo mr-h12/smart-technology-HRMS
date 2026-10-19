@@ -46,7 +46,7 @@ final class AttendanceDays
     /** Many employees' days for one date; a row is a FORMAT body plus employee_id, or {employee_id, version, clear: true}. */
     public const BULK_FORMAT = [
         'date' => ['required', 'date_format:Y-m-d'],
-        'rows' => ['required', 'array', 'min:1', 'max:'.self::BULK_MAX_ROWS],
+        'rows' => ['required', 'list', 'min:1', 'max:'.self::BULK_MAX_ROWS],
         'rows.*.employee_id' => ['required', 'uuid', 'distinct'],
         'rows.*.clear' => ['sometimes', 'accepted'],
         'rows.*.version' => ['nullable', 'integer', 'min:1', 'required_with:rows.*.clear'],
