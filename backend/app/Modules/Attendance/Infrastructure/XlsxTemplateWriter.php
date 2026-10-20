@@ -64,7 +64,12 @@ final class XlsxTemplateWriter
         $text = new Style(format: '@');
         $grey = new Style(backgroundColor: self::GREY, format: '@');
 
-        $writer->getCurrentSheet()->setName('attendance')->setSheetView(new SheetView(rightToLeft: $locale === 'ar', freezeRow: 2, freezeColumn: 'C'));
+        $sheet = $writer->getCurrentSheet()->setName('attendance')->setSheetView(new SheetView(rightToLeft: $locale === 'ar', freezeRow: 2, freezeColumn: 'C'));
+        // Widths in characters, plus 2 of padding: code, name (12..40), and every day column fits a date or the longest dropdown choice.
+        $fit = fn (array $values) => max(0, ...array_map(fn (string $v) => mb_strlen($v), $values)) + 2;
+        $sheet->setColumnWidth($fit([$grid['header'][0], ...array_map(fn (array $r) => (string) $r['code'], $grid['rows'])]), 1);
+        $sheet->setColumnWidth(min(max($fit([$grid['header'][1], ...array_column($grid['rows'], 'name')]), 12), 40), 2);
+        $sheet->setColumnWidthForRange($fit([...array_slice($grid['header'], 2), ...$grid['choices']]), 3, max(3, count($grid['header'])));
         $writer->addRow(self::row($grid['header'], new Style(fontBold: true, format: '@')));
         foreach ($grid['rows'] as $r) {
             $cells = [self::cell((string) $r['code'], $text), self::cell($r['name'], $text)];

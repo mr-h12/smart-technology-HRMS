@@ -93,6 +93,21 @@ class AttendanceTemplateTest extends TestCase
         $this->assertSame([], array_keys(array_filter($this->cellStyles(), fn (int $s) => ! in_array($s, $text, true))), 'every attendance cell is text (@)');
     }
 
+    public function test_template_columns_fit_their_content(): void
+    {
+        $this->twoEngineers();
+        $this->workSite('موقع برج العرب الجديد - المرحلة الثانية');
+
+        $sheets = $this->download(self::ENGINEERS);
+        $longest = max(array_map(fn (array $r) => mb_strlen((string) $r[0]), $sheets['lists']['rows']));
+        $widths = $this->columnWidths();
+        $this->assertGreaterThanOrEqual(mb_strlen('الرقم الوظيفي'), $widths[1] ?? 0, 'code');
+        $this->assertGreaterThanOrEqual(mb_strlen('Engineer-1'), $widths[2] ?? 0, 'name');
+        foreach ([3, 32] as $day) {                                                                 // C and AF, the first and last day
+            $this->assertGreaterThanOrEqual(max(strlen('2026-09-26'), $longest), $widths[$day] ?? 0, "day column {$day}");
+        }
+    }
+
     public function test_template_hides_lists_and_versions(): void
     {
         [$one, $two] = $this->twoEngineers();
@@ -357,6 +372,21 @@ class AttendanceTemplateTest extends TestCase
         }
 
         return $styles;
+    }
+
+    /** @return array<int, float> attendance column index (A = 1) → custom width, from `<cols>` */
+    private function columnWidths(): array
+    {
+        $widths = [];
+        foreach (simplexml_load_string($this->zipEntry('xl/worksheets/sheet1.xml'))->cols->col ?? [] as $col) {
+            if (in_array((string) $col['customWidth'], ['1', 'true'], true)) {
+                foreach (range((int) $col['min'], (int) $col['max']) as $i) {
+                    $widths[$i] = (float) $col['width'];
+                }
+            }
+        }
+
+        return $widths;
     }
 
     /** @return list<int> style indexes whose number format is text (@, built-in id 49) */
