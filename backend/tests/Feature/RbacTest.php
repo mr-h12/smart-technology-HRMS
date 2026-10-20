@@ -5,7 +5,10 @@ namespace Tests\Feature;
 use App\Modules\Identity\Domain\Rbac\AuthorizationRefused;
 use App\Modules\Identity\Infrastructure\Eloquent\Permission;
 use App\Modules\Identity\Infrastructure\Eloquent\Role;
+use App\Modules\Identity\Presentation\RequestScope;
+use ArgumentCountError;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Exceptions;
 use Illuminate\Support\Facades\Route;
 use Tests\TestCase;
@@ -67,6 +70,12 @@ class RbacTest extends TestCase
         $this->signIn('manager');
         $this->postJson('/api/v1/employees', [])->assertStatus(403);
         Exceptions::assertNotReported(AuthorizationRefused::class);
+    }
+
+    public function test_the_narrowest_scope_needs_at_least_one_permission(): void
+    {
+        $this->expectException(ArgumentCountError::class);   // zero abilities would read as `all` (fails open)
+        RequestScope::narrowestOwnerId(new Request);
     }
 
     public function test_permission_is_checked_by_name_not_role(): void

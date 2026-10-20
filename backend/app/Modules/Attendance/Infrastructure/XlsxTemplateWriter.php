@@ -47,9 +47,10 @@ final class XlsxTemplateWriter
         } catch (Throwable $e) {
             try {
                 $writer->close();   // also removes OpenSpout's working folder
-            } finally {
-                unlink($path);
+            } catch (Throwable) {
+                // The first error is the one to report.
             }
+            @unlink($path);
 
             throw $e;
         }

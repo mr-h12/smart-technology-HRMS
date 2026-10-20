@@ -23,13 +23,13 @@ final class RequestScope
     }
 
     /** For a route that requires several permissions: null only when every one is held at `all`, whatever the middleware order. */
-    public static function narrowestOwnerId(Request $request, string ...$abilities): ?string
+    public static function narrowestOwnerId(Request $request, string $ability, string ...$more): ?string
     {
         $all = true;
-        foreach ($abilities as $ability) {
-            $decision = $request->attributes->get(AuthorizePermission::ATTRIBUTE.':'.$ability);
+        foreach ([$ability, ...$more] as $name) {
+            $decision = $request->attributes->get(AuthorizePermission::ATTRIBUTE.':'.$name);
             if (! $decision instanceof PermissionDecision) {
-                throw new LogicException("RequestScope needs permission:{$ability} on the route.");
+                throw new LogicException("RequestScope needs permission:{$name} on the route.");
             }
             $all = $all && $decision->allows(Scope::All);
         }
