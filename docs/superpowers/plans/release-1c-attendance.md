@@ -1565,7 +1565,7 @@ Reuse existing `attendance.state.missing` / `attendance.short.absent` where they
 - [ ] **Step 3: Add the dependency, then implement `AttendanceTemplate`, `XlsxTemplateWriter`, the route and the lang keys**
 - [ ] **Step 4: Run them and see them pass** — `docker compose exec app php artisan test` → PASS.
 
-**Gates:** B-test, B-pint, B-stan, B-deptrac (OpenSpout is imported only under `Infrastructure`).
+**Gates:** B-test, B-pint, B-stan, B-deptrac, plus `grep -rl OpenSpout backend/app` listing only `Infrastructure` files (deptrac has no OpenSpout layer; adding one is an owner decision).
 
 - [ ] **Step 5: Commit** — `git commit -m "Add the attendance Excel grid template download" -m "Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"`
 
