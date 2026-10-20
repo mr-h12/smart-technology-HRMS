@@ -20,7 +20,7 @@ use Illuminate\Database\UniqueConstraintViolationException;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\ValidationException;
 
-/** Writes attendance days (HR entry, the day sheet's bulk write, import) with optimistic locking; every write is audited by the model. */
+/** Writes attendance days (HR entry, the day sheet's bulk write, the Excel import) with optimistic locking; every write is audited by the model. */
 final class AttendanceDays
 {
     /** Format only; DayRules does the rest. Shared by the controller and the import. */
@@ -154,15 +154,33 @@ final class AttendanceDays
     }
 
     /**
+     * One cell of the Excel import (P33): the bulk write's semantics (P28 keeps the day's unsent fields) with $source. Each call is its
+     * own savepoint, so a refused cell never aborts the caller's transaction. $dryRun runs every check and saves nothing (the preview).
+     *
+     * @param  array<string, mixed>  $employee  an EmployeeRoster row
+     * @param  array{version: ?int, site_id: ?string}  $input  the Day sheet's bulk row for a site, a leave type or office present
+     *
+     * @throws AttendanceRefused|DayRulesViolated
+     */
+    public function writeCell(array $employee, string $date, array $input, string $source, bool $dryRun = false): void
+    {
+        try {
+            DB::transaction(fn () => $this->write($employee, $date, $input, $source, true, dryRun: $dryRun));
+        } catch (UniqueConstraintViolationException) {
+            throw AttendanceRefused::because(AttendanceRefusal::ConcurrencyConflict);
+        }
+    }
+
+    /**
      * One day's write; call inside a transaction. $keepUnsent (bulk) applies P28 to the fields absent from $input, else they are stored as null.
-     * An unchanged row is not written (P29).
+     * An unchanged row is not written (P29). $dryRun stops after the last check, before anything is saved.
      *
      * @param  array<string, mixed>  $employee
      * @param  array<string, mixed>  $input  validated against FORMAT
      * @param  array<string, string>|null  $settings  read here when null and needed
      * @return int the row's version after the write
      */
-    private function write(array $employee, string $date, array $input, string $source, bool $keepUnsent, ?array $settings = null): int
+    private function write(array $employee, string $date, array $input, string $source, bool $keepUnsent, ?array $settings = null, bool $dryRun = false): int
     {
         [$type, $row] = $this->guard($employee, $date);
         $live = $row !== null && ! $row->trashed() ? $row : null;
@@ -183,6 +201,9 @@ final class AttendanceDays
         }
 
         $this->assertRules($type, $siteRule, $values);
+        if ($dryRun) {
+            return $live->version ?? 0;
+        }
 
         if ($isLeave && $type === EmployeeType::PermanentWorker) {
             $values['transport'] = 'none';
@@ -293,12 +314,9 @@ final class AttendanceDays
             }
         }
 
-        $messages = [];
-        foreach (DayRules::violations($type, $siteRule, $fields) as $v) {
-            $messages[$v['field']][] = __('attendance.rule.'.$v['code']);
-        }
-        if ($messages !== []) {
-            throw ValidationException::withMessages($messages);
+        $violations = DayRules::violations($type, $siteRule, $fields);
+        if ($violations !== []) {
+            throw DayRulesViolated::of($violations);
         }
     }
 }

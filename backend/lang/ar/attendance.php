@@ -10,6 +10,9 @@ return [
         'period_already_locked' => 'الفترة مقفلة بالفعل.',
         'period_not_locked' => 'الفترة غير مقفلة.',
         'leave_type_missing' => 'لا يوجد نوع إجازة نشط بالكود :code.',
+        'template_mismatch' => 'الملف لا يطابق قالب الحضور لهذه الفترة.',
+        'unreadable_file' => 'تعذّرت قراءة الملف.',
+        'too_many_rows' => 'يحتوي الملف على أكثر من :max صف.',
     ],
     'rule' => [
         'field_not_allowed' => 'هذا الحقل لا ينطبق على هذا اليوم.',
@@ -25,5 +28,10 @@ return [
         'code' => 'الرقم الوظيفي',
         'name' => 'الاسم',
         'present' => 'حاضر',
+    ],
+    'import' => [
+        'unknown_employee' => 'الرقم الوظيفي غير موجود.',
+        'unknown_site' => 'الموقع أو نوع اليوم غير موجود.',
+        'duplicate_row' => 'هذا الموظف مكرر في الملف.',
     ],
 ];

@@ -15,13 +15,17 @@ enum AttendanceRefusal: string
     case PeriodAlreadyLocked = 'period_already_locked';
     case PeriodNotLocked = 'period_not_locked';
     case LeaveTypeMissing = 'leave_type_missing';
+    case TemplateMismatch = 'template_mismatch';
+    case UnreadableFile = 'unreadable_file';
+    case TooManyRows = 'too_many_rows';
 
     public function status(): int
     {
         return match ($this) {
             self::ConcurrencyConflict, self::PeriodAlreadyLocked => 409,
             self::PeriodLocked => 423,
-            self::FutureDate, self::EmployeeNotActive, self::MissingDaysUnconfirmed, self::PeriodNotLocked, self::LeaveTypeMissing => 422,
+            self::FutureDate, self::EmployeeNotActive, self::MissingDaysUnconfirmed, self::PeriodNotLocked, self::LeaveTypeMissing,
+            self::TemplateMismatch, self::UnreadableFile, self::TooManyRows => 422,
         };
     }
 }

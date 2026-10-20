@@ -10,6 +10,9 @@ return [
         'period_already_locked' => 'The period is already locked.',
         'period_not_locked' => 'The period is not locked.',
         'leave_type_missing' => 'No active leave type has the code :code.',
+        'template_mismatch' => 'The file does not match this period\'s attendance template.',
+        'unreadable_file' => 'The file could not be read.',
+        'too_many_rows' => 'The file has more than :max rows.',
     ],
     'rule' => [
         'field_not_allowed' => 'This field does not apply to this day.',
@@ -25,5 +28,10 @@ return [
         'code' => 'Employee ID',
         'name' => 'Name',
         'present' => 'Present',
+    ],
+    'import' => [
+        'unknown_employee' => 'Unknown employee ID.',
+        'unknown_site' => 'Unknown site or day type.',
+        'duplicate_row' => 'This employee appears twice in the file.',
     ],
 ];

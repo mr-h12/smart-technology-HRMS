@@ -177,6 +177,21 @@ The sheet saves through bulk marking, under the same day rules as single-day ent
 - Keep rule (P28) for values a row does not send: a day of the same kind (work, leave, office present) keeps the values its new site allows; a change of kind keeps only the note and the advance. It applies to bulk writes only; single-day entry stores an unsent value as empty.
 - A row that changes nothing writes nothing: no new version and no audit entry. This also applies to single-day entry.
 
+## 14. Excel import
+How an uploaded attendance template (the grid: one row per employee, one column per period day, each cell a site or a leave day-type) becomes stored days. HR first sees a preview that saves nothing, then confirms by uploading the same file again. The import computes no amount.
+
+- One write path (G1): each changed cell is saved as the day sheet saves a row that sets that site, leave day-type or office present, with source `imported`. The section 13 keep rule applies: a site → site change keeps the day's other values; a change of kind keeps only the note and the advance.
+- A blank cell is no change (G2). It never clears a stored day; clearing stays in the app. Blank cells are not counted.
+- An unchanged cell writes nothing (G3). A cell is unchanged when it names the stored day's site, or the leave day-type of a derived weekly off or holiday. An office cell holding the present word is unchanged when the stored day is office present.
+- Stale protection, per cell (G4): the hidden sheet `versions` holds each stored day's version (blank = no stored day), matched to the grid by employee code. A changed cell whose version is not the stored day's current version is a conflict and is not saved, so a day edited after the download is never overwritten. Uploading the same file twice saves nothing the second time: its cells are now unchanged.
+- Cells the employee cannot take (G5) are blank and grey in the template: days not employed as the group's type, and future days. A value there is refused.
+- Office cells (G6) take the present word («حاضر» or Present) or a leave day-type; office has no sites. Present saves what the day sheet's office Present saves (no times, so on time). Other groups take a work site or a leave day-type. A name matches its Arabic name (spacing ignored) or its English name (case ignored). An inactive site is refused; a deleted one is unknown.
+- The header row (G7) holds the code label, the name label and then the period's dates, in order, and must match the requested group's period exactly; the `versions` sheet must have the same header. Anything else refuses the whole file. A header date that Excel turned into a date or a date number reads the same as the text.
+- Every change and every error names its cell (G8): the Excel row number and column letter.
+- Limits (G9): 5 MB, `.xlsx` only, at most 2000 employee rows (a technical limit in code, not a setting). The file is read once per request and never stored.
+- Order of the cell checks: an unknown or out-of-scope employee code, or a code already used on an earlier row, refuses the row; then a future date, then a day not employed as the group's type; then an unchanged cell is set aside; then, on every changed cell, a locked period, an unknown site or day type, a stale version, and the day rules of single-day entry. A refused cell is skipped and listed; the other cells are still saved.
+- The import follows the template's reach: an own-scope user imports only the employees assigned to them today.
+
 ## Not calculated by the system
 - Bonuses, negligence deductions, penalties, lateness exemptions, insurance shares and income tax: entered by HR.
 - Bank transfers: HR only marks "paid" and writes how the money was received.

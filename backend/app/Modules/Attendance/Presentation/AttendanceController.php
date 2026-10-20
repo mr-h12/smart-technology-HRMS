@@ -6,6 +6,7 @@ namespace App\Modules\Attendance\Presentation;
 
 use App\Modules\Attendance\Application\AttendanceDays;
 use App\Modules\Attendance\Application\AttendanceGrid;
+use App\Modules\Attendance\Application\AttendanceImport;
 use App\Modules\Attendance\Application\AttendanceTemplate;
 use App\Modules\Attendance\Application\EffectiveDays;
 use App\Modules\Employees\Application\EmployeeService;
@@ -15,6 +16,7 @@ use App\Support\Http\ApiEnvelope;
 use Illuminate\Database\Eloquent\ModelNotFoundException;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\Validator;
 use Illuminate\Validation\Rule;
 use Symfony\Component\HttpFoundation\BinaryFileResponse;
@@ -27,6 +29,7 @@ final class AttendanceController
         private readonly AttendanceDays $writes,
         private readonly EmployeeService $employees,
         private readonly AttendanceTemplate $template,
+        private readonly AttendanceImport $import,
     ) {}
 
     public function period(Request $request): JsonResponse
@@ -69,6 +72,22 @@ final class AttendanceController
             ->deleteFileAfterSend();
     }
 
+    /** The import's preview: the template's rule (P34), view and edit with the narrower scope. Nothing is saved, the upload included. */
+    public function preview(Request $request): JsonResponse
+    {
+        [$g, $start, $path] = $this->upload($request);
+
+        return ApiEnvelope::single($request, $this->import->preview($g, $start, $path, RequestScope::narrowestOwnerId($request, 'attendance.view', 'attendance.edit')));
+    }
+
+    /** The same file again: its valid changed cells are written, the refused ones returned. */
+    public function confirm(Request $request): JsonResponse
+    {
+        [$g, $start, $path] = $this->upload($request);
+
+        return ApiEnvelope::single($request, $this->import->confirm($g, $start, $path, RequestScope::narrowestOwnerId($request, 'attendance.view', 'attendance.edit')));
+    }
+
     public function show(Request $request, string $employee, string $date): JsonResponse
     {
         $this->assertDate($date);
@@ -106,6 +125,24 @@ final class AttendanceController
         $q = $request->validate(['version' => ['required', 'integer', 'min:1']]);
 
         return ApiEnvelope::single($request, $this->writes->clear($employee, $date, (int) $q['version']));
+    }
+
+    /**
+     * G9: 5 MB, .xlsx only. The file is read from PHP's temp path and never stored.
+     *
+     * @return array{EmployeeType, string, string}
+     */
+    private function upload(Request $request): array
+    {
+        $q = $request->validate([
+            'group' => ['required', Rule::enum(EmployeeType::class)],
+            'period_start' => ['required', 'date_format:Y-m-d'],
+            'file' => ['required', 'file', 'max:5120', 'mimes:xlsx', 'extensions:xlsx'],
+        ]);
+        /** @var UploadedFile $file */
+        $file = $q['file'];
+
+        return [EmployeeType::from($q['group']), $q['period_start'], $file->getPathname()];
     }
 
     /** @return array<string, array<mixed>> */
