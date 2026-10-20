@@ -62,6 +62,7 @@ Smart Technology runs HR and payroll today on 6 hand-built Excel workbooks (anal
    - Site or leave day-type; office staff are present or on a leave day-type.
    - The fields of the employee's type (in/out times, late / OT / outside-Alexandria minutes or amount, transport, advance amount, note).
    - The Excel template: download, fill, upload with a preview, confirm.
+     The template is a grid like HR's timesheet: one row per employee, one column per day, and the site or day type in each cell. Times, overtime and advances stay in the app **(owner, 2026-10-20)**.
    - Official holidays, kept in Settings.
    - The attendance lock per group and period; HR reopens with a reason.
    - The missing-days bell. Job `attendance:alert-missing` runs at 21:00 Cairo time and notifies the users holding `attendance.edit.all`:

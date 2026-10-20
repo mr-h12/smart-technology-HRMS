@@ -106,6 +106,8 @@
 - They are added in a **new** migration, never by editing an applied one (coding-standards §7). The same applies to the new setting keys.
 
 ## Excel template (owner: «قالب بسيط السيستم ينزله»)
+> **Amended 2026-10-20 (owner):** the template is a **grid like HR's current timesheet**, not one row per employee per day. It has one row per employee and one column per period day, and each cell holds that day's site or day type, from a dropdown. Times, overtime, outside-Alexandria minutes and amount, transport, advances and notes are not in the file; HR keeps them in the day editor. A blank cell changes nothing. Stale protection is per cell, through a hidden sheet of versions. The plan's Slice 3 (rulings G1–G9) is the detail. The bullets below are the original design, kept for history; where they differ, this note wins.
+
 - **Download:** HR picks a group and period and downloads an .xlsx.
   - It has one row per active employee per day of the period.
   - Prefilled: code, name, date, and any existing values, with Fridays and holidays already filled.

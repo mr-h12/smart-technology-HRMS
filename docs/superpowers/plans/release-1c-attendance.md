@@ -58,8 +58,8 @@
 
 ## Review Focus
 
-1. **A template downloaded before someone else edited a day, then uploaded.** The stale row must be a `concurrency_conflict` row error, never an overwrite. Test: Task 11 `test_a_row_changed_since_the_download_is_a_conflict_not_an_overwrite`.
-2. **Times and dates typed in Excel in any form**: a real time cell (`0.3333…`), `8:00` without the leading zero, Arabic-Indic digits `٠٨:٠٠`, a date cell instead of text. They are all read the same as `08:00` / `2026-10-01`. Test: Task 11 `test_time_and_date_cells_in_any_excel_form_are_read_the_same`.
+1. **A template downloaded before someone else edited a day, then uploaded.** The stale cell must be a `concurrency_conflict` cell error, never an overwrite. Test: Task 11 `test_a_cell_changed_since_the_download_is_a_conflict_not_an_overwrite`.
+2. **Excel rewriting the template's cells** (grid template, 2026-10-20): header dates turned into date cells or serials, Arabic-Indic digits in codes, extra spaces in site names. They are all read the same as what was downloaded. Test: Task 11 `test_header_dates_in_any_excel_form_are_read_the_same`.
 3. **Cairo midnight.** At 00:30 Cairo, UTC is still on the previous day. That Cairo date is today and may be entered; the next day is future. Test: Task 3 `test_today_follows_the_cairo_date`.
 4. **Someone hired or terminated mid-period.** The days outside employment are `not_employed`: they are never missing, never counted in the alert, never in the template, and a write to them is refused. Test: Task 3 `test_days_outside_employment_are_not_missing`.
 5. **A holiday on a date where one group's period is locked and another's is open** (periods differ per group). It is refused. Test: Task 4 `test_a_holiday_is_refused_when_any_groups_period_containing_it_is_locked`.
@@ -1495,215 +1495,201 @@ Reuse existing `attendance.state.missing` / `attendance.short.absent` where they
 3. Every screen at 375 / 1024 / 1440 × ar / en × light / dark into `.claude/gate-1c-2b/<n>-<screen>-<width>-<lang>-<theme>.png`, HR unless noted. New: S1 sheet engineer; S2 sheet office; S3 selection (3 rows); S4 command `1-3`; S5 paste dialog (not submitted); S6 after one P (toast, "Undo (1)"), then undo; S7 keyboard cursor on row 3; S8 locked (previous engineer period, locked then reopened with "Gate 2b screenshots"); S9 CEO read-only sheet + editor note. Re-shoot 1–12 from Gate 2.
 4. Console + network checked; data writes in `capture-log.md`. Post the shots; wait for the owner. Slice 3 waits.
 
-# Slice 3 — Excel template and import with preview
+# Slice 3 — Excel grid template and import with preview
 
-### Task 10: Template download
+> **Owner decision (2026-10-20, supersedes the spec's one-row-per-employee-day template):** the template is a **grid like HR's current timesheet**. It has one row per employee and one column per period day. Each cell holds that day's site or day type (a leave type), chosen from a dropdown. Times, overtime, outside-Alexandria minutes and amount, transport, advances and notes are **not** in the file; HR keeps them in the day editor.
+
+**Grid rulings (controller, 2026-10-20; each is in the ledger with its cost if wrong):**
+- **G1 One write path.** Each changed cell goes through the shared `AttendanceDays` row write the bulk endpoint uses, in the exact row shape the Day sheet's Present or Set site sends for that group (see `frontend/src/lib/day-sheet.ts` `bulkRows`), with `source = 'imported'`. The P28 keep-by-kind rule therefore applies unchanged: a site → site change keeps the day's other fields; a change of kind applies the same defaults as the Day sheet.
+- **G2 A blank cell is no change**, never a clear. Clearing a day stays in the app.
+- **G3 An unchanged cell writes nothing.** A cell equal to the effective day (a stored day, or a derived Friday or holiday compared by its leave type) counts as `unchanged`.
+- **G4 Stale protection, per cell.** A hidden sheet `versions` has the same shape as the grid and holds each stored day's `version` (blank = no stored row). A mismatch is a `concurrency_conflict` error for that cell, and a replayed confirm comes back as conflicts (coding-standards §8 idempotency).
+- **G5 Cells the employee cannot take** are blank and greyed in the template: days outside employment as the group's type, and future days. A value there is refused (`employee_not_active`, `future_date`).
+- **G6 Office cells** take «حاضر» / Present (either language) or a leave type; office has no sites. Present writes what the Day sheet's office Present writes (no times = on time).
+- **G7 The header row** holds the code label, the name label, then the period's dates as text `Y-m-d`, in order. It must match the requested group's period exactly, and the `versions` sheet must have the same shape; anything else is `template_mismatch`. A header date that Excel turned into a date cell or a serial reads the same as the text.
+- **G8 Every change and every error is per cell:** `{row, column}` are the Excel row number and column letter, so HR can find the cell.
+- **G9 Limits:** 5 MB, `.xlsx` only, never stored (spec); `AttendanceImport::MAX_ROWS = 2000` employee rows.
+
+---
+
+### Task 10: Grid template download
 
 **Model:** Opus implementer · Opus reviewer. **Brief loads:** `ponytail:ponytail`, `andrej-karpathy-skills:karpathy-guidelines`, `superpowers:test-driven-development`; reads `docs/coding-standards.md`.
 
 **Files:**
-- Modify: `backend/composer.json` (root `"php"` from `^8.3` to `^8.4`; see Open points), `backend/composer.lock` (`docker compose exec app composer require openspout/openspout:5.12.2`; checked on 2026-10-18: v5.12.2 is the latest stable and requires `php ~8.4.0 || ~8.5.0 || ~8.6.0`, with ext-zip, xmlreader, dom and libxml, all present in the image)
-- Create: `backend/app/Modules/Attendance/Domain/TemplateColumns.php`
-- Create: `backend/app/Modules/Attendance/Infrastructure/XlsxTemplateWriter.php`
+- Modify: `backend/composer.json` (root `"php"` from `^8.3` to `^8.4`; Open point 19), `backend/composer.lock` (`docker compose exec app composer require openspout/openspout:5.12.2`; checked on 2026-10-18: v5.12.2 is the latest stable and requires `php ~8.4.0 || ~8.5.0 || ~8.6.0`, with ext-zip, xmlreader, dom and libxml, all present in the image; the image runs PHP 8.4.24)
 - Create: `backend/app/Modules/Attendance/Application/AttendanceTemplate.php`
+- Create: `backend/app/Modules/Attendance/Infrastructure/XlsxTemplateWriter.php`
 - Modify: `backend/app/Modules/Attendance/Presentation/AttendanceController.php` (`template`), `backend/routes/api.php`, `backend/lang/{ar,en}/attendance.php` (`template.*`)
 - Test: `backend/tests/Feature/AttendanceTemplateTest.php`
 
 **Interfaces:**
-- Consumes: Task 3 `EmployeeRoster::allOfType`, `EffectiveDays::forPeriod`, `DayRules::FIELDS`.
+- Consumes: `EmployeeRoster` (the group's employees, own-scope aware as the sheet is), `EffectiveDays` (the period's effective days per employee), the sites and leave types.
 - Produces:
-  - `TemplateColumns::KEYS`, the fixed column order: `code`, `name`, `date`, `site`, `in_time`, `out_time`, `scheduled_in`, `scheduled_out`, `late_minutes`, `ot_minutes`, `outside_minutes`, `outside_amount`, `transport`, `advance_amount`, `note`, `version`. `TemplateColumns::VALUE_KEYS` = `site` … `note`.
-  - `AttendanceTemplate::rows(EmployeeType $g, string $start): array{headers: list<string>, rows: list<list<?string>>, grey: list<int>, lists: array{sites: list<string>, transport: list<string>}}`:
-    - one row per (employee, date) where the state is not `not_employed`, by code then date;
-    - `date` as text `Y-m-d`;
-    - prefill: a stored day's values and `version`; a derived day's leave-type `name_ar` in `site`; nothing for missing or future days;
-    - `transport` as the localized word;
-    - `grey` = the 0-based indexes of the value columns that the group's type does not take;
-    - `lists.sites` = active work sites (none for office) then active leave types, by `name_ar`;
-    - `lists.transport` = the three words in the request language.
-  - `XlsxTemplateWriter::write(array $template, string $locale): string` (the path of a temp file). Sheet `attendance`:
-    - header row 1 in bold;
-    - date, time and number columns written as **text** cells with number format `@`, so Excel keeps typed text;
-    - grey fill on the `grey` columns;
-    - the `version` column hidden (`setColumnHidden`);
-    - right-to-left when the locale is `ar` (through the XLSX `SheetView`).
-    - Sheet `lists` is hidden (`Sheet::setIsVisible(false)`). A `ListValidationRule` on the `site` and `transport` columns points at it; check the class in `vendor/openspout/openspout/src/Writer/XLSX/Validation/Rules/`.
-  - `GET attendance/template?group=&period_start=` streams it with `response()->download($path, "attendance-{$group}-{$start}.xlsx")->deleteFileAfterSend()`, content type `application/vnd.openxmlformats-officedocument.spreadsheetml.sheet`.
-  - `template.<key>` headers (ar / en): `code` الرقم الوظيفي / Employee ID; `name` الاسم / Name; `date` التاريخ / Date; `site` الموقع أو نوع اليوم / Site or day type; `in_time` الحضور / In; `out_time` الانصراف / Out; `scheduled_in` الحضور المقرر / Scheduled in; `scheduled_out` الانصراف المقرر / Scheduled out; `late_minutes` تأخير (دقيقة) / Late (min); `ot_minutes` إضافي (دقيقة) / Overtime (min); `outside_minutes` خارج الإسكندرية (دقيقة) / Outside Alexandria (min); `outside_amount` خارج الإسكندرية (مبلغ) / Outside Alexandria (amount); `transport` المواصلات / Transport; `advance_amount` السلفة / Advance; `note` ملاحظات / Note; `version` النسخة / Version. Transport words (ar / en): كاملة / full, نصف / half, بدون / none.
+  - `AttendanceTemplate::grid(EmployeeType $g, string $start, ?string $ownerId): array{dates: list<string>, rows: list<array{employee_id: string, code: int, name: string, cells: list<?string>, versions: list<?int>, grey: list<int>}>, choices: list<string>}`:
+    - `dates`: the period's dates, `Y-m-d`;
+    - one row per employee employed as the group's type on at least one period day, ordered by code;
+    - `cells[i]`: for a stored day, its site's or leave type's `name_ar`; for a derived day, the leave type's `name_ar`; otherwise null;
+    - `versions[i]`: the stored day's version, else null;
+    - `grey`: the 0-based day indexes the employee cannot take (G5);
+    - `choices`: for field groups, active work sites then active leave types by `name_ar`; for office, the present word in the request language, then active leave types.
+  - `XlsxTemplateWriter::write(array $grid, string $locale): string` (the path of a temp file):
+    - **Sheet `attendance`:**
+      - row 1 is the header (G7), in bold;
+      - every cell is written as **text** (number format `@`);
+      - grey fill on the `grey` cells;
+      - right-to-left when the locale is `ar` (XLSX `SheetView`);
+      - freeze the header row and the two name columns if OpenSpout supports it (skip it otherwise and say so);
+      - a `ListValidationRule` on the day cells points at `lists!A:A` (check the class in `vendor/openspout/openspout/src/Writer/XLSX/Validation/Rules/`).
+    - **Sheet `lists`**, hidden: column A holds `choices`.
+    - **Sheet `versions`**, hidden: the same header, then one row per employee in the same order, with each version or blank.
+  - `GET attendance/template?group=&period_start=` (`permission:attendance.edit`) streams the file with `response()->download($path, "attendance-{$group}-{$start}.xlsx")->deleteFileAfterSend()`. The content type is `application/vnd.openxmlformats-officedocument.spreadsheetml.sheet`.
+  - `template.code` الرقم الوظيفي / Employee ID; `template.name` الاسم / Name; `template.present` حاضر / Present.
 
 - [ ] **Step 1: Write the failing tests** (`cairo('2026-10-20 12:00')`, `signIn('hr')`; read the download back with `OpenSpout\Reader\XLSX\Reader`)
-  - `test_template_has_one_row_per_active_employee_day_prefilled`: two engineers (one hired 2026-10-10), holiday 10-06, a stored day 10-01 on `Site-1` at version 1. Then:
-    - data rows = 30 + 16 = 46;
-    - the first data row is `[code, 'Engineer-1', '2026-09-26', null, …]`;
-    - the 10-01 row has `site` `Site-1` and `version` `1`;
-    - the 10-02 row has `site` = the `friday` leave type's `name_ar`;
-    - no row for the second engineer before 2026-10-10.
-  - `test_template_lists_valid_names_on_a_hidden_sheet`: the second sheet is named `lists`, `isVisible()` is false, and it contains `Site-1` and every active leave type name.
-  - `test_template_headers_follow_the_request_language`: with `Accept-Language: en`, row 1 starts `['Employee ID', 'Name', 'Date']`.
-  - `test_template_needs_attendance_edit`: CEO → 403.
+  - `test_template_is_a_grid_of_employees_by_period_days_prefilled`:
+    - Setup: two engineers (Engineer-2 hired 2026-10-10), a holiday on 10-06, and Engineer-1's stored day on 10-01 at `Site-1`, version 1.
+    - Row 1 is `['الرقم الوظيفي', 'الاسم', '2026-09-26', …, '2026-10-25']` (30 dates), and there are 2 data rows.
+    - Engineer-1: 10-01 reads `Site-1`; 10-02 (a Friday) reads the `friday` leave type's `name_ar`; 10-06 reads the `holiday` leave type's `name_ar`; 10-03 is blank.
+    - Engineer-2: every cell before 10-10 is blank and grey.
+    - Both rows: every cell after 10-20 is blank and grey.
+  - `test_template_hides_lists_and_versions`:
+    - `lists` and `versions` are hidden.
+    - `versions` holds `1` at Engineer-1 × 10-01 and is blank elsewhere.
+    - `lists` holds `Site-1` and every active leave type.
+  - `test_office_template_offers_present_and_leave_types`: the office `lists` starts with `حاضر` and holds no work site.
+  - `test_template_headers_follow_the_request_language`: with `Accept-Language: en`, row 1 starts `['Employee ID', 'Name', '2026-09-26']`.
+  - `test_template_needs_attendance_edit`: the CEO gets 403.
+  - `test_template_follows_own_scope`: a caller with only `attendance.view.own` + `attendance.edit` gets only their own employees (same rule as the sheet).
 - [ ] **Step 2: Run them and see them fail** — `docker compose exec app php artisan test --filter=AttendanceTemplateTest` → FAIL.
-- [ ] **Step 3: Add the dependency, then implement `TemplateColumns`, `AttendanceTemplate`, `XlsxTemplateWriter`, the route and the lang keys**
+- [ ] **Step 3: Add the dependency, then implement `AttendanceTemplate`, `XlsxTemplateWriter`, the route and the lang keys**
 - [ ] **Step 4: Run them and see them pass** — `docker compose exec app php artisan test` → PASS.
 
-**Gates:** B-test, B-pint, B-stan, B-deptrac (OpenSpout imported only under `Infrastructure`).
+**Gates:** B-test, B-pint, B-stan, B-deptrac (OpenSpout is imported only under `Infrastructure`).
 
-- [ ] **Step 5: Commit** — `git commit -m "Add the attendance Excel template download" -m "Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"`
+- [ ] **Step 5: Commit** — `git commit -m "Add the attendance Excel grid template download" -m "Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"`
 
 ---
 
-### Task 11: Import preview and confirm (trust boundary)
+### Task 11: Grid import preview and confirm (trust boundary)
 
 **Model:** Opus implementer · Opus reviewer. **Brief loads:** `ponytail:ponytail`, `andrej-karpathy-skills:karpathy-guidelines`, `superpowers:test-driven-development`; reads `docs/coding-standards.md` (§5, §8, §9 for files).
 
 **Files:**
 - Create: `backend/app/Modules/Attendance/Infrastructure/XlsxAttendanceReader.php`
 - Create: `backend/app/Modules/Attendance/Application/AttendanceImport.php`
-- Modify: `backend/app/Modules/Attendance/Domain/AttendanceRefusal.php` (three cases), `backend/app/Modules/Attendance/Presentation/AttendanceController.php` (`preview`, `confirm`), `backend/routes/api.php`, `backend/lang/{ar,en}/attendance.php` (`import.*`, `refusal.*`)
+- Modify: `backend/app/Modules/Attendance/Domain/AttendanceRefusal.php` (three cases), `backend/app/Modules/Attendance/Presentation/AttendanceController.php` (`preview`, `confirm`), `backend/routes/api.php`, `backend/lang/{ar,en}/attendance.php` (`import.*`, `refusal.*`), `docs/calculations.md` (new §14 "Excel import": G1–G9 as rules, no formulas)
 - Test: `backend/tests/Feature/AttendanceImportTest.php`
 
 **Interfaces:**
-- Consumes: Task 3 `AttendanceDays::save` (with `source = 'imported'`), `AttendanceDays::FORMAT`, `EffectiveDays`, `DayRules`, `PeriodGuard`, `AttendanceRefusal`; Task 10 `TemplateColumns`, `AttendanceTemplate` (the header labels).
+- Consumes: Task 10 `AttendanceTemplate` (the header labels and choices), the shared `AttendanceDays` row write (G1), `EffectiveDays`, `PeriodGuard`, `AttendanceRefusal`.
 - Produces:
-  - `XlsxAttendanceReader::read(string $path, int $maxRows): array{header: list<?string>, rows: list<array{row: int, cells: list<?string>}>}`. It reads the first sheet only.
-    - Each cell is normalised to `?string`: trimmed, with Arabic-Indic and Eastern digits converted to ASCII, and empty → null.
-    - A `DateTimeInterface` becomes `Y-m-d` in a date column and `H:i` in a time column.
-    - A float in [0, 1) in a time column becomes `H:i` (round(v × 1440) minutes).
-    - An int or float in the date column is read as an Excel serial: 1899-12-30 + n days.
-    - `H:MM` is padded to `HH:MM`.
-    - More than `$maxRows` data rows throws `AttendanceRefused::because(TooManyRows, ['max' => $maxRows])`; a file OpenSpout cannot open throws `AttendanceRefused::because(UnreadableFile)`.
+  - `XlsxAttendanceReader::read(string $path, int $maxRows): array{header: list<?string>, rows: list<array{row: int, cells: list<?string>}>, versions: list<list<?string>>}`. It reads the sheets `attendance` and `versions`.
+    - Each cell is normalised to `?string`: trimmed, inner whitespace collapsed, Arabic-Indic and Eastern digits converted to ASCII, and empty → null.
+    - In the header, a `DateTimeInterface` or an int or float Excel serial (1899-12-30 + n days) becomes `Y-m-d`.
+    - More than `$maxRows` data rows throws `AttendanceRefused::because(TooManyRows, ['max' => $maxRows])`.
+    - A file OpenSpout cannot open throws `AttendanceRefused::because(UnreadableFile)`.
   - `AttendanceRefusal` gains `TemplateMismatch = 'template_mismatch'`, `UnreadableFile = 'unreadable_file'` and `TooManyRows = 'too_many_rows'`, all 422.
-  - `AttendanceImport::MAX_ROWS = 10000`.
-  - `AttendanceImport::preview(EmployeeType $g, string $start, string $path): array`. It returns:
-    - `summary {rows, changes, unchanged, errors}`;
-    - `changes: list<{row, employee_id, code, name_ar, date, fields: array<string, {from: ?string, to: ?string}>}>`;
-    - `errors: list<{row, code: ?int, date: ?string, field: ?string, error: string, message: string}>`.
-  - `AttendanceImport::confirm(…same…): array{applied: int, unchanged: int, errors: list<…>}`. It re-parses, then upserts every valid changed row in **one** transaction through `AttendanceDays::save(…, 'imported')`. That call writes the audit entries. Error rows are skipped and returned.
-  - Row rules, in order:
-    1. A row whose value cells are all blank is skipped and counted nowhere.
-    2. `code` must belong to a live employee (`unknown_employee`).
-    3. `date` must be a valid `Y-m-d` (`invalid_format`) inside the period (`outside_period`).
-    4. The same (code, date) may not appear twice (`duplicate_row`, on the second).
-    5. The employee must be employed as the group's type that day (`employee_not_active`).
-    6. The date may not be after today (`future_date`).
-    7. The period may not be locked (`period_locked`, on every row).
-    8. `site` must match an active site's `name_ar` (whitespace collapsed) or `name_en` (case-insensitive) (`unknown_site`).
-    9. `transport` must be a word in either language (`invalid_format`).
-    10. The `AttendanceDays::FORMAT` validator gives `invalid_format`; `DayRules` gives its own codes (`field_not_allowed`, `out_of_bounds`, …).
-    11. The hidden `version` must equal the stored version (blank means no stored row); otherwise `concurrency_conflict`.
-    - A row equal to the effective day (a derived day compared by its leave type) is `unchanged` and writes nothing.
-    - A replayed confirm writes nothing: every row it already applied now has a newer stored version, so it comes back as `concurrency_conflict` (the idempotency coding-standards §8 asks of imports).
-  - Whole-file refusals are 422 envelopes through `AttendanceRefused`:
-    - `template_mismatch`: the header row matches neither language's `template.*` labels;
+  - `AttendanceImport::MAX_ROWS = 2000`.
+  - `AttendanceImport::preview(EmployeeType $g, string $start, string $path, ?string $ownerId): array{summary: array{cells: int, changes: int, unchanged: int, errors: int}, changes: list<array{row: int, column: string, employee_id: string, code: int, name_ar: string, date: string, from: ?string, to: string}>, errors: list<array{row: int, column: ?string, code: ?int, date: ?string, error: string, message: string}>}`.
+    - `from`/`to` are display names in the request language.
+    - `cells` counts non-blank day cells.
+  - `AttendanceImport::confirm(…same…): array{applied: int, unchanged: int, errors: list<…>}`. It re-parses, then writes every valid changed cell in **one** transaction through the shared write (which audits). Error cells are skipped and returned.
+  - **Cell rules, in order:**
+    1. A blank cell is skipped and counted nowhere (G2).
+    2. The row's code must belong to a live employee in the caller's scope (`unknown_employee`, `column: null`). A code that appears on two rows gives `duplicate_row` on the second.
+    3. A date after today gives `future_date`; a day the employee is not employed as the group's type gives `employee_not_active`.
+    4. A locked period gives `period_locked`, on every changed cell.
+    5. The value must match a choice for the group (G6): a site's or leave type's `name_ar` (whitespace collapsed) or `name_en` (case-insensitive), or for office the present word in either language. Otherwise `unknown_site`.
+    6. The cell's `versions` value must equal the stored version, where blank means no stored row (G4). Otherwise `concurrency_conflict`.
+    7. Any refusal from the shared write (for example `site_inactive`) becomes that cell's error with its own code.
+    - A cell equal to the effective day is `unchanged` and writes nothing (G3).
+  - **Whole-file refusals** are 422 envelopes through `AttendanceRefused`:
+    - `template_mismatch` (G7);
     - `unreadable_file`;
     - `too_many_rows` (`:max`).
-  - Request (both endpoints): `group`, `period_start`, `file: required|file|max:5120|mimes:xlsx|extensions:xlsx`. The upload is read from its PHP temp path and never stored (no `store()`, no `Storage`).
-  - `import.<code>` messages (ar / en):
+  - **Request (both endpoints):** `group`, `period_start`, `file: required|file|max:5120|mimes:xlsx|extensions:xlsx`. The upload is read from its PHP temp path and never stored (no `store()`, no `Storage`). Permission: `attendance.edit`, plus the own-scope rule of the bulk write.
+  - **`import.<code>` messages** (ar / en):
     - `unknown_employee`: الرقم الوظيفي غير موجود. / Unknown employee ID.
     - `unknown_site`: الموقع أو نوع اليوم غير موجود. / Unknown site or day type.
-    - `invalid_format`: صيغة القيمة غير صحيحة. / The value's format is invalid.
-    - `outside_period`: التاريخ خارج الفترة المختارة. / The date is outside the chosen period.
-    - `duplicate_row`: هذا اليوم مكرر في الملف. / This day appears twice in the file.
-    - The remaining row codes reuse `attendance.refusal.*` and `attendance.rule.*`.
-  - New `refusal.*` messages (ar / en):
-    - `template_mismatch`: الملف لا يطابق قالب الحضور. / The file does not match the attendance template.
+    - `duplicate_row`: هذا الموظف مكرر في الملف. / This employee appears twice in the file.
+    - The remaining codes reuse `attendance.refusal.*` and `attendance.rule.*`.
+  - **New `refusal.*` messages** (ar / en):
+    - `template_mismatch`: الملف لا يطابق قالب الحضور لهذه الفترة. / The file does not match this period's attendance template.
     - `unreadable_file`: تعذّرت قراءة الملف. / The file could not be read.
     - `too_many_rows`: يحتوي الملف على أكثر من :max صف. / The file has more than :max rows.
 
 - [ ] **Step 1: Write the failing tests**
 
-Setup: `cairo('2026-10-20 12:00')`, `signIn('hr')`, `$this->leave = leaveTypes()`, `$this->site = workSite('Site-1')`, `$this->eng = employee('engineer')`, `holiday('2026-10-06')`. Helpers:
+Setup: `cairo('2026-10-20 12:00')`, `signIn('hr')`, `leaveTypes()`, `workSite('Site-1')`, `$this->eng = employee('engineer')`, `holiday('2026-10-06')`. Helpers:
 - `download(string $group = 'engineer'): string` saves the Task 10 template to a temp path;
-- `edit(string $path, array $changes): UploadedFile` rewrites cells keyed `[date][column] => value` with the OpenSpout writer and returns `new UploadedFile($path, 'attendance.xlsx', null, null, true)`;
+- `edit(string $path, array $changes): UploadedFile` rewrites cells keyed `[code][date] => value` with the OpenSpout writer, keeps the hidden sheets, and returns `new UploadedFile($path, 'attendance.xlsx', null, null, true)`;
 - `post(string $endpoint, UploadedFile $f)`.
 
-```php
-public function test_round_trip_download_edit_upload(): void
-{
-    $file = $this->edit($this->download(), [
-        '2026-10-01' => ['site' => 'Site-1', 'late_minutes' => '10'],
-        '2026-10-03' => ['site' => 'Leave-absent'],
-        '2026-10-04' => ['site' => 'Site-1', 'advance_amount' => '500'],
-        '2026-10-05' => ['site' => 'No-Such-Site'],
-    ]);
-    $p = $this->post('preview', $file)->assertOk();
-    $p->assertJsonPath('data.summary.changes', 3)->assertJsonPath('data.summary.errors', 1)->assertJsonPath('data.errors.0.error', 'unknown_site');
-    $this->assertSame(0, AttendanceDay::count());                    // a preview saves nothing
-    $this->post('confirm', $file)->assertOk()->assertJsonPath('data.applied', 3)->assertJsonPath('data.errors.0.date', '2026-10-05');
-    $this->assertSame(['imported'], AttendanceDay::distinct()->pluck('source')->all());
-    $this->assertSame(3, DB::table('audit_log')->where(['entity_type' => 'attendance_days', 'event' => 'CREATED'])->count());
-    $this->post('confirm', $file)->assertJsonPath('data.applied', 0);   // a replay writes nothing
-    $this->assertSame(3, AttendanceDay::count());
-}
-
-public function test_an_unchanged_row_writes_nothing(): void
-{
-    $this->post('confirm', $this->edit($this->download(), []))->assertJsonPath('data.applied', 0);   // derived Fridays come back as they went out
-    $this->assertSame(0, AttendanceDay::count());
-}
-
-public function test_a_row_changed_since_the_download_is_a_conflict_not_an_overwrite(): void
-{
-    $this->putDay($this->eng, '2026-10-01', ['site_id' => $this->site]);
-    $path = $this->download();                                      // carries version 1
-    $this->putDay($this->eng, '2026-10-01', ['version' => 1, 'site_id' => $this->site, 'late_minutes' => 5]);
-    $this->post('confirm', $this->edit($path, ['2026-10-01' => ['late_minutes' => '99']]))->assertJsonPath('data.errors.0.error', 'concurrency_conflict');
-    $this->assertSame(5, AttendanceDay::value('late_minutes'));
-}
-
-public function test_time_and_date_cells_in_any_excel_form_are_read_the_same(): void
-{
-    $this->employee('permanent_worker');
-    $path = $this->download('permanent_worker');
-    // edit() writes a non-string value as that cell type: a float stays a number cell, a DateTimeImmutable a date cell.
-    $file = $this->edit($path, [
-        '2026-10-01' => ['site' => 'Site-1', 'in_time' => 0.3333333, 'out_time' => '16:00'],
-        '2026-10-04' => ['site' => 'Site-1', 'in_time' => '8:00', 'out_time' => '16:00'],
-        '2026-10-05' => ['site' => 'Site-1', 'in_time' => '٠٨:٠٠', 'out_time' => '١٦:٠٠'],
-        '2026-10-07' => ['date' => new DateTimeImmutable('2026-10-07'), 'site' => 'Site-1', 'in_time' => '08:00', 'out_time' => '16:00'],
-    ]);
-    $changes = collect($this->post('preview', $file)->assertJsonPath('data.summary.errors', 0)->json('data.changes'));
-    $this->assertSame(['2026-10-01', '2026-10-04', '2026-10-05', '2026-10-07'], $changes->pluck('date')->all());
-    $this->assertSame(['08:00'], $changes->pluck('fields.in_time.to')->unique()->values()->all());
-}
-```
-Each remaining error kind gets one assertion in a data-provider test, `test_each_row_error_kind`: `unknown_employee` (code 9999), `field_not_allowed` (`transport` on an engineer), `future_date` (2026-10-21), `out_of_bounds` (`late_minutes` 961), `invalid_format` (`in_time` `25:00`), `outside_period` (2026-10-26), `duplicate_row`, `employee_not_active`. Then:
-- `test_a_locked_period_refuses_every_row`: lock → confirm → every changed row is `period_locked`, `applied` 0.
-- `test_the_file_is_checked_for_size_type_and_template`: a 5 MB + 1 KB file → 422 `file`; `attendance.csv` → 422 `file`; an xlsx with other headers → 422 `template_mismatch`; `Storage::fake('local')` sees no files afterwards.
-- `test_too_many_rows_is_refused`: with `AttendanceImport::MAX_ROWS` overridden to 3 through the container, a 4-row file → 422 `too_many_rows`.
+The tests:
+- `test_round_trip_download_edit_upload`:
+  - Edit Engineer-1's cells: 10-01 `Site-1`, 10-03 the absent leave type's `name_ar`, 10-04 `Site-1`, 10-05 `No-Such-Site`.
+  - Preview gives `changes` 3 and `errors` 1, with `errors.0.error` `unknown_site` and `errors.0.column` the 10-05 column letter.
+  - The preview saves nothing.
+  - Confirm gives `applied` 3; every stored `source` is `imported`; there are 3 `CREATED` audit rows.
+  - Replaying the confirm gives `applied` 0, and the stored count stays 3.
+- `test_an_untouched_template_writes_nothing`: uploading the download as it is (derived Fridays included) gives `applied` 0 and no rows.
+- `test_a_cell_changed_since_the_download_is_a_conflict_not_an_overwrite`: store 10-01 at `Site-1`, download (version 1), then change the day in the app to `Site-2` (version 2). Upload with 10-01 set to `Site-1` → `concurrency_conflict`, and the stored site is still `Site-2`.
+- `test_the_import_changes_only_the_site_and_keeps_the_rest`: an engineer's stored 10-01 at `Site-1` with `late_minutes` 10 → set to `Site-2` → `late_minutes` is still 10 (G1, P28).
+- `test_office_present_word_in_either_language`: `حاضر` and `Present` on office rows write the office present day; `Site-1` on an office row is `unknown_site`.
+- `test_a_blank_cell_never_clears_a_stored_day`: blank out a stored day's cell → `applied` 0 and the day is unchanged (G2).
+- `test_header_dates_in_any_excel_form_are_read_the_same`: rewrite the header dates as date cells and as serial numbers → the preview has no errors and the same changes.
+- `test_each_cell_error_kind` (data provider): `unknown_employee` (a row with code 9999), `duplicate_row`, `future_date` (2026-10-21), `employee_not_active` (before the hire date), `unknown_site`, `site_inactive`.
+- `test_a_locked_period_refuses_every_changed_cell`: lock, then confirm → every changed cell is `period_locked`, and `applied` is 0.
+- `test_the_file_is_checked_for_size_type_and_template`:
+  - a file of 5 MB + 1 KB → 422 `file`;
+  - `attendance.csv` → 422 `file`;
+  - an xlsx whose header dates belong to another period → 422 `template_mismatch`;
+  - a file without the `versions` sheet → 422 `template_mismatch`;
+  - `Storage::fake('local')` sees no files afterwards.
+- `test_too_many_rows_is_refused`: with `MAX_ROWS` overridden to 3 through the container, a 4-employee file → 422 `too_many_rows`.
+- `test_import_follows_own_scope`: an own-scope caller's file that names another manager's employee → `unknown_employee` for that row.
 
 - [ ] **Step 2: Run them and see them fail** — `docker compose exec app php artisan test --filter=AttendanceImportTest` → FAIL.
 - [ ] **Step 3: Implement `XlsxAttendanceReader` with its normaliser**
-- [ ] **Step 4: Implement `AttendanceImport`, the two endpoints and the lang keys**
+- [ ] **Step 4: Implement `AttendanceImport`, the two endpoints, the lang keys and `docs/calculations.md` §14**
 - [ ] **Step 5: Run them and see them pass** — `docker compose exec app php artisan test` → PASS.
 
 **Gates:** B-test, B-pint, B-stan, B-deptrac.
 
-- [ ] **Step 6: Commit** — `git commit -m "Add the attendance Excel import with preview" -m "Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"`
+- [ ] **Step 6: Commit** — `git commit -m "Add the attendance Excel grid import with preview" -m "Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"`
 
 ---
 
 ### Task 12: Import tab UI
 
-**Model:** Sonnet implementer · Opus reviewer. **Brief loads:** `ponytail:ponytail`, `andrej-karpathy-skills:karpathy-guidelines`, `superpowers:test-driven-development`, `ui-ux-pro-max:ui-ux-pro-max`; reads `docs/coding-standards.md`.
+**Model:** Opus implementer (the owner's rule this session; the earlier plan said Sonnet) · Opus reviewer. **Brief loads:** `ponytail:ponytail`, `andrej-karpathy-skills:karpathy-guidelines`, `superpowers:test-driven-development`, `ui-ux-pro-max:ui-ux-pro-max`; reads `docs/coding-standards.md`.
 
 **Files:**
 - Create: `frontend/src/pages/attendance-import.tsx`, `frontend/src/pages/attendance-import.test.tsx`
-- Modify: `frontend/src/lib/api.ts`, `frontend/src/lib/api.test.ts`, `frontend/src/pages/attendance.tsx` (`Tabs`: `grid` | `import`, the import tab only with `can('attendance.edit')`), `frontend/src/locales/{ar,en}.json`
+- Modify: `frontend/src/lib/api.ts`, `frontend/src/lib/api.test.ts`, `frontend/src/pages/attendance.tsx` (a third tab after Day sheet and Period grid, `import`, shown only with `can('attendance.edit')`), `frontend/src/locales/{ar,en}.json`
 
 **Interfaces:**
-- Consumes: Task 10 `GET /attendance/template`; Task 11 `POST /attendance/import/{preview,confirm}`; Task 6 `?group`/`?period`.
+- Consumes: Task 10 `GET /attendance/template`; Task 11 `POST /attendance/import/{preview,confirm}`; the page's group and period state.
 - Produces:
-  - `api.ts`: `call()` sends a `FormData` body as-is (no JSON content type). New `apiBlob(path: string): Promise<Blob>` shares the headers and the 401 handling.
+  - `api.ts`: `call()` sends a `FormData` body as-is, with no JSON content type. A new `apiBlob(path: string): Promise<Blob>` shares the headers and the 401 handling.
   - `ImportTab({ group, periodStart })`, in three steps on one Card:
     1. `attendance.import.download`: `apiBlob`, then a temporary object-URL anchor named `attendance-{group}-{start}.xlsx`.
     2. A file input (`accept=".xlsx"`, label `attendance.import.file`). Before any upload it refuses a file over 5 MB or not ending in `.xlsx`, showing `attendance.import.badFile`.
-    3. `attendance.import.preview` posts `FormData {group, period_start, file}`. It shows `attendance.import.summary`, the `attendance.import.notSaved` note, a changes table (row, employee, date, field, `from` → `to`) and an errors table (row, employee code, date, field, message), each in a Card table that scrolls sideways.
+    3. `attendance.import.preview` posts `FormData {group, period_start, file}`. It shows `attendance.import.summary` and the `attendance.import.notSaved` note. Below them are two tables:
+       - changes: the cell (column + row, e.g. `F7`, as an LTR isolate), the employee, the date, and `from` → `to`;
+       - errors: the cell, the employee code, the date and the message.
+
+       Each sits in a Card that follows the Day sheet's responsive pattern: a table from xl, stacked cards below, and no overflow at any width.
   - `attendance.import.confirm` (disabled when `changes === 0`) re-sends **the same `File`**. It shows `attendance.import.done`, invalidates `attendance` and clears the preview. Whole-file 422s show in `ErrorBanner`.
 
 - [ ] **Step 1: Write the failing tests**
-  - `api.test.ts` `'FormData bodies are sent without a JSON content type'` and `'apiBlob returns the body as a Blob with the bearer token'`.
-  - `'upload shows the preview and saves nothing until confirm'`: the preview mock returns `{ summary: { rows: 30, changes: 3, unchanged: 26, errors: 1 }, changes: [...], errors: [{ row: 6, code: 1, date: '2026-10-05', field: 'site', error: 'unknown_site', message: 'الموقع أو نوع اليوم غير موجود.' }] }` → the summary text shows and the error message is in the table; no confirm call yet.
-  - `'confirm re-sends the same file and shows the result'`: the confirm `FormData.get('file')` is the same `File` object → `تم حفظ 3 يومًا، وتُرك 1 صفًا به أخطاء.` shows.
+  - `api.test.ts`: `'FormData bodies are sent without a JSON content type'` and `'apiBlob returns the body as a Blob with the bearer token'`.
+  - `'upload shows the preview and saves nothing until confirm'`:
+    - The preview mock returns `{ summary: { cells: 30, changes: 3, unchanged: 26, errors: 1 }, changes: [...], errors: [{ row: 3, column: 'G', code: 12, date: '2026-10-05', error: 'unknown_site', message: 'الموقع أو نوع اليوم غير موجود.' }] }`.
+    - The summary text shows, and the error message and the cell `G3` are in the table.
+    - No confirm call has been made yet.
+  - `'confirm re-sends the same file and shows the result'`: the confirm `FormData.get('file')` is the same `File` object, and `تم حفظ 3 يومًا، وتُركت 1 خانة بها أخطاء.` shows.
   - `'a file over 5 MB or not xlsx is refused before upload'`: no fetch happens.
   - `'the import tab needs attendance.edit'`.
 - [ ] **Step 2: Run them and see them fail** — `cd frontend && npx vitest run src/pages/attendance-import.test.tsx src/lib/api.test.ts` → FAIL.
@@ -1712,7 +1698,7 @@ Each remaining error kind gets one assertion in a data-provider test, `test_each
 | Key | ar | en |
 |---|---|---|
 | `attendance.tab.import` | الاستيراد من Excel | Import from Excel |
-| `attendance.import.desc` | نزّل قالب الفترة، املأه، ثم ارفعه لمراجعة التغييرات قبل الحفظ. | Download the period's template, fill it in, then upload it to review the changes before saving. |
+| `attendance.import.desc` | نزّل قالب الفترة (موظف في كل صف ويوم في كل عمود)، اختر الموقع أو نوع اليوم في كل خانة، ثم ارفعه لمراجعة التغييرات قبل الحفظ. | Download the period's template (one employee per row, one day per column), pick the site or day type in each cell, then upload it to review the changes before saving. |
 | `attendance.import.download` | تنزيل القالب | Download template |
 | `attendance.import.file` | ملف Excel (‎.xlsx، حتى 5 ميجابايت) | Excel file (.xlsx, up to 5 MB) |
 | `attendance.import.badFile` | اختر ملف ‎.xlsx لا يتجاوز 5 ميجابايت. | Choose an .xlsx file of 5 MB or less. |
@@ -1721,13 +1707,12 @@ Each remaining error kind gets one assertion in a data-provider test, `test_each
 | `attendance.import.summary` | تغييرات: {{changes}} · بدون تغيير: {{unchanged}} · أخطاء: {{errors}} | Changes: {{changes}} · Unchanged: {{unchanged}} · Errors: {{errors}} |
 | `attendance.import.changes` | التغييرات | Changes |
 | `attendance.import.errors` | الأخطاء | Errors |
-| `attendance.import.row` | الصف | Row |
-| `attendance.import.field` | الحقل | Field |
+| `attendance.import.cell` | الخانة | Cell |
 | `attendance.import.from` | القيمة الحالية | Current value |
 | `attendance.import.to` | القيمة الجديدة | New value |
 | `attendance.import.message` | الخطأ | Error |
 | `attendance.import.confirm` | تأكيد الحفظ | Confirm and save |
-| `attendance.import.done` | تم حفظ {{applied}} يومًا، وتُرك {{skipped}} صفًا به أخطاء. | Saved {{applied}} days; skipped {{skipped}} rows with errors. |
+| `attendance.import.done` | تم حفظ {{applied}} يومًا، وتُركت {{skipped}} خانة بها أخطاء. | Saved {{applied}} days; skipped {{skipped}} cells with errors. |
 
 - [ ] **Step 4: Run every frontend gate** — `cd frontend && npm test && npm run build && npm run lint` → PASS.
 
@@ -1739,11 +1724,11 @@ Each remaining error kind gets one assertion in a data-provider test, `test_each
 
 ### Gate 3 (controller)
 
-Run the spec's import walkthrough in the browser as HR, for engineers 26-09 → 25-10:
-1. Download the template and open it once to check the greyed columns, the hidden lists sheet and the dropdowns. Put one screenshot of the open file in Excel or LibreOffice into the gate folder.
-2. Edit 3 rows plus 1 bad row, then upload.
-3. The preview must show 3 changes and 1 error.
-4. Confirm. Only the 3 are saved, and the grid shows them.
+Run the import walkthrough in the browser as HR, for engineers 26-09 → 25-10:
+1. Download the template and open it once to check the grid, the greyed cells, the hidden `lists` and `versions` sheets and the dropdowns. Put one picture of the open file into the gate folder: a screenshot from Excel or LibreOffice if either is installed, otherwise a rendering of the sheet, labelled as such.
+2. Edit 3 cells plus 1 bad cell, then upload.
+3. The preview must show 3 changes and 1 error, with the bad cell's address.
+4. Confirm. Only the 3 are saved, and the Day sheet and the grid show them.
 
 Take the screens at 375, 1024 and 1440 px, ar and en, light and dark, saved as `.claude/gate-1c-3/<n>-<screen>-<width>-<lang>-<theme>.png`:
 1. The import tab, empty.
@@ -1911,8 +1896,8 @@ Each point names the default this plan uses.
 6. **Alert scope.** Default: per group, the period containing the date and the one before it, each only if unlocked. No notification when every count is 0. Catch-up comes from the cumulative counts; past dates are not backfilled.
 7. **Notification endpoints.** Default: auth-only (each user sees only their own rows), with no new permission; `RbacTest`'s auth-only list grows.
 8. **Locking before the period ends.** Default: allowed; it materializes derived days for the whole period, future days included.
-9. **Excel row semantics.** Default: an all-blank row is skipped (Excel never clears a day); a non-blank row is the day's full new state.
-10. **Stale template protection.** Default: a hidden `version` column, compared on upload; a mismatch is a `concurrency_conflict` row error.
+9. **Excel cell semantics** (revised 2026-10-20 for the owner's grid template). A blank cell is no change, never a clear; a non-blank cell sets only the day's site or day type, and the rest follows the P28 keep rule (Slice 3 G1–G3).
+10. **Stale template protection** (revised 2026-10-20). A hidden `versions` sheet in the grid's shape, compared per cell on upload; a mismatch is a `concurrency_conflict` cell error (Slice 3 G4).
 11. **The leave-code unique index.** It covers every code, `other` included, as the spec says. `2026_10_19_000003_add_saturday_leave_code` runs first and is idempotent:
     - it recodes every active `friday` leave site whose `name_ar` contains «السبت» to `saturday`, which clears the dev DB's known duplicate (the owner's «اجازه السبت»);
     - it inserts «اجازة السبت» if no active `saturday` exists;
