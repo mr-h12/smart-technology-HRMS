@@ -2,9 +2,13 @@
 
 namespace Tests\Feature;
 
+use App\Modules\Attendance\Application\AttendanceTemplate;
+use App\Modules\Attendance\Infrastructure\XlsxTemplateWriter;
+use App\Modules\Employees\Application\EmployeeService;
 use App\Modules\Employees\Infrastructure\Eloquent\Employee;
 use App\Modules\Identity\Infrastructure\Eloquent\Permission;
 use App\Modules\Identity\Infrastructure\Eloquent\Role;
+use App\Modules\Identity\Infrastructure\Eloquent\User;
 use App\Modules\Sites\Infrastructure\Eloquent\Site;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Testing\TestResponse;
@@ -12,6 +16,7 @@ use OpenSpout\Reader\XLSX\Reader;
 use Symfony\Component\HttpFoundation\BinaryFileResponse;
 use Tests\AttendanceFixtures;
 use Tests\TestCase;
+use TypeError;
 use ZipArchive;
 
 class AttendanceTemplateTest extends TestCase
@@ -26,6 +31,8 @@ class AttendanceTemplateTest extends TestCase
 
     private string $site;
 
+    private User $hr;
+
     /** The downloaded file's bytes, kept for the XML checks. */
     private string $xlsx = '';
 
@@ -33,7 +40,7 @@ class AttendanceTemplateTest extends TestCase
     {
         parent::setUp();
         $this->cairo('2026-10-20 12:00');
-        $this->signIn('hr');
+        $this->hr = $this->signIn('hr');
         $this->leave = $this->leaveTypes();
         $this->site = $this->workSite('Site-1');
     }
@@ -43,7 +50,7 @@ class AttendanceTemplateTest extends TestCase
         [$one, $two] = $this->twoEngineers();
 
         $grid = $this->download(self::ENGINEERS)['attendance']['rows'];
-        $dates = array_map(fn (int $i) => date('Y-m-d', strtotime("2026-09-26 +{$i} days")), range(0, 29));
+        $dates = $this->dates();
         $this->assertSame(['الرقم الوظيفي', 'الاسم', ...$dates], $grid[0]);
         $this->assertCount(3, $grid);
 
@@ -143,10 +150,52 @@ class AttendanceTemplateTest extends TestCase
         $this->assertSame('Present', $this->zipRows('lists')[0][0]);
     }
 
-    public function test_template_needs_attendance_edit(): void
+    public function test_template_needs_attendance_view_and_edit(): void
     {
-        $this->signIn('ceo');
+        $this->signIn('ceo');                                                                       // view.all only
         $this->get('/api/v1/attendance/template?'.self::ENGINEERS)->assertForbidden();
+        $this->actingAs($this->userWith(null, 'all'), 'api');                                       // edit.all only
+        $this->get('/api/v1/attendance/template?'.self::ENGINEERS)->assertForbidden();
+    }
+
+    public function test_the_header_is_built_in_either_language(): void
+    {
+        app()->setLocale('ar');
+        $this->assertSame(['الرقم الوظيفي', 'الاسم', '2026-09-26'], AttendanceTemplate::header(['2026-09-26']));
+        $this->assertSame(['Employee ID', 'Name', '2026-09-26'], AttendanceTemplate::header(['2026-09-26'], 'en'));
+        app()->setLocale('en');
+        $this->assertSame(['الرقم الوظيفي', 'الاسم', '2026-09-26'], AttendanceTemplate::header(['2026-09-26'], 'ar'));
+    }
+
+    public function test_grey_cells_follow_termination_and_type_changes(): void
+    {
+        $this->employee('engineer', '2026-01-01', ['termination_date' => '2026-10-05']);
+        $movedOut = $this->employee('engineer');
+        $movedIn = $this->employee('day_laborer');
+        app(EmployeeService::class)->addTypeChange($movedOut, ['type' => 'day_laborer', 'effective_from' => '2026-10-16']);
+        app(EmployeeService::class)->addTypeChange($movedIn, ['type' => 'engineer', 'effective_from' => '2026-10-12']);
+
+        $this->assertCount(4, $this->download(self::ENGINEERS)['attendance']['rows']);
+        $dates = $this->dates();
+        $refs = fn (int $row, callable $grey) => array_map(fn (int $i) => $this->column($i).$row, array_keys(array_filter($dates, $grey)));
+        $this->assertEqualsCanonicalizing([
+            ...$refs(2, fn (string $d) => $d > '2026-10-05'),                                       // terminated 10-05
+            ...$refs(3, fn (string $d) => $d >= '2026-10-16'),                                      // a day laborer from 10-16
+            ...$refs(4, fn (string $d) => $d < '2026-10-12' || $d > '2026-10-20'),                  // an engineer from 10-12; today 10-20
+        ], $this->greyCells());
+    }
+
+    public function test_a_failed_write_leaves_no_temp_files(): void
+    {
+        $leftovers = fn () => [...glob(sys_get_temp_dir().'/attendance-template-*'), ...glob(sys_get_temp_dir().'/xlsx*')];
+        $before = $leftovers();
+        $grid = ['header' => ['Employee ID', 'Name', '2026-09-26'], 'rows' => [['code' => 1, 'name' => 'Engineer-1', 'cells' => [1], 'versions' => [null], 'grey' => []]], 'choices' => ['Site-1']];
+        try {
+            app(XlsxTemplateWriter::class)->write($grid, 'ar');
+            $this->fail('a cell that is not a string stops the write');
+        } catch (TypeError) {
+        }
+        $this->assertSame($before, $leftovers());
     }
 
     public function test_template_validates_the_period(): void
@@ -156,24 +205,22 @@ class AttendanceTemplateTest extends TestCase
         $this->getJson('/api/v1/attendance/template?group=nobody&period_start=2026-09-26')->assertStatus(422);
     }
 
-    public function test_template_follows_own_scope(): void
+    public function test_template_scope_is_the_narrower_of_view_and_edit(): void
     {
-        $role = Role::create(['slug' => 'site-lead', 'name' => 'Site lead', 'name_ar' => 'مشرف']);
-        foreach (['view', 'edit'] as $action) {
-            $role->permissions()->attach(Permission::create(['resource' => 'attendance', 'action' => $action, 'scope' => 'own'])->getKey());
+        $this->assign($this->employee('engineer'), $this->makeUser('manager'));
+        $leads = [];
+        foreach ([['own', 'all'], ['all', 'own'], ['own', 'own']] as [$view, $edit]) {
+            $lead = $this->userWith($view, $edit);
+            $leads["view.{$view} + edit.{$edit}"] = [$lead, $this->assign($this->employee('engineer'), $lead)];
         }
-        [$lead, $other] = [$this->makeUser('site-lead'), $this->makeUser('manager')];
-        [$mine, $theirs] = [$this->employee('engineer'), $this->employee('engineer')];
-        $this->postJson("/api/v1/employees/{$mine}/manager-assignments", ['manager_id' => $lead->id, 'effective_from' => '2026-10-01'])->assertCreated();
-        $this->postJson("/api/v1/employees/{$theirs}/manager-assignments", ['manager_id' => $other->id, 'effective_from' => '2026-10-01'])->assertCreated();
 
-        $this->assertCount(3, $this->download(self::ENGINEERS)['attendance']['rows']);       // HR: both
-
-        $this->actingAs($lead, 'api');
-        $sheets = $this->download(self::ENGINEERS);
-        $this->assertCount(2, $sheets['attendance']['rows']);
-        $this->assertSame($this->code($mine), $sheets['attendance']['rows'][1][0]);
-        $this->assertCount(2, $sheets['versions']['rows']);
+        $this->assertCount(5, $this->download(self::ENGINEERS)['attendance']['rows']);              // HR (view.all + edit.all): all four
+        foreach ($leads as $grants => [$lead, $mine]) {
+            $this->actingAs($lead, 'api');
+            $sheets = $this->download(self::ENGINEERS);
+            $this->assertSame([$this->code($mine)], array_column(array_slice($sheets['attendance']['rows'], 1), 0), $grants);
+            $this->assertCount(2, $sheets['versions']['rows'], $grants);
+        }
     }
 
     /** @return array{string, string} Engineer-1 (stored 10-01 at Site-1) and Engineer-2 (hired 10-10); 10-06 a holiday */
@@ -185,6 +232,43 @@ class AttendanceTemplateTest extends TestCase
         $this->putDay($one, '2026-10-01', ['site_id' => $this->site])->assertOk()->assertJsonPath('data.version', 1);
 
         return [$one, $two];
+    }
+
+    /** A user whose role holds attendance.view and attendance.edit at these scopes; null = not held. */
+    private function userWith(?string $view, ?string $edit): User
+    {
+        $slug = 'lead-'.($view ?? 'none').'-'.($edit ?? 'none');
+        $role = Role::create(['slug' => $slug, 'name' => $slug, 'name_ar' => $slug]);
+        foreach (['view' => $view, 'edit' => $edit] as $action => $scope) {
+            if ($scope !== null) {
+                $role->permissions()->attach(Permission::firstOrCreate(['resource' => 'attendance', 'action' => $action, 'scope' => $scope])->getKey());
+            }
+        }
+
+        return $this->makeUser($slug);
+    }
+
+    /** Assigns the employee to the manager from 10-01, as HR; returns the employee id. */
+    private function assign(string $employeeId, User $manager): string
+    {
+        $this->actingAs($this->hr, 'api');
+        $this->postJson("/api/v1/employees/{$employeeId}/manager-assignments", ['manager_id' => $manager->id, 'effective_from' => '2026-10-01'])->assertCreated();
+
+        return $employeeId;
+    }
+
+    /** @return list<string> the engineers' period 2026-09-26 .. 2026-10-25 */
+    private function dates(): array
+    {
+        return array_map(fn (int $i) => date('Y-m-d', strtotime("2026-09-26 +{$i} days")), range(0, 29));
+    }
+
+    /** The attendance column letter of the 0-based day index (day 0 is column C). */
+    private function column(int $day): string
+    {
+        $i = $day + 2;
+
+        return ($i >= 26 ? chr(64 + intdiv($i, 26)) : '').chr(65 + $i % 26);
     }
 
     private function code(string $employeeId): string
@@ -239,7 +323,7 @@ class AttendanceTemplateTest extends TestCase
 
     private function tempXlsx(): string
     {
-        $path = tempnam(sys_get_temp_dir(), 'template-test-').'.xlsx';
+        $path = (string) tempnam(sys_get_temp_dir(), 'template-test-');
         file_put_contents($path, $this->xlsx);
 
         return $path;

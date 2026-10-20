@@ -59,11 +59,11 @@ final class AttendanceController
         return ApiEnvelope::single($request, $this->grid->sheet(EmployeeType::from($q['group']), $q['date'], RequestScope::ownerId($request)));
     }
 
-    /** The Excel grid template of one period; own scope narrows it to the caller's employees, as the sheet. */
+    /** The Excel grid template of one period. It shows and later writes days, so it needs view and edit, and the narrower scope wins. */
     public function template(Request $request): BinaryFileResponse
     {
         $q = $request->validate(['group' => ['required', Rule::enum(EmployeeType::class)], 'period_start' => ['required', 'date_format:Y-m-d']]);
-        $path = $this->template->file(EmployeeType::from($q['group']), $q['period_start'], RequestScope::ownerId($request));
+        $path = $this->template->file(EmployeeType::from($q['group']), $q['period_start'], RequestScope::narrowestOwnerId($request, 'attendance.view', 'attendance.edit'));
 
         return response()->download($path, "attendance-{$q['group']}-{$q['period_start']}.xlsx", ['Content-Type' => 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'])
             ->deleteFileAfterSend();

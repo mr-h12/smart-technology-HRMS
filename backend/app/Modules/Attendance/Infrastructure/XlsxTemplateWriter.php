@@ -15,6 +15,8 @@ use OpenSpout\Writer\XLSX\Options;
 use OpenSpout\Writer\XLSX\Validation\CellReference;
 use OpenSpout\Writer\XLSX\Validation\Rules\ListValidationRule;
 use OpenSpout\Writer\XLSX\Writer;
+use RuntimeException;
+use Throwable;
 
 /** Writes AttendanceTemplate's grid as .xlsx: the visible `attendance` grid, then the hidden `lists` (the dropdown) and `versions` (G4). */
 final class XlsxTemplateWriter
@@ -27,17 +29,39 @@ final class XlsxTemplateWriter
      */
     public function write(array $grid, string $locale): string
     {
-        $text = new Style(format: '@');
-        $grey = new Style(backgroundColor: self::GREY, format: '@');
         $options = new Options;
         $rows = count($grid['rows']);
         if ($rows > 0 && $grid['choices'] !== []) {
             // Day columns C.. of every employee row; CellReference has no whole-column form, so the list range is exact.
             $options->addValidation(2, 2, count($grid['header']) - 1, $rows + 1, new ListValidationRule(new CellReference(0, 1, 0, count($grid['choices']), sheetName: 'lists')));
         }
-        $path = (string) tempnam(sys_get_temp_dir(), 'attendance-template-');
+        $path = tempnam(sys_get_temp_dir(), 'attendance-template-');
+        if ($path === false) {
+            throw new RuntimeException('Cannot create a temp file for the attendance template.');
+        }
         $writer = new Writer($options);
-        $writer->openToFile($path);
+        try {
+            $writer->openToFile($path);
+            $this->fill($writer, $grid, $locale);
+            $writer->close();
+        } catch (Throwable $e) {
+            try {
+                $writer->close();   // also removes OpenSpout's working folder
+            } finally {
+                unlink($path);
+            }
+
+            throw $e;
+        }
+
+        return $path;
+    }
+
+    /** @param  array{header: non-empty-list<string>, rows: list<array{code: int, name: string, cells: list<?string>, versions: list<?int>, grey: list<int>}>, choices: list<string>}  $grid */
+    private function fill(Writer $writer, array $grid, string $locale): void
+    {
+        $text = new Style(format: '@');
+        $grey = new Style(backgroundColor: self::GREY, format: '@');
 
         $writer->getCurrentSheet()->setName('attendance')->setSheetView(new SheetView(rightToLeft: $locale === 'ar', freezeRow: 2, freezeColumn: 'C'));
         $writer->addRow(self::row($grid['header'], new Style(fontBold: true, format: '@')));
@@ -61,9 +85,6 @@ final class XlsxTemplateWriter
             $versions = array_map(fn (?int $v) => $v === null ? new EmptyCell(null) : new NumericCell($v), $r['versions']);
             $writer->addRow(new Row([self::cell((string) $r['code']), self::cell($r['name']), ...$versions]));
         }
-        $writer->close();
-
-        return $path;
     }
 
     /** @param  list<?string>  $values */

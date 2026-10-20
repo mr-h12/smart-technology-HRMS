@@ -81,7 +81,7 @@ Route::middleware('auth')->group(function (): void {
         Route::get('grid', 'grid')->middleware('permission:attendance.view');
         Route::get('missing', 'missing')->middleware('permission:attendance.view');
         Route::get('sheet', 'sheet')->middleware('permission:attendance.view');
-        Route::get('template', 'template')->middleware('permission:attendance.edit');
+        Route::get('template', 'template')->middleware(['permission:attendance.view', 'permission:attendance.edit']);
         Route::post('days/bulk', 'bulk')->middleware('permission:attendance.edit');
         // A registrar where() would replace whereUuid(), so the date shape goes on each route.
         Route::middleware([])->whereUuid('employee')->group(function (): void {

@@ -11,7 +11,7 @@ use Illuminate\Auth\AuthenticationException;
 use Illuminate\Http\Request;
 use Symfony\Component\HttpFoundation\Response;
 
-/** `permission:resource.action` on a route; leaves the decision in the request for row-level scoping. */
+/** `permission:resource.action` on a route; leaves the decision in the request for row-level scoping (the last one, and one per ability). */
 final class AuthorizePermission
 {
     public const ATTRIBUTE = 'identity.authorization';
@@ -31,6 +31,7 @@ final class AuthorizePermission
             throw AuthorizationRefused::of($ability);
         }
         $request->attributes->set(self::ATTRIBUTE, $decision);
+        $request->attributes->set(self::ATTRIBUTE.':'.$ability, $decision);
 
         return $next($request);
     }

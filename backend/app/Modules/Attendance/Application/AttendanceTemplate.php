@@ -28,14 +28,14 @@ final class AttendanceTemplate
     }
 
     /**
-     * Row 1 of the attendance and versions sheets (G7), in the request language; the import checks an upload against it.
+     * Row 1 of the attendance and versions sheets (G7), in $locale (default: the request language); the import checks an upload against it.
      *
      * @param  list<string>  $dates
      * @return non-empty-list<string>
      */
-    public static function header(array $dates): array
+    public static function header(array $dates, ?string $locale = null): array
     {
-        return [(string) __('attendance.template.code'), (string) __('attendance.template.name'), ...$dates];
+        return [(string) __('attendance.template.code', [], $locale), (string) __('attendance.template.name', [], $locale), ...$dates];
     }
 
     /**
