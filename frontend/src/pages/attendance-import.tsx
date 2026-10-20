@@ -1,13 +1,13 @@
-import { ArrowRight, Download, FileSearch, Save } from 'lucide-react'
+import { ArrowRight, Download, FileSearch, Save, Upload } from 'lucide-react'
 import { useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { ErrorBanner, Field, ltrDates } from '@/components/form'
-import { Button } from '@/components/ui/button'
+import { Button, buttonVariants } from '@/components/ui/button'
 import { Card, CardHeader, CardTitle } from '@/components/ui/card'
-import { Input } from '@/components/ui/input'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 import { api, apiBlob } from '@/lib/api'
 import { useSave } from '@/lib/query'
+import { cn } from '@/lib/utils'
 
 const MAX_BYTES = 5 * 1024 * 1024 // the server's own limit (max:5120 KB)
 
@@ -55,7 +55,7 @@ export function ImportTab({ group, periodStart }: { group: string; periodStart: 
       a.href = URL.createObjectURL(blob)
       a.download = `attendance-${group}-${periodStart}.xlsx`
       a.click()
-      setTimeout(() => URL.revokeObjectURL(a.href))
+      setTimeout(() => URL.revokeObjectURL(a.href), 1000) // after the browser has started reading it
     })
   // a new file drops the old preview, so confirm can only ever send the file that was previewed
   function pick(f: File | undefined) {
@@ -79,7 +79,16 @@ export function ImportTab({ group, periodStart }: { group: string; periodStart: 
             <Download aria-hidden /> {t('attendance.import.download')}
           </Button>
           <Field name="file" label={t('attendance.import.file')} errs={bad ? { file: t('attendance.import.badFile') } : {}}>
-            {(p) => <Input {...p} type="file" accept=".xlsx" className="h-11 py-2.5" disabled={busy} onChange={(e) => pick(e.target.files?.[0])} />}
+            {(p) => (
+              // the real input stays (named by the field label) but hidden: its own "Choose File" text is in the browser's language, not the app's
+              <div className="flex min-w-0 items-center gap-3">
+                <input {...p} type="file" accept=".xlsx" className="peer sr-only" disabled={busy} onChange={(e) => pick(e.target.files?.[0])} />
+                <label htmlFor={p.id} aria-hidden className={cn(buttonVariants({ variant: 'outline' }), 'h-11 cursor-pointer peer-focus-visible:outline-2 peer-focus-visible:outline-solid peer-focus-visible:outline-offset-2 peer-focus-visible:outline-ring peer-disabled:pointer-events-none peer-disabled:opacity-50 peer-aria-invalid:border-destructive')}>
+                  <Upload aria-hidden /> {t('attendance.import.choose')}
+                </label>
+                <span className="min-w-0 text-sm break-all text-muted-foreground">{file?.name ?? t('attendance.import.noFile')}</span>
+              </div>
+            )}
           </Field>
           <Button type="button" className="h-11" disabled={busy || !file} onClick={check}>
             <FileSearch aria-hidden /> {t('attendance.import.preview')}
@@ -116,7 +125,7 @@ function Changes({ rows }: { rows: Change[] }) {
   const employee = (c: Change) => (
     <span className="flex min-w-0 items-center gap-2">
       <span className="tabular text-muted-foreground">{c.code}</span>
-      <bdi className="truncate">{c.name_ar}</bdi>
+      <bdi className="min-w-0 break-words">{c.name_ar}</bdi>
     </span>
   )
   return (

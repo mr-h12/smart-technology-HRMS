@@ -585,6 +585,8 @@
       "desc": "Download the period's template (one employee per row, one day per column), pick the site or day type in each cell, then upload it to review the changes before saving.",
       "download": "Download template",
       "file": "Excel file (.xlsx, up to 5 MB)",
+      "choose": "Choose file",
+      "noFile": "No file chosen",
       "badFile": "Choose an .xlsx file of 5 MB or less.",
       "preview": "Preview changes",
       "notSaved": "Nothing is saved yet. Review the preview, then confirm.",
