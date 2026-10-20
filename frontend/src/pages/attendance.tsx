@@ -1,4 +1,4 @@
-import { CalendarCheck, CalendarX, ChevronLeft, ChevronRight, ListChecks, Lock, LockOpen, Users } from 'lucide-react'
+import { CalendarCheck, CalendarX, ChevronLeft, ChevronRight, FileSpreadsheet, ListChecks, Lock, LockOpen, Users } from 'lucide-react'
 import { useId, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { useSearchParams } from 'react-router-dom'
@@ -20,12 +20,13 @@ import { cn } from '@/lib/utils'
 import { useAuth } from '@/lib/auth'
 import { SITES, useApi, useList, useSave } from '@/lib/query'
 import { DayEditor } from './attendance-day'
+import { ImportTab } from './attendance-import'
 import { DaySheet } from './attendance-sheet'
 import { NotFoundPage } from './pages'
 
 const GROUPS = ['office', 'engineer', 'permanent_worker', 'day_laborer']
 const PER_PAGE = 50
-const TABS = ['sheet', 'grid'] // the import tab joins with the template import
+const TABS = ['sheet', 'grid', 'import'] // import only with attendance.edit
 
 type Period = { group: string; start: string; end: string; prev_start: string; next_start: string | null; is_locked: boolean; lock: { locked_by: { name: string } | null; locked_at: string | null } | null; missing: number }
 type Day = { date: string; state: 'not_employed' | 'stored' | 'derived' | 'future' | 'missing'; site_id: string | null; leave_code: string | null }
@@ -55,7 +56,8 @@ export function AttendancePage() {
   const group = GROUPS.find((g) => g === params.get('group')) ?? 'engineer'
   const chosen = params.get('period')
   const date = pickDate(params.get('date'))
-  const tab = TABS.find((x) => x === params.get('tab')) ?? TABS[0]
+  const { can } = useAuth()
+  const tab = TABS.find((x) => x === params.get('tab') && (x !== 'import' || can('attendance.edit'))) ?? TABS[0]
   const set = (patch: Record<string, string | null>) =>
     setParams((p) => {
       for (const [k, v] of Object.entries(patch)) {
@@ -64,7 +66,6 @@ export function AttendancePage() {
       }
       return p
     }, { replace: true })
-  const { can } = useAuth()
   const allowed = can('attendance.view') // without it nothing is fetched and the page is not found
   // the sheet's period is the one holding its date; the grid's is the chosen one
   // the sheet keeps the last period while the next date's loads, so the header does not blink inside one period; a kept period
@@ -137,6 +138,11 @@ export function AttendancePage() {
           <TabsTrigger value="grid">
             <CalendarCheck className="size-4" aria-hidden /> {t('attendance.tab.grid')}
           </TabsTrigger>
+          {can('attendance.edit') && (
+            <TabsTrigger value="import">
+              <FileSpreadsheet className="size-4" aria-hidden /> {t('attendance.tab.import')}
+            </TabsTrigger>
+          )}
         </TabsList>
         <TabsContent value="sheet" className="space-y-4">
           <Card className="overflow-hidden [&>:last-child]:border-b-0">{bar}</Card>
@@ -148,6 +154,12 @@ export function AttendancePage() {
             {start ? <Grid key={`${group}/${start}`} group={group} start={start} onOpenDay={openDay} /> : !err && <TableSkeleton rows={8} />}
           </Card>
         </TabsContent>
+        {can('attendance.edit') && (
+          <TabsContent value="import" className="space-y-4">
+            <Card className="overflow-hidden [&>:last-child]:border-b-0">{bar}</Card>
+            {start ? <ImportTab key={`${group}/${start}`} group={group} periodStart={start} /> : !err && <TableSkeleton rows={3} />}
+          </TabsContent>
+        )}
       </Tabs>
       {period && dlg === 'lock' && <LockDialog period={period} onClose={() => setDlg(undefined)} />}
       {period && dlg === 'reopen' && (

@@ -462,7 +462,8 @@
     "empty": "No employees in this group during this period.",
     "tab": {
       "grid": "Period grid",
-      "sheet": "Day sheet"
+      "sheet": "Day sheet",
+      "import": "Import from Excel"
     },
     "day": {
       "title": "{{date}} — {{name}}",
@@ -579,6 +580,24 @@
         "undo": "Undo",
         "clear": "Clear"
       }
+    },
+    "import": {
+      "desc": "Download the period's template (one employee per row, one day per column), pick the site or day type in each cell, then upload it to review the changes before saving.",
+      "download": "Download template",
+      "file": "Excel file (.xlsx, up to 5 MB)",
+      "badFile": "Choose an .xlsx file of 5 MB or less.",
+      "preview": "Preview changes",
+      "notSaved": "Nothing is saved yet. Review the preview, then confirm.",
+      "summary": "Changes: {{changes}} · Unchanged: {{unchanged}} · Errors: {{errors}}",
+      "changes": "Changes",
+      "errors": "Errors",
+      "cell": "Cell",
+      "date": "Date",
+      "from": "Current value",
+      "to": "New value",
+      "message": "Error",
+      "confirm": "Confirm and save",
+      "done": "Saved {{applied}} days; skipped {{skipped}} cells with errors."
     }
   },
   "holiday": {
