@@ -1,4 +1,4 @@
-import { CalendarOff, Check, CircleHelp, Clock, type LucideIcon, Stethoscope, UserX } from 'lucide-react'
+import { CalendarOff, Check, CircleHelp, Clock, Eye, type LucideIcon, Stethoscope, UserX } from 'lucide-react'
 import { useId } from 'react'
 import { useTranslation } from 'react-i18next'
 import { localName, type Row } from '@/components/form'
@@ -30,7 +30,8 @@ const SELECTED = 'bg-accent hover:bg-accent'
 const TOTALS = [['worked', 'text-success', 'attendance.sheet.kpi.worked'], ['leave', 'text-info', 'attendance.sheet.kpi.leave'], ['absent', 'text-destructive', 'attendance.sheet.kpi.absent'], ['missing', 'text-warning', 'attendance.state.missing']] as const
 
 /**
- * One page of the day sheet: a table from xl up, cards below it (below xl the table is wider than its card, in both groups). Writes go back through `onApply` (the sheet's `apply()`).
+ * One page of the day sheet: a table from xl up, cards below it (below xl the table is wider than its card, in both groups). Below 2xl
+ * the table's actions are icons, and its totals always sit in two columns, so the table fits its card. Writes go back through `onApply` (the sheet's `apply()`).
  * `cursor` is the keyboard row (J/K): it carries `aria-current` and a ring.
  */
 export function SheetRows({ rows, office, editable, date, sites, selected, pending, cursor, leaveSite, onToggle, onApply, onOpenDay }: {
@@ -73,13 +74,13 @@ export function SheetRows({ rows, office, editable, date, sites, selected, pendi
       <span className="sr-only">{t('attendance.sheet.select', { name: name(r) })}</span>
     </label>
   )
-  // the aria-label always names the action and the employee
-  const quick = (r: SheetRow, h: string) => QUICK.map(([action, label, Icon, tone]) => (
+  // compact (the table): icon-only below 2xl, named by its tooltip; the aria-label always names the action and the employee
+  const quick = (r: SheetRow, h: string, compact = false) => QUICK.map(([action, label, Icon, tone]) => (
     <Button key={label} type="button" variant="outline" size="sm" className={cn(FOCUS, h, 'px-2.5', tone)} disabled={pending.has(r.employee.id) || noLeave(action) || noSite(action, r)}
-      {...(noSite(action, r) && { title: t('attendance.sheet.noLastSite'), 'aria-describedby': noSiteId })}
+      {...(compact && { title: t(label) })} {...(noSite(action, r) && { title: t('attendance.sheet.noLastSite'), 'aria-describedby': noSiteId })}
       aria-label={t('attendance.sheet.rowAction', { action: t(label), name: name(r) })} onClick={() => onApply(action, r, t('attendance.sheet.actionOn', { action: t(label), name: name(r) }))}>
       <Icon aria-hidden />
-      {t(label)}
+      <span className={cn(compact && 'hidden 2xl:inline')}>{t(label)}</span>
     </Button>
   ))
   const inTime = (r: SheetRow, h: string) => {
@@ -115,19 +116,22 @@ export function SheetRows({ rows, office, editable, date, sites, selected, pendi
     if (s === 'missing' && r.last_site_id) return <span className="text-xs text-muted-foreground">{t('attendance.sheet.lastSite', { site: siteName(r.last_site_id) })}</span>
     return null
   }
-  const details = (r: SheetRow, cls: string) => (
-    <Button type="button" variant="outline" size="sm" className={cn(FOCUS, cls)} aria-label={t('attendance.sheet.rowAction', { action: t('attendance.sheet.action.details'), name: name(r) })} onClick={() => onOpenDay(r.employee, date)}>
-      {t('attendance.sheet.action.details')}
+  const details = (r: SheetRow, cls: string, compact = false) => (
+    <Button type="button" variant="outline" size="sm" className={cn(FOCUS, cls, compact && 'px-2.5')} {...(compact && { title: t('attendance.sheet.action.details') })}
+      aria-label={t('attendance.sheet.rowAction', { action: t('attendance.sheet.action.details'), name: name(r) })} onClick={() => onOpenDay(r.employee, date)}>
+      {compact && <Eye aria-hidden />}
+      <span className={cn(compact && 'hidden 2xl:inline')}>{t('attendance.sheet.action.details')}</span>
     </Button>
   )
   // the keyboard cursor: aria-current plus an inset ring (the sheet scrolls it into view)
   const here = (r: SheetRow) => (r.employee.id === cursor ? true : undefined)
-  const totals = (r: SheetRow) => (
-    <div className="grid grid-cols-4 gap-3">
+  // the table's totals: two content-sized columns of "number label" (fr tracks let the labels overlap); a card spreads four across
+  const totals = (r: SheetRow, table = false) => (
+    <div className={table ? 'grid w-max grid-cols-[auto_auto] gap-x-4 gap-y-0.5' : 'grid grid-cols-4 gap-3'}>
       {TOTALS.map(([k, tone, label]) => (
-        <div key={k} className="min-w-14">
+        <div key={k} className={table ? 'flex items-baseline gap-1' : 'min-w-14'}>
           <div className={cn('text-sm font-semibold tabular', r.totals[k] ? tone : 'text-muted-foreground')}>{r.totals[k]}</div>
-          <div className="truncate text-[11px] text-muted-foreground">{t(office && k === 'worked' ? 'attendance.present' : label)}</div>
+          <div className={cn('text-[11px] text-muted-foreground', !table && 'truncate')}>{t(office && k === 'worked' ? 'attendance.present' : label)}</div>
         </div>
       ))}
     </div>
@@ -161,7 +165,7 @@ export function SheetRows({ rows, office, editable, date, sites, selected, pendi
               <TableRow key={r.employee.id} aria-current={here(r)} className={cn(selected.has(r.employee.id) && SELECTED, here(r) && 'ring-2 ring-primary ring-inset')}>
                 {editable && <TableCell className="px-1 py-0 first:ps-2">{check(r)}</TableCell>}
                 <TableCell className="tabular text-muted-foreground">{r.employee.code}</TableCell>
-                <TableCell>
+                <TableCell className="whitespace-normal">
                   <bdi className="font-medium">{name(r)}</bdi>
                   {r.employee.department && <div className="text-xs text-muted-foreground">{r.employee.department}</div>}
                 </TableCell>
@@ -174,11 +178,11 @@ export function SheetRows({ rows, office, editable, date, sites, selected, pendi
                 </TableCell>
                 <TableCell>
                   <div className="flex items-center justify-end gap-1.5">
-                    {editable && quick(r, 'h-9')}
-                    {details(r, 'h-9')}
+                    {editable && quick(r, 'h-9', true)}
+                    {details(r, 'h-9', true)}
                   </div>
                 </TableCell>
-                <TableCell className={cn('border-s', !selected.has(r.employee.id) && 'bg-muted/40')}>{totals(r)}</TableCell>
+                <TableCell className={cn('border-s', !selected.has(r.employee.id) && 'bg-muted/40')}>{totals(r, true)}</TableCell>
               </TableRow>
             ))}
           </TableBody>

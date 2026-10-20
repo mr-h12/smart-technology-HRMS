@@ -1065,3 +1065,41 @@ test('office totals say present, not at a site', async () => {
   const cards = within(screen.getByRole('list', { name: 'الموظف' })).getAllByRole('listitem')
   for (const c of cards) expect(c.lastElementChild).not.toHaveTextContent('في موقع')
 })
+
+// Gate 2b, D3 round 2: the table fits its card at every width where it shows
+test('below 2xl the table row actions are icons named by their tooltip; the labels come back at 2xl', async () => {
+  mockFetch(routes)
+  edit()
+  const tr = within(await table()).getByText('Engineer-1').closest('tr')!
+  for (const action of ['حاضر', 'غياب', 'مرضي', 'التفاصيل']) {
+    const button = within(tr).getByRole('button', { name: `${action} Engineer-1` })
+    expect(button).toHaveAttribute('title', action)
+    expect(within(button).getByText(action)).toHaveClass('hidden', '2xl:inline')
+  }
+  // a card keeps its labelled buttons and no tooltip
+  const card = within(screen.getByRole('list', { name: 'الموظف' })).getByText('Engineer-1').closest('li')!
+  expect(within(card).getByRole('button', { name: 'التفاصيل Engineer-1' })).not.toHaveAttribute('title')
+  expect(within(within(card).getByRole('button', { name: 'حاضر Engineer-1' })).getByText('حاضر')).not.toHaveClass('hidden')
+})
+
+test('a disabled Present keeps the no-last-site reason as its tooltip in the table', async () => {
+  mockFetch(routes)
+  edit()
+  const tr = within(await table()).getByText('Engineer-3').closest('tr')!
+  expect(within(tr).getByRole('button', { name: 'حاضر Engineer-3' })).toHaveAttribute('title', 'بدون موقع سابق')
+})
+
+test('the table totals sit in two content-sized columns, so their labels never overlap', async () => {
+  mockFetch(routes)
+  open()
+  const cell = within(await table()).getByText('Engineer-1').closest('tr')!.lastElementChild!
+  expect(cell.firstElementChild).toHaveClass('grid-cols-[auto_auto]', 'w-max') // w-max: the table cell must reserve the grid's full width (1280 en cut "Missing" by 2 px)
+  expect(cell.firstElementChild).not.toHaveClass('grid-cols-4')
+  expect(cell).toHaveTextContent(/12.*4.*1.*2/)
+})
+
+test('a long employee name wraps in the table instead of widening it', async () => {
+  mockFetch(routes)
+  open()
+  expect(within(await table()).getByText('Engineer-1').closest('td')).toHaveClass('whitespace-normal')
+})
