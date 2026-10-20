@@ -1103,3 +1103,37 @@ test('a long employee name wraps in the table instead of widening it', async () 
   open()
   expect(within(await table()).getByText('Engineer-1').closest('td')).toHaveClass('whitespace-normal')
 })
+
+// Gate 2b, round 3
+test('the cards have their own select-page box: it selects and clears the page and shows a partial pick', async () => {
+  mockFetch(routes)
+  edit()
+  await table()
+  const list = screen.getByRole('list', { name: 'الموظف' })
+  const all = screen.getAllByRole('checkbox', { name: 'تحديد كل الصفحة' }).find((el) => !el.closest('table'))
+  expect(all).toBeDefined()
+  expect(all!.closest('label')).toHaveClass('xl:hidden', 'min-h-11') // a 44 px line, hidden where the table header has its own
+  await user.click(within(list).getAllByRole('checkbox')[0])
+  expect(all).toHaveProperty('indeterminate', true)
+  await user.click(all!)
+  expect(all).toBeChecked()
+  for (const box of within(list).getAllByRole('checkbox')) expect(box).toBeChecked()
+  await user.click(all!)
+  for (const box of within(list).getAllByRole('checkbox')) expect(box).not.toBeChecked()
+})
+
+test('a reader gets no select-page box on the cards', async () => {
+  mockFetch(routes)
+  open()
+  await table()
+  expect(screen.queryByRole('checkbox', { name: 'تحديد كل الصفحة' })).not.toBeInTheDocument()
+})
+
+test('the Arabic Quick entry hint isolates every left-to-right example, so RTL does not draw 10-20 as 20-10', async () => {
+  mockFetch(routes)
+  edit()
+  await table()
+  const hint = command().getAttribute('placeholder')!
+  expect(hint).toContain('⁦10-20⁩')
+  expect(hint.replace(/⁦[^⁩]*⁩/g, '')).not.toMatch(/\d/) // no digit outside an isolate
+})

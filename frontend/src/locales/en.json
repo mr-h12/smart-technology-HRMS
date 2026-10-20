@@ -546,7 +546,7 @@
         "apply": "Apply"
       },
       "command": "Quick entry",
-      "commandHint": "Employee ID, list (12, 15), range (1001-1050) or name",
+      "commandHint": "ID 12 · list 12, 15 · range 10-20",
       "commandHelp": "Enter marks the IDs present; a name only selects the matches.",
       "matched": "{{count}} matched",
       "unknown": "Not on this sheet: {{ids}}",

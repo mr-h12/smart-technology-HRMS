@@ -68,6 +68,8 @@ export function SheetRows({ rows, office, editable, date, sites, selected, pendi
   // a field row is present at its last site; without one there is nowhere to put it (bulk paths skip such rows with a toast)
   const noSite = (a: SheetAction, r: SheetRow) => a.kind === 'present' && !office && !r.last_site_id
   const noSiteId = useId()
+  // the select-page box: in the table header from xl, on its own line above the cards below it
+  const pageCheck = <input type="checkbox" className={cn(FOCUS, 'size-4 accent-primary')} checked={pageAll} ref={(el) => { if (el) el.indeterminate = pageSome && !pageAll }} onChange={() => onToggle(pageIds, !pageAll)} />
   const check = (r: SheetRow) => (
     <label className="flex size-11 cursor-pointer items-center justify-center">
       <input type="checkbox" className={cn(FOCUS, 'size-4 accent-primary')} checked={selected.has(r.employee.id)} onChange={(e) => onToggle([r.employee.id], e.target.checked)} />
@@ -147,7 +149,7 @@ export function SheetRows({ rows, office, editable, date, sites, selected, pendi
               {editable && (
                 <TableHead className="w-0 px-1 first:ps-2">
                   <label className="flex size-11 cursor-pointer items-center justify-center">
-                    <input type="checkbox" className={cn(FOCUS, 'size-4 accent-primary')} checked={pageAll} ref={(el) => { if (el) el.indeterminate = pageSome && !pageAll }} onChange={() => onToggle(pageIds, !pageAll)} />
+                    {pageCheck}
                     <span className="sr-only">{t('attendance.sheet.selectPage')}</span>
                   </label>
                 </TableHead>
@@ -188,6 +190,12 @@ export function SheetRows({ rows, office, editable, date, sites, selected, pendi
           </TableBody>
         </Table>
       </div>
+      {editable && (
+        <label className="flex min-h-11 cursor-pointer items-center gap-1.5 border-b ps-1.5 pe-4 text-sm font-medium xl:hidden">
+          <span className="flex size-11 items-center justify-center">{pageCheck}</span>
+          {t('attendance.sheet.selectPage')}
+        </label>
+      )}
       <ul aria-label={t('attendance.employee')} className="divide-y xl:hidden">
         {rows.map((r) => (
           <li key={r.employee.id} aria-current={here(r)} className={cn('space-y-3 p-4', selected.has(r.employee.id) && SELECTED, here(r) && 'ring-2 ring-primary ring-inset')}>
