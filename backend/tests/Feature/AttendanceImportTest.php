@@ -5,8 +5,6 @@ namespace Tests\Feature;
 use App\Modules\Attendance\Application\AttendanceImport;
 use App\Modules\Attendance\Infrastructure\Eloquent\AttendanceDay;
 use App\Modules\Employees\Infrastructure\Eloquent\Employee;
-use App\Modules\Identity\Infrastructure\Eloquent\Permission;
-use App\Modules\Identity\Infrastructure\Eloquent\Role;
 use App\Modules\Identity\Infrastructure\Eloquent\User;
 use App\Modules\Sites\Infrastructure\Eloquent\Site;
 use DateTimeImmutable;
@@ -208,6 +206,68 @@ class AttendanceImportTest extends TestCase
         $this->upload('preview', $file)->assertOk()->assertJsonPath('data.summary.errors', 0)->assertJsonPath('data.changes', $expected);
     }
 
+    public function test_an_untouched_cell_on_a_deleted_or_inactive_site_is_unchanged(): void
+    {
+        $deleted = $this->workSite('Site-2');
+        $inactive = $this->workSite('Site-3');
+        $this->putDay($this->eng, '2026-10-01', ['site_id' => $deleted])->assertOk();
+        $this->putDay($this->eng, '2026-10-04', ['site_id' => $inactive])->assertOk();
+        Site::findOrFail($deleted)->delete();
+        Site::whereKey($inactive)->update(['active' => false]);
+        $file = $this->file($this->download());                                                     // still names Site-2 and Site-3
+
+        // 6 cells: the two stored days and the 4 derived days.
+        $this->upload('preview', $file)->assertOk()->assertJsonPath('data.summary', ['cells' => 6, 'changes' => 0, 'unchanged' => 6, 'errors' => 0]);
+        $this->workSite('Site-2');                                                                  // a new site takes the deleted one's name
+        $this->upload('preview', $file)->assertOk()->assertJsonPath('data.summary', ['cells' => 6, 'changes' => 0, 'unchanged' => 6, 'errors' => 0]);
+        $this->upload('confirm', $file)->assertOk()->assertJsonPath('data', ['applied' => 0, 'unchanged' => 6, 'errors' => []]);
+        $day = AttendanceDay::where(['employee_id' => $this->eng, 'date' => '2026-10-01'])->sole();
+        $this->assertSame([$deleted, 1], [$day->site_id, $day->version]);
+    }
+
+    public function test_a_name_shared_by_two_sites_is_unknown(): void
+    {
+        Site::create(['name_ar' => 'Site-2', 'name_en' => 'North', 'kind' => 'work']);
+        Site::create(['name_ar' => 'Site-3', 'name_en' => 'north', 'kind' => 'work', 'active' => false]);
+        $this->workSite('Site-4');
+        $this->workSite('site-4');                                                                  // name_ar differing only in case
+
+        $file = $this->edit($this->download(), [$this->code($this->eng) => ['2026-10-01' => 'North', '2026-10-03' => 'Site-4', '2026-10-04' => 'Site-2']]);
+        $r = $this->upload('preview', $file)->assertOk()->assertJsonPath('data.summary.changes', 1)->assertJsonPath('data.changes.0.to', 'Site-2');
+        $this->assertSame([['H', 'unknown_site'], ['J', 'unknown_site']], array_map(fn (array $e) => [$e['column'], $e['error']], $r->json('data.errors')));
+    }
+
+    public function test_versions_follow_the_code_when_the_visible_rows_are_reordered(): void
+    {
+        $second = $this->employee('engineer');
+        $site2 = $this->workSite('Site-2');
+        $this->putDay($this->eng, '2026-10-01', ['site_id' => $this->site])->assertOk();
+        $this->putDay($this->eng, '2026-10-01', ['site_id' => $site2, 'version' => 1])->assertOk();  // version 2
+        $this->putDay($second, '2026-10-01', ['site_id' => $this->site])->assertOk();              // version 1
+
+        $file = $this->edit($this->download(), [$this->code($this->eng) => ['2026-10-01' => 'Site-1'], $this->code($second) => ['2026-10-01' => 'Site-2']]);
+        // HR sorts the visible sheet; the hidden versions sheet stays as downloaded.
+        $file = $this->rewrite($file->getPathname(), fn (string $sheet, array $rows) => $sheet === 'attendance' ? [$rows[0], ...array_reverse(array_slice($rows, 1))] : $rows);
+
+        $this->upload('confirm', $file)->assertOk()->assertJsonPath('data.applied', 2)->assertJsonPath('data.errors', []);
+        $this->assertSame([$this->site, 3], AttendanceDay::where(['employee_id' => $this->eng, 'date' => '2026-10-01'])->get(['site_id', 'version'])->map(fn (AttendanceDay $d) => [$d->site_id, $d->version])->sole());
+        $this->assertSame([$site2, 2], AttendanceDay::where(['employee_id' => $second, 'date' => '2026-10-01'])->get(['site_id', 'version'])->map(fn (AttendanceDay $d) => [$d->site_id, $d->version])->sole());
+    }
+
+    public function test_a_template_downloaded_in_english_uploads_under_arabic(): void
+    {
+        [$a, $b] = [$this->employee('office'), $this->employee('office')];
+        $this->putDay($a, '2026-10-01', ['in_time' => '09:00'])->assertOk();
+        $path = $this->download('office', locale: 'en');                                            // Employee ID, Name, …; 10-01 prefilled "Present"
+
+        $file = $this->edit($path, [$this->code($b) => ['2026-10-01' => 'Present']]);
+        $this->upload('preview', $file, 'office')->assertOk()->assertJsonPath('data.summary.errors', 0)->assertJsonPath('data.summary.changes', 1)
+            ->assertJsonPath('data.changes.0.employee_id', $b)->assertJsonPath('data.changes.0.to', 'حاضر');
+        $this->upload('confirm', $file, 'office')->assertOk()->assertJsonPath('data.applied', 1);
+        $day = AttendanceDay::where(['employee_id' => $a, 'date' => '2026-10-01'])->sole();
+        $this->assertSame([1, '09:00:00'], [$day->version, $day->in_time]);
+    }
+
     /** @return array<string, array{string, string}> error code => [error, message key] */
     public static function cellErrors(): array
     {
@@ -294,15 +354,21 @@ class AttendanceImportTest extends TestCase
 
     public function test_import_follows_own_scope(): void
     {
-        $lead = $this->userWith('own', 'own');
-        $mine = $this->assign($this->employee('engineer'), $lead);
         $this->assign($this->eng, $this->makeUser('manager'));
-        $file = $this->edit($this->download(), [$this->code($this->eng) => ['2026-10-01' => 'Site-1'], $this->code($mine) => ['2026-10-01' => 'Site-1']]);
+        // The narrower of view and edit wins (P34): each lead imports only their own employee from HR's file.
+        foreach ([['own', 'own'], ['all', 'own'], ['own', 'all']] as [$view, $edit]) {
+            $grants = "view.{$view} + edit.{$edit}";
+            $lead = $this->userWith($view, $edit);
+            $mine = $this->assign($this->employee('engineer'), $lead);
+            $file = $this->edit($this->download(), [$this->code($this->eng) => ['2026-10-01' => 'Site-1'], $this->code($mine) => ['2026-10-01' => 'Site-1']]);
 
-        $this->actingAs($lead, 'api');
-        $this->upload('confirm', $file)->assertOk()->assertJsonPath('data.applied', 1)
-            ->assertJsonPath('data.errors', [['row' => 2, 'column' => null, 'code' => (int) $this->code($this->eng), 'date' => null, 'error' => 'unknown_employee', 'message' => 'الرقم الوظيفي غير موجود.']]);
-        $this->assertSame([$mine], AttendanceDay::pluck('employee_id')->all());
+            $this->actingAs($lead, 'api');
+            $errors = $this->upload('confirm', $file)->assertOk()->assertJsonPath('data.applied', 1)->json('data.errors');
+            $this->assertContains(['row' => 2, 'column' => null, 'code' => (int) $this->code($this->eng), 'date' => null, 'error' => 'unknown_employee', 'message' => 'الرقم الوظيفي غير موجود.'], $errors, $grants);
+            $this->assertSame(['unknown_employee'], array_values(array_unique(array_column($errors, 'error'))), $grants);   // earlier leads' rows too
+            $this->assertTrue(AttendanceDay::where(['employee_id' => $mine, 'date' => '2026-10-01'])->exists(), $grants);
+        }
+        $this->assertFalse(AttendanceDay::where('employee_id', $this->eng)->exists());
 
         foreach ([$this->userWith('all', null), $this->userWith(null, 'all')] as $user) {             // view or edit missing
             $this->actingAs($user, 'api');
@@ -311,11 +377,11 @@ class AttendanceImportTest extends TestCase
         }
     }
 
-    /** The template of the group's period (default: its period containing 2026-10-20), downloaded in Arabic and saved to a temp file. */
-    private function download(string $group = 'engineer', ?string $start = null): string
+    /** The template of the group's period (default: its period containing 2026-10-20), downloaded in $locale and saved to a temp file. */
+    private function download(string $group = 'engineer', ?string $start = null, string $locale = 'ar'): string
     {
         $start ??= self::STARTS[$group];
-        $response = $this->get("/api/v1/attendance/template?group={$group}&period_start={$start}", ['Accept-Language' => 'ar'])->assertOk();
+        $response = $this->get("/api/v1/attendance/template?group={$group}&period_start={$start}", ['Accept-Language' => $locale])->assertOk();
         $sent = $response->baseResponse;
         $this->assertInstanceOf(BinaryFileResponse::class, $sent);
         ob_start();
@@ -435,20 +501,6 @@ class AttendanceImportTest extends TestCase
         $i = 2 + (int) (new DateTimeImmutable('2026-09-26'))->diff(new DateTimeImmutable($date))->days;
 
         return ($i >= 26 ? chr(64 + intdiv($i, 26)) : '').chr(65 + $i % 26);
-    }
-
-    /** A user whose role holds attendance.view and attendance.edit at these scopes; null = not held. */
-    private function userWith(?string $view, ?string $edit): User
-    {
-        $slug = 'lead-'.($view ?? 'none').'-'.($edit ?? 'none');
-        $role = Role::create(['slug' => $slug, 'name' => $slug, 'name_ar' => $slug]);
-        foreach (['view' => $view, 'edit' => $edit] as $action => $scope) {
-            if ($scope !== null) {
-                $role->permissions()->attach(Permission::firstOrCreate(['resource' => 'attendance', 'action' => $action, 'scope' => $scope])->getKey());
-            }
-        }
-
-        return $this->makeUser($slug);
     }
 
     /** Assigns the employee to the manager from 10-01, as HR; returns the employee id. */

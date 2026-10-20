@@ -99,7 +99,7 @@ final class AttendanceImport
             }
         }
         $days = $this->days->forPeriod($p, array_values($employees));
-        [$choices, $names] = $this->choices($g);
+        [$choices, $names, $prefilled] = $this->choices($g);
         $present = (string) __('attendance.template.present');
         $locked = PeriodGuard::isLocked($p);
         $today = EffectiveDays::today();
@@ -127,12 +127,13 @@ final class AttendanceImport
             foreach ($filled as $i => $value) {
                 $date = $dates[$i - 2];
                 $day = $days[$employee['id']][$date];
-                $choice = $choices[self::key($value)] ?? null;
+                $key = self::key($value);
+                $choice = $choices[$key] ?? null;
                 if ($date > $today) {
                     $plan['errors'][] = self::error($row, $i, $code, $date, 'future_date');
                 } elseif ($day['state'] === 'not_employed') {     // also a day employed as another type (G5)
                     $plan['errors'][] = self::error($row, $i, $code, $date, 'employee_not_active');
-                } elseif ($choice !== null && self::same($choice, $day)) {
+                } elseif (self::unchanged($key, $choice, $day, $prefilled)) {
                     $plan['unchanged']++;
                 } elseif ($locked || $choice === null) {         // every changed cell of a locked period
                     $plan['errors'][] = self::error($row, $i, $code, $date, $locked ? 'period_locked' : 'unknown_site');
@@ -161,6 +162,7 @@ final class AttendanceImport
     private function write(array $c, bool $dryRun): ?array
     {
         $at = [$c['change']['row'], $c['index'], $c['change']['code'], $c['date']];
+        // ponytail: ~8 queries per changed cell, the preview's dry run included; preload sites and locks if full-period files get slow
         try {
             $this->writes->writeCell($c['employee'], $c['date'], $c['input'], 'imported', $dryRun);
 
@@ -176,49 +178,62 @@ final class AttendanceImport
 
     /**
      * What a cell may say for the group (G6), keyed by self::key of a name_ar or name_en; office takes the present word in either
-     * language. Inactive sites are matched too, so the write refuses them (site_inactive); a deleted one is unknown.
+     * language. Inactive sites are matched too, so the write refuses them (site_inactive). A deleted site, or a key that two sites
+     * share, matches nothing (unknown_site). Also returned: every site's name in the request language, by id, and the keys of what
+     * the template prefills for a stored day, by site id ('' = office present).
      *
-     * @return array{array<string, array{site_id: ?string, leave_code: ?string, name: string}>, array<array-key, string>} the choices, and every site's name (by id) in the request language
+     * @return array{array<string, array{site_id: ?string, leave_code: ?string, name: string}>, array<array-key, string>, array<array-key, list<string>>}
      */
     private function choices(EmployeeType $g): array
     {
         $en = app()->getLocale() === 'en';
-        $sites = Site::withTrashed()->orderByDesc('active')->get(['id', 'name_ar', 'name_en', 'kind', 'leave_code', 'active', 'deleted_at']);
-        $names = [];
-        foreach ($sites as $s) {
-            $names[(string) $s->id] = (string) ($en ? ($s->name_en ?? $s->name_ar) : $s->name_ar);
-        }
+        $present = (string) __('attendance.template.present');
+        $presentKeys = [self::key((string) __('attendance.template.present', [], 'ar')), self::key((string) __('attendance.template.present', [], 'en'))];
+        $sites = Site::withTrashed()->get(['id', 'name_ar', 'name_en', 'kind', 'leave_code', 'active', 'deleted_at']);
 
-        $choices = [];
+        $names = [];
+        $prefilled = ['' => $presentKeys];
+        $found = [];                                                                        // key => site id ('' = present) => choice
         if ($g === EmployeeType::Office) {
-            foreach (['ar', 'en'] as $locale) {
-                $choices[self::key((string) __('attendance.template.present', [], $locale))] = ['site_id' => null, 'leave_code' => null, 'name' => (string) __('attendance.template.present')];
+            foreach ($presentKeys as $key) {
+                $found[$key][''] = ['site_id' => null, 'leave_code' => null, 'name' => $present];
             }
         }
         foreach ($sites as $s) {
+            $id = (string) $s->id;
+            $names[$id] = (string) ($en ? ($s->name_en ?? $s->name_ar) : $s->name_ar);
+            $prefilled[$id] = [self::key((string) $s->name_ar)];                             // AttendanceTemplate::grid prefills name_ar
             if ($s->trashed() || ($g === EmployeeType::Office && $s->kind !== 'leave')) {
                 continue;
             }
             foreach ([$s->name_ar, $s->name_en] as $name) {
                 if ($name !== null) {
-                    $choices[self::key((string) $name)] ??= ['site_id' => (string) $s->id, 'leave_code' => $s->leave_code, 'name' => $names[(string) $s->id]];
+                    $found[self::key((string) $name)][$id] = ['site_id' => $id, 'leave_code' => $s->leave_code, 'name' => $names[$id]];
                 }
             }
         }
+        // A name two sites share would pick one of them by database order; it is refused instead.
+        $choices = array_map(fn (array $sitesByKey) => reset($sitesByKey), array_filter($found, fn (array $sitesByKey) => count($sitesByKey) === 1));
 
-        return [$choices, $names];
+        return [$choices, $names, $prefilled];
     }
 
     /**
-     * G3: the cell names the stored day's site, or a derived Friday or holiday's leave type.
+     * G3. The cell still says what the template prefilled for the stored day, even after that site was deleted or its name reused;
+     * or it names the stored day's site, or a derived Friday or holiday's leave type.
      *
-     * @param  array{site_id: ?string, leave_code: ?string, name: string}  $choice
+     * @param  array{site_id: ?string, leave_code: ?string, name: string}|null  $choice
      * @param  array<string, mixed>  $day  an EffectiveDays day
+     * @param  array<array-key, list<string>>  $prefilled
      */
-    private static function same(array $choice, array $day): bool
+    private static function unchanged(string $key, ?array $choice, array $day, array $prefilled): bool
     {
-        return ($day['state'] === 'stored' && $day['site_id'] === $choice['site_id'])
-            || ($day['state'] === 'derived' && $choice['leave_code'] !== null && $day['leave_code'] === $choice['leave_code']);
+        if ($day['state'] === 'stored' && in_array($key, $prefilled[$day['site_id'] ?? ''] ?? [], true)) {
+            return true;
+        }
+
+        return $choice !== null && (($day['state'] === 'stored' && $day['site_id'] === $choice['site_id'])
+            || ($day['state'] === 'derived' && $choice['leave_code'] !== null && $day['leave_code'] === $choice['leave_code']));
     }
 
     /** @return array{row: int, column: ?string, code: ?int, date: ?string, error: string, message: string, index: int} a row error when $index is 0 (the code column) */

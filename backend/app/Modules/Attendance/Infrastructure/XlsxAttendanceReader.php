@@ -15,6 +15,7 @@ use OpenSpout\Common\Exception\OpenSpoutException;
 use OpenSpout\Reader\XLSX\Options;
 use OpenSpout\Reader\XLSX\Reader;
 use OpenSpout\Reader\XLSX\Sheet;
+use Throwable;
 
 /** Reads an uploaded attendance grid (AttendanceTemplate's file, as Excel saved it back): its `attendance` and `versions` sheets, every cell normalised. */
 final class XlsxAttendanceReader
@@ -39,6 +40,8 @@ final class XlsxAttendanceReader
     public function read(string $path, int $maxRows): array
     {
         // Empty rows are kept so the iterator's key is the Excel row number (G8).
+        // ponytail: a crafted <dimension> (A1:XFD…) makes OpenSpout build that many cells per row, which can exhaust memory_limit
+        // (a 500, nothing written); Excel never writes one. Parse the sheet XML ourselves if that ever matters.
         $reader = new Reader(new Options(SHOULD_PRESERVE_EMPTY_ROWS: true));
         $sheets = [];
         try {
@@ -48,10 +51,15 @@ final class XlsxAttendanceReader
                     $sheets[$sheet->getName()] = $this->rows($sheet, $maxRows);
                 }
             }
-        } catch (OpenSpoutException) {
-            throw AttendanceRefused::because(AttendanceRefusal::UnreadableFile);
-        } finally {
             $reader->close();
+        } catch (Throwable $e) {
+            try {
+                $reader->close();
+            } catch (Throwable) {
+                // The first error is the one to report.
+            }
+
+            throw $e instanceof OpenSpoutException ? AttendanceRefused::because(AttendanceRefusal::UnreadableFile) : $e;
         }
 
         $attendance = $sheets['attendance'] ?? [];

@@ -6,8 +6,6 @@ use App\Modules\Attendance\Application\AttendanceTemplate;
 use App\Modules\Attendance\Infrastructure\XlsxTemplateWriter;
 use App\Modules\Employees\Application\EmployeeService;
 use App\Modules\Employees\Infrastructure\Eloquent\Employee;
-use App\Modules\Identity\Infrastructure\Eloquent\Permission;
-use App\Modules\Identity\Infrastructure\Eloquent\Role;
 use App\Modules\Identity\Infrastructure\Eloquent\User;
 use App\Modules\Sites\Infrastructure\Eloquent\Site;
 use Illuminate\Foundation\Testing\RefreshDatabase;
@@ -232,20 +230,6 @@ class AttendanceTemplateTest extends TestCase
         $this->putDay($one, '2026-10-01', ['site_id' => $this->site])->assertOk()->assertJsonPath('data.version', 1);
 
         return [$one, $two];
-    }
-
-    /** A user whose role holds attendance.view and attendance.edit at these scopes; null = not held. */
-    private function userWith(?string $view, ?string $edit): User
-    {
-        $slug = 'lead-'.($view ?? 'none').'-'.($edit ?? 'none');
-        $role = Role::create(['slug' => $slug, 'name' => $slug, 'name_ar' => $slug]);
-        foreach (['view' => $view, 'edit' => $edit] as $action => $scope) {
-            if ($scope !== null) {
-                $role->permissions()->attach(Permission::firstOrCreate(['resource' => 'attendance', 'action' => $action, 'scope' => $scope])->getKey());
-            }
-        }
-
-        return $this->makeUser($slug);
     }
 
     /** Assigns the employee to the manager from 10-01, as HR; returns the employee id. */

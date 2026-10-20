@@ -4,6 +4,9 @@ namespace Tests;
 
 use App\Modules\Attendance\Infrastructure\Eloquent\OfficialHoliday;
 use App\Modules\Employees\Application\EmployeeService;
+use App\Modules\Identity\Infrastructure\Eloquent\Permission;
+use App\Modules\Identity\Infrastructure\Eloquent\Role;
+use App\Modules\Identity\Infrastructure\Eloquent\User;
 use App\Modules\Sites\Domain\LeaveCode;
 use App\Modules\Sites\Infrastructure\Eloquent\Site;
 use Illuminate\Support\Carbon;
@@ -49,6 +52,20 @@ trait AttendanceFixtures
     protected function holiday(string $date, string $name = 'Holiday-1'): string
     {
         return (string) OfficialHoliday::create(['date' => $date, 'name' => $name])->getKey();
+    }
+
+    /** A user whose role holds attendance.view and attendance.edit at these scopes; null = not held. */
+    protected function userWith(?string $view, ?string $edit): User
+    {
+        $slug = 'lead-'.($view ?? 'none').'-'.($edit ?? 'none');
+        $role = Role::create(['slug' => $slug, 'name' => $slug, 'name_ar' => $slug]);
+        foreach (['view' => $view, 'edit' => $edit] as $action => $scope) {
+            if ($scope !== null) {
+                $role->permissions()->attach(Permission::firstOrCreate(['resource' => 'attendance', 'action' => $action, 'scope' => $scope])->getKey());
+            }
+        }
+
+        return $this->makeUser($slug);
     }
 
     protected function cairo(string $local): void
