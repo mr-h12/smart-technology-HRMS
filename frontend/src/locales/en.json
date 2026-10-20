@@ -463,7 +463,8 @@
     "tab": {
       "grid": "Period grid",
       "sheet": "Day sheet",
-      "import": "Import from Excel"
+      "import": "Import from Excel",
+      "importShort": "Import"
     },
     "day": {
       "title": "{{date}} — {{name}}",
@@ -599,7 +600,31 @@
       "to": "New value",
       "message": "Error",
       "confirm": "Confirm and save",
-      "done": "Saved {{applied}} days; skipped {{skipped}} cells with errors."
+      "done": "{{saved}}; {{skipped}}.",
+      "saved_one": "Saved 1 day",
+      "saved_other": "Saved {{count}} days",
+      "skipped_zero": "no cells with errors",
+      "skipped_one": "skipped 1 cell with errors",
+      "skipped_other": "skipped {{count}} cells with errors",
+      "error": {
+        "unknown_employee": "Unknown employee ID.",
+        "unknown_site": "Unknown site or day type.",
+        "duplicate_row": "This employee appears twice in the file.",
+        "concurrency_conflict": "Someone else changed this record. Load the latest version and try again.",
+        "period_locked": "This attendance period is locked and cannot be edited.",
+        "future_date": "Attendance cannot be recorded for a future date.",
+        "employee_not_active": "The employee is not employed on this date.",
+        "field_not_allowed": "This field does not apply to this day.",
+        "out_of_bounds": "The value is outside the allowed range.",
+        "site_required": "Choose a site or a day type.",
+        "site_not_allowed": "Office staff are not recorded on a work site.",
+        "site_inactive": "This site is inactive.",
+        "out_before_in": "The out time is before the in time.",
+        "times_need_both": "Enter both the in and out times.",
+        "template_mismatch": "The file does not match this period's attendance template.",
+        "unreadable_file": "The file could not be read.",
+        "too_many_rows": "The file has more than {{max}} rows."
+      }
     }
   },
   "holiday": {

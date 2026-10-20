@@ -463,7 +463,8 @@
     "tab": {
       "grid": "جدول الفترة",
       "sheet": "كشف اليوم",
-      "import": "الاستيراد من Excel"
+      "import": "الاستيراد من Excel",
+      "importShort": "استيراد"
     },
     "day": {
       "title": "يوم {{date}} — {{name}}",
@@ -599,7 +600,38 @@
       "to": "القيمة الجديدة",
       "message": "الخطأ",
       "confirm": "تأكيد الحفظ",
-      "done": "تم حفظ {{applied}} يومًا، وتُركت {{skipped}} خانة بها أخطاء."
+      "done": "{{saved}}، {{skipped}}.",
+      "saved_zero": "لم يُحفظ أي يوم",
+      "saved_one": "تم حفظ يوم واحد",
+      "saved_two": "تم حفظ يومين",
+      "saved_few": "تم حفظ {{count}} أيام",
+      "saved_many": "تم حفظ {{count}} يومًا",
+      "saved_other": "تم حفظ {{count}} يوم",
+      "skipped_zero": "لا خانات بها أخطاء",
+      "skipped_one": "تُركت خانة واحدة بها خطأ",
+      "skipped_two": "تُركت خانتان بهما أخطاء",
+      "skipped_few": "تُركت {{count}} خانات بها أخطاء",
+      "skipped_many": "تُركت {{count}} خانة بها أخطاء",
+      "skipped_other": "تُركت {{count}} خانة بها أخطاء",
+      "error": {
+        "unknown_employee": "الرقم الوظيفي غير موجود.",
+        "unknown_site": "الموقع أو نوع اليوم غير موجود.",
+        "duplicate_row": "هذا الموظف مكرر في الملف.",
+        "concurrency_conflict": "عدّل مستخدم آخر هذا السجل. حمّل آخر نسخة ثم أعد المحاولة.",
+        "period_locked": "فترة الحضور مقفلة ولا يمكن تعديلها.",
+        "future_date": "لا يمكن تسجيل حضور لتاريخ لم يأتِ بعد.",
+        "employee_not_active": "الموظف غير مُعيَّن في هذا التاريخ.",
+        "field_not_allowed": "هذا الحقل لا ينطبق على هذا اليوم.",
+        "out_of_bounds": "القيمة خارج الحدود المسموح بها.",
+        "site_required": "اختر موقعًا أو نوع يوم.",
+        "site_not_allowed": "لا يُسجَّل لموظفي الشركة موقع عمل.",
+        "site_inactive": "هذا الموقع غير نشط.",
+        "out_before_in": "وقت الانصراف قبل وقت الحضور.",
+        "times_need_both": "أدخل وقتي الحضور والانصراف معًا.",
+        "template_mismatch": "الملف لا يطابق قالب الحضور لهذه الفترة.",
+        "unreadable_file": "تعذّرت قراءة الملف.",
+        "too_many_rows": "يحتوي الملف على أكثر من {{max}} صف."
+      }
     }
   },
   "holiday": {

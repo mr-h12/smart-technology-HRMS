@@ -1,11 +1,15 @@
-import { screen, within } from '@testing-library/react'
+import { act, screen, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { afterEach, expect, test, vi } from 'vitest'
+import i18n from '@/i18n'
 import { json, mockFetch, renderWithAuth } from '@/test-utils'
 import { AttendancePage } from './attendance'
 import { ImportTab } from './attendance-import'
 
-afterEach(() => vi.unstubAllGlobals())
+afterEach(async () => {
+  vi.unstubAllGlobals()
+  await i18n.changeLanguage('ar')
+})
 
 const perms = ['attendance.view.all', 'attendance.edit.all']
 const FILE_LABEL = 'ملف Excel (⁦.xlsx⁩، حتى 5 ميجابايت)'
@@ -16,21 +20,22 @@ const preview = { summary: { cells: 30, changes: 3, unchanged: 26, errors: 2 }, 
 const xlsx = () => new File(['PK'], 'attendance-engineer-2026-09-26.xlsx', { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' })
 const sent = (f: ReturnType<typeof vi.fn>) => (f.mock.calls[0] as [string, RequestInit])[1].body as FormData
 
-async function previewed() {
+async function previewed(data: object = preview) {
   const user = userEvent.setup()
-  const previewCall = vi.fn(() => json(200, { data: preview }))
+  const previewCall = vi.fn(() => json(200, { data }))
   const confirmCall = vi.fn(() => json(200, { data: { applied: 3, unchanged: 26, errors: [error] } }))
   mockFetch({ 'POST /api/v1/attendance/import/preview': previewCall, 'POST /api/v1/attendance/import/confirm': confirmCall })
   renderWithAuth(<ImportTab group="engineer" periodStart="2026-09-26" />, perms)
   const file = xlsx()
   await user.upload(screen.getByLabelText(FILE_LABEL), file)
   await user.click(screen.getByRole('button', { name: 'معاينة التغييرات' }))
-  await screen.findByText('تغييرات: 3 · بدون تغيير: 26 · أخطاء: 2')
+  await screen.findByText('تأكيد الحفظ')
   return { user, file, previewCall, confirmCall }
 }
 
 test('upload shows the preview and saves nothing until confirm', async () => {
   const { file, previewCall, confirmCall } = await previewed()
+  expect(screen.getByText('تغييرات: 3 · بدون تغيير: 26 · أخطاء: 2')).toBeInTheDocument()
   const body = sent(previewCall)
   expect([body.get('group'), body.get('period_start'), body.get('file')]).toEqual(['engineer', '2026-09-26', file])
   expect(screen.getByText('لم يُحفظ أي شيء بعد. راجع المعاينة ثم أكّد الحفظ.')).toBeInTheDocument()
@@ -45,7 +50,7 @@ test('upload shows the preview and saves nothing until confirm', async () => {
 test('confirm re-sends the same file and shows the result', async () => {
   const { user, file, confirmCall } = await previewed()
   await user.click(screen.getByRole('button', { name: 'تأكيد الحفظ' }))
-  expect(await screen.findByText('تم حفظ 3 يومًا، وتُركت 1 خانة بها أخطاء.')).toBeInTheDocument()
+  expect(await screen.findByText('تم حفظ 3 أيام، تُركت خانة واحدة بها خطأ.')).toBeInTheDocument()
   expect(sent(confirmCall).get('file')).toBe(file)
   expect(screen.queryByRole('table', { name: 'التغييرات' })).not.toBeInTheDocument()
 })
@@ -59,13 +64,79 @@ test('confirm is disabled when the preview has no changes', async () => {
   expect(await screen.findByRole('button', { name: 'تأكيد الحفظ' })).toBeDisabled()
 })
 
-test('a whole-file refusal shows the server message', async () => {
+// the server answers in the request's language; the banner follows the UI's, and keeps the server's words for a code it does not know
+test.each([
+  ['template_mismatch', 'The file does not match this period\'s attendance template.', 'الملف لا يطابق قالب الحضور لهذه الفترة.'],
+  ['unreadable_file', 'The file could not be read.', 'تعذّرت قراءة الملف.'],
+  ['too_many_rows', 'The file has more than 2000 rows.', 'يحتوي الملف على أكثر من 2000 صف.'],
+  ['server_busy', 'رسالة الخادم.', 'رسالة الخادم.'],
+])('a whole-file refusal (%s) shows in the UI language', async (code, message, shown) => {
   const user = userEvent.setup()
-  mockFetch({ 'POST /api/v1/attendance/import/preview': () => json(422, { error: { code: 'template_mismatch', message: 'الملف لا يطابق قالب هذه الفترة.', details: [] } }) })
+  mockFetch({ 'POST /api/v1/attendance/import/preview': () => json(422, { error: { code, message, details: [] } }) })
   renderWithAuth(<ImportTab group="engineer" periodStart="2026-09-26" />, perms)
   await user.upload(screen.getByLabelText(FILE_LABEL), xlsx())
   await user.click(screen.getByRole('button', { name: 'معاينة التغييرات' }))
-  expect(await screen.findByRole('alert')).toHaveTextContent('الملف لا يطابق قالب هذه الفترة.')
+  expect(await screen.findByRole('alert')).toHaveTextContent(shown)
+})
+
+test('a cell error follows the UI language, and an unknown code keeps the server message', async () => {
+  const mystery = { row: 6, column: 'J', code: 7, date: '2026-10-06', error: 'mystery_code', message: 'رسالة لا يعرفها الواجهة.' }
+  await previewed({ ...preview, errors: [error, mystery] })
+  await act(() => i18n.changeLanguage('en'))
+  const errors = screen.getByRole('table', { name: 'Errors' })
+  expect(within(errors).getByText('Unknown site or day type.').tagName).toBe('BDI')
+  expect(within(errors).queryByText('الموقع أو نوع اليوم غير موجود.')).not.toBeInTheDocument()
+  expect(within(errors).getByText('رسالة لا يعرفها الواجهة.').tagName).toBe('BDI')
+})
+
+test('after a preview, confirm is the only primary action', async () => {
+  const user = userEvent.setup()
+  mockFetch({ 'POST /api/v1/attendance/import/preview': () => json(200, { data: preview }) })
+  renderWithAuth(<ImportTab group="engineer" periodStart="2026-09-26" />, perms)
+  await user.upload(screen.getByLabelText(FILE_LABEL), xlsx())
+  const check = screen.getByRole('button', { name: 'معاينة التغييرات' })
+  expect(check).toHaveClass('bg-primary')
+  await user.click(check)
+  expect(await screen.findByRole('button', { name: 'تأكيد الحفظ' })).toHaveClass('bg-primary')
+  expect(check).not.toHaveClass('bg-primary')
+  expect(check).toHaveClass('border-border', 'bg-card') // the outline variant, as Download template
+})
+
+test.each([
+  [0, 'لم يُحفظ أي يوم', 'لا خانات بها أخطاء'],
+  [1, 'تم حفظ يوم واحد', 'تُركت خانة واحدة بها خطأ'],
+  [2, 'تم حفظ يومين', 'تُركت خانتان بهما أخطاء'],
+  [3, 'تم حفظ 3 أيام', 'تُركت 3 خانات بها أخطاء'],
+  [11, 'تم حفظ 11 يومًا', 'تُركت 11 خانة بها أخطاء'],
+  [100, 'تم حفظ 100 يوم', 'تُركت 100 خانة بها أخطاء'],
+])('the Arabic done line counts %i', (count, saved, skipped) => {
+  const t = i18n.getFixedT('ar')
+  expect([t('attendance.import.saved', { count }), t('attendance.import.skipped', { count })]).toEqual([saved, skipped])
+})
+
+test.each([
+  [0, 'Saved 0 days', 'no cells with errors'],
+  [1, 'Saved 1 day', 'skipped 1 cell with errors'],
+  [3, 'Saved 3 days', 'skipped 3 cells with errors'],
+])('the English done line counts %i', (count, saved, skipped) => {
+  const t = i18n.getFixedT('en')
+  expect([t('attendance.import.saved', { count }), t('attendance.import.skipped', { count })]).toEqual([saved, skipped])
+})
+
+test('the English done line joins the two counts', async () => {
+  const { user } = await previewed()
+  await act(() => i18n.changeLanguage('en'))
+  await user.click(screen.getByRole('button', { name: 'Confirm and save' }))
+  expect(await screen.findByText('Saved 3 days; skipped 1 cell with errors.')).toBeInTheDocument()
+})
+
+test('on a phone the import tab shows its short label, the full one from sm', async () => {
+  const period = { group: 'engineer', start: '2026-09-26', end: '2026-10-25', prev_start: '2026-08-26', next_start: null, is_locked: false, lock: null, missing: 0 }
+  mockFetch({ 'GET /api/v1/attendance/period': () => json(200, { data: period }) })
+  renderWithAuth(<AttendancePage />, perms, { path: '/attendance?group=engineer&tab=import&period=2026-09-26' })
+  const tab = await screen.findByRole('tab', { name: /الاستيراد من Excel/ })
+  expect(within(tab).getByText('استيراد')).toHaveClass('sm:hidden')
+  expect(within(tab).getByText('الاستيراد من Excel')).toHaveClass('max-sm:hidden')
 })
 
 test('a file over 5 MB or not xlsx is refused before upload', async () => {

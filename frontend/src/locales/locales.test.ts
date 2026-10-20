@@ -5,9 +5,22 @@ import en from './en.json'
 const flat = (o: object, p = ''): [string, string][] =>
   Object.entries(o).flatMap(([k, v]) => (typeof v === 'object' ? flat(v, `${p}${k}.`) : [[`${p}${k}`, v as string]]))
 const keys = (o: object) => flat(o).map(([k]) => k)
+// i18next's plural suffixes (Intl.PluralRules categories); `_zero` is also i18next's own count-of-0 form in any language
+const PLURAL = /_(zero|one|two|few|many|other)$/
+const bases = (o: object) => [...new Set(keys(o).map((k) => k.replace(PLURAL, '')))].sort()
 
-test('ar and en have the same keys', () => {
-  expect(keys(ar).sort()).toEqual(keys(en).sort())
+test('ar and en have the same keys, a counted key once whatever its plural forms', () => {
+  expect(bases(ar)).toEqual(bases(en))
+})
+
+test('every counted key has each plural form its language needs', () => {
+  for (const [lng, o] of [['ar', ar], ['en', en]] as const) {
+    const all = keys(o)
+    const needed = new Intl.PluralRules(lng).resolvedOptions().pluralCategories
+    for (const base of new Set(all.filter((k) => PLURAL.test(k)).map((k) => k.replace(PLURAL, '')))) {
+      expect(needed.filter((form) => !all.includes(`${base}_${form}`)), `${lng} ${base}`).toEqual([])
+    }
+  }
 })
 
 test('Arabic copy has no Latin letters outside placeholders', () => {

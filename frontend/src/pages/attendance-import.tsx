@@ -5,11 +5,12 @@ import { ErrorBanner, Field, ltrDates } from '@/components/form'
 import { Button, buttonVariants } from '@/components/ui/button'
 import { Card, CardHeader, CardTitle } from '@/components/ui/card'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
-import { api, apiBlob } from '@/lib/api'
+import { api, apiBlob, ApiError } from '@/lib/api'
 import { useSave } from '@/lib/query'
 import { cn } from '@/lib/utils'
 
 const MAX_BYTES = 5 * 1024 * 1024 // the server's own limit (max:5120 KB)
+const MAX_ROWS = 2000 // the server's own cap (AttendanceImport::MAX_ROWS), for the too_many_rows message
 
 type Cell = { row: number; column: string | null }
 type Change = Cell & { employee_id: string; code: number; name_ar: string; date: string; from: string | null; to: string }
@@ -20,13 +21,15 @@ type Result = { applied: number; unchanged: number; errors: CellError[] }
 /** The Excel cell HR looks for, e.g. G3, drawn left to right; a row error has no column, so it is just the row number. */
 const cellLabel = (c: Cell) => <bdi dir="ltr" className="font-medium tabular">{`${c.column ?? ''}${c.row}`}</bdi>
 const dash = (v: string | number | null) => v ?? '—'
+/** The server's error codes in the UI language (the server's message is in the request's); its own words only for a code this UI does not know. */
+const errorKey = (code: string) => `attendance.import.error.${code}`
 
 /**
  * The period's Excel grid: download the template, pick the filled file, preview what it would change (nothing is saved), then
  * confirm, which sends the same File again. Keyed by group and period in the page, so a new period starts empty.
  */
 export function ImportTab({ group, periodStart }: { group: string; periodStart: string }) {
-  const { t } = useTranslation()
+  const { t, i18n } = useTranslation()
   const save = useSave()
   const [file, setFile] = useState<File>()
   const [bad, setBad] = useState(false)
@@ -69,6 +72,8 @@ export function ImportTab({ group, periodStart }: { group: string; periodStart: 
   const check = () => run(() => api<Preview>('/attendance/import/preview', { method: 'POST', body: body() }), (p) => { setPreview(p); setResult(undefined) })
   const confirm = () => run(() => save<Result>('/attendance/import/confirm', { body: body() }), (r) => { setResult(r); setPreview(undefined) })
   const errors = preview?.errors ?? result?.errors ?? []
+  // a whole-file refusal (template_mismatch, unreadable_file, too_many_rows) follows the UI language like the cells' errors
+  const fileErr = err instanceof ApiError && i18n.exists(errorKey(err.code)) ? new Error(t(errorKey(err.code), { max: MAX_ROWS })) : err
 
   return (
     <div className="space-y-4">
@@ -90,11 +95,11 @@ export function ImportTab({ group, periodStart }: { group: string; periodStart: 
               </div>
             )}
           </Field>
-          <Button type="button" className="h-11" disabled={busy || !file} onClick={check}>
+          <Button type="button" variant={preview ? 'outline' : 'default'} className="h-11" disabled={busy || !file} onClick={check}>
             <FileSearch aria-hidden /> {t('attendance.import.preview')}
           </Button>
         </div>
-        <ErrorBanner err={err} shown={[]} />
+        <ErrorBanner err={fileErr} shown={[]} />
         {preview && (
           <div className="grid gap-3 border-t pt-4 sm:flex sm:flex-wrap sm:items-center">
             <div className="grid flex-1 gap-1">
@@ -108,7 +113,7 @@ export function ImportTab({ group, periodStart }: { group: string; periodStart: 
         )}
         {result && (
           <p role="status" className="rounded-md border border-success-border bg-success-bg p-3 text-sm font-medium text-success">
-            {t('attendance.import.done', { applied: result.applied, skipped: result.errors.length })}
+            {t('attendance.import.done', { saved: t('attendance.import.saved', { count: result.applied }), skipped: t('attendance.import.skipped', { count: result.errors.length }) })}
           </p>
         )}
       </Card>
@@ -182,6 +187,7 @@ function Changes({ rows }: { rows: Change[] }) {
 function Errors({ rows }: { rows: CellError[] }) {
   const { t } = useTranslation()
   const title = t('attendance.import.errors')
+  const message = (e: CellError) => <bdi>{t(errorKey(e.error), { defaultValue: e.message })}</bdi>
   return (
     <Card className="overflow-hidden">
       <CardHeader className="border-b">
@@ -203,7 +209,7 @@ function Errors({ rows }: { rows: CellError[] }) {
                 <TableCell>{cellLabel(e)}</TableCell>
                 <TableCell className="tabular">{dash(e.code)}</TableCell>
                 <TableCell className="tabular">{e.date ? ltrDates(e.date) : '—'}</TableCell>
-                <TableCell className="whitespace-normal text-destructive">{e.message}</TableCell>
+                <TableCell className="whitespace-normal text-destructive">{message(e)}</TableCell>
               </TableRow>
             ))}
           </TableBody>
@@ -219,7 +225,7 @@ function Errors({ rows }: { rows: CellError[] }) {
               </span>
               {e.date && <span className="text-muted-foreground tabular">{ltrDates(e.date)}</span>}
             </div>
-            <p className="break-words text-destructive">{e.message}</p>
+            <p className="break-words text-destructive">{message(e)}</p>
           </li>
         ))}
       </ul>

@@ -140,7 +140,9 @@ export function AttendancePage() {
           </TabsTrigger>
           {can('attendance.edit') && (
             <TabsTrigger value="import">
-              <FileSpreadsheet className="size-4" aria-hidden /> {t('attendance.tab.import')}
+              {/* the full label does not fit beside the other two on a phone */}
+              <FileSpreadsheet className="size-4" aria-hidden /> <span className="sm:hidden">{t('attendance.tab.importShort')}</span>
+              <span className="max-sm:hidden">{t('attendance.tab.import')}</span>
             </TabsTrigger>
           )}
         </TabsList>
