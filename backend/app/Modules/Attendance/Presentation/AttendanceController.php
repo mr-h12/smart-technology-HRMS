@@ -6,6 +6,7 @@ namespace App\Modules\Attendance\Presentation;
 
 use App\Modules\Attendance\Application\AttendanceDays;
 use App\Modules\Attendance\Application\AttendanceGrid;
+use App\Modules\Attendance\Application\AttendanceTemplate;
 use App\Modules\Attendance\Application\EffectiveDays;
 use App\Modules\Employees\Application\EmployeeService;
 use App\Modules\Employees\Domain\EmployeeType;
@@ -16,6 +17,7 @@ use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Validator;
 use Illuminate\Validation\Rule;
+use Symfony\Component\HttpFoundation\BinaryFileResponse;
 
 final class AttendanceController
 {
@@ -24,6 +26,7 @@ final class AttendanceController
         private readonly EffectiveDays $days,
         private readonly AttendanceDays $writes,
         private readonly EmployeeService $employees,
+        private readonly AttendanceTemplate $template,
     ) {}
 
     public function period(Request $request): JsonResponse
@@ -54,6 +57,16 @@ final class AttendanceController
         $q = $request->validate(['group' => ['required', Rule::enum(EmployeeType::class)], 'date' => ['required', 'date_format:Y-m-d']]);
 
         return ApiEnvelope::single($request, $this->grid->sheet(EmployeeType::from($q['group']), $q['date'], RequestScope::ownerId($request)));
+    }
+
+    /** The Excel grid template of one period; own scope narrows it to the caller's employees, as the sheet. */
+    public function template(Request $request): BinaryFileResponse
+    {
+        $q = $request->validate(['group' => ['required', Rule::enum(EmployeeType::class)], 'period_start' => ['required', 'date_format:Y-m-d']]);
+        $path = $this->template->file(EmployeeType::from($q['group']), $q['period_start'], RequestScope::ownerId($request));
+
+        return response()->download($path, "attendance-{$q['group']}-{$q['period_start']}.xlsx", ['Content-Type' => 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'])
+            ->deleteFileAfterSend();
     }
 
     public function show(Request $request, string $employee, string $date): JsonResponse

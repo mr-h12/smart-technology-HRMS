@@ -21,4 +21,9 @@ return [
         'times_need_both' => 'Enter both the in and out times.',
     ],
     'invalid_period' => 'This is not a period start for this group.',
+    'template' => [
+        'code' => 'Employee ID',
+        'name' => 'Name',
+        'present' => 'Present',
+    ],
 ];
