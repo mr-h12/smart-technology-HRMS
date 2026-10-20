@@ -9,6 +9,7 @@ use App\Modules\Employees\Presentation\EmployeeController;
 use App\Modules\Identity\Presentation\AuthController;
 use App\Modules\Identity\Presentation\RoleController;
 use App\Modules\Identity\Presentation\UserController;
+use App\Modules\Notifications\Presentation\NotificationController;
 use App\Modules\Settings\Presentation\SettingController;
 use App\Modules\Sites\Presentation\FareController;
 use App\Modules\Sites\Presentation\ResidenceController;
@@ -106,6 +107,12 @@ Route::middleware('auth')->group(function (): void {
             Route::patch('{holiday}', 'update')->middleware('permission:holiday.manage');
             Route::delete('{holiday}', 'destroy')->middleware('permission:holiday.manage');
         });
+    });
+
+    // Auth only: each account sees and marks only its own rows (the inbox filters by user).
+    Route::prefix('notifications')->controller(NotificationController::class)->group(function (): void {
+        Route::get('/', 'index');
+        Route::patch('{notification}/read', 'read')->whereUuid('notification');
     });
 
     Route::get('audit-log', [AuditLogController::class, 'index'])->middleware('permission:audit_log.view');

@@ -35,7 +35,7 @@ class RbacTest extends TestCase
     public function test_every_api_route_requires_auth_and_a_permission(): void
     {
         $open = ['api/v1/health', 'api/v1/auth/login'];
-        $authOnly = ['api/v1/auth/me', 'api/v1/auth/logout'];
+        $authOnly = ['api/v1/auth/me', 'api/v1/auth/logout', 'api/v1/notifications', 'api/v1/notifications/{notification}/read'];
         foreach (Route::getRoutes() as $route) {
             if (! str_starts_with($route->uri(), 'api/v1') || in_array($route->uri(), $open, true)) {
                 continue;
