@@ -18,7 +18,7 @@ import { USERS, useApi } from '@/lib/query'
 const ENTITIES = [
   'employees', 'employee_type_changes', 'employee_pay_changes', 'employee_documents', 'employee_fare_overrides', 'employee_manager_assignments',
   'sites', 'site_allowance_rules', 'residences', 'fares', 'users', 'roles', 'settings',
-  'attendance_days', 'attendance_locks', 'official_holidays',
+  'attendance_days', 'attendance_locks', 'official_holidays', 'notifications',
 ]
 const PER_PAGE = 20
 const EVENT_VARIANT: Record<string, BadgeVariant> = { CREATED: 'success', UPDATED: 'info', DELETED: 'danger' }

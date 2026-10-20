@@ -343,7 +343,8 @@
       "settings": "Business rules",
       "attendance_days": "Attendance days",
       "attendance_locks": "Attendance locks",
-      "official_holidays": "Official holidays"
+      "official_holidays": "Official holidays",
+      "notifications": "Notifications"
     }
   },
   "settings": {
@@ -634,5 +635,15 @@
     "name": "Holiday name",
     "delete": "Delete",
     "deleteConfirm": "Delete the official holiday \"{{name}}\"?"
+  },
+  "notifications": {
+    "title": "Notifications",
+    "open": "Open notifications ({{count}} unread)",
+    "empty": "No notifications.",
+    "missingDays": {
+      "title": "Missing attendance days as of {{date}}",
+      "line": "Missing days, {{group}}: {{count}}",
+      "period": "{{start}} – {{end}}"
+    }
   }
 }

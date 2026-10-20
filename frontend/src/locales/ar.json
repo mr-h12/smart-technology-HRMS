@@ -343,7 +343,8 @@
       "settings": "قواعد العمل",
       "attendance_days": "أيام الحضور",
       "attendance_locks": "قفل الحضور",
-      "official_holidays": "الإجازات الرسمية"
+      "official_holidays": "الإجازات الرسمية",
+      "notifications": "الإشعارات"
     }
   },
   "settings": {
@@ -641,5 +642,15 @@
     "name": "اسم الإجازة",
     "delete": "حذف",
     "deleteConfirm": "حذف الإجازة الرسمية «{{name}}»؟"
+  },
+  "notifications": {
+    "title": "الإشعارات",
+    "open": "فتح الإشعارات ({{count}} غير مقروء)",
+    "empty": "لا توجد إشعارات.",
+    "missingDays": {
+      "title": "أيام حضور غير مسجلة حتى {{date}}",
+      "line": "أيام غير مسجلة في {{group}}: {{count}}",
+      "period": "{{start}} – {{end}}"
+    }
   }
 }

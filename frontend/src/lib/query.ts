@@ -29,10 +29,10 @@ export const SITES = '/sites?per_page=100'
 const fetchEnvelope = (path: string) => ({ signal }: { signal: AbortSignal }) => apiList<Row>(path, { signal })
 const none: Row[] = []
 
-/** Loads a list endpoint; `total` lets pages warn when more rows exist than were fetched; `loading` is true until the first answer. */
-export function useList(path: string) {
+/** Loads a list endpoint; `total` lets pages warn when more rows exist than were fetched; `loading` is true until the first answer; `refetchInterval` (ms) polls. */
+export function useList(path: string, { refetchInterval }: { refetchInterval?: number } = {}) {
   const qc = useQueryClient()
-  const q = useQuery({ queryKey: queryKey(path), queryFn: fetchEnvelope(path), placeholderData: keepPreviousData })
+  const q = useQuery({ queryKey: queryKey(path), queryFn: fetchEnvelope(path), placeholderData: keepPreviousData, refetchInterval })
   const reload = useCallback(() => void qc.invalidateQueries({ queryKey: queryKey(path) }), [qc, path])
   const ok = !q.isError && q.data
   return { rows: ok ? ok.data : none, total: ok ? ok.meta.pagination.total : 0, err: q.error ?? undefined, loading: q.isPending, reload }

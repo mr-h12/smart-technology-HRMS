@@ -42,6 +42,12 @@ test('a second mount of the same path within staleTime makes no new request', as
   expect(calls('/sites?page=1')).toBe(1)
 })
 
+test('useList passes refetchInterval through', async () => {
+  mockFetch({ 'GET /api/v1/sites': () => list([]) })
+  renderHook(() => useList('/sites', { refetchInterval: 20 }), { wrapper })
+  await waitFor(() => expect(calls('/sites')).toBeGreaterThanOrEqual(3))
+})
+
 test('a save refetches every list of that resource and leaves other resources alone', async () => {
   let n = 0
   mockFetch({

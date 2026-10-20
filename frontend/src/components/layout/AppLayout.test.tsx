@@ -97,3 +97,11 @@ test('the mobile nav header keeps the close button lane clear of the brand', asy
   expect(sheet).toHaveClass('w-72')
   expect(within(sheet).getByRole('link', { name: 'سمارت تكنولوجي لإدارة الموارد البشرية' }).parentElement).toHaveClass('pe-14')
 })
+
+test('the header shows the notification bell before the account menu', async () => {
+  signedIn(['employee.view.all'])
+  renderApp('/employees')
+  const profile = await screen.findByRole('button', { name: 'قائمة الحساب' })
+  const bell = await screen.findByRole('button', { name: /^فتح الإشعارات/ })
+  expect(bell.compareDocumentPosition(profile) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+})

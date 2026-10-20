@@ -27,6 +27,7 @@ import { Sheet, SheetContent, SheetDescription, SheetTitle } from '@/components/
 import { useTheme } from '@/hooks/useTheme'
 import { useAuth } from '@/lib/auth'
 import { cn } from '@/lib/utils'
+import { NotificationBell } from './NotificationBell'
 import { TableSkeleton } from './PageSkeleton'
 import { SegmentedControl } from './SegmentedControl'
 
@@ -279,6 +280,7 @@ function Navbar({ onOpenMobile }: { onOpenMobile: () => void }) {
         <div className="hidden sm:block">
           <ThemeToggle />
         </div>
+        <NotificationBell />
         <ProfileMenu />
       </div>
     </header>
