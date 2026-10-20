@@ -97,8 +97,8 @@ Each test the spec lists for slice 1 maps to exactly one named test:
 | POST | `attendance/locks/reopen` | `attendance.lock` | 4 |
 | GET | `attendance/holidays?year=&per_page=` | `attendance.view` | 4 |
 | POST / PATCH / DELETE | `attendance/holidays`, `attendance/holidays/{holiday}` | `holiday.manage` | 4 |
-| GET | `attendance/template?group=&period_start=` | `attendance.edit` | 10 |
-| POST | `attendance/import/preview`, `attendance/import/confirm` (multipart) | `attendance.edit` | 11 |
+| GET | `attendance/template?group=&period_start=` | `attendance.view` + `attendance.edit`, scope = the narrower (ruling P34) | 10 |
+| POST | `attendance/import/preview`, `attendance/import/confirm` (multipart) | `attendance.view` + `attendance.edit`, scope = the narrower (ruling P34) | 11 |
 | GET | `notifications?per_page=` | auth only (own rows) | 13 |
 | PATCH | `notifications/{notification}/read` | auth only (own rows) | 13 |
 
@@ -1503,7 +1503,7 @@ Reuse existing `attendance.state.missing` / `attendance.short.absent` where they
 - **G1 One write path.** Each changed cell goes through the shared `AttendanceDays` row write the bulk endpoint uses, in the exact row shape the Day sheet's Present or Set site sends for that group (see `frontend/src/lib/day-sheet.ts` `bulkRows`), with `source = 'imported'`. The P28 keep-by-kind rule therefore applies unchanged: a site → site change keeps the day's other fields; a change of kind applies the same defaults as the Day sheet.
 - **G2 A blank cell is no change**, never a clear. Clearing a day stays in the app.
 - **G3 An unchanged cell writes nothing.** A cell equal to the effective day (a stored day, or a derived Friday or holiday compared by its leave type) counts as `unchanged`.
-- **G4 Stale protection, per cell.** A hidden sheet `versions` has the same shape as the grid and holds each stored day's `version` (blank = no stored row). A mismatch is a `concurrency_conflict` error for that cell, and a replayed confirm comes back as conflicts (coding-standards §8 idempotency).
+- **G4 Stale protection, per cell.** A hidden sheet `versions` has the same shape as the grid and holds each stored day's `version` (blank = no stored row). A mismatch is a `concurrency_conflict` error for that cell, and a replayed confirm writes nothing: the cells it applied now equal the stored day, so they come back `unchanged` (G3 runs first; amended 2026-10-20), while a cell changed since the download is still a conflict (coding-standards §8 idempotency).
 - **G5 Cells the employee cannot take** are blank and greyed in the template: days outside employment as the group's type, and future days. A value there is refused (`employee_not_active`, `future_date`).
 - **G6 Office cells** take «حاضر» / Present (either language) or a leave type; office has no sites. Present writes what the Day sheet's office Present writes (no times = on time).
 - **G7 The header row** holds the code label, the name label, then the period's dates as text `Y-m-d`, in order. It must match the requested group's period exactly, and the `versions` sheet must have the same shape; anything else is `template_mismatch`. A header date that Excel turned into a date cell or a serial reads the same as the text.
