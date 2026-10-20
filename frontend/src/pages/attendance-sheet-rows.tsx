@@ -25,10 +25,12 @@ export const QUICK: [SheetAction, string, LucideIcon, string][] = [
   [{ kind: 'leave', code: 'absent' }, 'attendance.sheet.action.absent', UserX, 'text-destructive hover:bg-destructive-bg hover:border-destructive-border'],
   [{ kind: 'leave', code: 'sick' }, 'attendance.sheet.action.sick', Stethoscope, 'text-info hover:bg-info-bg hover:border-info-border'],
 ]
+// a selected row or card: full accent, so it still shows in dark mode (accent/60 was too faint there), and kept under the pointer
+const SELECTED = 'bg-accent hover:bg-accent'
 const TOTALS = [['worked', 'text-success', 'attendance.sheet.kpi.worked'], ['leave', 'text-info', 'attendance.sheet.kpi.leave'], ['absent', 'text-destructive', 'attendance.sheet.kpi.absent'], ['missing', 'text-warning', 'attendance.state.missing']] as const
 
 /**
- * One page of the day sheet: a table from md up, cards below it. Writes go back through `onApply` (the sheet's `apply()`).
+ * One page of the day sheet: a table from xl up, cards below it (below xl the table is wider than its card, in both groups). Writes go back through `onApply` (the sheet's `apply()`).
  * `cursor` is the keyboard row (J/K): it carries `aria-current` and a ring.
  */
 export function SheetRows({ rows, office, editable, date, sites, selected, pending, cursor, leaveSite, onToggle, onApply, onOpenDay }: {
@@ -71,13 +73,13 @@ export function SheetRows({ rows, office, editable, date, sites, selected, pendi
       <span className="sr-only">{t('attendance.sheet.select', { name: name(r) })}</span>
     </label>
   )
-  // compact: icon-only below xl, so the desktop row fits beside the totals; the aria-label always names the action and the employee
-  const quick = (r: SheetRow, h: string, compact = false) => QUICK.map(([action, label, Icon, tone]) => (
+  // the aria-label always names the action and the employee
+  const quick = (r: SheetRow, h: string) => QUICK.map(([action, label, Icon, tone]) => (
     <Button key={label} type="button" variant="outline" size="sm" className={cn(FOCUS, h, 'px-2.5', tone)} disabled={pending.has(r.employee.id) || noLeave(action) || noSite(action, r)}
       {...(noSite(action, r) && { title: t('attendance.sheet.noLastSite'), 'aria-describedby': noSiteId })}
       aria-label={t('attendance.sheet.rowAction', { action: t(label), name: name(r) })} onClick={() => onApply(action, r, t('attendance.sheet.actionOn', { action: t(label), name: name(r) }))}>
       <Icon aria-hidden />
-      <span className={cn(compact && 'hidden xl:inline')}>{t(label)}</span>
+      {t(label)}
     </Button>
   ))
   const inTime = (r: SheetRow, h: string) => {
@@ -125,7 +127,7 @@ export function SheetRows({ rows, office, editable, date, sites, selected, pendi
       {TOTALS.map(([k, tone, label]) => (
         <div key={k} className="min-w-14">
           <div className={cn('text-sm font-semibold tabular', r.totals[k] ? tone : 'text-muted-foreground')}>{r.totals[k]}</div>
-          <div className="truncate text-[11px] text-muted-foreground">{t(label)}</div>
+          <div className="truncate text-[11px] text-muted-foreground">{t(office && k === 'worked' ? 'attendance.present' : label)}</div>
         </div>
       ))}
     </div>
@@ -134,7 +136,7 @@ export function SheetRows({ rows, office, editable, date, sites, selected, pendi
   return (
     <>
       {editable && !office && <span id={noSiteId} className="sr-only">{t('attendance.sheet.noLastSite')}</span>}
-      <div className="hidden md:block">
+      <div className="hidden xl:block">
         <Table>
           <TableHeader>
             <TableRow>
@@ -156,7 +158,7 @@ export function SheetRows({ rows, office, editable, date, sites, selected, pendi
           </TableHeader>
           <TableBody>
             {rows.map((r) => (
-              <TableRow key={r.employee.id} aria-current={here(r)} className={cn(selected.has(r.employee.id) && 'bg-accent/60', here(r) && 'ring-2 ring-primary ring-inset')}>
+              <TableRow key={r.employee.id} aria-current={here(r)} className={cn(selected.has(r.employee.id) && SELECTED, here(r) && 'ring-2 ring-primary ring-inset')}>
                 {editable && <TableCell className="px-1 py-0 first:ps-2">{check(r)}</TableCell>}
                 <TableCell className="tabular text-muted-foreground">{r.employee.code}</TableCell>
                 <TableCell>
@@ -172,19 +174,19 @@ export function SheetRows({ rows, office, editable, date, sites, selected, pendi
                 </TableCell>
                 <TableCell>
                   <div className="flex items-center justify-end gap-1.5">
-                    {editable && quick(r, 'h-9', true)}
+                    {editable && quick(r, 'h-9')}
                     {details(r, 'h-9')}
                   </div>
                 </TableCell>
-                <TableCell className="border-s bg-muted/40">{totals(r)}</TableCell>
+                <TableCell className={cn('border-s', !selected.has(r.employee.id) && 'bg-muted/40')}>{totals(r)}</TableCell>
               </TableRow>
             ))}
           </TableBody>
         </Table>
       </div>
-      <ul aria-label={t('attendance.employee')} className="divide-y md:hidden">
+      <ul aria-label={t('attendance.employee')} className="divide-y xl:hidden">
         {rows.map((r) => (
-          <li key={r.employee.id} aria-current={here(r)} className={cn('space-y-3 p-4', here(r) && 'ring-2 ring-primary ring-inset')}>
+          <li key={r.employee.id} aria-current={here(r)} className={cn('space-y-3 p-4', selected.has(r.employee.id) && SELECTED, here(r) && 'ring-2 ring-primary ring-inset')}>
             <div className="flex items-start justify-between gap-3">
               {editable && <div className="-my-2.5 -ms-2.5">{check(r)}</div>}
               <div className="min-w-0 flex-1">
@@ -201,7 +203,8 @@ export function SheetRows({ rows, office, editable, date, sites, selected, pendi
               {details(r, 'h-11')}
             </div>
             {editable && <div className="grid grid-cols-3 gap-2">{quick(r, 'h-11')}</div>}
-            {editable && noSite({ kind: 'present' }, r) && <p className="-mt-1.5 text-xs text-muted-foreground">{t('attendance.sheet.noLastSite')}</p>}
+            {/* not on a row already at a site today: there the disabled Present is no problem to explain */}
+            {editable && noSite({ kind: 'present' }, r) && status(r) !== 'present' && <p className="-mt-1.5 text-xs text-muted-foreground">{t('attendance.sheet.noLastSite')}</p>}
             <div className="border-t pt-3">
               <p className="mb-1.5 text-[11px] font-medium text-muted-foreground">{t('attendance.sheet.totals')}</p>
               {totals(r)}

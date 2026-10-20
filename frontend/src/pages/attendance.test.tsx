@@ -42,9 +42,20 @@ test('the grid isolates a Latin name from the employee code so RTL does not glue
 test('the period range stays on one line and its row wraps instead', async () => {
   mockFetch(routes)
   renderWithAuth(<AttendancePage />, ['attendance.view.all'], { path: '/attendance?group=engineer&tab=grid' })
-  const range = await screen.findByText('من 2026-09-26 إلى 2026-10-25')
+  const range = (await screen.findByText('2026-09-26')).parentElement!
+  expect(range).toHaveTextContent('من 2026-09-26 إلى 2026-10-25')
   expect(range).toHaveClass('whitespace-nowrap')
   expect(range.parentElement).toHaveClass('flex-wrap', 'gap-1') // gap-2 pushes the next arrow onto a second line at 375 px ar
+})
+
+test('the period range and the day editor title draw each ISO date left to right inside RTL text', async () => {
+  mockFetch({ ...routes, 'GET /api/v1/attendance/days/e1/2026-10-03': () => json(200, { data: { ...cell('2026-10-03', 'missing'), employee_id: 'e1', type: 'engineer', version: null,
+    fields: ['in_time'], leave_day_fields: [], hints: {}, period: { start: '2026-09-26', end: '2026-10-25', is_locked: false } } }) })
+  renderWithAuth(<AttendancePage />, ['attendance.view.all'], { path: '/attendance?group=engineer&tab=grid' })
+  for (const d of ['2026-09-26', '2026-10-25']) expect(await screen.findByText(d)).toHaveAttribute('dir', 'ltr')
+  await user.click(await screen.findByRole('button', { name: 'Engineer-1 2026-10-03: غير مسجل' }))
+  const editor = await screen.findByRole('dialog', { name: 'يوم 2026-10-03 — Engineer-1' })
+  expect(within(editor).getByText('2026-10-03')).toHaveAttribute('dir', 'ltr')
 })
 
 test('the period arrows move between periods and keep the group in the URL', async () => {
@@ -105,6 +116,7 @@ test('locking with missing days lists them and needs the confirm checkbox', asyn
   const row = await within(dialog).findByRole('listitem')
   expect(row).toHaveTextContent('Engineer-1')
   expect(row).toHaveTextContent('2026-10-03')
+  expect(within(row).getByText('2026-10-03')).toHaveAttribute('dir', 'ltr')
   const submit = within(dialog).getByRole('button', { name: 'قفل الفترة' })
   expect(submit).toBeDisabled()
   await user.click(within(dialog).getByRole('checkbox', { name: 'أؤكد القفل رغم وجود أيام غير مسجلة' }))

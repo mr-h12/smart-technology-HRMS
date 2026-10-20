@@ -4,7 +4,7 @@ import { useEffect, useId, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { toast } from 'sonner'
 import { EmptyState } from '@/components/common/EmptyState'
-import { cairoToday, ErrorBanner, intlLocale, localName, type Row, SelectField } from '@/components/form'
+import { cairoToday, ErrorBanner, intlLocale, localName, ltrDates, type Row, SelectField } from '@/components/form'
 import { TableSkeleton } from '@/components/layout/PageSkeleton'
 import { paginate, Pagination } from '@/components/tables/Pagination'
 import { Button } from '@/components/ui/button'
@@ -178,7 +178,7 @@ export function DaySheet({ group, date, period, onDate, onOpenDay }: { group: st
     const from = new Map(before.map((r) => [r.employee.id, r.day.version]))
     const to = new Map(done.map((a) => [a.employee_id, a.version]))
     undos.current = undos.current.map((u) => (u.date !== entry.date ? u : { ...u, after: u.after.map((a) => (to.has(a.employee_id) && from.get(a.employee_id) === a.version ? { ...a, version: to.get(a.employee_id) ?? null } : a)) }))
-    toast.success(entry.date === date ? t('attendance.sheet.toast.undone', { label: entry.label }) : t('attendance.sheet.toast.undoneOn', { label: entry.label, date: entry.date }))
+    toast.success(entry.date === date ? t('attendance.sheet.toast.undone', { label: entry.label }) : ltrDates(t('attendance.sheet.toast.undoneOn', { label: entry.label, date: entry.date })))
   }
 
   onKey.current = () => {} // no key acts on a sheet that is not on screen (the next date loading, an error); set again below
@@ -337,12 +337,13 @@ export function DaySheet({ group, date, period, onDate, onOpenDay }: { group: st
       {rows.length > 0 && (
         <Card>
           <p id={cohortsId} className="px-4 pt-3 text-xs font-medium text-muted-foreground">{t(office ? 'attendance.sheet.cohortsDept' : 'attendance.sheet.cohortsSite')}</p>
-          <div role="group" aria-labelledby={cohortsId} className="grid grid-cols-2 gap-2 p-3 pt-2 sm:grid-cols-3 lg:grid-cols-6">
+          {/* chips as wide as their label: only a name longer than the whole row is cut, and its title keeps it */}
+          <div role="group" aria-labelledby={cohortsId} className="flex flex-wrap gap-2 p-3 pt-2">
             {cohorts.map(([key, { total, done }]) => (
-              <div key={key} className="flex flex-col gap-1.5">
+              <div key={key} className="flex max-w-full min-w-36 flex-col gap-1.5">
                 <button type="button" aria-pressed={cohort === key} onClick={() => pickCohort(key)} className={cn(FOCUS, 'min-h-11 rounded-lg border p-2.5 text-start transition-colors', cohort === key ? 'border-primary bg-accent' : 'bg-muted/40 hover:bg-muted')}>
                   <span className="flex items-center justify-between gap-2 text-xs">
-                    <span className="truncate font-semibold">{cohortName(key)}</span>
+                    <span className="truncate font-semibold" title={cohortName(key)}>{cohortName(key)}</span>
                     <span dir="ltr" className={cn('font-semibold tabular', done === total ? 'text-success' : 'text-muted-foreground')}>{done}/{total}</span>
                   </span>
                   <span aria-hidden className="mt-1.5 block h-1.5 overflow-hidden rounded-full border bg-card">
@@ -370,9 +371,11 @@ export function DaySheet({ group, date, period, onDate, onOpenDay }: { group: st
             <div className="flex flex-wrap items-end gap-2">
               <div className="flex min-w-0 flex-1 basis-64 flex-col gap-1.5">
                 <Label htmlFor={commandId}>{t('attendance.sheet.command')}</Label>
+                {/* dir="auto": typed IDs and ranges read left to right, a typed Arabic name right to left. Chrome treats the empty box as
+                    LTR, so in Arabic the hint keeps the page's direction, and px-9 keeps either direction's text clear of the icon */}
                 <div className="relative">
                   <ScanBarcode className="pointer-events-none absolute start-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" aria-hidden />
-                  <Input ref={commandRef} id={commandId} aria-keyshortcuts="/" value={query} autoComplete="off" enterKeyHint="go" placeholder={t('attendance.sheet.commandHint')} className="h-11 ps-9 md:h-9"
+                  <Input ref={commandRef} id={commandId} dir="auto" aria-keyshortcuts="/" value={query} autoComplete="off" enterKeyHint="go" placeholder={t('attendance.sheet.commandHint')} className="h-11 px-9 md:h-9 rtl:text-right rtl:placeholder-shown:[direction:rtl]"
                     onChange={(e) => { setQuery(e.target.value); setPage(1) }} onKeyDown={command} />
                 </div>
               </div>

@@ -2,7 +2,7 @@ import { CalendarDays, Plus } from 'lucide-react'
 import { useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { RowActions } from '@/components/common/RowActions'
-import { type Controlled, ErrorBanner, FormDialog, type Row, TextField, useList } from '@/components/form'
+import { type Controlled, ErrorBanner, FormDialog, ltrDates, type Row, TextField, useList } from '@/components/form'
 import { paginate } from '@/components/tables/Pagination'
 import { Button } from '@/components/ui/button'
 import { Dialog, DialogBody, DialogContent, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog'
@@ -103,7 +103,7 @@ export function HolidaysTab() {
         <TableBody>
           {paginate(rows, page, PAGE).map((h) => (
             <TableRow key={h.id}>
-              <TableCell className="tabular-nums">{h.date}</TableCell>
+              <TableCell className="tabular-nums">{ltrDates(h.date)}</TableCell>
               <TableCell className="font-medium">{h.name}</TableCell>
               <TableCell className="text-end">
                 <RowActions

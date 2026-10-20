@@ -2,7 +2,7 @@ import { useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { toast } from 'sonner'
 import { StatusBadge } from '@/components/common/StatusBadge'
-import { ErrorBanner, Field, localName, type Row, SelectField, TextField, toErrs, useForm } from '@/components/form'
+import { ErrorBanner, Field, localName, ltrDates, type Row, SelectField, TextField, toErrs, useForm } from '@/components/form'
 import { TableSkeleton } from '@/components/layout/PageSkeleton'
 import { Button } from '@/components/ui/button'
 import { Textarea } from '@/components/ui/input'
@@ -50,7 +50,7 @@ function DayBody({ employee, date, onDone, onReload }: { employee: Row; date: st
   return (
     <>
       <div className="flex flex-wrap items-center gap-2 border-b p-5 pe-14">
-        <SheetTitle>{t('attendance.day.title', { date, name: localName(employee, i18n.language) })}</SheetTitle>
+        <SheetTitle>{ltrDates(t('attendance.day.title', { date, name: localName(employee, i18n.language) }))}</SheetTitle>
         {ready && day.data?.source && <StatusBadge variant="neutral" label={t(`attendance.source.${day.data.source}`)} />}
       </div>
       {ready ? (

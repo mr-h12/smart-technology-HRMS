@@ -4,7 +4,7 @@ import { useTranslation } from 'react-i18next'
 import { EmptyState } from '@/components/common/EmptyState'
 import { RowActions } from '@/components/common/RowActions'
 import { StatusBadge } from '@/components/common/StatusBadge'
-import { cairoToday, type Controlled, ErrorBanner, FormDialog, type Row, SelectField, TextField, useList, useMoney } from '@/components/form'
+import { cairoToday, type Controlled, ErrorBanner, FormDialog, ltrDates, type Row, SelectField, TextField, useList, useMoney } from '@/components/form'
 import { TableSkeleton } from '@/components/layout/PageSkeleton'
 import { Pagination, paginate } from '@/components/tables/Pagination'
 import { Badge } from '@/components/ui/badge'
@@ -120,7 +120,7 @@ function RuleHistory({ siteId }: { siteId: string }) {
         <TableBody>
           {rules.map((r) => (
             <TableRow key={r.id}>
-              <TableCell>{r.effective_from}</TableCell>
+              <TableCell>{ltrDates(r.effective_from)}</TableCell>
               <TableCell>{t(`enum.allowance_mode.${r.mode}`)}</TableCell>
               <TableCell>{r.mode === 'none' ? '—' : r.mode === 'share_of_wage' ? `×${r.value.replace(/(\.\d*?)0+$/, '$1').replace(/\.$/, '')}` : money(r.value)}</TableCell>
             </TableRow>

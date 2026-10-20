@@ -7,7 +7,7 @@ import { MiniStat } from '@/components/cards/StatCard'
 import { EmptyState } from '@/components/common/EmptyState'
 import { PageHeader } from '@/components/common/PageHeader'
 import { StatusBadge } from '@/components/common/StatusBadge'
-import { cairoToday, ErrorBanner, Field, FormDialog, intlLocale, localName, type Row, SelectField, useCairoTime } from '@/components/form'
+import { cairoToday, ErrorBanner, Field, FormDialog, intlLocale, localName, ltrDates, type Row, SelectField, useCairoTime } from '@/components/form'
 import { TableSkeleton } from '@/components/layout/PageSkeleton'
 import { Pagination } from '@/components/tables/Pagination'
 import { Button } from '@/components/ui/button'
@@ -91,7 +91,7 @@ export function AttendancePage() {
             <ChevronLeft className="rtl:-scale-x-100" aria-hidden />
           </Button>
           <span className="px-1 text-sm font-medium whitespace-nowrap tabular">
-            {period ? t('attendance.periodRange', { start: period.start, end: period.end }) : '—'}
+            {period ? ltrDates(t('attendance.periodRange', { start: period.start, end: period.end })) : '—'}
           </span>
           <Button variant="outline" size="icon" className="size-11" disabled={!period?.next_start} onClick={() => period?.next_start && move(period.next_start)} aria-label={t('attendance.nextPeriod')}>
             <ChevronRight className="rtl:-scale-x-100" aria-hidden />
@@ -309,7 +309,7 @@ function MissingDays({ group, start }: { group: string; start: string }) {
               <li key={`${d.employee_id}/${d.date}`} className="flex gap-3 px-3 py-2">
                 <span className="tabular text-muted-foreground">{d.code}</span>
                 <span className="flex-1">{localName(d, i18n.language)}</span>
-                <span className="tabular">{d.date}</span>
+                <span className="tabular">{ltrDates(d.date)}</span>
               </li>
             ))}
           </ul>

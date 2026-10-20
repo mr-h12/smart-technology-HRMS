@@ -36,6 +36,9 @@ export const localName = (row: Row, lang: string, fallback?: string): string => 
 /** Intl locale for a UI language; Arabic keeps Latin digits. */
 export const intlLocale = (lng: string) => (lng === 'ar' ? 'ar-EG-u-nu-latn' : lng)
 
+/** `text` with each ISO date (YYYY-MM-DD) in an LTR isolate: inside RTL text, after an Arabic word, 2026-10-25 would draw as 25-10-2026. */
+export const ltrDates = (text: string) => text.split(/(\d{4}-\d{2}-\d{2})/).map((part, i) => (i % 2 ? <bdi key={i} dir="ltr">{part}</bdi> : part))
+
 /** Today's date in Cairo as YYYY-MM-DD. */
 export const cairoToday = () => new Date().toLocaleDateString('en-CA', { timeZone: 'Africa/Cairo' })
 

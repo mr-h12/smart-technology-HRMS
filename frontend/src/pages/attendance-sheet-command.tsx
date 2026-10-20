@@ -60,7 +60,7 @@ export function PasteDialog({ open, onOpenChange, rows, leaveSite, onApply }: {
         </DialogHeader>
         <DialogBody className="grid gap-2">
           <Label htmlFor={id}>{t('attendance.sheet.paste.label')}</Label>
-          <Textarea id={id} rows={8} value={text} onChange={(e) => setText(e.target.value)} className="tabular" />
+          <Textarea id={id} dir="auto" rows={8} value={text} onChange={(e) => setText(e.target.value)} className="tabular rtl:text-right" />
           <div role="status" className="flex min-h-6 flex-wrap items-center gap-1.5">
             {batch?.byName && <span className="text-xs text-warning">{t('attendance.sheet.paste.idsOnly')}</span>}
             {ids && <BatchPreview batch={ids} count={ids.matches.length} />}

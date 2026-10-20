@@ -1,4 +1,4 @@
-import { fireEvent, screen, waitFor, within } from '@testing-library/react'
+import { fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { afterEach, beforeEach, expect, test, vi } from 'vitest'
 import i18n from '@/i18n'
@@ -396,7 +396,7 @@ test('the header keeps its period while a day inside it loads', async () => {
   await table()
   await user.click(within(screen.getByRole('group', { name: 'أيام الفترة' })).getByRole('button', { name: /^2026-10-17/ }))
   await waitFor(() => expect(calls).toBe(2))
-  expect(screen.getByText('من 2026-09-26 إلى 2026-10-25')).toBeInTheDocument()
+  expect(screen.getByText('2026-09-26').parentElement).toHaveTextContent('من 2026-09-26 إلى 2026-10-25')
   expect(within(await table()).getByRole('button', { name: 'حاضر Engineer-1' })).toBeInTheDocument() // still writable
 })
 
@@ -443,7 +443,7 @@ test('while another period or group loads, the header shows no stale range, miss
   expect(await screen.findByRole('button', { name: 'قفل الفترة' })).toBeInTheDocument()
   await user.click(screen.getByRole('button', { name: 'الفترة السابقة' })) // the date jumps to 2026-08-26, outside the loaded period
   await waitFor(() => expect(calls).toBe(2))
-  expect(screen.queryByText('من 2026-09-26 إلى 2026-10-25')).not.toBeInTheDocument()
+  expect(screen.queryByText('2026-09-26')).not.toBeInTheDocument() // the range's start date
   expect(screen.queryByRole('button', { name: 'قفل الفترة' })).not.toBeInTheDocument()
   expect(screen.getByRole('button', { name: 'الفترة السابقة' })).toBeDisabled()
   expect(screen.getByRole('group', { name: 'أيام غير مسجلة' })).toHaveTextContent('—')
@@ -456,7 +456,7 @@ test('a group change does not show the old group\'s period', async () => {
   expect(await screen.findByRole('button', { name: 'قفل الفترة' })).toBeInTheDocument()
   await user.selectOptions(screen.getByRole('combobox', { name: 'المجموعة' }), 'office')
   await waitFor(() => expect(calls).toBe(2))
-  expect(screen.queryByText('من 2026-09-26 إلى 2026-10-25')).not.toBeInTheDocument()
+  expect(screen.queryByText('2026-09-26')).not.toBeInTheDocument() // the range's start date
   expect(screen.queryByRole('button', { name: 'قفل الفترة' })).not.toBeInTheDocument()
 })
 
@@ -966,7 +966,10 @@ test('an undo of another day names that day in its toast', async () => {
   await user.click(within(screen.getByRole('group', { name: 'أيام الفترة' })).getByRole('button', { name: /^2026-10-17/ }))
   await table()
   key('KeyZ', { ctrlKey: true })
-  await waitFor(() => expect(toast.success).toHaveBeenCalledWith('تم التراجع: حاضر Engineer-1 (2026-10-18)'))
+  await waitFor(() => expect(toast.success).toHaveBeenCalledTimes(2))
+  const { container } = render(<>{vi.mocked(toast.success).mock.calls[1][0]}</>)
+  expect(container).toHaveTextContent('تم التراجع: حاضر Engineer-1 (2026-10-18)')
+  expect(within(container).getByText('2026-10-18')).toHaveAttribute('dir', 'ltr') // an Arabic name before it would otherwise flip the date in RTL
 })
 
 test('a refused row names its employee with the reason', async () => {
@@ -992,4 +995,73 @@ test('Enter on Undo keeps focus on the button while the undo is in flight', asyn
   expect(undoButton()).not.toBeDisabled()
   expect(undoButton()).toHaveAttribute('aria-disabled', 'true')
   expect(document.activeElement).toBe(undoButton())
+})
+
+// Gate 2b defects
+test('Quick entry and the paste box take their direction from what is typed, so RTL does not draw 1-3 as 3-1', async () => {
+  mockFetch(routes)
+  edit()
+  await table()
+  expect(command()).toHaveAttribute('dir', 'auto')
+  await user.click(screen.getByRole('button', { name: 'لصق أرقام' }))
+  expect(within(screen.getByRole('dialog')).getByRole('textbox', { name: 'الأرقام الوظيفية' })).toHaveAttribute('dir', 'auto')
+})
+
+test('below xl both groups get the cards; the table shows only from xl', async () => {
+  for (const [rows, group] of [[engineers, 'engineer'], [office, 'office']] as const) {
+    mockFetch({ ...routes, 'GET /api/v1/attendance/sheet': () => sheet(rows, group) })
+    const { unmount } = open(`/attendance?group=${group}`)
+    expect((await table()).closest('.hidden')).toHaveClass('xl:block')
+    expect(screen.getByRole('list', { name: 'الموظف' })).toHaveClass('xl:hidden')
+    unmount()
+  }
+})
+
+test('a cohort chip grows to its full label and carries the full name as its title', async () => {
+  mockFetch(routes)
+  open()
+  await table()
+  const cohorts = screen.getByRole('group', { name: 'حسب آخر موقع' })
+  expect(cohorts).toHaveClass('flex', 'flex-wrap') // not a fixed column grid that cuts the label at 1024
+  expect(within(cohorts).getByText('بدون موقع سابق')).toHaveAttribute('title', 'بدون موقع سابق')
+  expect(within(cohorts).getByText('Site-1')).toHaveAttribute('title', 'Site-1')
+})
+
+test('the no-last-site hint shows on a missing card, not on one already stored at a site today', async () => {
+  mockFetch({ ...routes, 'GET /api/v1/attendance/sheet': () => sheet([
+    row(5, 'Engineer-5', { state: 'stored', source: 'entered', version: 1, site_id: 's1' }), // at Site-1 today, no last site before it
+    row(6, 'Engineer-6', {}),
+  ]) })
+  edit()
+  await table()
+  const card = (name: string) => within(screen.getByRole('list', { name: 'الموظف' })).getByText(name).closest('li')!
+  expect(within(card('Engineer-5')).queryByText('بدون موقع سابق')).not.toBeInTheDocument()
+  expect(within(card('Engineer-6')).getByText('بدون موقع سابق')).toBeInTheDocument()
+})
+
+test('a selected card carries the same selected tint as its row, and the row tint spans the totals cell', async () => {
+  mockFetch(routes)
+  edit()
+  const tbl = await table()
+  await user.click(within(tbl).getByRole('checkbox', { name: 'تحديد Engineer-1' }))
+  const card = within(screen.getByRole('list', { name: 'الموظف' })).getByText('Engineer-1').closest('li')!
+  const tr = rowOf('Engineer-1')
+  expect(card).toHaveClass('bg-accent')
+  expect(tr).toHaveClass('bg-accent', 'hover:bg-accent') // the row's own hover fill must not hide the tint under the pointer that just ticked it
+  expect(within(tr).getAllByRole('cell').at(-1)).not.toHaveClass('bg-muted/40')
+  expect(within(rowOf('Engineer-2')).getAllByRole('cell').at(-1)).toHaveClass('bg-muted/40')
+  expect(within(screen.getByRole('list', { name: 'الموظف' })).getByText('Engineer-2').closest('li')).not.toHaveClass('bg-accent')
+})
+
+test('office totals say present, not at a site', async () => {
+  mockFetch({ ...routes, 'GET /api/v1/attendance/sheet': () => sheet(office, 'office') })
+  open('/attendance?group=office')
+  const [, ...rows] = within(await table()).getAllByRole('row')
+  for (const r of rows) {
+    const totals = within(r).getAllByRole('cell').at(-1)!
+    expect(within(totals).getByText('حاضر')).toBeInTheDocument()
+    expect(totals).not.toHaveTextContent('في موقع')
+  }
+  const cards = within(screen.getByRole('list', { name: 'الموظف' })).getAllByRole('listitem')
+  for (const c of cards) expect(c.lastElementChild).not.toHaveTextContent('في موقع')
 })

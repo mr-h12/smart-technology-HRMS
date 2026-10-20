@@ -211,6 +211,7 @@ test('allowance rule history lists rules and adds one', async () => {
   await rowMenu('موقع أ')
   await user.click(await screen.findByRole('menuitem', { name: 'البدلات' }))
   expect(await screen.findByText(fmt(50))).toBeInTheDocument()
+  expect(screen.getByText('2020-01-01')).toHaveAttribute('dir', 'ltr') // an ISO date is not drawn backwards in RTL
   await user.type(screen.getByLabelText('ساري اعتبارًا من'), '2026-10-01')
   await user.selectOptions(screen.getByLabelText('نوع البدل'), 'share_of_wage')
   await user.type(screen.getByLabelText('القيمة'), '0.5')
@@ -451,6 +452,7 @@ test('holidays tab lists, adds and shows a locked-period refusal', async () => {
   mockFetch({ 'GET /api/v1/attendance/holidays': list([{ id: 'h1', date: '2026-10-06', name: 'Holiday-1' }]), 'POST /api/v1/attendance/holidays': post })
   renderWithAuth(<SettingsPage />, HOLIDAYS, { path: '/settings?tab=holidays' })
   expect(await screen.findByRole('row', { name: /2026-10-06.*Holiday-1/ })).toBeInTheDocument()
+  expect(screen.getByText('2026-10-06')).toHaveAttribute('dir', 'ltr')
   expect(urlWith('/attendance/holidays')).toContain('per_page=100')
   const add = async (date: string, name: string) => {
     await user.click(screen.getByRole('button', { name: 'إضافة إجازة رسمية' }))
