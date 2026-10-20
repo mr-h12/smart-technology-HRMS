@@ -26,7 +26,7 @@ import { Tooltip, TooltipProvider } from '@/components/ui/misc'
 import { Sheet, SheetContent, SheetDescription, SheetTitle } from '@/components/ui/sheet'
 import { useTheme } from '@/hooks/useTheme'
 import { useAuth } from '@/lib/auth'
-import { cn } from '@/lib/utils'
+import { cn, FOCUS } from '@/lib/utils'
 import { NotificationBell } from './NotificationBell'
 import { TableSkeleton } from './PageSkeleton'
 import { SegmentedControl } from './SegmentedControl'
@@ -54,8 +54,6 @@ export const NAV: { group: string; items: { path: string; key: string; icon: Luc
 /** The first page the user may open; the fallback is the 1a landing page. */
 export const homePath = (can: (ability: string) => boolean) =>
   NAV.flatMap((g) => g.items).find((n) => n.abilities.some(can))?.path ?? '/employees'
-
-const FOCUS = 'focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring'
 
 export function LanguageToggle() {
   const { t, i18n } = useTranslation()

@@ -1,7 +1,8 @@
-import { screen, waitFor } from '@testing-library/react'
+import { act, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { useLocation } from 'react-router-dom'
 import { afterEach, expect, test, vi } from 'vitest'
+import { queryClient } from '@/lib/query'
 import { json, mockFetch, pagination, renderWithAuth } from '@/test-utils'
 import { NotificationBell } from './NotificationBell'
 
@@ -72,4 +73,50 @@ test('more than nine unread show as 9+', async () => {
   mockFetch({ 'GET /api/v1/notifications': inbox(Array.from({ length: 10 }, (_, i) => missing(`n${i}`, null, []))) })
   renderWithAuth(<NotificationBell />, [])
   expect(await screen.findByRole('button', { name: 'فتح الإشعارات (10 غير مقروء)' })).toHaveTextContent(/^9\+$/)
+})
+
+test('an unread notification of an unknown type is neither counted nor listed', async () => {
+  mockFetch({ 'GET /api/v1/notifications': inbox([{ id: 'x1', type: 'something_new', date: '2026-10-20', read_at: null, data: {} }]) })
+  renderWithAuth(<NotificationBell />, [])
+  await user.click(screen.getByRole('button', { name: /^فتح الإشعارات/ }))
+  expect(await screen.findByText('لا توجد إشعارات.')).toBeInTheDocument() // loaded
+  expect(screen.getByRole('button', { name: 'فتح الإشعارات (0 غير مقروء)' })).toHaveTextContent(/^$/)
+})
+
+test('a failed load says so in a short line, without the server dump', async () => {
+  mockFetch({ 'GET /api/v1/notifications': () => json(500, { error: { code: 'server_error', message: 'SQLSTATE[42P01]: Undefined table' } }) })
+  renderWithAuth(<NotificationBell />, [])
+  await user.click(screen.getByRole('button', { name: /^فتح الإشعارات/ }))
+  expect(await screen.findByText('تعذّر تحميل الإشعارات.')).toBeInTheDocument()
+  expect(screen.queryByText(/SQLSTATE/)).toBeNull()
+  expect(screen.queryByText('لا توجد إشعارات.')).toBeNull()
+})
+
+test('a failed refetch keeps the last unread count and lines', async () => {
+  let fail = false
+  mockFetch({ 'GET /api/v1/notifications': () => (fail ? json(500, { error: { code: 'server_error', message: 'Boom' } }) : inbox([unread])()) })
+  renderWithAuth(<NotificationBell />, [])
+  await screen.findByRole('button', { name: 'فتح الإشعارات (1 غير مقروء)' })
+  fail = true
+  await act(() => queryClient.invalidateQueries({ queryKey: ['notifications'] }))
+  await user.click(screen.getByRole('button', { name: 'فتح الإشعارات (1 غير مقروء)' }))
+  expect(await screen.findByText('تعذّر تحميل الإشعارات.')).toBeInTheDocument()
+  expect(screen.getAllByRole('menuitem')).toHaveLength(2)
+})
+
+test('each notification is a group named by its title, and unread lines say so', async () => {
+  mockFetch({ 'GET /api/v1/notifications': inbox([unread, read]) })
+  renderWithAuth(<NotificationBell />, [])
+  await user.click(await screen.findByRole('button', { name: 'فتح الإشعارات (1 غير مقروء)' }))
+  const groups = await screen.findAllByRole('group', { name: 'أيام حضور غير مسجلة حتى 2026-10-20' })
+  expect(groups).toHaveLength(2)
+  expect(within(groups[0]).getByRole('menuitem', { name: /المهندسون: 22/ })).toHaveAccessibleName(/غير مقروء/)
+  expect(within(groups[1]).getByRole('menuitem', { name: /عمال اليومية: 4/ })).not.toHaveAccessibleName(/غير مقروء/)
+})
+
+test('while loading, the menu says so to screen readers', async () => {
+  vi.stubGlobal('fetch', vi.fn(() => new Promise(() => {})))
+  renderWithAuth(<NotificationBell />, [])
+  await user.click(screen.getByRole('button', { name: /^فتح الإشعارات/ }))
+  expect(await screen.findByText('جارٍ التحميل…')).toBeInTheDocument()
 })

@@ -640,6 +640,8 @@
     "title": "Notifications",
     "open": "Open notifications ({{count}} unread)",
     "empty": "No notifications.",
+    "loadFailed": "Couldn't load notifications.",
+    "unread": "unread",
     "missingDays": {
       "title": "Missing attendance days as of {{date}}",
       "line": "Missing days, {{group}}: {{count}}",
