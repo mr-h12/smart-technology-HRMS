@@ -655,6 +655,9 @@
     "pm": "PM",
     "amName": "AM",
     "pmName": "PM",
-    "period": "AM or PM: {{field}}"
+    "period": "AM or PM: {{field}}",
+    "choosePeriod": "Choose AM or PM.",
+    "noPeriod": "No AM or PM chosen",
+    "invalid": "Invalid time."
   }
 }

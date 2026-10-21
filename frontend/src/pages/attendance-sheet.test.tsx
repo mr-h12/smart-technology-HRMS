@@ -352,7 +352,11 @@ test('an office in-time edit posts site null and the time', async () => {
   edit('/attendance?group=office')
   const tbl = await table()
   expect(within(tbl).getByLabelText('وقت الحضور Office-1')).toHaveValue('9:40')
-  const input = within(tbl).getByLabelText('وقت الحضور Office-2')
+  const row = within(tbl).getByRole('row', { name: /Office-2/ })
+  // an unrecorded row has no AM/PM chosen
+  for (const b of within(row).getAllByRole('button', { name: /^(صباحًا|مساءً)$/ })) expect(b).toHaveAttribute('aria-pressed', 'false')
+  const input = within(row).getByLabelText('وقت الحضور Office-2')
+  await user.click(within(row).getByRole('button', { name: 'صباحًا' }))
   await user.type(input, '9:20')
   expect(bulk).not.toHaveBeenCalled() // nothing is sent while typing
   fireEvent.blur(input)
@@ -393,14 +397,47 @@ test('an office in-time by keyboard: Tab to PM, Space, Tab out sends it once, no
   expect(sent(bulk).rows).toEqual([{ employee_id: 'e11', version: null, site_id: null, in_time: '13:15' }])
 })
 
-test('an office in-time: an AM/PM click while the box is not focused is applied at once', async () => {
+test('an office in-time: an AM/PM click alone writes nothing; it puts the cursor in the box, and leaving the box writes once', async () => {
   const bulk = bulkOk()
   mockFetch({ ...routes, 'GET /api/v1/attendance/period': officePeriod, 'GET /api/v1/attendance/sheet': () => sheet(office, 'office'), 'POST /api/v1/attendance/days/bulk': bulk })
   edit('/attendance?group=office')
   const row = within(await table()).getByRole('row', { name: /Office-1/ })
+  const input = within(row).getByLabelText('وقت الحضور Office-1')
   await user.click(within(row).getByRole('button', { name: 'مساءً' }))
+  expect(input).toHaveFocus()
+  expect(bulk).not.toHaveBeenCalled()
+  await user.clear(input)
+  await user.type(input, '1:15')
+  await user.click(document.body)
   await waitFor(() => expect(bulk).toHaveBeenCalledTimes(1))
-  expect(sent(bulk).rows).toEqual([{ employee_id: 'e10', version: 1, site_id: null, in_time: '21:40' }])
+  expect(sent(bulk).rows).toEqual([{ employee_id: 'e10', version: 1, site_id: null, in_time: '13:15' }])
+})
+
+test('an office in-time typed without AM/PM writes nothing, asks for the choice and puts the stored time back', async () => {
+  const bulk = bulkOk()
+  mockFetch({ ...routes, 'GET /api/v1/attendance/period': officePeriod, 'GET /api/v1/attendance/sheet': () => sheet(office, 'office'), 'POST /api/v1/attendance/days/bulk': bulk })
+  edit('/attendance?group=office')
+  const input = within(await table()).getByLabelText('وقت الحضور Office-2')
+  await user.type(input, '1:15')
+  fireEvent.blur(input)
+  expect(input).toHaveValue('')
+  expect(toast.error).toHaveBeenCalledWith('اختر ص أو م.')
+  expect(bulk).not.toHaveBeenCalled()
+})
+
+test('an office in-time box and its AM/PM choice are disabled while its write is in flight', async () => {
+  const bulk = vi.fn(() => new Promise<Response>(() => {}) as unknown as Response) // never answers: the write stays in flight
+  mockFetch({ ...routes, 'GET /api/v1/attendance/period': officePeriod, 'GET /api/v1/attendance/sheet': () => sheet(office, 'office'), 'POST /api/v1/attendance/days/bulk': bulk })
+  edit('/attendance?group=office')
+  const row = within(await table()).getByRole('row', { name: /Office-1/ })
+  const input = within(row).getByLabelText('وقت الحضور Office-1')
+  await user.clear(input)
+  await user.type(input, '0905')
+  fireEvent.blur(input)
+  await waitFor(() => expect(input).toBeDisabled())
+  expect(within(row).getByRole('button', { name: 'صباحًا' })).toBeDisabled()
+  expect(within(row).getByRole('button', { name: 'مساءً' })).toBeDisabled()
+  expect(bulk).toHaveBeenCalledTimes(1)
 })
 
 test('an office in-time: Escape or an unreadable time puts the stored one back and sends nothing', async () => {
@@ -416,6 +453,7 @@ test('an office in-time: Escape or an unreadable time puts the stored one back a
   await user.type(input, '99')
   fireEvent.blur(input)
   expect(input).toHaveValue('9:40')
+  expect(toast.error).toHaveBeenCalledWith('وقت غير صالح.')
   expect(bulk).not.toHaveBeenCalled()
 })
 

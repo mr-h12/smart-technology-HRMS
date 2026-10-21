@@ -39,6 +39,7 @@ test('an engineer day saves its fields with the version', async () => {
   await user.selectOptions(select, 's2')
   await user.type(screen.getByLabelText('دقائق العمل خارج الإسكندرية'), '٣٠')
   await user.type(screen.getByLabelText('السلفة'), '500')
+  await user.click(within(screen.getByRole('group', { name: 'صباحًا أو مساءً: وقت الحضور' })).getByRole('button', { name: 'صباحًا' }))
   await user.type(screen.getByLabelText('وقت الحضور'), '8')
   await user.type(screen.getByLabelText('وقت الانصراف'), '5:30')
   await user.click(within(screen.getByRole('group', { name: 'صباحًا أو مساءً: وقت الانصراف' })).getByRole('button', { name: 'مساءً' }))

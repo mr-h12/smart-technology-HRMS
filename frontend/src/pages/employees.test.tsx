@@ -252,7 +252,7 @@ test('create sends only the pay fields the type uses', async () => {
   await user.type(screen.getByLabelText('المرتب'), '9000')
   await user.selectOptions(screen.getByLabelText('نوع الموظف'), 'day_laborer')
   await user.type(screen.getByLabelText('الأجر اليومي'), '250')
-  await user.type(screen.getByLabelText('بداية الوردية'), '730')
+  await user.type(screen.getByLabelText('بداية الوردية'), '0730') // a leading zero is 24-hour: no AM/PM needed
   await user.type(screen.getByLabelText('انتهاء الوردية'), '3:30')
   await user.click(within(screen.getByRole('group', { name: 'صباحًا أو مساءً: انتهاء الوردية' })).getByRole('button', { name: 'مساءً' }))
   await user.click(screen.getByRole('button', { name: 'حفظ' }))

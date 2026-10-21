@@ -1,7 +1,8 @@
 import { CalendarOff, Check, CircleHelp, Clock, Eye, type LucideIcon, Stethoscope, UserX } from 'lucide-react'
 import { useId, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
-import { formatTime, localName, type Row, TimeInput } from '@/components/form'
+import { toast } from 'sonner'
+import { formatTime, localName, type Row, TimeInput, to24 } from '@/components/form'
 import { Button } from '@/components/ui/button'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 import { type SheetAction, type SheetRow, statusOf } from '@/lib/day-sheet'
@@ -224,10 +225,12 @@ export function SheetRows({ rows, office, editable, date, sites, selected, pendi
 }
 
 /**
- * The office in-time on the sheet. It is applied when focus leaves it (Enter in the box leaves it), or on an AM/PM click while the box
- * is not focused; Escape, a blank or an unreadable time puts the stored one back. A new day version remounts it (its `key`).
+ * The office in-time on the sheet. It is applied only when focus leaves it (Enter in the box leaves it; an AM/PM click moves the cursor
+ * into the box, it never writes). Escape, a blank, an unreadable time or one with no AM/PM puts the stored one back. A new day version
+ * remounts it (its `key`).
  */
 function InTime({ was, label, className, disabled, onCommit }: { was: string; label: string; className: string; disabled: boolean; onCommit: (v: string) => void }) {
+  const { t } = useTranslation()
   const [v, setV] = useState(was)
   // the sheet's own Escape blurs the box before React re-renders, so the blur reads the value from here, not from `v`
   const latest = useRef(was)
@@ -235,13 +238,15 @@ function InTime({ was, label, className, disabled, onCommit }: { was: string; la
   const box = useRef<HTMLDivElement>(null)
   const done = (x: string) => {
     const ok = /^\d{2}:\d{2}$/.test(x) ? x : was
+    // a time with no AM/PM chosen, or an unreadable one, is never written: say why, then put the stored time back
+    if (x && ok !== x) toast.error(t(to24(x, null) === 'period' ? 'time.choosePeriod' : 'time.invalid'))
     put(ok)
     if (ok !== was) onCommit(ok)
   }
   return (
     <div ref={box} className="w-44" onBlur={(e) => { if (!box.current?.contains(e.relatedTarget)) done(latest.current) }}
       onKeyDown={(e) => { if (e.key === 'Escape') put(was); else if (e.key === 'Enter' && e.target instanceof HTMLInputElement) e.target.blur() }}>
-      <TimeInput value={v} label={label} aria-label={label} className={className} disabled={disabled} onChange={(x) => { put(x); if (!box.current?.contains(document.activeElement)) done(x) }} />
+      <TimeInput value={v} label={label} aria-label={label} className={className} disabled={disabled} onChange={put} />
     </div>
   )
 }
