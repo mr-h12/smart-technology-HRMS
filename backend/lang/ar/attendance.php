@@ -29,6 +29,15 @@ return [
         'name' => 'الاسم',
         'present' => 'حاضر',
     ],
+    'leave_name' => [
+        'friday' => 'إجازة الجمعة',
+        'saturday' => 'إجازة السبت',
+        'official_holiday' => 'إجازة رسمية',
+        'sick' => 'إجازة مرضية',
+        'rest' => 'راحة',
+        'absent' => 'غياب',
+        'other' => 'أخرى',
+    ],
     'import' => [
         'unknown_employee' => 'الرقم الوظيفي غير موجود.',
         'unknown_site' => 'الموقع أو نوع اليوم غير موجود.',

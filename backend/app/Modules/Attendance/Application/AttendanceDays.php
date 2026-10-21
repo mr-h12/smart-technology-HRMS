@@ -110,45 +110,46 @@ final class AttendanceDays
         usort($order, fn (int $a, int $b) => strcmp((string) $rows[$a]['employee_id'], (string) $rows[$b]['employee_id']));
         $settings = $this->rules->all();
         $versions = [];
-        try {
-            DB::transaction(function () use ($date, $rows, $order, $employees, $settings, &$versions): void {
-                $conflicts = [];
-                $errors = [];
-                // ponytail: ~6 queries per row; preload sites and locks if 500-row requests get slow
-                foreach ($order as $i) {
-                    $row = $rows[$i];
-                    $employee = $employees[(string) $row['employee_id']] ?? throw new ModelNotFoundException;
-                    try {
-                        if (isset($row['clear'])) {
-                            $this->clearRow($employee, $date, (int) $row['version']);
-                            $versions[$i] = null;
-                        } else {
-                            $versions[$i] = $this->write($employee, $date, $row, 'entered', true, $settings);
-                        }
-                    } catch (AttendanceRefused $e) {
-                        $detail = ['field' => "rows.{$i}", 'code' => $e->reason->value, 'message' => __('attendance.refusal.'.$e->reason->value, $e->params)];
-                        if ($e->reason !== AttendanceRefusal::ConcurrencyConflict) {
-                            throw AttendanceRefused::because($e->reason, $e->params, [$detail]);
-                        }
-                        $conflicts[$i] = $detail;
-                    } catch (ValidationException $e) {
-                        foreach ($e->errors() as $field => $messages) {
-                            $errors[$i]["rows.{$i}.{$field}"] = $messages;
-                        }
+        DB::transaction(function () use ($date, $rows, $order, $employees, $settings, &$versions): void {
+            $conflicts = [];
+            $errors = [];
+            // ponytail: ~6 queries per row; preload sites and locks if 500-row requests get slow
+            foreach ($order as $i) {
+                $row = $rows[$i];
+                $employee = $employees[(string) $row['employee_id']] ?? throw new ModelNotFoundException;
+                try {
+                    if (isset($row['clear'])) {
+                        $this->clearRow($employee, $date, (int) $row['version']);
+                        $versions[$i] = null;
+                    } else {
+                        $versions[$i] = $this->write($employee, $date, $row, 'entered', true, $settings);
+                    }
+                } catch (AttendanceRefused $e) {
+                    $detail = ['field' => "rows.{$i}", 'code' => $e->reason->value, 'message' => __('attendance.refusal.'.$e->reason->value, $e->params)];
+                    if ($e->reason !== AttendanceRefusal::ConcurrencyConflict) {
+                        // A locked period or a future date refuses the whole request, so it names no row.
+                        throw AttendanceRefused::because($e->reason, $e->params, $e->reason === AttendanceRefusal::EmployeeNotActive ? [$detail] : []);
+                    }
+                    $conflicts[$i] = $detail;
+                } catch (UniqueConstraintViolationException) {
+                    // A racing insert of this row's day won; the transaction is aborted, so stop at this row.
+                    $reason = AttendanceRefusal::ConcurrencyConflict;
+                    throw AttendanceRefused::because($reason, [], [['field' => "rows.{$i}", 'code' => $reason->value, 'message' => __('attendance.refusal.'.$reason->value)]]);
+                } catch (ValidationException $e) {
+                    foreach ($e->errors() as $field => $messages) {
+                        $errors[$i]["rows.{$i}.{$field}"] = $messages;
                     }
                 }
-                ksort($conflicts);
-                ksort($errors);
-                if ($conflicts !== []) {
-                    throw AttendanceRefused::because(AttendanceRefusal::ConcurrencyConflict, [], array_values($conflicts));
-                }
-                if ($errors !== []) {
-                    throw ValidationException::withMessages(array_merge(...array_values($errors)));
-                }
-            });
-        } catch (UniqueConstraintViolationException) {
-            throw AttendanceRefused::because(AttendanceRefusal::ConcurrencyConflict);
-        }
+            }
+            ksort($conflicts);
+            ksort($errors);
+            if ($conflicts !== []) {
+                throw AttendanceRefused::because(AttendanceRefusal::ConcurrencyConflict, [], array_values($conflicts));
+            }
+            if ($errors !== []) {
+                throw ValidationException::withMessages(array_merge(...array_values($errors)));
+            }
+        });
 
         return array_map(fn (int $i) => ['employee_id' => (string) $rows[$i]['employee_id'], 'version' => $versions[$i]], array_keys($rows));
     }

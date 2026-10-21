@@ -29,6 +29,15 @@ return [
         'name' => 'Name',
         'present' => 'Present',
     ],
+    'leave_name' => [
+        'friday' => 'Friday',
+        'saturday' => 'Saturday',
+        'official_holiday' => 'Official holiday',
+        'sick' => 'Sick leave',
+        'rest' => 'Rest',
+        'absent' => 'Absent',
+        'other' => 'Other',
+    ],
     'import' => [
         'unknown_employee' => 'Unknown employee ID.',
         'unknown_site' => 'Unknown site or day type.',

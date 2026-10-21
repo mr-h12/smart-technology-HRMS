@@ -72,16 +72,6 @@ final class EmployeeRoster
         return $rows;
     }
 
-    /**
-     * @param  list<int>  $codes
-     * @return array<int, array<string, mixed>>
-     */
-    public function byCodes(array $codes): array
-    {
-        return Employee::with(['typeChanges', 'payChanges'])->whereIn('code', $codes)->get()
-            ->mapWithKeys(fn (Employee $e) => [(int) $e->code => $this->row($e)])->all();
-    }
-
     /** @return Builder<Employee> narrowed, when $managedBy is set, to the employees that user manages today (as `employee.scope`) */
     private function employedAs(EmployeeType $type, string $from, string $to, ?string $managedBy): Builder
     {

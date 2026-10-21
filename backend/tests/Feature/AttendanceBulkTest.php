@@ -138,14 +138,39 @@ class AttendanceBulkTest extends TestCase
         $this->postJson('/api/v1/attendance/locks', ['group' => 'engineer', 'period_start' => '2026-09-26', 'confirm_missing' => true])->assertCreated();
 
         $this->bulk([['employee_id' => $office, 'site_id' => null, 'in_time' => '09:00'], ['employee_id' => $eng, 'site_id' => $this->site]])
-            ->assertStatus(423)->assertJsonPath('error.code', 'period_locked')->assertJsonPath('error.details.0.field', 'rows.1');
+            ->assertStatus(423)->assertJsonPath('error.code', 'period_locked')->assertJsonMissingPath('error.details');   // request-wide: it names no row
         $this->assertSame(0, AttendanceDay::where('date', self::DATE)->count());
+    }
+
+    public function test_an_employee_not_active_on_the_date_names_their_row(): void
+    {
+        $active = $this->employee('engineer');
+        $hiredLater = $this->employee('engineer', '2026-10-19');
+
+        $this->bulk([['employee_id' => $active, 'site_id' => $this->site], ['employee_id' => $hiredLater, 'site_id' => $this->site]])
+            ->assertStatus(422)->assertJsonPath('error.code', 'employee_not_active')->assertJsonPath('error.details.0.field', 'rows.1');
+        $this->assertSame(0, AttendanceDay::count());
+    }
+
+    public function test_a_racing_insert_names_the_row_it_hit(): void
+    {
+        [$a, $b] = [$this->employee('engineer'), $this->employee('engineer')];
+        // Another request inserts $b's day between this request's read and its insert.
+        AttendanceDay::creating(function (AttendanceDay $day) use ($b): void {
+            if ($day->employee_id === $b) {
+                DB::table('attendance_days')->insert(['id' => (string) Str::uuid7(), 'employee_id' => $b, 'date' => self::DATE, 'source' => 'entered']);
+            }
+        });
+
+        $this->bulk([['employee_id' => $b, 'site_id' => $this->site], ['employee_id' => $a, 'site_id' => $this->site]])
+            ->assertStatus(409)->assertJsonPath('error.code', 'concurrency_conflict')->assertJsonPath('error.details.0.field', 'rows.0');
+        $this->assertSame(0, AttendanceDay::count());
     }
 
     public function test_a_future_date_is_refused(): void
     {
         $this->bulk([['employee_id' => $this->employee('engineer'), 'site_id' => $this->site]], '2026-10-21')
-            ->assertStatus(422)->assertJsonPath('error.code', 'future_date')->assertJsonPath('error.details.0.field', 'rows.0');
+            ->assertStatus(422)->assertJsonPath('error.code', 'future_date')->assertJsonMissingPath('error.details');
     }
 
     public function test_more_than_500_rows_is_refused(): void

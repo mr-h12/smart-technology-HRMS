@@ -44,7 +44,26 @@ class NotificationsTest extends TestCase
         $this->assertEqualsCanonicalizing([$hr1->id, $hr2->id, $c->id], Notification::pluck('user_id')->all());
         // assertEquals, not assertSame: jsonb stores object keys in its own order.
         $this->assertEquals(['date' => '2026-10-20', 'groups' => [['group' => 'engineer', 'period_start' => '2026-09-26', 'period_end' => '2026-10-25', 'missing' => 22]]], Notification::first()?->data);
+        $this->assertSame(22, Notification::first()?->data['groups'][0]['missing']);   // an int: the bell pluralizes it
         $this->assertSame(['attendance_missing_days'], Notification::distinct()->pluck('type')->all());
+    }
+
+    public function test_days_before_a_mid_period_hire_are_not_counted(): void
+    {
+        $this->employee('engineer', '2026-10-10');   // 10-10 → 10-20 is 11 days, less Friday 10-16: 10 missing
+        $this->makeUser('hr');
+
+        $this->artisan('attendance:alert-missing', ['date' => '2026-10-20'])->assertSuccessful();
+
+        $this->assertSame(10, Notification::first()?->data['groups'][0]['missing']);
+    }
+
+    public function test_a_job_that_fails_its_last_try_is_recorded_in_failed_jobs(): void
+    {
+        $payload = json_encode(['uuid' => '0192f000-0000-7000-8000-000000000001', 'displayName' => SendMissingDaysAlert::class], JSON_THROW_ON_ERROR);
+        app('queue.failer')->log('redis', 'maintenance', $payload, new RuntimeException('down'));
+
+        $this->assertSame([SendMissingDaysAlert::class], array_map(fn ($j) => json_decode($j->payload)->displayName, app('queue.failer')->all()));
     }
 
     public function test_no_notification_when_nothing_is_missing(): void

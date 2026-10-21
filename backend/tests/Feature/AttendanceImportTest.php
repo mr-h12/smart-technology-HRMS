@@ -76,7 +76,7 @@ class AttendanceImportTest extends TestCase
             ->assertJsonPath('data.summary', ['cells' => 8, 'changes' => 3, 'unchanged' => 4, 'errors' => 1])
             ->assertJsonPath('data.changes.0', [
                 'row' => 2, 'column' => 'H', 'employee_id' => $this->eng, 'code' => (int) $this->code($this->eng), 'name_ar' => 'Engineer-1',
-                'date' => '2026-10-01', 'from' => null, 'to' => 'Site-1',
+                'name_en' => null, 'date' => '2026-10-01', 'from' => null, 'to' => 'Site-1',
             ])
             ->assertJsonPath('data.changes.1.to', $this->leaveName('absent'))
             ->assertJsonPath('data.errors', [[
@@ -237,6 +237,17 @@ class AttendanceImportTest extends TestCase
         $this->assertSame([['H', 'unknown_site'], ['J', 'unknown_site']], array_map(fn (array $e) => [$e['column'], $e['error']], $r->json('data.errors')));
     }
 
+    public function test_an_untouched_derived_day_whose_name_another_site_shares_is_unchanged(): void
+    {
+        Site::create(['name_ar' => 'Site-2', 'name_en' => $this->leaveName('friday'), 'kind' => 'work']);   // the Friday type's name, reused
+        $file = $this->file($this->download());                                                     // the derived Fridays say that name
+
+        // The derived Fridays 10-02, 10-09, 10-16 and the holiday 10-06.
+        $this->upload('preview', $file)->assertOk()->assertJsonPath('data.summary', ['cells' => 4, 'changes' => 0, 'unchanged' => 4, 'errors' => 0]);
+        $this->upload('confirm', $file)->assertOk()->assertJsonPath('data', ['applied' => 0, 'unchanged' => 4, 'errors' => []]);
+        $this->assertSame(0, AttendanceDay::withTrashed()->count());
+    }
+
     public function test_versions_follow_the_code_when_the_visible_rows_are_reordered(): void
     {
         $second = $this->employee('engineer');
@@ -252,6 +263,20 @@ class AttendanceImportTest extends TestCase
         $this->upload('confirm', $file)->assertOk()->assertJsonPath('data.applied', 2)->assertJsonPath('data.errors', []);
         $this->assertSame([$this->site, 3], AttendanceDay::where(['employee_id' => $this->eng, 'date' => '2026-10-01'])->get(['site_id', 'version'])->map(fn (AttendanceDay $d) => [$d->site_id, $d->version])->sole());
         $this->assertSame([$site2, 2], AttendanceDay::where(['employee_id' => $second, 'date' => '2026-10-01'])->get(['site_id', 'version'])->map(fn (AttendanceDay $d) => [$d->site_id, $d->version])->sole());
+    }
+
+    public function test_an_english_preview_names_employees_and_leave_types_in_english(): void
+    {
+        $this->employee('engineer', '2026-01-01', ['name_en' => 'Engineer One']);
+        $code = Employee::where('name_en', 'Engineer One')->value('code');
+        $id = (string) Employee::where('name_en', 'Engineer One')->value('id');
+        $this->putDay($id, '2026-10-04', ['site_id' => $this->leave['sick']])->assertOk();
+
+        $file = $this->edit($this->download(), [(string) $code => ['2026-10-03' => $this->leaveName('absent'), '2026-10-04' => 'Site-1']]);
+        $r = $this->upload('preview', $file, locale: 'en')->assertOk();
+
+        // The seeded leave types have no name_en; English falls back to the day-type's own English name.
+        $this->assertSame([['Engineer One', null, 'Absent'], ['Engineer One', 'Sick leave', 'Site-1']], array_map(fn (array $c) => [$c['name_en'], $c['from'], $c['to']], $r->json('data.changes')));
     }
 
     public function test_a_template_downloaded_in_english_uploads_under_arabic(): void
@@ -473,10 +498,10 @@ class AttendanceImportTest extends TestCase
         return new UploadedFile($path, 'attendance.xlsx', null, null, true);
     }
 
-    private function upload(string $endpoint, UploadedFile $file, string $group = 'engineer'): TestResponse
+    private function upload(string $endpoint, UploadedFile $file, string $group = 'engineer', string $locale = 'ar'): TestResponse
     {
         return $this->post("/api/v1/attendance/import/{$endpoint}", ['group' => $group, 'period_start' => self::STARTS[$group], 'file' => $file], [
-            'Accept' => 'application/json', 'Accept-Language' => 'ar',
+            'Accept' => 'application/json', 'Accept-Language' => $locale,
         ]);
     }
 

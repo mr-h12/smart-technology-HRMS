@@ -36,7 +36,7 @@ final class AttendanceImport
     ) {}
 
     /**
-     * @return array{summary: array{cells: int, changes: int, unchanged: int, errors: int}, changes: list<array{row: int, column: string, employee_id: string, code: int, name_ar: string, date: string, from: ?string, to: string}>, errors: list<array{row: int, column: ?string, code: ?int, date: ?string, error: string, message: string}>}
+     * @return array{summary: array{cells: int, changes: int, unchanged: int, errors: int}, changes: list<array{row: int, column: string, employee_id: string, code: int, name_ar: string, name_en: ?string, date: string, from: ?string, to: string}>, errors: list<array{row: int, column: ?string, code: ?int, date: ?string, error: string, message: string}>}
      */
     public function preview(EmployeeType $g, string $start, string $path, ?string $ownerId): array
     {
@@ -74,7 +74,7 @@ final class AttendanceImport
     /**
      * Reads and checks the file (G7) and sorts its non-blank day cells into unchanged (G3), refused, and the changes to write.
      *
-     * @return array{cells: int, unchanged: int, changes: list<array{employee: array<string, mixed>, date: string, index: int, input: array{version: ?int, site_id: ?string}, change: array{row: int, column: string, employee_id: string, code: int, name_ar: string, date: string, from: ?string, to: string}}>, errors: list<array{row: int, column: ?string, code: ?int, date: ?string, error: string, message: string, index: int}>}
+     * @return array{cells: int, unchanged: int, changes: list<array{employee: array<string, mixed>, date: string, index: int, input: array{version: ?int, site_id: ?string}, change: array{row: int, column: string, employee_id: string, code: int, name_ar: string, name_en: ?string, date: string, from: ?string, to: string}}>, errors: list<array{row: int, column: ?string, code: ?int, date: ?string, error: string, message: string, index: int}>}
      */
     private function plan(EmployeeType $g, string $start, string $path, ?string $ownerId): array
     {
@@ -145,7 +145,7 @@ final class AttendanceImport
                         'input' => ['version' => self::version($versions[$code][$i] ?? null), 'site_id' => $choice['site_id']],
                         'change' => [
                             'row' => $row, 'column' => self::column($i), 'employee_id' => (string) $employee['id'], 'code' => $code,
-                            'name_ar' => (string) $employee['name_ar'], 'date' => $date, 'from' => $from, 'to' => $choice['name'],
+                            'name_ar' => (string) $employee['name_ar'], 'name_en' => $employee['name_en'], 'date' => $date, 'from' => $from, 'to' => $choice['name'],
                         ],
                     ];
                 }
@@ -156,7 +156,7 @@ final class AttendanceImport
     }
 
     /**
-     * @param  array{employee: array<string, mixed>, date: string, index: int, input: array{version: ?int, site_id: ?string}, change: array{row: int, column: string, employee_id: string, code: int, name_ar: string, date: string, from: ?string, to: string}}  $c
+     * @param  array{employee: array<string, mixed>, date: string, index: int, input: array{version: ?int, site_id: ?string}, change: array{row: int, column: string, employee_id: string, code: int, name_ar: string, name_en: ?string, date: string, from: ?string, to: string}}  $c
      * @return array{row: int, column: ?string, code: ?int, date: ?string, error: string, message: string, index: int}|null the shared write's refusal, with its own code
      */
     private function write(array $c, bool $dryRun): ?array
@@ -201,7 +201,8 @@ final class AttendanceImport
         }
         foreach ($sites as $s) {
             $id = (string) $s->id;
-            $names[$id] = (string) ($en ? ($s->name_en ?? $s->name_ar) : $s->name_ar);
+            // In English a leave type without name_en takes its day-type's English name, as the day sheet shows it.
+            $names[$id] = (string) ($en ? ($s->name_en ?? ($s->leave_code !== null ? __('attendance.leave_name.'.$s->leave_code) : $s->name_ar)) : $s->name_ar);
             $prefilled[$id] = [self::key((string) $s->name_ar)];                             // AttendanceTemplate::grid prefills name_ar
             if ($s->trashed() || ($g === EmployeeType::Office && $s->kind !== 'leave')) {
                 continue;
@@ -219,8 +220,8 @@ final class AttendanceImport
     }
 
     /**
-     * G3. The cell still says what the template prefilled for the stored day, even after that site was deleted or its name reused;
-     * or it names the stored day's site, or a derived Friday or holiday's leave type.
+     * G3. The cell still says what the template prefilled for the stored day or the derived Friday or holiday, even after that site
+     * was deleted or its name reused; or it names the stored day's site, or a derived Friday or holiday's leave type.
      *
      * @param  array{site_id: ?string, leave_code: ?string, name: string}|null  $choice
      * @param  array<string, mixed>  $day  an EffectiveDays day
@@ -228,7 +229,8 @@ final class AttendanceImport
      */
     private static function unchanged(string $key, ?array $choice, array $day, array $prefilled): bool
     {
-        if ($day['state'] === 'stored' && in_array($key, $prefilled[$day['site_id'] ?? ''] ?? [], true)) {
+        $prefills = $day['state'] === 'stored' || ($day['state'] === 'derived' && $day['site_id'] !== null);
+        if ($prefills && in_array($key, $prefilled[$day['site_id'] ?? ''] ?? [], true)) {
             return true;
         }
 
