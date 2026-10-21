@@ -24,6 +24,10 @@ _Avoid_: supervisor, team leader
 The English name an office employee has on the fingerprint device, used to match its export to the employee.
 _Avoid_: English name, device ID
 
+**Employee ID** (الرقم الوظيفي):
+The number the company gives each employee; stored as the employee's `code`.
+_Avoid_: الكود; code (in the UI)
+
 ## Work and attendance
 
 **Site** (موقع):
@@ -31,12 +35,12 @@ A place where a day of work is done, usually a client location.
 _Avoid_: location, project, place (المكان)
 
 **Leave day-type**:
-A non-work value recorded instead of a site for a day: Friday, official holiday, sick, rest, absent (غ). It gets its own row in site costing.
+A non-work value recorded instead of a site for a day: Friday, official holiday, sick, rest, absent (غ). It gets its own row in site costing. Stored as a `sites` row with `kind=leave` and a `leave_code`; the UI calls them أنواع الإجازات / Leave types and never "leave site".
 _Avoid_: leave site
 
-**Residence** (السكن):
+**Residence** (محل الإقامة):
 The town an employee travels from. Together with the site it sets the fare.
-_Avoid_: address, home
+_Avoid_: السكن; address, home
 
 **Shift**:
 An employee's scheduled start and end time. Lateness and overtime are measured against it.
@@ -72,7 +76,7 @@ _Avoid_: bonus, extra
 
 **Fare** (المواصلات):
 The transport amount paid for travelling from a residence to a site, full or half.
-_Avoid_: transport allowance (for office tower trips, see Tower transport)
+_Avoid_: الأجرة; transport allowance (for office tower trips, see Tower transport)
 
 **Tower transport** (بدل انتقالات البرج):
 An office employee's allowance of a quarter day's pay per tower day.

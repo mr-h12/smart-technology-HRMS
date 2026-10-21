@@ -1,12 +1,25 @@
+import { Briefcase, CalendarDays, FileText, HardHat, History as HistoryIcon, IdCard, type LucideIcon, UserCog, UserPlus, Users, Wrench } from 'lucide-react'
 import { useCallback, useEffect, useState } from 'react'
 import { useTranslation } from 'react-i18next'
-import { Link, useNavigate, useParams } from 'react-router-dom'
+import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom'
+import { MiniStat, type Tone } from '@/components/cards/StatCard'
+import { EmptyState } from '@/components/common/EmptyState'
+import { FilterSelect, SearchInput } from '@/components/common/Filters'
+import { PageHeader } from '@/components/common/PageHeader'
+import { StatusBadge } from '@/components/common/StatusBadge'
+import { UserAvatar } from '@/components/common/UserAvatar'
+import { TableSkeleton } from '@/components/layout/PageSkeleton'
+import { Pagination } from '@/components/tables/Pagination'
+import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Dialog, DialogBody, DialogContent, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog'
-import { Input, Textarea } from '@/components/ui/input'
+import { Textarea } from '@/components/ui/input'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
-import { ErrorBanner, Field, type Errs, type Row, SelectField, selectCls, TextField, toErrs, useForm, useMoney } from '@/components/form'
-import { api, apiList, type Pagination } from '@/lib/api'
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
+import { cairoToday, ErrorBanner, Field, type Errs, FormDialog, type FormApi, type Row, SelectField, TextField, toErrs, useForm, useMoney } from '@/components/form'
+import { api, apiList } from '@/lib/api'
+import { useAuth } from '@/lib/auth'
 
 const TYPES = ['office', 'engineer', 'permanent_worker', 'day_laborer']
 const GENDERS = ['male', 'female']
@@ -37,104 +50,192 @@ function PayFields({ type, values, set, errs }: { type: string; values: Row; set
 
 const clean = (o: Row, keys: string[]) => Object.fromEntries(keys.filter((k) => o[k] !== undefined && o[k] !== '').map((k) => [k, o[k]]))
 
+const PAGE = 12
+const STATS: [string, LucideIcon, Tone][] = [
+  ['total', Users, 'indigo'],
+  ['office', Briefcase, 'sky'],
+  ['engineer', HardHat, 'amber'],
+  ['permanent_worker', Wrench, 'emerald'],
+  ['day_laborer', CalendarDays, 'slate'],
+]
+
 export function EmployeesPage() {
   const { t } = useTranslation()
+  const { can } = useAuth()
+  const navigate = useNavigate()
   const [q, setQ] = useState('')
   const [type, setType] = useState('')
   const [page, setPage] = useState(1)
-  const [rows, setRows] = useState<Row[]>([])
-  const [pg, setPg] = useState<Pagination>()
+  const [rows, setRows] = useState<Row[]>()
+  const [total, setTotal] = useState(0)
+  const [counts, setCounts] = useState<Record<string, number>>({})
   const [err, setErr] = useState<unknown>()
 
   useEffect(() => {
-    const qs = new URLSearchParams({ page: String(page), ...(q && { search: q }), ...(type && { type }) })
+    let live = true // drop answers to queries the user has already typed past
+    const qs = new URLSearchParams({ page: String(page), per_page: String(PAGE), ...(q && { search: q }), ...(type && { type }) })
     apiList<Row>(`/employees?${qs}`)
       .then((r) => {
+        if (!live) return
         setErr(undefined)
         setRows(r.data)
-        setPg(r.meta.pagination)
+        setTotal(r.meta.pagination.total)
       })
-      .catch(setErr)
+      .catch((e) => live && setErr(e))
+    return () => {
+      live = false
+    }
   }, [q, type, page])
 
+  // ponytail: one count call per tile; replace them with a counts endpoint if the list grows slow.
+  useEffect(() => {
+    for (const [k] of STATS) {
+      apiList(`/employees?per_page=1${k === 'total' ? '' : `&type=${k}`}`).then(
+        (r) => setCounts((c) => ({ ...c, [k]: r.meta.pagination.total })),
+        () => {}, // a failed tile stays at —; the list request shows the banner
+      )
+    }
+  }, [])
+
+  const filter = (set: (v: string) => void) => (v: string) => {
+    set(v)
+    setPage(1)
+  }
+  const clear = () => {
+    setQ('')
+    setType('')
+    setPage(1)
+  }
+  const today = cairoToday()
+  const open = (id: string) => navigate(`/employees/${id}`)
+
   return (
-    <div className="flex flex-col gap-4">
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <h1 className="text-page-title">{t('page.employees')}</h1>
-        <Button asChild>
-          <Link to="/employees/new">{t('employee.add')}</Link>
-        </Button>
+    <div className="space-y-6">
+      <PageHeader
+        title={t('page.employees')}
+        description={t('employee.subtitle')}
+        actions={
+          can('employee.create') && (
+            <Button asChild>
+              <Link to="/employees/new">
+                <UserPlus />
+                {t('employee.add')}
+              </Link>
+            </Button>
+          )
+        }
+      />
+
+      <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 xl:grid-cols-5">
+        {STATS.map(([k, icon, tone]) => (
+          <MiniStat key={k} label={t(`employee.stat.${k}`)} value={counts[k] ?? '—'} icon={icon} tone={tone} />
+        ))}
       </div>
-      <div className="flex flex-wrap gap-3">
-        <Input className="max-w-xs" aria-label={t('employee.search')} placeholder={t('employee.search')} value={q} onChange={(e) => { setQ(e.target.value); setPage(1) }} />
-        <select aria-label={t('employee.type')} className={`${selectCls} max-w-xs`} value={type} onChange={(e) => { setType(e.target.value); setPage(1) }}>
-          <option value="">{t('employee.allTypes')}</option>
-          {TYPES.map((v) => (
-            <option key={v} value={v}>
-              {t(`enum.type.${v}`)}
-            </option>
-          ))}
-        </select>
-      </div>
-      <ErrorBanner err={err} shown={[]} />
-      <Table>
-        <TableHeader>
-          <TableRow>
-            {['code', 'name_ar', 'type', 'department', 'pay_method'].map((c) => (
-              <TableHead key={c}>{t(`employee.${c}`)}</TableHead>
-            ))}
-          </TableRow>
-        </TableHeader>
-        <TableBody>
-          {rows.map((e) => (
-            <TableRow key={e.id}>
-              <TableCell>{e.code}</TableCell>
-              <TableCell>
-                <Link className="underline" to={`/employees/${e.id}`}>
-                  {e.name_ar}
-                </Link>
-              </TableCell>
-              <TableCell>{e.current_type ? t(`enum.type.${e.current_type}`) : '—'}</TableCell>
-              <TableCell>{e.department ?? '—'}</TableCell>
-              <TableCell>{t(`enum.pay_method.${e.pay_method}`)}</TableCell>
-            </TableRow>
-          ))}
-        </TableBody>
-      </Table>
-      {pg && (
-        <div className="flex items-center gap-3 text-sm">
-          <Button variant="outline" disabled={!pg.has_previous_page} onClick={() => setPage(page - 1)}>
-            {t('common.prev')}
-          </Button>
-          <span>{t('common.pageOf', { page: pg.page, total: pg.total_pages })}</span>
-          <Button variant="outline" disabled={!pg.has_next_page} onClick={() => setPage(page + 1)}>
-            {t('common.next')}
-          </Button>
+
+      <Card className="overflow-hidden">
+        <div className="space-y-3 border-b p-4">
+          <div className="flex flex-col gap-3 xl:flex-row xl:items-center">
+            <SearchInput value={q} onChange={filter(setQ)} placeholder={t('employee.search')} className="sm:w-full sm:max-w-md" />
+            <FilterSelect value={type} onChange={filter(setType)} label={t('employee.type')} allLabel={t('employee.allTypes')} options={TYPES.map((v) => [v, t(`enum.type.${v}`)])} />
+            {(q || type) && (
+              <Button variant="ghost" size="sm" onClick={clear} className="xl:ms-auto">
+                {t('common.clearFilters')}
+              </Button>
+            )}
+          </div>
+          <ErrorBanner err={err} shown={[]} />
         </div>
-      )}
+
+        {!rows ? (
+          !err && <TableSkeleton rows={8} />
+        ) : !rows.length ? (
+          <EmptyState icon={Users} title={t('common.noResults')} />
+        ) : (
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead>{t('employee.employee')}</TableHead>
+                <TableHead className="hidden sm:table-cell">{t('employee.code')}</TableHead>
+                <TableHead className="hidden sm:table-cell">{t('employee.type')}</TableHead>
+                <TableHead className="hidden md:table-cell">{t('employee.department')}</TableHead>
+                <TableHead className="hidden xl:table-cell">{t('employee.hire_date')}</TableHead>
+                <TableHead>{t('employee.status')}</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {rows.map((e) => {
+                const left = e.termination_date && e.termination_date <= today
+                const badge = e.current_type && <Badge variant="info">{t(`enum.type.${e.current_type}`)}</Badge>
+                return (
+                  <TableRow
+                    key={e.id}
+                    tabIndex={0}
+                    className="cursor-pointer focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-ring"
+                    onClick={() => open(e.id)}
+                    onKeyDown={(ev) => ev.key === 'Enter' && open(e.id)}
+                  >
+                    <TableCell className="whitespace-normal">
+                      <div className="flex items-center gap-3">
+                        <UserAvatar name={e.name_ar} />
+                        <div className="min-w-0">
+                          <div className="font-medium">{e.name_ar}</div>
+                          {e.name_en && <div className="text-xs text-muted-foreground">{e.name_en}</div>}
+                          {badge && <div className="mt-1 sm:hidden">{badge}</div>}
+                        </div>
+                      </div>
+                    </TableCell>
+                    <TableCell className="hidden font-mono text-xs text-muted-foreground sm:table-cell">{e.code}</TableCell>
+                    <TableCell className="hidden sm:table-cell">{badge || '—'}</TableCell>
+                    <TableCell className="hidden md:table-cell">{e.department ?? '—'}</TableCell>
+                    <TableCell className="hidden text-muted-foreground xl:table-cell">{e.hire_date ?? '—'}</TableCell>
+                    <TableCell>
+                      <StatusBadge variant={left ? 'neutral' : 'success'} label={t(left ? 'status.inactive' : 'status.active')} />
+                    </TableCell>
+                  </TableRow>
+                )
+              })}
+            </TableBody>
+          </Table>
+        )}
+        {total > 0 && <Pagination page={page} pageSize={PAGE} total={total} onPageChange={setPage} />}
+      </Card>
     </div>
   )
 }
 
+const TABS: [string, LucideIcon][] = [
+  ['profile', IdCard],
+  ['manager', UserCog],
+  ['history', HistoryIcon],
+  ['documents', FileText],
+]
+
+/** Create (no id) or detail: both render the same profile form; detail adds a header card and tabs synced to `?tab=`. */
 export function EmployeeFormPage() {
   const { t } = useTranslation()
+  const { can } = useAuth()
   const { id } = useParams()
   const navigate = useNavigate()
+  const [params, setParams] = useSearchParams()
   const { form, setForm, set } = useForm({ gender: 'male', pay_method: 'cash', type: 'office' })
   const [emp, setEmp] = useState<Row>()
   const [residences, setResidences] = useState<Row[]>([])
   const [err, setErr] = useState<unknown>()
   const errs = toErrs(err)
+  // An own-scoped (manager) record comes without the sensitive identity and pay fields; never render or send what was not received.
+  const has = (k: string) => !emp || k in emp
+  const editable = can(id ? 'employee.edit' : 'employee.create')
 
+  const fill = useCallback(
+    (e: Row) => {
+      setEmp(e)
+      setForm((f) => ({ ...f, ...Object.fromEntries(IDENTITY.map((k) => [k, e[k] ?? ''])) }))
+    },
+    [setForm],
+  )
   const load = useCallback(() => {
-    if (!id) return
-    api<Row>(`/employees/${id}`)
-      .then((e) => {
-        setEmp(e)
-        setForm((f) => ({ ...f, ...Object.fromEntries(IDENTITY.map((k) => [k, e[k] ?? ''])) }))
-      })
-      .catch(setErr)
-  }, [id, setForm])
+    if (id) api<Row>(`/employees/${id}`).then(fill).catch(setErr)
+  }, [id, fill])
   useEffect(load, [load])
   useEffect(() => {
     apiList<Row>('/residences?per_page=100').then((r) => setResidences(r.data)).catch(setErr)
@@ -146,9 +247,8 @@ export function EmployeeFormPage() {
     try {
       if (id) {
         // PATCH: blank clears a nullable field; name_ar/gender/pay_method must stay set
-        const body = Object.fromEntries(IDENTITY.map((k) => [k, form[k] === '' && !['name_ar', 'gender', 'pay_method'].includes(k) ? null : form[k]]))
-        await api(`/employees/${id}`, { method: 'PATCH', body })
-        load()
+        const body = Object.fromEntries(IDENTITY.filter(has).map((k) => [k, form[k] === '' && !['name_ar', 'gender', 'pay_method'].includes(k) ? null : form[k]]))
+        fill(await api<Row>(`/employees/${id}`, { method: 'PATCH', body }))
       } else {
         const e = await api<Row>('/employees', { method: 'POST', body: clean(form, [...IDENTITY, ...payFields(form.type), 'type', 'effective_from']) })
         navigate(`/employees/${e.id}`)
@@ -159,67 +259,207 @@ export function EmployeeFormPage() {
   }
 
   const f = { values: form, set, errs }
-  const shown = [...IDENTITY, ...(id ? [] : [...payFields(form.type), 'type', 'effective_from'])]
-  return (
-    <div className="flex max-w-3xl flex-col gap-6">
-    <form onSubmit={save} className="flex flex-col gap-6">
-      <h1 className="text-page-title">{id ? emp?.name_ar : t('employee.add')}</h1>
+  const shown = [...IDENTITY.filter(has), ...(id ? [] : [...payFields(form.type), 'type', 'effective_from'])]
+  const section = (title: string, fields: React.ReactNode) => (
+    <Card>
+      <CardHeader>
+        <CardTitle>{t(title)}</CardTitle>
+      </CardHeader>
+      <CardContent className="grid gap-4 sm:grid-cols-2">{fields}</CardContent>
+    </Card>
+  )
+  const profile = (
+    <form onSubmit={save} className="space-y-6">
       <ErrorBanner err={err} shown={shown} />
-      <fieldset className="grid gap-4 sm:grid-cols-2">
-        <legend className="mb-2 font-semibold">{t('employee.identity')}</legend>
-        <TextField name="name_ar" label={t('employee.name_ar')} {...f} />
-        <TextField name="name_en" label={t('employee.name_en')} {...f} />
-        <TextField name="fingerprint_name" label={t('employee.fingerprint_name')} {...f} />
-        <SelectField name="gender" label={t('employee.gender')} options={GENDERS.map((v) => [v, t(`enum.gender.${v}`)])} {...f} />
-        <TextField name="national_id" label={t('employee.national_id')} inputMode="numeric" {...f} />
-        <TextField name="insurance_no" label={t('employee.insurance_no')} {...f} />
-        <TextField name="phone" label={t('employee.phone')} {...f} />
-        <TextField name="address" label={t('employee.address')} {...f} />
-      </fieldset>
-      <fieldset className="grid gap-4 sm:grid-cols-2">
-        <legend className="mb-2 font-semibold">{t('employee.placement')}</legend>
-        <TextField name="department" label={t('employee.department')} {...f} />
-        <SelectField name="residence_id" label={t('employee.residence')} blank options={residences.map((r) => [r.id, r.name_ar])} {...f} />
-        <TextField name="hire_date" label={t('employee.hire_date')} type="date" {...f} />
-        <TextField name="contract_end_date" label={t('employee.contract_end_date')} type="date" {...f} />
-        <TextField name="termination_date" label={t('employee.termination_date')} type="date" {...f} />
-        <TextField name="termination_reason" label={t('employee.termination_reason')} {...f} />
-        <Field name="hr_notes" label={t('employee.hr_notes')} errs={errs}>
-          {(p) => <Textarea {...p} value={form.hr_notes ?? ''} onChange={(e) => set('hr_notes', e.target.value)} />}
-        </Field>
-      </fieldset>
-      <fieldset className="grid gap-4 sm:grid-cols-2">
-        <legend className="mb-2 font-semibold">{t('employee.pay')}</legend>
-        <SelectField name="pay_method" label={t('employee.pay_method')} options={PAY_METHODS.map((v) => [v, t(`enum.pay_method.${v}`)])} {...f} />
-        <TextField name="bank_account" label={t('employee.bank_account')} {...f} />
-        {!id && (
+      <fieldset disabled={!editable} className="min-w-0 space-y-6">
+        {section('employee.identity', (
           <>
-            <SelectField name="type" label={t('employee.type')} options={TYPES.map((v) => [v, t(`enum.type.${v}`)])} {...f} />
-            <TextField name="effective_from" label={t('change.effective_from')} type="date" {...f} />
-            <PayFields type={form.type} {...f} />
+            <TextField name="name_ar" label={t('employee.name_ar')} {...f} />
+            <TextField name="name_en" label={t('employee.name_en')} {...f} />
+            <TextField name="fingerprint_name" label={t('employee.fingerprint_name')} {...f} />
+            <SelectField name="gender" label={t('employee.gender')} options={GENDERS.map((v) => [v, t(`enum.gender.${v}`)])} {...f} />
+            {has('national_id') && <TextField name="national_id" label={t('employee.national_id')} inputMode="numeric" {...f} />}
+            {has('insurance_no') && <TextField name="insurance_no" label={t('employee.insurance_no')} {...f} />}
+            <TextField name="phone" label={t('employee.phone')} {...f} />
+            <TextField name="address" label={t('employee.address')} {...f} />
           </>
-        )}
+        ))}
+        {section('employee.placement', (
+          <>
+            <TextField name="department" label={t('employee.department')} {...f} />
+            <SelectField name="residence_id" label={t('employee.residence')} blank options={residences.map((r) => [r.id, r.name_ar])} {...f} />
+            <TextField name="hire_date" label={t('employee.hire_date')} type="date" {...f} />
+            <TextField name="contract_end_date" label={t('employee.contract_end_date')} type="date" {...f} />
+            <TextField name="termination_date" label={t('employee.termination_date')} type="date" {...f} />
+            <TextField name="termination_reason" label={t('employee.termination_reason')} {...f} />
+            {has('hr_notes') && (
+              <Field name="hr_notes" label={t('employee.hr_notes')} errs={errs}>
+                {(p) => <Textarea {...p} value={form.hr_notes ?? ''} onChange={(e) => set('hr_notes', e.target.value)} />}
+              </Field>
+            )}
+          </>
+        ))}
+        {has('bank_account') && section('employee.pay', (
+          <>
+            <SelectField name="pay_method" label={t('employee.pay_method')} options={PAY_METHODS.map((v) => [v, t(`enum.pay_method.${v}`)])} {...f} />
+            <TextField name="bank_account" label={t('employee.bank_account')} {...f} />
+            {!id && (
+              <>
+                <SelectField name="type" label={t('employee.type')} options={TYPES.map((v) => [v, t(`enum.type.${v}`)])} {...f} />
+                <TextField name="effective_from" label={t('change.effective_from')} type="date" {...f} />
+                <PayFields type={form.type} {...f} />
+              </>
+            )}
+          </>
+        ))}
       </fieldset>
-      <div>
-        <Button type="submit">{t('common.save')}</Button>
-      </div>
+      {editable && (
+        <div className="flex justify-end">
+          <Button type="submit">{t('common.save')}</Button>
+        </div>
+      )}
     </form>
-    {emp && <History emp={emp} reload={load} />}
+  )
+
+  if (!id)
+    return (
+      <div className="mx-auto max-w-5xl space-y-6">
+        <PageHeader title={t('employee.add')} />
+        {profile}
+      </div>
+    )
+  if (!emp) return <div className="mx-auto max-w-5xl space-y-6">{err ? <ErrorBanner err={err} shown={[]} /> : <TableSkeleton rows={6} />}</div>
+
+  const tab = TABS.some(([v]) => v === params.get('tab')) ? params.get('tab')! : 'profile'
+  return (
+    <div className="mx-auto max-w-5xl space-y-6">
+      <Card className="flex flex-col gap-4 p-5 sm:flex-row sm:items-center">
+        <UserAvatar name={emp.name_ar} size="xl" />
+        <div className="min-w-0 flex-1 space-y-1">
+          <h1 className="text-page-title">{emp.name_ar}</h1>
+          {emp.name_en && <p className="text-sm text-muted-foreground">{emp.name_en}</p>}
+          {emp.code != null && (
+            <p className="text-xs text-muted-foreground">
+              {t('employee.code')}: <span className="font-mono">{emp.code}</span>
+            </p>
+          )}
+        </div>
+        {emp.current_type && <Badge variant="info" className="self-start sm:self-center">{t(`enum.type.${emp.current_type}`)}</Badge>}
+        <dl className="flex gap-2 text-sm">
+          <dt className="text-muted-foreground">{t('manager.title')}</dt>
+          <dd>{emp.current_manager?.name ?? t('manager.none')}</dd>
+        </dl>
+        {can('employee.assign_manager') && <AssignManagerDialog empId={emp.id} onAssigned={setEmp} />}
+      </Card>
+
+      <Tabs value={tab} onValueChange={(v) => setParams({ tab: v }, { replace: true })}>
+        <TabsList>
+          {TABS.map(([v, Icon]) => (
+            <TabsTrigger key={v} value={v}>
+              <Icon className="hidden size-4 sm:block" aria-hidden /> {t(`employee.tab.${v}`)}
+            </TabsTrigger>
+          ))}
+        </TabsList>
+        {/* Only the active panel is mounted: a hidden panel stays labelled by its trigger, so «المدير» would also name the manager panel. */}
+        <TabsContent key={tab} value={tab}>
+          {{
+            profile,
+            manager: <ManagerHistory emp={emp} />,
+            history: <History emp={emp} reload={load} />,
+            documents: <Documents emp={emp} onSaved={setEmp} />,
+          }[tab]}
+        </TabsContent>
+      </Tabs>
     </div>
+  )
+}
+
+/** Posts a dated manager assignment; the users list loads when the dialog opens (its body mounts then). */
+function AssignManagerDialog({ empId, onAssigned }: { empId: string; onAssigned: (e: Row) => void }) {
+  const { t } = useTranslation()
+  return (
+    <FormDialog
+      title={t('manager.assign')}
+      trigger={
+        <Button type="button" variant="outline">
+          <UserCog />
+          {t('manager.assign')}
+        </Button>
+      }
+      init={{ manager_id: '', effective_from: '' }}
+      submit={(form) => api<Row>(`/employees/${empId}/manager-assignments`, { method: 'POST', body: { manager_id: form.manager_id, effective_from: form.effective_from } }).then(onAssigned)}
+      onDone={() => {}}
+      shown={['manager_id', 'effective_from']}
+    >
+      {(f) => (
+        <>
+          <ManagerSelect {...f} />
+          <TextField name="effective_from" label={t('change.effective_from')} type="date" {...f} />
+        </>
+      )}
+    </FormDialog>
+  )
+}
+
+function ManagerSelect(f: FormApi) {
+  const { t } = useTranslation()
+  const [users, setUsers] = useState<Row[]>([])
+  const [err, setErr] = useState<unknown>()
+  useEffect(() => {
+    apiList<Row>('/users?active=true&per_page=100').then((r) => setUsers(r.data), setErr)
+  }, [])
+  return (
+    <>
+      <ErrorBanner err={err} shown={[]} />
+      <SelectField name="manager_id" label={t('manager.title')} blank options={users.map((u) => [u.id, u.name])} {...f} />
+    </>
+  )
+}
+
+function ManagerHistory({ emp }: { emp: Row }) {
+  const { t } = useTranslation()
+  const rows: Row[] = [...emp.manager_assignments].reverse() // the API sends oldest first
+  return (
+    <Card className="overflow-hidden">
+      <CardHeader>
+        <CardTitle>{t('manager.history')}</CardTitle>
+      </CardHeader>
+      {rows.length ? (
+        <Table>
+          <TableHeader>
+            <TableRow>
+              <TableHead>{t('manager.title')}</TableHead>
+              <TableHead>{t('change.effective_from')}</TableHead>
+            </TableRow>
+          </TableHeader>
+          <TableBody>
+            {rows.map((m) => (
+              <TableRow key={m.id}>
+                <TableCell className="font-medium">{m.manager_name ?? '—'}</TableCell>
+                <TableCell>{m.effective_from}</TableCell>
+              </TableRow>
+            ))}
+          </TableBody>
+        </Table>
+      ) : (
+        <EmptyState icon={UserCog} title={t('manager.none')} />
+      )}
+    </Card>
   )
 }
 
 function History({ emp, reload }: { emp: Row; reload: () => void }) {
   const { t } = useTranslation()
+  const { can } = useAuth()
   const money = useMoney()
   const cell = (v: string | null) => (v == null ? '—' : v)
   return (
-    <>
-      <section className="flex flex-col gap-2">
-        <div className="flex items-center justify-between">
-          <h2 className="font-semibold">{t('history.types')}</h2>
-          <ChangeDialog kind="type" emp={emp} reload={reload} />
-        </div>
+    <div className="space-y-6">
+      <Card className="overflow-hidden">
+        <CardHeader>
+          <CardTitle>{t('history.types')}</CardTitle>
+          {can('employee.edit') && <ChangeDialog kind="type" emp={emp} reload={reload} />}
+        </CardHeader>
         <Table>
           <TableHeader>
             <TableRow>
@@ -236,41 +476,37 @@ function History({ emp, reload }: { emp: Row; reload: () => void }) {
             ))}
           </TableBody>
         </Table>
-      </section>
-      <section className="flex flex-col gap-2">
-        <div className="flex items-center justify-between">
-          <h2 className="font-semibold">{t('history.pay')}</h2>
-          <ChangeDialog kind="pay" emp={emp} reload={reload} />
-        </div>
-        <Table>
-          <TableHeader>
-            <TableRow>
-              {['effective_from', ...PAY].map((c) => (
-                <TableHead key={c}>{t(c === 'effective_from' ? 'change.effective_from' : `pay.${c}`)}</TableHead>
-              ))}
-            </TableRow>
-          </TableHeader>
-          <TableBody>
-            {emp.pay_changes.map((c: Row) => (
-              <TableRow key={c.id}>
-                <TableCell>{c.effective_from}</TableCell>
-                {['salary', 'raise', 'insured_basic', 'daily_wage'].map((k) => (
-                  <TableCell key={k}>{money(c[k])}</TableCell>
+      </Card>
+      {emp.pay_changes && (
+        <Card className="overflow-hidden">
+          <CardHeader>
+            <CardTitle>{t('history.pay')}</CardTitle>
+            {can('employee.edit') && <ChangeDialog kind="pay" emp={emp} reload={reload} />}
+          </CardHeader>
+          <Table>
+            <TableHeader>
+              <TableRow>
+                {['effective_from', ...PAY].map((c) => (
+                  <TableHead key={c}>{t(c === 'effective_from' ? 'change.effective_from' : `pay.${c}`)}</TableHead>
                 ))}
-                <TableCell>{cell(c.shift_start)}</TableCell>
-                <TableCell>{cell(c.shift_end)}</TableCell>
               </TableRow>
-            ))}
-          </TableBody>
-        </Table>
-      </section>
-      <section className="flex flex-col gap-2">
-        <h2 className="font-semibold">{t('history.documents')}</h2>
-        {DOC_KINDS.map((k) => (
-          <DocRow key={k} kind={k} empId={emp.id} doc={emp.documents.find((d: Row) => d.kind === k)} reload={reload} />
-        ))}
-      </section>
-    </>
+            </TableHeader>
+            <TableBody>
+              {emp.pay_changes.map((c: Row) => (
+                <TableRow key={c.id}>
+                  <TableCell>{c.effective_from}</TableCell>
+                  {['salary', 'raise', 'insured_basic', 'daily_wage'].map((k) => (
+                    <TableCell key={k}>{money(c[k])}</TableCell>
+                  ))}
+                  <TableCell>{cell(c.shift_start)}</TableCell>
+                  <TableCell>{cell(c.shift_end)}</TableCell>
+                </TableRow>
+              ))}
+            </TableBody>
+          </Table>
+        </Card>
+      )}
+    </div>
   )
 }
 
@@ -307,7 +543,7 @@ function ChangeDialog({ kind, emp, reload }: { kind: 'type' | 'pay'; emp: Row; r
 
   return (
     <Dialog open={open} onOpenChange={setOpen}>
-      <Button type="button" variant="outline" onClick={() => setOpen(true)}>
+      <Button type="button" variant="outline" size="sm" onClick={() => setOpen(true)}>
         {t('change.add')}
       </Button>
       <DialogContent aria-describedby={undefined}>
@@ -333,33 +569,67 @@ function ChangeDialog({ kind, emp, reload }: { kind: 'type' | 'pay'; emp: Row; r
   )
 }
 
-function DocRow({ kind, empId, doc, reload }: { kind: string; empId: string; doc?: Row; reload: () => void }) {
+/** One row per document kind; its dialog PUTs and the page shows the record the API returns. */
+function Documents({ emp, onSaved }: { emp: Row; onSaved: (e: Row) => void }) {
   const { t } = useTranslation()
-  const { form, set } = useForm({ received_at: doc?.received_at ?? '', expires_at: doc?.expires_at ?? '', note: doc?.note ?? '' })
-  const [err, setErr] = useState<unknown>()
-  const errs = toErrs(err)
-  const save = async () => {
-    setErr(undefined)
-    try {
-      await api(`/employees/${empId}/documents/${kind}`, { method: 'PUT', body: Object.fromEntries(Object.entries(form).map(([k, v]) => [k, v || null])) })
-      reload()
-    } catch (e) {
-      setErr(e)
-    }
-  }
-  const f = { values: form, set, errs, ns: `${kind}-` }
+  const { can } = useAuth()
   return (
-    <div className="flex flex-col gap-2">
-    <ErrorBanner err={err} shown={['received_at', 'expires_at', 'note']} />
-    <div className="grid items-end gap-3 sm:grid-cols-[1fr_1fr_1fr_1fr_auto]">
-      <span className="text-sm font-medium">{t(`enum.document.${kind}`)}</span>
-      <TextField name="received_at" label={t('document.received_at')} type="date" {...f} />
-      <TextField name="expires_at" label={t('document.expires_at')} type="date" {...f} />
-      <TextField name="note" label={t('document.note')} {...f} />
-      <Button type="button" variant="outline" onClick={save}>
-        {t('common.save')}
-      </Button>
-    </div>
-    </div>
+    <Card className="overflow-hidden">
+      <CardHeader>
+        <CardTitle>{t('history.documents')}</CardTitle>
+      </CardHeader>
+      <Table>
+        <TableHeader>
+          <TableRow>
+            <TableHead>{t('document.kind')}</TableHead>
+            <TableHead>{t('document.received_at')}</TableHead>
+            <TableHead className="hidden md:table-cell">{t('document.expires_at')}</TableHead>
+            <TableHead className="hidden lg:table-cell">{t('document.note')}</TableHead>
+            <TableHead>
+              <span className="sr-only">{t('common.actions')}</span>
+            </TableHead>
+          </TableRow>
+        </TableHeader>
+        <TableBody>
+          {DOC_KINDS.map((kind) => {
+            const doc: Row | undefined = emp.documents.find((d: Row) => d.kind === kind)
+            return (
+              <TableRow key={kind}>
+                <TableCell className="font-medium">{t(`enum.document.${kind}`)}</TableCell>
+                <TableCell>{doc?.received_at ?? '—'}</TableCell>
+                <TableCell className="hidden md:table-cell">{doc?.expires_at ?? '—'}</TableCell>
+                <TableCell className="hidden text-muted-foreground lg:table-cell">{doc?.note ?? '—'}</TableCell>
+                <TableCell className="text-end">
+                  {can('employee.edit') && (
+                    <FormDialog
+                      title={t(`enum.document.${kind}`)}
+                      trigger={
+                        <Button type="button" variant="outline" size="sm">
+                          {t('common.edit')}
+                        </Button>
+                      }
+                      init={{ received_at: doc?.received_at ?? '', expires_at: doc?.expires_at ?? '', note: doc?.note ?? '' }}
+                      submit={(form) =>
+                        api<Row>(`/employees/${emp.id}/documents/${kind}`, { method: 'PUT', body: Object.fromEntries(Object.entries(form).map(([k, v]) => [k, v || null])) }).then(onSaved)
+                      }
+                      onDone={() => {}}
+                      shown={['received_at', 'expires_at', 'note']}
+                    >
+                      {(f) => (
+                        <>
+                          <TextField name="received_at" label={t('document.received_at')} type="date" {...f} />
+                          <TextField name="expires_at" label={t('document.expires_at')} type="date" {...f} />
+                          <TextField name="note" label={t('document.note')} {...f} />
+                        </>
+                      )}
+                    </FormDialog>
+                  )}
+                </TableCell>
+              </TableRow>
+            )
+          })}
+        </TableBody>
+      </Table>
+    </Card>
   )
 }

@@ -11,6 +11,12 @@ class EmployeesApiTest extends TestCase
 {
     use RefreshDatabase;
 
+    protected function setUp(): void
+    {
+        parent::setUp();
+        $this->signIn('hr');
+    }
+
     /** @param array<string, mixed> $over */
     private function payload(array $over = []): array
     {

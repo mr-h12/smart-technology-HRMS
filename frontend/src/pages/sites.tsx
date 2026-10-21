@@ -1,34 +1,24 @@
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { Bus, CalendarOff, House, MapPin, Plus, type LucideIcon } from 'lucide-react'
+import { useCallback, useEffect, useState, type ReactNode } from 'react'
 import { useTranslation } from 'react-i18next'
-import { ErrorBanner, type Row, SelectField, selectCls, TextField, toErrs, useForm, useMoney } from '@/components/form'
+import { EmptyState } from '@/components/common/EmptyState'
+import { RowActions } from '@/components/common/RowActions'
+import { StatusBadge } from '@/components/common/StatusBadge'
+import { cairoToday, type Controlled, ErrorBanner, FormDialog, type Row, SelectField, TextField, useList, useMoney } from '@/components/form'
+import { TableSkeleton } from '@/components/layout/PageSkeleton'
+import { Pagination, paginate } from '@/components/tables/Pagination'
+import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
+import { Card, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Dialog, DialogBody, DialogContent, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 import { api, apiList } from '@/lib/api'
+import { useAuth } from '@/lib/auth'
 
 const LEAVE_CODES = ['friday', 'official_holiday', 'sick', 'rest', 'absent', 'other']
 const MODES = ['none', 'share_of_wage', 'fixed']
 const LIST = '?per_page=100' // server max; these lists are small, the notice below covers overflow
-
-/** Loads a list endpoint; `total` lets pages warn when more rows exist than were fetched. */
-function useList(path: string) {
-  const [rows, setRows] = useState<Row[]>([])
-  const [total, setTotal] = useState(0)
-  const [err, setErr] = useState<unknown>()
-  const reload = useCallback(() => {
-    apiList<Row>(path)
-      .then((r) => {
-        setErr(undefined)
-        setRows(r.data)
-        setTotal(r.meta.pagination.total)
-      })
-      .catch(setErr)
-  }, [path])
-  useEffect(reload, [reload])
-  return { rows, total, err, reload }
-}
-
-const cairoToday = () => new Date().toLocaleDateString('en-CA', { timeZone: 'Africa/Cairo' })
+const PAGE = 12
 
 const Notice = ({ show, text }: { show: boolean; text: string }) =>
   show ? (
@@ -37,98 +27,67 @@ const Notice = ({ show, text }: { show: boolean; text: string }) =>
     </p>
   ) : null
 
-type FormApi = { values: Row; set: (k: string, v: string) => void; errs: Record<string, string> }
-
-/** Dialog whose form state lives in the body, so it is fresh on every open (Radix unmounts closed content). */
-function FormDialog({ title, trigger, init, submit, onDone, shown, children, footer = 'common.save' }: {
+/** The card every settings list shares: header with an optional add button, banners, skeleton, table or empty state, pagination. */
+function ListCard({ title, description, action, err, loading, empty, icon, notice, page, children }: {
   title: string
-  trigger: React.ReactNode
-  init: Row
-  submit: (form: Row) => Promise<unknown>
-  onDone: () => void
-  shown: string[]
-  children: (f: FormApi) => React.ReactNode
-  footer?: string
+  description: string
+  action?: ReactNode
+  err: unknown
+  loading: boolean
+  empty: boolean
+  icon: LucideIcon
+  notice?: ReactNode
+  page?: { page: number; total: number; onPageChange: (p: number) => void }
+  children: ReactNode
 }) {
-  const [open, setOpen] = useState(false)
+  const { t } = useTranslation()
   return (
-    <Dialog open={open} onOpenChange={setOpen}>
-      <span onClick={() => setOpen(true)}>{trigger}</span>
-      <DialogContent aria-describedby={undefined}>
-        <DialogHeader>
-          <DialogTitle>{title}</DialogTitle>
-        </DialogHeader>
-        <FormBody init={init} submit={submit} shown={shown} footer={footer} onDone={() => { setOpen(false); onDone() }}>
-          {children}
-        </FormBody>
-      </DialogContent>
-    </Dialog>
+    <Card className="overflow-hidden">
+      <CardHeader>
+        <div>
+          <CardTitle>{title}</CardTitle>
+          <CardDescription>{description}</CardDescription>
+        </div>
+        {action}
+      </CardHeader>
+      <div className="space-y-3 px-5 pb-3 empty:hidden">
+        <ErrorBanner err={err} shown={[]} />
+        {notice}
+      </div>
+      {loading ? <TableSkeleton /> : empty ? !err && <EmptyState icon={icon} title={t('common.noData')} /> : children}
+      {page && page.total > PAGE && <Pagination page={page.page} pageSize={PAGE} total={page.total} onPageChange={page.onPageChange} />}
+    </Card>
   )
 }
 
-function FormBody({ init, submit, onDone, shown, footer, children }: { init: Row; submit: (form: Row) => Promise<unknown>; onDone: () => void; shown: string[]; footer: string; children: (f: FormApi) => React.ReactNode }) {
+function SiteDialog({ kind, site, reload, ...dialog }: { kind: 'work' | 'leave'; site?: Row; reload: () => void } & Controlled) {
   const { t } = useTranslation()
-  const { form, set } = useForm(init)
-  const [err, setErr] = useState<unknown>()
-  const busy = useRef(false)
-  const [, rerender] = useState(0)
-  async function go() {
-    if (busy.current) return
-    busy.current = true
-    rerender((n) => n + 1)
-    setErr(undefined)
-    try {
-      await submit(form)
-      onDone()
-    } catch (e) {
-      setErr(e)
-    } finally {
-      busy.current = false
-      rerender((n) => n + 1)
-    }
-  }
-  return (
-    <>
-      <DialogBody className="grid gap-4">
-        <ErrorBanner err={err} shown={shown} />
-        {children({ values: form, set, errs: toErrs(err) })}
-      </DialogBody>
-      <DialogFooter>
-        <Button type="button" disabled={busy.current} onClick={go}>
-          {t(footer)}
-        </Button>
-      </DialogFooter>
-    </>
-  )
-}
-
-function SiteDialog({ site, reload }: { site?: Row; reload: () => void }) {
-  const { t } = useTranslation()
-  const init = { name_ar: site?.name_ar ?? '', name_en: site?.name_en ?? '', kind: site?.kind ?? 'work', leave_code: site?.leave_code ?? '', outside_alexandria: site?.outside_alexandria ? 'true' : '', active: site?.active === false ? '' : 'true' }
+  const addKey = kind === 'work' ? 'site.add' : 'site.addLeaveType'
+  const init = { name_ar: site?.name_ar ?? '', name_en: site?.name_en ?? '', leave_code: site?.leave_code ?? LEAVE_CODES[0], outside_alexandria: site?.outside_alexandria ? 'true' : '', active: site?.active === false ? '' : 'true' }
   const body = (form: Row) => ({
     name_ar: form.name_ar,
     name_en: form.name_en || null,
-    kind: form.kind,
-    leave_code: form.kind === 'leave' ? form.leave_code || null : null,
+    kind,
+    leave_code: kind === 'leave' ? form.leave_code || null : null,
     outside_alexandria: !!form.outside_alexandria,
     active: !!form.active,
   })
   return (
     <FormDialog
-      title={t(site ? 'site.edit' : 'site.add')}
-      trigger={<Button type="button" variant={site ? 'outline' : 'default'}>{t(site ? 'site.edit' : 'site.add')}</Button>}
+      {...dialog}
+      title={t(site ? 'site.edit' : addKey)}
+      trigger={site ? undefined : <Button type="button" variant="outline" size="sm"><Plus />{t(addKey)}</Button>}
       init={init}
       submit={(form) => (site ? api(`/sites/${site.id}`, { method: 'PATCH', body: body(form) }) : api('/sites', { method: 'POST', body: body(form) }))}
       onDone={reload}
-      shown={['name_ar', 'name_en', 'kind', 'leave_code']}
+      shown={['name_ar', 'name_en', 'leave_code']}
     >
       {(f) => (
         <>
           <TextField name="name_ar" label={t('employee.name_ar')} {...f} />
           <TextField name="name_en" label={t('employee.name_en')} {...f} />
-          <SelectField name="kind" label={t('site.kind')} options={['work', 'leave'].map((v) => [v, t(`enum.site_kind.${v}`)])} {...f} />
-          {f.values.kind === 'leave' && <SelectField name="leave_code" label={t('site.leave_code')} blank options={LEAVE_CODES.map((v) => [v, t(`enum.leave_code.${v}`)])} {...f} />}
-          {['outside_alexandria', 'active'].map((k) => (
+          {kind === 'leave' && <SelectField name="leave_code" label={t('site.leave_code')} options={LEAVE_CODES.map((v) => [v, t(`enum.leave_code.${v}`)])} {...f} />}
+          {(kind === 'work' ? ['outside_alexandria', 'active'] : ['active']).map((k) => (
             <label key={k} className="flex items-center gap-2 text-sm">
               <input type="checkbox" checked={!!f.values[k]} onChange={(e) => f.set(k, e.target.checked ? 'true' : '')} />
               {t(`site.${k}`)}
@@ -175,12 +134,12 @@ function RuleHistory({ siteId }: { siteId: string }) {
 }
 
 /** Allowance-rule history for a site, with an add form (a rule applies from its date until the next). */
-function RulesDialog({ site }: { site: Row }) {
+function RulesDialog({ site, ...dialog }: { site: Row } & Controlled) {
   const { t } = useTranslation()
   return (
     <FormDialog
+      {...dialog}
       title={`${t('site.allowanceHistory')}: ${site.name_ar}`}
-      trigger={<Button type="button" variant="outline">{t('site.allowances')}</Button>}
       init={{ mode: 'fixed' }}
       submit={(form) => api(`/sites/${site.id}/allowance-rules`, { method: 'POST', body: { effective_from: form.effective_from, mode: form.mode, ...(form.mode !== 'none' && { value: form.value }) } })}
       onDone={() => {}}
@@ -199,67 +158,141 @@ function RulesDialog({ site }: { site: Row }) {
   )
 }
 
-export function SitesPage() {
+/** Ticks the managers of a site among the active accounts; the body mounts on open, so it loads then. */
+function ManagersDialog({ site, open, onOpenChange }: { site: Row; open: boolean; onOpenChange: (open: boolean) => void }) {
   const { t } = useTranslation()
-  const [kind, setKind] = useState('')
-  const [active, setActive] = useState('')
-  const { rows, total, err, reload } = useList(`/sites${LIST}${kind && `&kind=${kind}`}${active && `&active=${active}`}`)
   return (
-    <div className="flex flex-col gap-4">
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <h1 className="text-page-title">{t('page.sites')}</h1>
-        <SiteDialog reload={reload} />
-      </div>
-      <div className="flex flex-wrap gap-3">
-        <select aria-label={t('site.kind')} className={`${selectCls} max-w-xs`} value={kind} onChange={(e) => setKind(e.target.value)}>
-          <option value="">{t('site.allKinds')}</option>
-          {['work', 'leave'].map((v) => <option key={v} value={v}>{t(`enum.site_kind.${v}`)}</option>)}
-        </select>
-        <select aria-label={t('site.active')} className={`${selectCls} max-w-xs`} value={active} onChange={(e) => setActive(e.target.value)}>
-          <option value="">{t('site.allActive')}</option>
-          <option value="true">{t('site.active')}</option>
-          <option value="false">{t('site.inactive')}</option>
-        </select>
-      </div>
-      <ErrorBanner err={err} shown={[]} />
-      <Notice show={total > rows.length} text={t('common.tooMany')} />
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent aria-describedby={undefined}>
+        <DialogHeader>
+          <DialogTitle>{`${t('site.managers')}: ${site.name_ar}`}</DialogTitle>
+        </DialogHeader>
+        <ManagersBody siteId={site.id} onDone={() => onOpenChange(false)} />
+      </DialogContent>
+    </Dialog>
+  )
+}
+
+function ManagersBody({ siteId, onDone }: { siteId: string; onDone: () => void }) {
+  const { t } = useTranslation()
+  const [users, setUsers] = useState<Row[]>()
+  const [ticked, setTicked] = useState<Set<string>>(new Set())
+  const [err, setErr] = useState<unknown>()
+  const [busy, setBusy] = useState(false)
+  useEffect(() => {
+    Promise.all([api<Row>(`/sites/${siteId}`), apiList<Row>('/users?active=true&per_page=100')])
+      .then(([s, u]) => {
+        setUsers(u.data)
+        setTicked(new Set(s.managers.map((m: Row) => m.id)))
+      })
+      .catch(setErr)
+  }, [siteId])
+  const toggle = (id: string, on: boolean) => setTicked((s) => { const n = new Set(s); if (on) n.add(id); else n.delete(id); return n })
+  function save() {
+    setBusy(true)
+    setErr(undefined)
+    api(`/sites/${siteId}/managers`, { method: 'PUT', body: { manager_ids: users!.filter((u) => ticked.has(u.id)).map((u) => u.id) } })
+      .then(onDone, setErr)
+      .finally(() => setBusy(false))
+  }
+  return (
+    <>
+      <DialogBody className="grid gap-1">
+        <ErrorBanner err={err} shown={[]} />
+        {users
+          ? users.map((u) => (
+              <label key={u.id} className="flex min-h-11 items-center gap-3 rounded-md px-2 text-sm hover:bg-muted">
+                <input type="checkbox" checked={ticked.has(u.id)} onChange={(e) => toggle(u.id, e.target.checked)} />
+                {u.name}
+              </label>
+            ))
+          : !err && <TableSkeleton rows={3} />}
+      </DialogBody>
+      <DialogFooter>
+        <Button type="button" disabled={busy || !users} onClick={save}>
+          {t('common.save')}
+        </Button>
+      </DialogFooter>
+    </>
+  )
+}
+
+/** Work sites and leave types are both `sites` rows; `kind` picks the list, the columns and the row actions. */
+function SiteList({ kind }: { kind: 'work' | 'leave' }) {
+  const { t } = useTranslation()
+  const { can } = useAuth()
+  const { rows, total, err, loading, reload } = useList(`/sites${LIST}&kind=${kind}`)
+  const [page, setPage] = useState(1)
+  const [dlg, setDlg] = useState<{ type: 'edit' | 'rules' | 'managers'; row: Row }>()
+  const close = { open: true, onOpenChange: () => setDlg(undefined) }
+  const work = kind === 'work'
+  const actions = (row: Row) => [
+    ...(can('site.manage') ? [{ label: t('site.edit'), onSelect: () => setDlg({ type: 'edit', row }) }] : []),
+    ...(work && can('site.manage') ? [{ label: t('site.allowances'), onSelect: () => setDlg({ type: 'rules', row }) }] : []),
+    ...(work && can('site.assign_manager') ? [{ label: t('site.managers'), onSelect: () => setDlg({ type: 'managers', row }) }] : []),
+  ]
+  return (
+    <ListCard
+      title={t(work ? 'settings.tab.sites' : 'settings.tab.leaveTypes')}
+      description={t(work ? 'settings.desc.sites' : 'settings.desc.leaveTypes')}
+      action={can('site.manage') && <SiteDialog kind={kind} reload={reload} />}
+      err={err}
+      loading={loading}
+      empty={!rows.length}
+      icon={work ? MapPin : CalendarOff}
+      notice={<Notice show={total > rows.length} text={t('common.tooMany')} />}
+      page={{ page, total: rows.length, onPageChange: setPage }}
+    >
       <Table>
         <TableHeader>
           <TableRow>
-            <TableHead>{t('employee.name_ar')}</TableHead>
-            <TableHead>{t('site.kind')}</TableHead>
-            <TableHead>{t('site.leave_code')}</TableHead>
-            <TableHead>{t('site.active')}</TableHead>
-            <TableHead />
+            <TableHead>{t('common.name')}</TableHead>
+            {work ? <TableHead className="hidden md:table-cell">{t('site.outside_alexandria')}</TableHead> : <TableHead className="hidden sm:table-cell">{t('site.leave_code')}</TableHead>}
+            <TableHead>{t('common.status')}</TableHead>
+            <TableHead>
+              <span className="sr-only">{t('common.actions')}</span>
+            </TableHead>
           </TableRow>
         </TableHeader>
         <TableBody>
-          {rows.map((s) => (
+          {paginate(rows, page, PAGE).map((s) => (
             <TableRow key={s.id}>
-              <TableCell>{s.name_ar}</TableCell>
-              <TableCell>{t(`enum.site_kind.${s.kind}`)}</TableCell>
-              <TableCell>{s.leave_code ? t(`enum.leave_code.${s.leave_code}`) : '—'}</TableCell>
-              <TableCell>{t(s.active ? 'site.yes' : 'site.no')}</TableCell>
               <TableCell>
-                <div className="flex gap-2">
-                  <SiteDialog site={s} reload={reload} />
-                  <RulesDialog site={s} />
-                </div>
+                <div className="font-medium">{s.name_ar}</div>
+                {s.name_en && <div className="text-xs text-muted-foreground">{s.name_en}</div>}
+              </TableCell>
+              {work ? (
+                <TableCell className="hidden md:table-cell">{s.outside_alexandria ? <Badge variant="neutral">{t('site.yes')}</Badge> : '—'}</TableCell>
+              ) : (
+                <TableCell className="hidden sm:table-cell">{s.leave_code ? <Badge variant="neutral">{t(`enum.leave_code.${s.leave_code}`)}</Badge> : '—'}</TableCell>
+              )}
+              <TableCell>
+                <StatusBadge variant={s.active ? 'success' : 'neutral'} label={t(s.active ? 'status.active' : 'status.inactive')} />
+              </TableCell>
+              <TableCell className="text-end">
+                <RowActions items={actions(s)} />
               </TableCell>
             </TableRow>
           ))}
         </TableBody>
       </Table>
-    </div>
+      {dlg?.type === 'edit' && <SiteDialog kind={kind} site={dlg.row} reload={reload} {...close} />}
+      {dlg?.type === 'rules' && <RulesDialog site={dlg.row} {...close} />}
+      {dlg?.type === 'managers' && <ManagersDialog site={dlg.row} {...close} />}
+    </ListCard>
   )
 }
 
-function ResidenceDialog({ residence, reload }: { residence?: Row; reload: () => void }) {
+export const SitesTab = () => <SiteList kind="work" />
+export const LeaveTypesTab = () => <SiteList kind="leave" />
+
+function ResidenceDialog({ residence, reload, ...dialog }: { residence?: Row; reload: () => void } & Controlled) {
   const { t } = useTranslation()
   return (
     <FormDialog
+      {...dialog}
       title={t(residence ? 'site.edit' : 'residence.add')}
-      trigger={<Button type="button" variant={residence ? 'outline' : 'default'}>{t(residence ? 'site.edit' : 'residence.add')}</Button>}
+      trigger={residence ? undefined : <Button type="button" variant="outline" size="sm"><Plus />{t('residence.add')}</Button>}
       init={{ name_ar: residence?.name_ar ?? '' }}
       submit={(form) => (residence ? api(`/residences/${residence.id}`, { method: 'PATCH', body: { name_ar: form.name_ar } }) : api('/residences', { method: 'POST', body: { name_ar: form.name_ar } }))}
       onDone={reload}
@@ -270,34 +303,50 @@ function ResidenceDialog({ residence, reload }: { residence?: Row; reload: () =>
   )
 }
 
-export function ResidencesPage() {
+export function ResidencesTab() {
   const { t } = useTranslation()
-  const { rows, total, err, reload } = useList(`/residences${LIST}`)
+  const { can } = useAuth()
+  const { rows, total, err, loading, reload } = useList(`/residences${LIST}`)
+  const [page, setPage] = useState(1)
+  const [edit, setEdit] = useState<Row>()
   return (
-    <div className="flex flex-col gap-4">
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <h1 className="text-page-title">{t('page.residences')}</h1>
-        <ResidenceDialog reload={reload} />
-      </div>
-      <ErrorBanner err={err} shown={[]} />
-      <Notice show={total > rows.length} text={t('common.tooMany')} />
+    <ListCard
+      title={t('settings.tab.residences')}
+      description={t('settings.desc.residences')}
+      action={can('site.manage') && <ResidenceDialog reload={reload} />}
+      err={err}
+      loading={loading}
+      empty={!rows.length}
+      icon={House}
+      notice={<Notice show={total > rows.length} text={t('common.tooMany')} />}
+      page={{ page, total: rows.length, onPageChange: setPage }}
+    >
       <Table>
+        <TableHeader>
+          <TableRow>
+            <TableHead>{t('common.name')}</TableHead>
+            <TableHead>
+              <span className="sr-only">{t('common.actions')}</span>
+            </TableHead>
+          </TableRow>
+        </TableHeader>
         <TableBody>
-          {rows.map((r) => (
+          {paginate(rows, page, PAGE).map((r) => (
             <TableRow key={r.id}>
-              <TableCell>{r.name_ar}</TableCell>
-              <TableCell>
-                <ResidenceDialog residence={r} reload={reload} />
+              <TableCell className="font-medium">{r.name_ar}</TableCell>
+              <TableCell className="text-end">
+                <RowActions items={can('site.manage') ? [{ label: t('site.edit'), onSelect: () => setEdit(r) }] : []} />
               </TableCell>
             </TableRow>
           ))}
         </TableBody>
       </Table>
-    </div>
+      {edit && <ResidenceDialog residence={edit} reload={reload} open onOpenChange={() => setEdit(undefined)} />}
+    </ListCard>
   )
 }
 
-/** Greatest effective_from <= today (Cairo) per residence x site; the list is not date-filtered server-side. */
+/** Fares keyed by residence x site. `?date=` already makes the server send only the row in force per pair; the date check here is a redundant guard. */
 function inForce(fares: Row[], today: string) {
   const best = new Map<string, Row>()
   for (const f of fares) {
@@ -312,7 +361,7 @@ function FareDialog({ residence, site, reload, children }: { residence: Row; sit
   return (
     <FormDialog
       title={`${residence.name_ar} / ${site.name_ar}`}
-      trigger={<button type="button" className="min-h-9 w-full rounded px-2 text-start hover:bg-muted">{children}</button>}
+      trigger={<Button type="button" variant="soft" size="sm" className="min-w-20 tabular-nums">{children}</Button>}
       init={{}}
       submit={(form) => api('/fares', { method: 'POST', body: { residence_id: residence.id, site_id: site.id, effective_from: form.effective_from, amount: form.amount } })}
       onDone={reload}
@@ -328,7 +377,7 @@ function FareDialog({ residence, site, reload, children }: { residence: Row; sit
   )
 }
 
-export function FaresPage() {
+export function FaresTab() {
   const { t } = useTranslation()
   const money = useMoney()
   const [data, setData] = useState<{ sites: Row[]; residences: Row[]; fares: Row[]; over: boolean }>()
@@ -344,37 +393,40 @@ export function FaresPage() {
   useEffect(load, [load])
   const best = inForce(data?.fares ?? [], cairoToday())
   return (
-    <div className="flex flex-col gap-4">
-      <h1 className="text-page-title">{t('page.fares')}</h1>
-      <ErrorBanner err={err} shown={[]} />
+    <ListCard
+      title={t('settings.tab.fares')}
+      description={t('settings.desc.fares')}
+      err={err}
+      loading={!data && !err}
+      empty={!!data && (!data.sites.length || !data.residences.length)}
+      icon={Bus}
+      // ponytail: one 100-row page of in-force fares; paginate if a site x residence grid ever exceeds it
+      notice={<Notice show={!!data?.over} text={t('fare.tooMany')} />}
+    >
       {data && (
-        <>
-          {/* ponytail: one 100-row page of in-force fares; paginate if a site x residence grid ever exceeds it */}
-          <Notice show={data.over} text={t('fare.tooMany')} />
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead>{t('fare.residence')}</TableHead>
-                {data.sites.map((s) => <TableHead key={s.id}>{s.name_ar}</TableHead>)}
+        <Table>
+          <TableHeader>
+            <TableRow>
+              <TableHead className="sticky start-0 z-10 bg-muted">{t('fare.residence')}</TableHead>
+              {data.sites.map((s) => <TableHead key={s.id}>{s.name_ar}</TableHead>)}
+            </TableRow>
+          </TableHeader>
+          <TableBody>
+            {data.residences.map((r) => (
+              <TableRow key={r.id}>
+                <TableCell className="sticky start-0 z-10 bg-card font-medium">{r.name_ar}</TableCell>
+                {data.sites.map((s) => (
+                  <TableCell key={s.id}>
+                    <FareDialog residence={r} site={s} reload={load}>
+                      {best.has(`${r.id}|${s.id}`) ? money(best.get(`${r.id}|${s.id}`)!.amount) : '—'}
+                    </FareDialog>
+                  </TableCell>
+                ))}
               </TableRow>
-            </TableHeader>
-            <TableBody>
-              {data.residences.map((r) => (
-                <TableRow key={r.id}>
-                  <TableCell>{r.name_ar}</TableCell>
-                  {data.sites.map((s) => (
-                    <TableCell key={s.id}>
-                      <FareDialog residence={r} site={s} reload={load}>
-                        {best.has(`${r.id}|${s.id}`) ? money(best.get(`${r.id}|${s.id}`)!.amount) : '—'}
-                      </FareDialog>
-                    </TableCell>
-                  ))}
-                </TableRow>
-              ))}
-            </TableBody>
-          </Table>
-        </>
+            ))}
+          </TableBody>
+        </Table>
       )}
-    </div>
+    </ListCard>
   )
 }

@@ -9,6 +9,7 @@ use App\Modules\Employees\Domain\DocumentKind;
 use App\Modules\Employees\Domain\EmployeeType;
 use App\Modules\Employees\Domain\Gender;
 use App\Modules\Employees\Domain\PayMethod;
+use App\Modules\Identity\Presentation\RequestScope;
 use App\Support\Http\ApiEnvelope;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -28,7 +29,7 @@ final class EmployeeController
             'search' => ['sometimes', 'nullable', 'string'],
             'per_page' => ['sometimes', 'integer', 'min:1'],
         ]);
-        $r = $this->employees->list($f);
+        $r = $this->employees->list($f, RequestScope::ownerId($request));
 
         return ApiEnvelope::collection($request, $r['data'], $r['pagination']);
     }
@@ -47,7 +48,7 @@ final class EmployeeController
 
     public function show(Request $request, string $employee): JsonResponse
     {
-        return ApiEnvelope::single($request, $this->employees->show($employee));
+        return ApiEnvelope::single($request, $this->employees->show($employee, RequestScope::ownerId($request)));
     }
 
     public function update(Request $request, string $employee): JsonResponse
@@ -79,6 +80,16 @@ final class EmployeeController
         $data = $request->validate([...$this->pay(), 'effective_from' => ['required', 'date_format:Y-m-d']]);
 
         return ApiEnvelope::single($request, $this->employees->addPayChange($employee, $data), 201);
+    }
+
+    public function assignManager(Request $request, string $employee): JsonResponse
+    {
+        $data = $request->validate([
+            'manager_id' => ['required', 'uuid', Rule::exists('users', 'id')->where('is_active', true)->whereNull('deleted_at')],
+            'effective_from' => ['required', 'date_format:Y-m-d'],
+        ]);
+
+        return ApiEnvelope::single($request, $this->employees->assignManager($employee, $data), 201);
     }
 
     public function document(Request $request, string $employee, string $kind): JsonResponse

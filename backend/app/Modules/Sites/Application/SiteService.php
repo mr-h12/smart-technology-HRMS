@@ -4,9 +4,15 @@ declare(strict_types=1);
 
 namespace App\Modules\Sites\Application;
 
+use App\Modules\Audit\Infrastructure\AuditLog;
+use App\Modules\Identity\Domain\Authentication\IdentityAuditEvents;
+use App\Modules\Identity\Infrastructure\Eloquent\User;
 use App\Modules\Sites\Domain\AllowanceMode;
 use App\Modules\Sites\Domain\SiteKind;
 use App\Modules\Sites\Infrastructure\Eloquent\Site;
+use App\Support\Http\Paginates;
+use Illuminate\Database\Eloquent\Builder;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\ValidationException;
 
 /** Sites (work places and leave "sites") and their dated allowance rules. */
@@ -18,9 +24,9 @@ final class SiteService
      * @param  array{kind?: string, active?: string, per_page?: int}  $filters
      * @return array{data: list<array<string, mixed>>, pagination: array{page: int, per_page: int, total: int, total_pages: int, has_next_page: bool, has_previous_page: bool}}
      */
-    public function list(array $filters): array
+    public function list(array $filters, ?string $ownerId = null): array
     {
-        $query = Site::query()->orderBy('name_ar');
+        $query = $this->visibleTo($ownerId)->orderBy('name_ar');
         if (isset($filters['kind'])) {
             $query->where('kind', $filters['kind']);
         }
@@ -45,12 +51,13 @@ final class SiteService
     }
 
     /** @return array<string, mixed> */
-    public function show(string $id): array
+    public function show(string $id, ?string $ownerId = null): array
     {
-        $site = Site::with('allowanceRules')->findOrFail($id);
+        $site = $this->visibleTo($ownerId)->with(['allowanceRules', 'managers'])->findOrFail($id);
 
         return [
             ...$this->row($site),
+            'managers' => $site->managers->sortBy('name')->values()->map(fn (User $u) => ['id' => $u->id, 'name' => $u->name])->all(),
             'allowance_rules' => $site->allowanceRules->sortBy('effective_from')->values()->map(fn ($r) => $this->row($r))->all(),
         ];
     }
@@ -82,25 +89,55 @@ final class SiteService
     {
         $site = Site::findOrFail($id);
         if ($site->allowanceRules()->where('effective_from', $data['effective_from'])->exists()) {
-            throw ValidationException::withMessages(['effective_from' => 'A rule already exists on this date.']);
+            throw ValidationException::withMessages(['effective_from' => __('errors.duplicate_date')]);
         }
         $none = $data['mode'] === AllowanceMode::None->value;
         if (! $none && blank($data['value'] ?? null)) {
-            throw ValidationException::withMessages(['value' => 'Value is required unless mode is none.']);
+            throw ValidationException::withMessages(['value' => __('errors.allowance_value_required')]);
         }
         $site->allowanceRules()->create([...$data, 'value' => $none ? '0' : $data['value']]);
 
         return $this->show($id);
     }
 
+    /**
+     * @param  list<string>  $managerIds
+     * @return array<string, mixed>
+     */
+    public function setManagers(string $id, array $managerIds): array
+    {
+        DB::transaction(function () use ($id, $managerIds): void {
+            $site = Site::lockForUpdate()->findOrFail($id);
+            $old = $site->managers()->pluck('users.id')->sort()->values()->all();
+            $site->managers()->sync($managerIds);
+            $new = collect($managerIds)->unique()->sort()->values()->all();
+            AuditLog::record(IdentityAuditEvents::SITE_MANAGERS_UPDATED, 'sites', $id, ['manager_ids' => $old], ['manager_ids' => $new]);
+        });
+
+        return $this->show($id);
+    }
+
+    /** @return Builder<Site> */
+    private function visibleTo(?string $ownerId): Builder
+    {
+        $query = Site::query();
+        if ($ownerId !== null) {
+            $query->where(fn (Builder $q) => $q
+                ->where('kind', SiteKind::Leave->value)
+                ->orWhereHas('managers', fn (Builder $m) => $m->whereKey($ownerId)));
+        }
+
+        return $query;
+    }
+
     private function assertLeaveCode(Site $site): void
     {
         $leave = $site->kind === SiteKind::Leave->value;
         if ($leave && blank($site->leave_code)) {
-            throw ValidationException::withMessages(['leave_code' => 'Leave code is required for leave sites.']);
+            throw ValidationException::withMessages(['leave_code' => __('errors.leave_code_required')]);
         }
         if (! $leave && filled($site->leave_code)) {
-            throw ValidationException::withMessages(['leave_code' => 'Leave code is only for leave sites.']);
+            throw ValidationException::withMessages(['leave_code' => __('errors.leave_code_not_allowed')]);
         }
     }
 }

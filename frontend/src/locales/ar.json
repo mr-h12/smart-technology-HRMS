@@ -1,22 +1,45 @@
 {
   "common": {
+    "all": "الكل",
     "close": "إغلاق",
     "save": "حفظ",
     "prev": "السابق",
     "next": "التالي",
-    "pageOf": "صفحة {{page}} من {{total}}",
-    "tooMany": "أكثر من 100 صف، يتم عرض أول 100 فقط."
+    "pageOf": "صفحة {{page}} من {{pages}}",
+    "tooMany": "يتجاوز عدد السجلات 100 سجل، ويُعرض أول 100 سجل فقط.",
+    "edit": "تعديل",
+    "showing": "عرض {{from}}–{{to}} من {{total}}",
+    "actions": "الإجراءات",
+    "clearSearch": "مسح البحث",
+    "clearFilters": "مسح عوامل التصفية",
+    "noResults": "لا توجد نتائج",
+    "noData": "لا توجد سجلات بعد.",
+    "saveChanges": "حفظ التغييرات",
+    "name": "الاسم",
+    "saved": "تم حفظ التغييرات.",
+    "status": "الحالة"
   },
   "app": {
-    "name": "سمارت تكنولوجي HRMS"
+    "name": "سمارت تكنولوجي لإدارة الموارد البشرية",
+    "product": "إدارة الموارد البشرية"
   },
   "nav": {
-    "main": "التنقل الرئيسي",
+    "main": "القائمة الرئيسية",
     "open": "فتح القائمة",
     "employees": "الموظفون",
-    "sites": "المواقع",
-    "residences": "محال الإقامة",
-    "fares": "الأجرة"
+    "accounts": "حسابات المستخدمين",
+    "roles": "الأدوار والصلاحيات",
+    "audit": "سجل التدقيق",
+    "collapse": "طي القائمة الجانبية",
+    "expand": "توسيع القائمة الجانبية",
+    "profile": "قائمة الحساب",
+    "breadcrumb": "مسار التنقل",
+    "group": {
+      "hr": "الموارد البشرية",
+      "settings": "الإعدادات",
+      "admin": "إدارة النظام"
+    },
+    "settings": "الإعدادات"
   },
   "toggle": {
     "language": "اللغة",
@@ -26,9 +49,9 @@
   },
   "page": {
     "employees": "الموظفون",
-    "sites": "المواقع",
-    "residences": "محال الإقامة",
-    "fares": "أجرة المواصلات"
+    "accounts": "حسابات المستخدمين",
+    "roles": "الأدوار والصلاحيات",
+    "audit": "سجل التدقيق"
   },
   "notFound": {
     "title": "الصفحة غير موجودة",
@@ -37,30 +60,46 @@
   "skip": "تخطي إلى المحتوى",
   "employee": {
     "add": "إضافة موظف",
-    "search": "بحث بالاسم أو الرقم القومي أو الكود",
-    "allTypes": "كل الأنواع",
-    "code": "الكود",
+    "search": "بحث بالاسم أو الرقم القومي أو الرقم الوظيفي",
+    "allTypes": "جميع الأنواع",
+    "code": "الرقم الوظيفي",
     "name_ar": "الاسم بالعربية",
     "name_en": "الاسم بالإنجليزية",
     "fingerprint_name": "اسم البصمة",
     "gender": "النوع",
     "national_id": "الرقم القومي",
-    "insurance_no": "رقم التأمين",
-    "phone": "الهاتف",
+    "insurance_no": "الرقم التأميني",
+    "phone": "رقم الهاتف",
     "address": "العنوان",
     "department": "القسم",
     "residence": "محل الإقامة",
     "hire_date": "تاريخ التعيين",
-    "contract_end_date": "نهاية العقد",
+    "contract_end_date": "تاريخ انتهاء العقد",
     "termination_date": "تاريخ إنهاء الخدمة",
     "termination_reason": "سبب إنهاء الخدمة",
     "hr_notes": "ملاحظات الموارد البشرية",
-    "pay_method": "طريقة الدفع",
+    "pay_method": "طريقة صرف المرتب",
     "bank_account": "الحساب البنكي",
     "type": "نوع الموظف",
     "identity": "البيانات الشخصية",
-    "placement": "التعيين",
-    "pay": "الأجر"
+    "placement": "بيانات التعيين",
+    "pay": "البيانات المالية",
+    "tab": {
+      "profile": "البيانات",
+      "manager": "المدير",
+      "history": "السجل",
+      "documents": "المستندات"
+    },
+    "subtitle": "سجل موظفي الشركة وعمالها بجميع أنواعهم.",
+    "stat": {
+      "total": "إجمالي الموظفين",
+      "office": "موظفو الشركة",
+      "engineer": "المهندسون",
+      "permanent_worker": "العمال المثبتون",
+      "day_laborer": "عمال اليومية"
+    },
+    "status": "الحالة",
+    "employee": "الموظف"
   },
   "pay": {
     "salary": "المرتب",
@@ -68,22 +107,23 @@
     "insured_basic": "الأساسي التأميني",
     "daily_wage": "الأجر اليومي",
     "shift_start": "بداية الوردية",
-    "shift_end": "نهاية الوردية"
+    "shift_end": "انتهاء الوردية"
   },
   "change": {
     "add": "إضافة تغيير",
-    "effective_from": "ساري من",
+    "effective_from": "ساري اعتبارًا من",
     "sameType": "اختر نوعًا مختلفًا عن النوع الساري في هذا التاريخ."
   },
   "history": {
-    "types": "سجل تغيير النوع",
-    "pay": "سجل تغيير الأجر",
+    "types": "سجل تغييرات نوع الموظف",
+    "pay": "سجل تغييرات الأجر",
     "documents": "المستندات"
   },
   "document": {
+    "kind": "المستند",
     "received_at": "تاريخ الاستلام",
     "expires_at": "تاريخ الانتهاء",
-    "note": "ملاحظة"
+    "note": "ملاحظات"
   },
   "enum": {
     "type": {
@@ -97,63 +137,254 @@
       "female": "أنثى"
     },
     "pay_method": {
-      "cash": "نقدي",
-      "bank": "بنكي"
+      "cash": "نقدًا",
+      "bank": "تحويل بنكي"
     },
     "document": {
-      "national_id_copy": "صورة البطاقة",
-      "work_stub": "عقب عمل",
-      "criminal_record": "فيش وتشبيه",
-      "qualification": "المؤهل",
+      "national_id_copy": "صورة بطاقة الرقم القومي",
+      "work_stub": "عقد عمل",
+      "criminal_record": "صحيفة الحالة الجنائية",
+      "qualification": "المؤهل الدراسي",
       "birth_certificate": "شهادة الميلاد",
-      "insurance_form_6": "استمارة 6 تأمينات",
+      "insurance_form_6": "استمارة رقم 6 (التأمينات الاجتماعية)",
       "photos": "صور شخصية",
-      "military_status": "موقف التجنيد",
+      "military_status": "الموقف من التجنيد",
       "other": "أخرى"
-    },
-    "site_kind": {
-      "work": "موقع عمل",
-      "leave": "إجازة"
     },
     "leave_code": {
       "friday": "الجمعة",
       "official_holiday": "إجازة رسمية",
-      "sick": "مرضي",
+      "sick": "إجازة مرضية",
       "rest": "راحة",
       "absent": "غياب",
       "other": "أخرى"
     },
     "allowance_mode": {
-      "none": "بدون",
-      "share_of_wage": "نسبة من الأجر",
+      "none": "بدون بدل",
+      "share_of_wage": "نسبة من الأجر اليومي",
       "fixed": "مبلغ ثابت"
     }
   },
   "site": {
     "add": "إضافة موقع",
     "edit": "تعديل",
-    "kind": "نوع الموقع",
-    "allKinds": "كل الأنواع",
     "leave_code": "كود الإجازة",
     "active": "نشط",
-    "allActive": "الكل",
-    "inactive": "غير نشط",
     "outside_alexandria": "خارج الإسكندرية",
-    "allowances": "بدلات",
-    "allowanceHistory": "سجل البدلات",
-    "mode": "نمط البدل",
+    "allowances": "البدلات",
+    "allowanceHistory": "سجل تغييرات البدلات",
+    "mode": "نوع البدل",
     "value": "القيمة",
-    "addRule": "إضافة",
+    "addRule": "إضافة قاعدة",
     "yes": "نعم",
-    "no": "لا"
+    "managers": "المديرون",
+    "addLeaveType": "إضافة نوع إجازة"
   },
   "residence": {
     "add": "إضافة محل إقامة"
   },
   "fare": {
-    "amount": "الأجرة",
-    "add": "إضافة أجرة",
-    "tooMany": "عدد الأجور أكبر من 100، قد لا تظهر كل الأجور في الجدول.",
+    "amount": "قيمة المواصلات",
+    "tooMany": "يتجاوز عدد السجلات 100 سجل، وقد لا تظهر جميعها في الجدول.",
     "residence": "محل الإقامة"
+  },
+  "auth": {
+    "email": "البريد الإلكتروني",
+    "password": "كلمة المرور",
+    "submit": "تسجيل الدخول",
+    "logout": "تسجيل الخروج",
+    "loading": "جارٍ التحميل…",
+    "error": {
+      "invalid_credentials": "البريد الإلكتروني أو كلمة المرور غير صحيحة.",
+      "account_locked": "تم قفل الحساب لتكرار محاولات الدخول الفاشلة. يرجى التواصل مع مسؤول النظام.",
+      "account_suspended": "تم تعطيل الحساب. يرجى التواصل مع مسؤول النظام.",
+      "rate_limited": "تم تجاوز الحد المسموح به من المحاولات. يرجى المحاولة بعد دقيقة.",
+      "unknown": "تعذّر تسجيل الدخول. يرجى المحاولة مرة أخرى."
+    },
+    "title": "تسجيل الدخول إلى حسابك"
+  },
+  "console": {
+    "addAccount": "إضافة حساب",
+    "name": "الاسم",
+    "role": "الدور",
+    "status": "الحالة",
+    "active": "نشط",
+    "inactive": "معطّل",
+    "locked": "مقفل",
+    "deactivate": "تعطيل",
+    "reactivate": "إعادة تفعيل",
+    "setPassword": "تعيين كلمة مرور جديدة",
+    "sessions": "الجلسات النشطة",
+    "noSessions": "لا توجد جلسات نشطة.",
+    "ip": "عنوان الـIP",
+    "userAgent": "المتصفح",
+    "lastActivity": "آخر نشاط",
+    "revoke": "إنهاء الجلسة",
+    "addRole": "إضافة دور",
+    "slug": "المعرّف",
+    "pickRole": "اختر دورًا لعرض صلاحياته.",
+    "accountsSubtitle": "إنشاء حسابات المستخدمين وإدارة أدوارهم وجلساتهم.",
+    "user": "المستخدم",
+    "rolesSubtitle": "حدد ما يستطيع كل دور عرضه أو تعديله.",
+    "resource": "القسم",
+    "usersCount": "عدد المستخدمين: {{count}}",
+    "matrixTitle": "صلاحيات {{role}}"
+  },
+  "perm": {
+    "employee": {
+      "view": "الموظفون: عرض",
+      "create": "الموظفون: إضافة",
+      "edit": "الموظفون: تعديل",
+      "delete": "الموظفون: حذف",
+      "assign_manager": "الموظفون: تعيين المدير"
+    },
+    "site": {
+      "view": "المواقع: عرض",
+      "manage": "المواقع: إدارة",
+      "assign_manager": "المواقع: تعيين المديرين"
+    },
+    "user": {
+      "view": "حسابات المستخدمين: عرض",
+      "manage": "حسابات المستخدمين: إدارة"
+    },
+    "role": {
+      "view": "الأدوار والصلاحيات: عرض",
+      "manage": "الأدوار والصلاحيات: إدارة"
+    },
+    "audit_log": {
+      "view": "سجل التدقيق: عرض"
+    },
+    "scope": {
+      "none": "لا",
+      "own": "الخاص به",
+      "all": "الكل"
+    },
+    "setting": {
+      "view": "قواعد العمل: عرض",
+      "manage": "قواعد العمل: إدارة"
+    },
+    "resource": {
+      "employee": "الموظفون",
+      "site": "المواقع",
+      "user": "حسابات المستخدمين",
+      "role": "الأدوار والصلاحيات",
+      "audit_log": "سجل التدقيق",
+      "setting": "قواعد العمل"
+    },
+    "action": {
+      "view": "عرض",
+      "create": "إنشاء",
+      "edit": "تعديل",
+      "delete": "حذف",
+      "assign_manager": "تعيين المدير",
+      "manage": "إدارة"
+    }
+  },
+  "audit": {
+    "subtitle": "كل عملية إنشاء أو تعديل أو حذف أو تسجيل دخول، مع المنفِّذ والقيم قبل التغيير وبعده.",
+    "details": "عرض التفاصيل",
+    "actor": "المنفِّذ",
+    "entityType": "نوع السجل",
+    "from": "من",
+    "to": "إلى",
+    "time": "التاريخ والوقت",
+    "action": "الحدث",
+    "entityId": "معرّف السجل",
+    "old_values": "القيمة السابقة",
+    "new_values": "القيمة الجديدة",
+    "event": {
+      "CREATED": "إنشاء",
+      "UPDATED": "تعديل",
+      "DELETED": "حذف",
+      "LOGIN_SUCCEEDED": "تسجيل دخول ناجح",
+      "LOGIN_FAILED": "محاولة دخول فاشلة",
+      "ACCOUNT_LOCKED": "قفل الحساب",
+      "LOGIN_BLOCKED": "منع الدخول",
+      "LOGOUT": "تسجيل خروج",
+      "USER_CREATED": "إنشاء حساب",
+      "USER_UPDATED": "تعديل حساب",
+      "USER_ACTIVATED": "إعادة تفعيل حساب",
+      "USER_DEACTIVATED": "تعطيل حساب",
+      "PASSWORD_SET": "تعيين كلمة المرور",
+      "ADMIN_SESSION_TERMINATED": "إنهاء الجلسة بواسطة مسؤول النظام",
+      "ROLE_CREATED": "إنشاء دور",
+      "ROLE_UPDATED": "تعديل دور",
+      "ROLE_PERMISSIONS_UPDATED": "تعديل صلاحيات دور",
+      "SITE_MANAGERS_UPDATED": "تعديل مديري الموقع"
+    },
+    "entity": {
+      "employees": "الموظفون",
+      "employee_type_changes": "تغييرات نوع الموظف",
+      "employee_pay_changes": "تغييرات الأجر",
+      "employee_documents": "مستندات الموظف",
+      "employee_fare_overrides": "مواصلات خاصة بالموظف",
+      "employee_manager_assignments": "تعيين المديرين",
+      "sites": "المواقع",
+      "site_allowance_rules": "قواعد بدلات المواقع",
+      "residences": "محل الإقامة",
+      "fares": "المواصلات",
+      "users": "حسابات المستخدمين",
+      "roles": "الأدوار",
+      "settings": "قواعد العمل"
+    }
+  },
+  "settings": {
+    "tab": {
+      "sites": "المواقع",
+      "residences": "محل الإقامة",
+      "leaveTypes": "أنواع الإجازات",
+      "fares": "المواصلات",
+      "rules": "قواعد العمل"
+    },
+    "subtitle": "إدارة المواقع ومحل الإقامة وأنواع الإجازات والمواصلات وقواعد العمل.",
+    "desc": {
+      "sites": "أماكن العمل التي تُسجَّل عليها أيام الحضور.",
+      "residences": "المناطق التي ينتقل منها الموظفون إلى المواقع.",
+      "leaveTypes": "الأيام التي تُسجَّل بدلًا من موقع العمل، مثل الجمعة والإجازات الرسمية والغياب.",
+      "fares": "قيمة المواصلات من كل محل إقامة إلى كل موقع، سارية من تاريخها.",
+      "rules": "الأرقام التي تعتمد عليها حسابات الرواتب والتأخير والإجازات."
+    }
+  },
+  "status": {
+    "active": "نشط",
+    "inactive": "غير نشط"
+  },
+  "manager": {
+    "title": "المدير",
+    "assign": "تعيين مدير",
+    "none": "بدون مدير",
+    "history": "سجل تعيين المديرين"
+  },
+  "rule": {
+    "group": {
+      "time": "الأجر وساعات العمل",
+      "lateness": "التأخير",
+      "schedule": "الوردية والراحة الأسبوعية",
+      "leave": "رصيد الإجازات السنوية"
+    },
+    "month_days": "عدد أيام الشهر",
+    "day_hours": "عدد ساعات اليوم",
+    "overtime_multiplier": "معامل الوقت الإضافي",
+    "lateness_multiplier_office": "معامل التأخير: موظفو الشركة",
+    "lateness_multiplier_engineer": "معامل التأخير: المهندسون",
+    "lateness_multiplier_permanent_worker": "معامل التأخير: العمال المثبتون",
+    "lateness_multiplier_day_laborer": "معامل التأخير: عمال اليومية",
+    "office_grace_minutes": "فترة السماح للتأخير (دقيقة)",
+    "office_shift_start": "بدء وردية المكتب",
+    "office_shift_end": "انتهاء وردية المكتب",
+    "weekly_off_office": "الراحة الأسبوعية: موظفو الشركة",
+    "weekly_off_field": "الراحة الأسبوعية: العاملون بالمواقع",
+    "leave_days_under_one_year": "أيام الإجازة لمن خدمته أقل من سنة",
+    "leave_days_one_year_plus": "أيام الإجازة لمن أتم سنة أو أكثر",
+    "leave_casual_days": "أيام الإجازة العارضة"
+  },
+  "weekday": {
+    "saturday": "السبت",
+    "sunday": "الأحد",
+    "monday": "الاثنين",
+    "tuesday": "الثلاثاء",
+    "wednesday": "الأربعاء",
+    "thursday": "الخميس",
+    "friday": "الجمعة"
   }
 }

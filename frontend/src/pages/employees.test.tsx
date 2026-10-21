@@ -1,37 +1,126 @@
-import { render, screen, waitFor, within } from '@testing-library/react'
+import { screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { MemoryRouter, Route, Routes } from 'react-router-dom'
 import { afterEach, beforeEach, expect, test, vi } from 'vitest'
-import '@/i18n'
+import { json, mockFetch, pagination, renderWithAuth } from '@/test-utils'
 import { EmployeeFormPage, EmployeesPage } from './employees'
 
-const pagination = { page: 1, per_page: 20, total: 1, total_pages: 1, has_next_page: false, has_previous_page: false }
-const json = (status: number, body: unknown) => new Response(JSON.stringify(body), { status })
-
-function mockFetch(routes: Record<string, () => Response>) {
-  vi.stubGlobal('fetch', vi.fn(async (url: string, init?: RequestInit) => {
-    const key = `${init?.method ?? 'GET'} ${url.split('?')[0]}`
-    return routes[key]?.() ?? json(404, { error: { code: 'nf', message: key } })
-  }))
-}
 const residences = () => json(200, { data: [{ id: 'r1', name_ar: 'العجمي' }], meta: { pagination } })
+
+const user = userEvent.setup()
 
 beforeEach(() => localStorage.clear())
 afterEach(() => vi.unstubAllGlobals())
 
-test('list renders rows from the API', async () => {
+const row1 = { id: 'e1', code: 7, name_ar: 'أحمد علي', name_en: 'Ahmed Ali', department: 'المبيعات', hire_date: '2024-02-01', termination_date: null, pay_method: 'cash', current_type: 'engineer' }
+
+const ALL = ['employee.view.all', 'employee.create.all', 'employee.edit.all']
+const emp = { id: 'e1', name_ar: 'أحمد', current_type: 'office', type_changes: [], pay_changes: [], documents: [], current_manager: null, manager_assignments: [] }
+
+function EmployeeDetailRoute({ id, tab }: { id: string; tab?: string }) {
+  return (
+    <MemoryRouter initialEntries={[`/employees/${id}${tab ? `?tab=${tab}` : ''}`]}>
+      <Routes><Route path="employees/:id" element={<EmployeeFormPage />} /></Routes>
+    </MemoryRouter>
+  )
+}
+
+test('assigning a manager posts the chosen user and date', async () => {
+  const post = vi.fn(() => json(201, { data: { ...emp, current_manager: { id: 'u1', name: 'خالد' } } }))
+  mockFetch({ 'GET /api/v1/employees/e1': () => json(200, { data: emp }), 'GET /api/v1/residences': residences,
+    'GET /api/v1/users': () => json(200, { data: [{ id: 'u1', name: 'خالد', is_active: true }], meta: { pagination } }),
+    'POST /api/v1/employees/e1/manager-assignments': post })
+  renderWithAuth(<EmployeeDetailRoute id="e1" />, ['employee.view.all', 'employee.assign_manager.all'], { router: false })
+  await user.click(await screen.findByRole('button', { name: 'تعيين مدير' }))
+  await screen.findByRole('option', { name: 'خالد' })
+  await user.selectOptions(screen.getByLabelText('المدير'), 'u1')
+  await user.type(screen.getByLabelText('ساري اعتبارًا من'), '2026-11-01')
+  await user.click(screen.getByRole('button', { name: 'حفظ' }))
+  expect(JSON.parse((post.mock.calls[0] as unknown as [string, RequestInit])[1].body as string)).toEqual({ manager_id: 'u1', effective_from: '2026-11-01' })
+  expect(await screen.findByText('خالد')).toBeInTheDocument()
+})
+
+test('without the permission there is no assign button', async () => {
+  mockFetch({ 'GET /api/v1/employees/e1': () => json(200, { data: { ...emp, current_manager: null } }), 'GET /api/v1/residences': residences })
+  renderWithAuth(<EmployeeDetailRoute id="e1" />, ['employee.view.own'], { router: false })
+  expect(await screen.findByText('بدون مدير')).toBeInTheDocument()
+  expect(screen.queryByRole('button', { name: 'تعيين مدير' })).toBeNull()
+})
+
+test('manager tab lists the assignment history', async () => {
+  mockFetch({ 'GET /api/v1/residences': residences, 'GET /api/v1/employees/e1': () => json(200, { data: { ...emp,
+    current_manager: { id: 'u1', name: 'خالد' }, manager_assignments: [{ id: 'm1', manager_id: 'u1', manager_name: 'خالد', effective_from: '2026-01-01' }] } }) })
+  renderWithAuth(<EmployeeDetailRoute id="e1" tab="manager" />, ['employee.view.all'], { router: false })
+  const row = await screen.findByRole('row', { name: /2026-01-01/ })
+  expect(within(row).getByText('خالد')).toBeInTheDocument()
+})
+
+test('a document is updated from its row dialog and the returned record is shown', async () => {
+  const put = vi.fn(() => json(200, { data: { ...emp, documents: [{ id: 'd1', kind: 'criminal_record', received_at: '2026-10-01', expires_at: null, note: 'أصل' }] } }))
+  mockFetch({ 'GET /api/v1/residences': residences, 'GET /api/v1/employees/e1': () => json(200, { data: emp }),
+    'PUT /api/v1/employees/e1/documents/criminal_record': put })
+  renderWithAuth(<EmployeeDetailRoute id="e1" tab="documents" />, ALL, { router: false })
+  const row = await screen.findByRole('row', { name: /صحيفة الحالة الجنائية/ })
+  await user.click(within(row).getByRole('button', { name: 'تعديل' }))
+  await user.type(screen.getByLabelText('ملاحظات'), 'أصل')
+  await user.type(screen.getByLabelText('تاريخ الاستلام'), '2026-10-01')
+  await user.click(screen.getByRole('button', { name: 'حفظ' }))
+  expect(JSON.parse((put.mock.calls[0] as unknown as [string, RequestInit])[1].body as string)).toEqual({ received_at: '2026-10-01', expires_at: null, note: 'أصل' })
+  expect(await within(screen.getByRole('row', { name: /صحيفة الحالة الجنائية/ })).findByText('2026-10-01')).toBeInTheDocument()
+  expect(vi.mocked(fetch).mock.calls.filter(([u]) => String(u).endsWith('/employees/e1'))).toHaveLength(1)
+})
+
+test('list rows show the employee, ID, type badge, department, hire date and status', async () => {
+  mockFetch({ 'GET /api/v1/employees': () => json(200, { data: [row1], meta: { pagination } }) })
+  renderWithAuth(<EmployeesPage />, ['employee.view.all'])
+  const row = await screen.findByRole('row', { name: /أحمد علي/ })
+  expect(within(row).getByText('7')).toBeInTheDocument()
+  expect(within(row).getAllByText('مهندس')).toHaveLength(2) // under the name on phones, its own column from sm
+  expect(within(row).getByText('المبيعات')).toBeInTheDocument()
+  expect(within(row).getByText('2024-02-01')).toBeInTheDocument()
+  expect(within(row).getByText('نشط')).toBeInTheDocument()
+  expect(screen.queryByRole('link', { name: 'إضافة موظف' })).toBeNull()
+})
+
+test('stat tiles show the server totals per type', async () => {
+  const totals: Record<string, number> = { '': 40, office: 9, engineer: 7, permanent_worker: 13, day_laborer: 11 }
   mockFetch({
-    'GET /api/v1/employees': () =>
-      json(200, {
-        data: [{ id: 'e1', code: 7, name_ar: 'أحمد علي', department: 'المبيعات', pay_method: 'cash', current_type: 'engineer' }],
-        meta: { pagination },
-      }),
+    'GET /api/v1/employees': (url) =>
+      json(200, { data: [], meta: { pagination: { ...pagination, total: totals[new URL(url, 'http://x').searchParams.get('type') ?? ''] } } }),
   })
-  render(<MemoryRouter><EmployeesPage /></MemoryRouter>)
-  expect(await screen.findByText('أحمد علي')).toBeInTheDocument()
-  expect(screen.getByText('المبيعات')).toBeInTheDocument()
-  expect(screen.getByText('نقدي')).toBeInTheDocument()
-  expect(within(screen.getByRole('table')).getByText('مهندس')).toBeInTheDocument()
+  renderWithAuth(<EmployeesPage />, ['employee.view.all', 'employee.create.all'])
+  expect(await within(screen.getByRole('group', { name: 'إجمالي الموظفين' })).findByText('40')).toBeInTheDocument()
+  expect(await within(screen.getByRole('group', { name: 'المهندسون' })).findByText('7')).toBeInTheDocument()
+  expect(await within(screen.getByRole('group', { name: 'عمال اليومية' })).findByText('11')).toBeInTheDocument()
+  expect(screen.getByRole('link', { name: 'إضافة موظف' })).toBeInTheDocument()
+})
+
+test('search and type filter the query and clear filters resets them', async () => {
+  const list = vi.fn((_url: string) => json(200, { data: [], meta: { pagination } }))
+  mockFetch({ 'GET /api/v1/employees': list })
+  renderWithAuth(<EmployeesPage />, ['employee.view.all'])
+  const main = () => list.mock.calls.map(([u]) => String(u)).filter((u) => u.includes('per_page=12')).at(-1)!
+  await user.type(await screen.findByRole('textbox', { name: 'بحث بالاسم أو الرقم القومي أو الرقم الوظيفي' }), 'أحمد')
+  await user.selectOptions(screen.getByRole('combobox', { name: 'نوع الموظف' }), 'engineer')
+  await waitFor(() => expect(main()).toContain('type=engineer'))
+  expect(decodeURIComponent(main())).toContain('search=أحمد')
+  expect(main()).toContain('page=1')
+  await user.click(screen.getByRole('button', { name: 'مسح عوامل التصفية' }))
+  await waitFor(() => expect(main()).not.toContain('type='))
+  expect(screen.queryByRole('button', { name: 'مسح عوامل التصفية' })).toBeNull()
+})
+
+test('clicking a row opens the employee', async () => {
+  mockFetch({ 'GET /api/v1/employees': () => json(200, { data: [row1], meta: { pagination } }) })
+  renderWithAuth(
+    <Routes>
+      <Route path="/" element={<EmployeesPage />} />
+      <Route path="/employees/:id" element={<p>صفحة الموظف</p>} />
+    </Routes>,
+    ['employee.view.all'],
+  )
+  await user.click(await screen.findByText('المبيعات'))
+  expect(await screen.findByText('صفحة الموظف')).toBeInTheDocument()
 })
 
 test('create form shows a server field error under its field', async () => {
@@ -40,11 +129,7 @@ test('create form shows a server field error under its field', async () => {
     'POST /api/v1/employees': () =>
       json(422, { error: { code: 'validation_failed', message: 'Invalid', details: [{ field: 'national_id', code: 'unique', message: 'الرقم القومي مستخدم' }] } }),
   })
-  render(
-    <MemoryRouter initialEntries={['/employees/new']}>
-      <Routes><Route path="employees/new" element={<EmployeeFormPage />} /></Routes>
-    </MemoryRouter>,
-  )
+  renderWithAuth(<MemoryRouter initialEntries={['/employees/new']}><Routes><Route path="employees/new" element={<EmployeeFormPage />} /></Routes></MemoryRouter>, ALL, { router: false })
   const user = userEvent.setup()
   await user.type(screen.getByLabelText('الاسم بالعربية'), 'أحمد')
   await user.click(screen.getByRole('button', { name: 'حفظ' }))
@@ -54,11 +139,7 @@ test('create form shows a server field error under its field', async () => {
 })
 
 const createForm = () =>
-  render(
-    <MemoryRouter initialEntries={['/employees/new']}>
-      <Routes><Route path="employees/new" element={<EmployeeFormPage />} /></Routes>
-    </MemoryRouter>,
-  )
+  renderWithAuth(<MemoryRouter initialEntries={['/employees/new']}><Routes><Route path="employees/new" element={<EmployeeFormPage />} /></Routes></MemoryRouter>, ALL, { router: false })
 
 test('a 500 on save shows the error banner', async () => {
   mockFetch({
@@ -107,25 +188,11 @@ test('create sends only the pay fields the type uses', async () => {
   expect(body).not.toHaveProperty('salary')
 })
 
-test('Enter in a document row does not submit the employee form', async () => {
-  mockFetch({
-    'GET /api/v1/residences': residences,
-    'GET /api/v1/employees/e1': () => json(200, { data: { id: 'e1', name_ar: 'أحمد', current_type: 'office', type_changes: [], pay_changes: [], documents: [] } }),
-  })
-  render(
-    <MemoryRouter initialEntries={['/employees/e1']}>
-      <Routes><Route path="employees/:id" element={<EmployeeFormPage />} /></Routes>
-    </MemoryRouter>,
-  )
-  const note = (await screen.findAllByLabelText('ملاحظة'))[0]
-  await userEvent.type(note, 'x{Enter}')
-  expect(vi.mocked(fetch).mock.calls.some(([, i]) => i?.method === 'PATCH')).toBe(false)
-})
-
 test('list load failure shows the banner', async () => {
   mockFetch({ 'GET /api/v1/employees': () => json(500, { error: { code: 'server_error', message: 'تعذر التحميل' } }) })
-  render(<MemoryRouter><EmployeesPage /></MemoryRouter>)
+  renderWithAuth(<EmployeesPage />, ['employee.view.all'])
   expect(await screen.findByRole('alert')).toHaveTextContent('تعذر التحميل')
+  expect(screen.getAllByRole('alert')).toHaveLength(1)
 })
 
 const openEmp = (type_changes: unknown[]) => {
@@ -134,11 +201,7 @@ const openEmp = (type_changes: unknown[]) => {
     'GET /api/v1/employees/e1': () => json(200, { data: { id: 'e1', name_ar: 'أحمد', current_type: 'day_laborer', type_changes, pay_changes: [], documents: [] } }),
     'POST /api/v1/employees/e1/type-changes': () => json(201, { data: {} }),
   })
-  render(
-    <MemoryRouter initialEntries={['/employees/e1']}>
-      <Routes><Route path="employees/:id" element={<EmployeeFormPage />} /></Routes>
-    </MemoryRouter>,
-  )
+  renderWithAuth(<EmployeeDetailRoute id="e1" tab="history" />, ALL, { router: false })
 }
 const history = [
   { id: 't1', effective_from: '2020-01-01', type: 'office' },
@@ -149,11 +212,11 @@ test('pay dialog shapes its fields by the type in force on the chosen date', asy
   openEmp(history)
   const user = userEvent.setup()
   await user.click((await screen.findAllByRole('button', { name: 'إضافة تغيير' }))[1])
-  await user.type(screen.getByLabelText('ساري من'), '2025-01-01')
+  await user.type(screen.getByLabelText('ساري اعتبارًا من'), '2025-01-01')
   expect(screen.getByLabelText('المرتب')).toBeInTheDocument()
   expect(screen.queryByLabelText('الأجر اليومي')).toBeNull()
-  await user.clear(screen.getByLabelText('ساري من'))
-  await user.type(screen.getByLabelText('ساري من'), '2026-07-01')
+  await user.clear(screen.getByLabelText('ساري اعتبارًا من'))
+  await user.type(screen.getByLabelText('ساري اعتبارًا من'), '2026-07-01')
   expect(screen.getByLabelText('الأجر اليومي')).toBeInTheDocument()
 })
 
@@ -161,7 +224,7 @@ test('type-change dialog rejects the type already in force on that date', async 
   openEmp(history)
   const user = userEvent.setup()
   await user.click((await screen.findAllByRole('button', { name: 'إضافة تغيير' }))[0])
-  await user.type(screen.getByLabelText('ساري من'), '2025-01-01')
+  await user.type(screen.getByLabelText('ساري اعتبارًا من'), '2025-01-01')
   await user.selectOptions(screen.getByLabelText('نوع الموظف'), 'office')
   await user.click(screen.getByRole('button', { name: 'حفظ' }))
   expect(await screen.findByText(/نوعًا مختلفًا/)).toBeInTheDocument()
@@ -182,4 +245,47 @@ test('a residences load failure shows the banner', async () => {
   mockFetch({ 'GET /api/v1/residences': () => json(500, { error: { code: 'server_error', message: 'تعذر التحميل' } }) })
   createForm()
   expect(await screen.findByRole('alert')).toHaveTextContent('تعذر التحميل')
+})
+
+// An own-scoped (manager) record arrives without national_id, insurance_no, bank_account, hr_notes, current_pay and pay_changes.
+const scoped = { id: 'e1', name_ar: 'أحمد', gender: 'male', phone: '0100', pay_method: 'cash', current_type: 'office', type_changes: [], documents: [], current_manager: null, manager_assignments: [] }
+const sensitive = ['الرقم القومي', 'الرقم التأميني', 'ملاحظات الموارد البشرية', 'الحساب البنكي', 'طريقة صرف المرتب']
+
+test('a record without the sensitive fields hides them, the pay section and the pay history', async () => {
+  mockFetch({ 'GET /api/v1/residences': residences, 'GET /api/v1/employees/e1': () => json(200, { data: scoped }) })
+  const { unmount } = renderWithAuth(<EmployeeDetailRoute id="e1" />, ['employee.view.own'], { router: false })
+  expect(await screen.findByLabelText('رقم الهاتف')).toBeDisabled()
+  for (const label of sensitive) expect(screen.queryByLabelText(label)).toBeNull()
+  expect(screen.queryByText('البيانات المالية')).toBeNull()
+  unmount()
+  renderWithAuth(<EmployeeDetailRoute id="e1" tab="history" />, ['employee.view.own'], { router: false })
+  expect(await screen.findByText('سجل تغييرات نوع الموظف')).toBeInTheDocument()
+  expect(screen.queryByText('سجل تغييرات الأجر')).toBeNull()
+})
+
+test('view-only users with the data see pay read-only', async () => {
+  const full = { ...emp, gender: 'male', pay_method: 'bank', bank_account: 'EG01', national_id: '29001011234567', current_pay: null,
+    pay_changes: [{ id: 'p1', effective_from: '2026-01-01', salary: '9000.000000', raise: '0', insured_basic: null, daily_wage: null, shift_start: null, shift_end: null }] }
+  mockFetch({ 'GET /api/v1/residences': residences, 'GET /api/v1/employees/e1': () => json(200, { data: full }) })
+  const { unmount } = renderWithAuth(<EmployeeDetailRoute id="e1" />, ['employee.view.all'], { router: false })
+  expect(await screen.findByLabelText('الرقم القومي')).toBeDisabled()
+  expect(screen.getByText('البيانات المالية')).toBeInTheDocument()
+  expect(screen.getByLabelText('الحساب البنكي')).toBeDisabled()
+  expect(screen.queryByRole('button', { name: 'حفظ' })).toBeNull()
+  unmount()
+  renderWithAuth(<EmployeeDetailRoute id="e1" tab="history" />, ['employee.view.all'], { router: false })
+  expect(await screen.findByText('سجل تغييرات الأجر')).toBeInTheDocument()
+  expect(screen.getByRole('row', { name: /2026-01-01/ })).toBeInTheDocument()
+  expect(screen.queryByRole('button', { name: 'إضافة تغيير' })).toBeNull()
+})
+
+test('saving a record that came without the sensitive fields does not send them', async () => {
+  const patch = vi.fn(() => json(200, { data: scoped }))
+  mockFetch({ 'GET /api/v1/residences': residences, 'GET /api/v1/employees/e1': () => json(200, { data: scoped }), 'PATCH /api/v1/employees/e1': patch })
+  renderWithAuth(<EmployeeDetailRoute id="e1" />, ['employee.view.own', 'employee.edit.all'], { router: false })
+  await user.click(await screen.findByRole('button', { name: 'حفظ' }))
+  await waitFor(() => expect(patch).toHaveBeenCalled())
+  const body = JSON.parse((patch.mock.calls[0] as unknown as [string, RequestInit])[1].body as string)
+  for (const k of ['national_id', 'insurance_no', 'bank_account', 'hr_notes']) expect(body).not.toHaveProperty(k)
+  expect(body).toMatchObject({ name_ar: 'أحمد', phone: '0100' })
 })

@@ -1,67 +1,67 @@
 @import 'tailwindcss';
 
 @font-face {
-  font-family: 'Inter';
+  font-family: 'IBM Plex Sans';
   font-style: normal;
   font-weight: 400;
   font-display: swap;
-  src: url('/fonts/inter-latin-400-normal.woff2') format('woff2');
+  src: url('/fonts/ibm-plex-sans-latin-400-normal.woff2') format('woff2');
 }
 
 @font-face {
-  font-family: 'Inter';
+  font-family: 'IBM Plex Sans';
   font-style: normal;
   font-weight: 500;
   font-display: swap;
-  src: url('/fonts/inter-latin-500-normal.woff2') format('woff2');
+  src: url('/fonts/ibm-plex-sans-latin-500-normal.woff2') format('woff2');
 }
 
 @font-face {
-  font-family: 'Inter';
+  font-family: 'IBM Plex Sans';
   font-style: normal;
   font-weight: 600;
   font-display: swap;
-  src: url('/fonts/inter-latin-600-normal.woff2') format('woff2');
+  src: url('/fonts/ibm-plex-sans-latin-600-normal.woff2') format('woff2');
 }
 
 @font-face {
-  font-family: 'Inter';
+  font-family: 'IBM Plex Sans';
   font-style: normal;
   font-weight: 700;
   font-display: swap;
-  src: url('/fonts/inter-latin-700-normal.woff2') format('woff2');
+  src: url('/fonts/ibm-plex-sans-latin-700-normal.woff2') format('woff2');
 }
 
 @font-face {
-  font-family: 'Noto Sans Arabic';
+  font-family: 'IBM Plex Sans Arabic';
   font-style: normal;
   font-weight: 400;
   font-display: swap;
-  src: url('/fonts/noto-sans-arabic-arabic-400-normal.woff2') format('woff2');
+  src: url('/fonts/ibm-plex-sans-arabic-arabic-400-normal.woff2') format('woff2');
 }
 
 @font-face {
-  font-family: 'Noto Sans Arabic';
+  font-family: 'IBM Plex Sans Arabic';
   font-style: normal;
   font-weight: 500;
   font-display: swap;
-  src: url('/fonts/noto-sans-arabic-arabic-500-normal.woff2') format('woff2');
+  src: url('/fonts/ibm-plex-sans-arabic-arabic-500-normal.woff2') format('woff2');
 }
 
 @font-face {
-  font-family: 'Noto Sans Arabic';
+  font-family: 'IBM Plex Sans Arabic';
   font-style: normal;
   font-weight: 600;
   font-display: swap;
-  src: url('/fonts/noto-sans-arabic-arabic-600-normal.woff2') format('woff2');
+  src: url('/fonts/ibm-plex-sans-arabic-arabic-600-normal.woff2') format('woff2');
 }
 
 @font-face {
-  font-family: 'Noto Sans Arabic';
+  font-family: 'IBM Plex Sans Arabic';
   font-style: normal;
   font-weight: 700;
   font-display: swap;
-  src: url('/fonts/noto-sans-arabic-arabic-700-normal.woff2') format('woff2');
+  src: url('/fonts/ibm-plex-sans-arabic-arabic-700-normal.woff2') format('woff2');
 }
 
 @font-face {
@@ -87,6 +87,7 @@
  * Light = "Warm Editorial", dark = "Midnight Obsidian". Components use the shadcn names below.
  */
 :root {
+  color-scheme: light;
   --radius: 0.5rem;
   --background: #faf8f5;
   --foreground: #292524;
@@ -127,6 +128,7 @@
 }
 
 .dark {
+  color-scheme: dark;
   --background: #0b0f19;
   --foreground: #e0e7ff;
   --card: #111827;
@@ -166,8 +168,8 @@
 }
 
 @theme inline {
-  /* Inter for Latin and digits, Noto Sans Arabic for Arabic — resolved per character (CRM §4.1). */
-  --font-sans: 'Inter', 'Noto Sans Arabic', sans-serif;
+  /* IBM Plex Sans for Latin and digits, IBM Plex Sans Arabic for Arabic — resolved per character. */
+  --font-sans: 'IBM Plex Sans', 'IBM Plex Sans Arabic', sans-serif;
   --font-mono: 'Noto Sans Mono', monospace;
 
   --text-body: 14px;

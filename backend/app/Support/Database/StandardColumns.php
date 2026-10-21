@@ -9,7 +9,7 @@ use Illuminate\Database\Schema\Blueprint;
 /**
  * Blueprint macros so every business table gets the same id/audit columns and the
  * money/percentage/quantity precisions (Laravel's decimal() defaults to 8,2).
- * created_by/updated_by have no FK yet; the users table is replaced later.
+ * created_by/updated_by hold the acting user id (HasStandardColumns fills them); no FK, so deleting a user never touches history.
  */
 final class StandardColumns
 {
