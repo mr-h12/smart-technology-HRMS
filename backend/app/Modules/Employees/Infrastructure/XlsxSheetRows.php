@@ -54,6 +54,32 @@ final class XlsxSheetRows
         }
     }
 
+    /**
+     * Sheet name => its row-1 headers by 0-based column, blanks left out. Unlike read(), a repeated header stays visible here.
+     *
+     * @return array<string, array<int, string>>
+     */
+    public function headers(string $path): array
+    {
+        $reader = new Reader(new Options(SHOULD_PRESERVE_EMPTY_ROWS: true));
+        $reader->open($path);
+        try {
+            $sheets = [];
+            foreach ($reader->getSheetIterator() as $sheet) {
+                $sheets[$sheet->getName()] = [];
+                foreach ($sheet->getRowIterator() as $row) {
+                    $sheets[$sheet->getName()] = array_filter(array_map(self::value(...), $row->cells), fn (?string $h) => $h !== null);
+
+                    break;
+                }
+            }
+
+            return $sheets;
+        } finally {
+            $reader->close();
+        }
+    }
+
     private static function value(Cell $cell): ?string
     {
         // A formula reads as the value Excel last computed for it.

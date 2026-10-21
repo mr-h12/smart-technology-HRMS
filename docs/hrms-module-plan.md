@@ -75,7 +75,7 @@ Smart Technology runs HR and payroll today on 6 hand-built Excel workbooks (anal
      - **Paste site attendance messages**: HR pastes a site's attendance message in a fixed format, and the system parses it per person.
 6. **Leave**: balances and rules above, recorded by the manager, HR approves or escalates.
 7. **Notifications**: in-app, instant + daily digest.
-8. **Migration step 1**: employees, sites, rates, fares, opening leave balances, open advance balances.
+8. **Migration step 1**: step 1 (master data: employees, sites, rates, fares) is done by `hrms:import-master`; opening leave and advance balances follow their modules.
 
 ### Release 2 — end of Month 2: Payroll
 1. **Fingerprint import** (office) → late minutes with grace, exemptions.
