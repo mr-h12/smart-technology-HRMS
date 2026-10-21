@@ -313,6 +313,17 @@ test('a 409 names the conflicting employees and refetches the sheet', async () =
   await waitFor(() => expect(get.mock.calls.length).toBeGreaterThan(before))
 })
 
+test.each([
+  ['a locked period', 423, 'period_locked', 'الفترة مقفلة'],
+  ['a future date', 422, 'future_date', 'تاريخ مستقبلي'],
+  ['a racing insert with no row', 409, 'concurrency_conflict', 'عدّل مستخدم آخر هذا السجل'],
+])('%s names nobody: the toast is the plain message', async (_, status, code, message) => {
+  mockFetch({ ...routes, 'POST /api/v1/attendance/days/bulk': () => json(status, { error: { code, message } }) })
+  edit()
+  await user.click(within(await table()).getByRole('button', { name: 'غياب Engineer-1' }))
+  await waitFor(() => expect(toast.error).toHaveBeenCalledWith(message))
+})
+
 test('a row in flight is not sent again', async () => {
   const bulk = vi.fn(() => new Promise<Response>(() => {}) as unknown as Response) // never answers
   mockFetch({ ...routes, 'POST /api/v1/attendance/days/bulk': bulk })
@@ -539,6 +550,35 @@ test.each([
   await user.type(command(), '1{Enter}')
   expect(within(screen.getByRole('table')).getAllByRole('row')).toHaveLength(2)
   expect(bulk).not.toHaveBeenCalled()
+})
+
+test('a reader is told the box finds employees by ID or name; an editor gets the write help', async () => {
+  mockFetch(routes)
+  const { unmount } = open()
+  await table()
+  expect(screen.getByRole('status', { name: 'إدخال سريع' })).toHaveTextContent('اكتب الأرقام الوظيفية أو جزءًا من الاسم للبحث عن الموظفين.')
+  unmount()
+  edit()
+  await table()
+  expect(screen.getByRole('status', { name: 'إدخال سريع' })).toHaveTextContent('مفتاح الإدخال يسجل الأرقام حاضرين؛ الاسم يحدد المطابقين فقط.')
+})
+
+test('the paste undo label is the translated action count', async () => {
+  i18n.addResource('ar', 'translation', 'attendance.sheet.actionCount', '{{action}} × {{count}}')
+  try {
+    mockFetch({ ...routes, 'POST /api/v1/attendance/days/bulk': bulkOk() })
+    edit()
+    await table()
+    await user.click(screen.getByRole('button', { name: 'لصق أرقام' }))
+    const dialog = screen.getByRole('dialog', { name: 'لصق الأرقام الوظيفية' })
+    await user.type(within(dialog).getByRole('textbox', { name: 'الأرقام الوظيفية' }), '1 2')
+    await user.click(within(dialog).getByRole('button', { name: 'غياب' }))
+    await waitFor(() => expect(screen.getByRole('button', { name: /^تراجع/ })).toHaveTextContent('تراجع (1)'))
+    await user.click(screen.getByRole('button', { name: /^تراجع/ }))
+    await waitFor(() => expect(toast.success).toHaveBeenCalledWith('تم التراجع: غياب × 2'))
+  } finally {
+    i18n.addResource('ar', 'translation', 'attendance.sheet.actionCount', '{{action}} ({{count}})')
+  }
 })
 
 test('Enter writes only the shown rows while a cohort filter is active', async () => {

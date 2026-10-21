@@ -13,7 +13,7 @@ afterEach(async () => {
 
 const perms = ['attendance.view.all', 'attendance.edit.all']
 const FILE_LABEL = 'ملف Excel (⁦.xlsx⁩، حتى 5 ميجابايت)'
-const change = (row: number, column: string, to: string) => ({ row, column, employee_id: 'e1', code: 1, name_ar: 'Engineer-1', date: '2026-10-04', from: null, to })
+const change = (row: number, column: string, to: string) => ({ row, column, employee_id: 'e1', code: 1, name_ar: 'Engineer-1', name_en: null, date: '2026-10-04', from: null, to })
 const error = { row: 3, column: 'G', code: 12, date: '2026-10-05', error: 'unknown_site', message: 'الموقع أو نوع اليوم غير موجود.' }
 const rowError = { row: 5, column: null, code: 99, date: null, error: 'unknown_employee', message: 'الرقم الوظيفي غير موجود في هذه المجموعة.' }
 const preview = { summary: { cells: 30, changes: 3, unchanged: 26, errors: 2 }, changes: [change(2, 'F', 'Site-1'), change(2, 'H', 'Site-1'), change(4, 'F', 'Site-2')], errors: [error, rowError] }
@@ -87,6 +87,17 @@ test('a cell error follows the UI language, and an unknown code keeps the server
   expect(within(errors).getByText('Unknown site or day type.').tagName).toBe('BDI')
   expect(within(errors).queryByText('الموقع أو نوع اليوم غير موجود.')).not.toBeInTheDocument()
   expect(within(errors).getByText('رسالة لا يعرفها الواجهة.').tagName).toBe('BDI')
+})
+
+test('the preview names the employee in the UI language, falling back to the Arabic name', async () => {
+  const named = { ...change(2, 'F', 'Site-1'), employee_id: 'e2', code: 2, name_ar: 'مهندس-2', name_en: 'Engineer Two' }
+  await previewed({ ...preview, changes: [named, change(2, 'H', 'Site-1')] })
+  const table = () => within(screen.getByRole('table', { name: /التغييرات|Changes/ }))
+  expect(table().getByText('مهندس-2')).toBeInTheDocument()
+  await act(() => i18n.changeLanguage('en'))
+  expect(table().getByText('Engineer Two')).toBeInTheDocument()
+  expect(table().queryByText('مهندس-2')).not.toBeInTheDocument()
+  expect(table().getByText('Engineer-1')).toBeInTheDocument() // no name_en: the Arabic name
 })
 
 test('after a preview, confirm is the only primary action', async () => {

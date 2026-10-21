@@ -70,6 +70,8 @@ export function NotificationBell() {
                 <span>
                   {!n.read_at && <><span className="sr-only">{t('notifications.unread')}</span> </>}
                   {t('notifications.missingDays.line', { group: t(`attendance.group.${g.group}`), count: g.missing })}
+                  {/* without it, screen readers other than Chromium's run the count into the range's first date */}
+                  <span className="sr-only">{t('notifications.pause')}</span>{' '}
                 </span>
                 <span className="text-xs font-normal text-muted-foreground tabular-nums">{ltrDates(t('notifications.missingDays.period', { start: g.period_start, end: g.period_end }))}</span>
               </DropdownMenuItem>

@@ -1,7 +1,7 @@
 import { ArrowRight, Download, FileSearch, Save, Upload } from 'lucide-react'
 import { useState } from 'react'
 import { useTranslation } from 'react-i18next'
-import { ErrorBanner, Field, ltrDates } from '@/components/form'
+import { ErrorBanner, Field, localName, ltrDates } from '@/components/form'
 import { Button, buttonVariants } from '@/components/ui/button'
 import { Card, CardHeader, CardTitle } from '@/components/ui/card'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
@@ -13,7 +13,7 @@ const MAX_BYTES = 5 * 1024 * 1024 // the server's own limit (max:5120 KB)
 const MAX_ROWS = 2000 // the server's own cap (AttendanceImport::MAX_ROWS), for the too_many_rows message
 
 type Cell = { row: number; column: string | null }
-type Change = Cell & { employee_id: string; code: number; name_ar: string; date: string; from: string | null; to: string }
+type Change = Cell & { employee_id: string; code: number; name_ar: string; name_en: string | null; date: string; from: string | null; to: string }
 type CellError = Cell & { code: number | null; date: string | null; error: string; message: string }
 type Preview = { summary: { cells: number; changes: number; unchanged: number; errors: number }; changes: Change[]; errors: CellError[] }
 type Result = { applied: number; unchanged: number; errors: CellError[] }
@@ -125,12 +125,12 @@ export function ImportTab({ group, periodStart }: { group: string; periodStart: 
 
 // ponytail: every row renders (a table from xl, cards below it); fine for a period's few thousand cells, paginate if files grow past that
 function Changes({ rows }: { rows: Change[] }) {
-  const { t } = useTranslation()
+  const { t, i18n } = useTranslation()
   const title = t('attendance.import.changes')
   const employee = (c: Change) => (
     <span className="flex min-w-0 items-center gap-2">
       <span className="tabular text-muted-foreground">{c.code}</span>
-      <bdi className="min-w-0 break-words">{c.name_ar}</bdi>
+      <bdi className="min-w-0 break-words">{localName(c, i18n.language)}</bdi>
     </span>
   )
   return (

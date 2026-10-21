@@ -551,6 +551,7 @@
       "command": "Quick entry",
       "commandHint": "ID 12 · list 12, 15 · range 10-20",
       "commandHelp": "Enter marks the IDs present; a name only selects the matches.",
+      "commandFind": "Type IDs or part of a name to find employees.",
       "matched": "{{count}} matched",
       "unknown": "Not on this sheet: {{ids}}",
       "capped": "Only the first {{max}} IDs were used",
@@ -642,6 +643,7 @@
     "empty": "No notifications.",
     "loadFailed": "Couldn't load notifications.",
     "unread": "unread,",
+    "pause": ",",
     "missingDays": {
       "title": "Missing attendance days as of {{date}}",
       "line": "Missing days, {{group}}: {{count}}",

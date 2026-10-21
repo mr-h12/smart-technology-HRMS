@@ -127,7 +127,8 @@ export function DaySheet({ group, date, period, onDate, onOpenDay }: { group: st
     } catch (e) {
       // a detail's field is rows.N or rows.N.<field>, N indexing `out` (and so `before`)
       const who = (d: { field?: string | null }) => (d.field?.startsWith('rows.') ? before[Number(d.field.split('.')[1])] : undefined)
-      if (e instanceof ApiError && e.code === 'concurrency_conflict') {
+      // a 409 that names no row (a racing insert) falls through to the plain message
+      if (e instanceof ApiError && e.code === 'concurrency_conflict' && e.details.some(who)) {
         const names = e.details.flatMap((d) => who(d) ?? []).map(name)
         toast.error(t(conflict, { names: new Intl.ListFormat(intlLocale(i18n.language)).format(names) }))
       } else if (e instanceof ApiError && e.details.some(who)) {
@@ -393,7 +394,7 @@ export function DaySheet({ group, date, period, onDate, onOpenDay }: { group: st
               )}
             </div>
             <div role="status" aria-label={t('attendance.sheet.command')} className="flex min-h-6 flex-wrap items-center gap-1.5">
-              {batch ? <BatchPreview batch={batch} count={shown.length} /> : editable && <span className="text-xs text-muted-foreground">{t('attendance.sheet.commandHelp')}</span>}
+              {batch ? <BatchPreview batch={batch} count={shown.length} /> : <span className="text-xs text-muted-foreground">{t(editable ? 'attendance.sheet.commandHelp' : 'attendance.sheet.commandFind')}</span>}
             </div>
             <ul aria-label={t('attendance.sheet.keys.label')} className="hidden flex-wrap gap-x-4 gap-y-1 text-xs text-muted-foreground lg:flex">
               {KEYS.filter(([, , write]) => editable || !write).map(([glyphs, key]) => (

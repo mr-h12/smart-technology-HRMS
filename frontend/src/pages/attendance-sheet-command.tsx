@@ -45,7 +45,7 @@ export function PasteDialog({ open, onOpenChange, rows, leaveSite, onApply }: {
   const ids = batch && !batch.byName ? batch : null
 
   async function run(action: SheetAction, label: string) {
-    if (!ids || !(await onApply(action, ids.matches, `${label} (${ids.matches.length})`))) return
+    if (!ids || !(await onApply(action, ids.matches, t('attendance.sheet.actionCount', { action: label, count: ids.matches.length })))) return
     if (ids.unknown.length) toast.warning(t('attendance.sheet.unknown', { ids: new Intl.ListFormat(intlLocale(i18n.language)).format(ids.unknown) }))
     setText('')
     onOpenChange(false)

@@ -114,8 +114,10 @@ test('each notification is a group named by its title, and unread lines say so',
   await user.click(await screen.findByRole('button', { name: 'فتح الإشعارات (1 غير مقروء)' }))
   const groups = await screen.findAllByRole('group', { name: 'أيام حضور غير مسجلة حتى 2026-10-20' })
   expect(groups).toHaveLength(2)
-  // the unread word comes first, then a pause, and the range follows the count directly
-  expect(within(groups[0]).getByRole('menuitem', { name: /المهندسون: 22/ })).toHaveAccessibleName(/^غير مقروء، أيام غير مسجلة — المهندسون: 22\s*2026-09-26 – 2026-10-25$/)
+  // the unread word comes first, then a pause; a separator in the DOM keeps the count and the range apart in every screen reader
+  const line = within(groups[0]).getByRole('menuitem', { name: /المهندسون: 22/ })
+  expect(line).toHaveAccessibleName(/^غير مقروء، أيام غير مسجلة — المهندسون: 22،\s*2026-09-26 – 2026-10-25$/)
+  expect(line.textContent).toContain('22، 2026-09-26')
   expect(within(groups[1]).getByRole('menuitem', { name: /عمال اليومية: 4/ })).not.toHaveAccessibleName(/غير مقروء/)
 })
 
@@ -124,7 +126,7 @@ test('in English an unread line also starts with the unread word', async () => {
   mockFetch({ 'GET /api/v1/notifications': inbox([unread]) })
   renderWithAuth(<NotificationBell />, [])
   await user.click(await screen.findByRole('button', { name: 'Open notifications (1 unread)' }))
-  expect(await screen.findByRole('menuitem', { name: /Engineers: 22/ })).toHaveAccessibleName(/^unread, Missing days, Engineers: 22\s*2026-09-26 – 2026-10-25$/)
+  expect(await screen.findByRole('menuitem', { name: /Engineers: 22/ })).toHaveAccessibleName(/^unread, Missing days, Engineers: 22,\s*2026-09-26 – 2026-10-25$/)
 })
 
 test('the badge stays on the bell, clear of the account button beside it', async () => {
