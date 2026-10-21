@@ -29,6 +29,8 @@ use Throwable;
  * rules, fares, employees, fare overrides and manager assignments. Every row goes through the API's rules and services, so the
  * audit log records it. It all runs in one transaction that commits only when asked and when no row failed; a refusal (employees
  * exist, a malformed workbook) is a DomainException thrown before any write. Errors name sheet, row and column, never a cell value.
+ *
+ * @phpstan-type SheetRow array{row: int, cells: array<string, ?string>, unreadable: list<string>, numeric: list<string>, unlabelled: list<int>}
  */
 final class MasterDataImport
 {
@@ -50,11 +52,14 @@ final class MasterDataImport
     /** Informational columns: allowed in the workbook, never read. */
     private const INFO = ['excel_spellings', 'source'];
 
+    /** Columns that must be typed as text: as a number, a phone has already lost its leading 0. */
+    private const TEXT = ['employees' => ['phone']];
+
     /** Employee columns that must not repeat within the file (the database checks them only against rows already written). */
     private const DISTINCT = ['ref', 'national_id', 'fingerprint_name'];
 
     /** Validator keys renamed back to the workbook column the operator sees. */
-    private const FIELD = ['residence_id' => 'residence', 'site_id' => 'site', 'mode' => 'allowance_mode', 'value' => 'allowance_value', 'manager_id' => 'manager_email'];
+    private const FIELD = ['residence_id' => 'residence', 'site_id' => 'site', 'mode' => 'allowance_mode', 'value' => 'allowance_value', 'manager_id' => 'manager_email', 'effective_from' => '--from'];
 
     /** @var array<string, int> */
     private array $counts = [];
@@ -90,9 +95,11 @@ final class MasterDataImport
     }
 
     /**
+     * @param  (Closure(list<array{ref: string, code: int}>): void)|null  $beforeCommit  runs on an error-free run before the commit
+     *                                                                                   (or the dry run's rollback); throwing rolls back
      * @return array{counts: array<string, int>, errors: list<array{sheet: string, row: int, field: string, message: string}>, codes: list<array{ref: string, code: int}>}
      */
-    public function run(string $path, string $from, bool $commit): array
+    public function run(string $path, string $from, bool $commit, ?Closure $beforeCommit = null): array
     {
         $this->counts = array_fill_keys(['residences', 'residences reused', 'sites', 'sites reused', 'allowance rules', 'fares', 'employees', 'fare overrides', 'manager assignments'], 0);
         $this->errors = $this->codes = $this->residenceIds = $this->siteIds = $this->employeeIds = $this->rowEmployeeIds = [];
@@ -111,6 +118,9 @@ final class MasterDataImport
             $this->employeeRows($sheets['employees'], $from);
             $this->overrides($sheets['fare_overrides'] ?? [], $from);
             $this->managers($sheets['employees'], $from);
+            if ($this->errors === [] && $beforeCommit !== null) {
+                $beforeCommit($this->codes);
+            }
         } catch (Throwable $e) {
             DB::rollBack();
 
@@ -121,7 +131,7 @@ final class MasterDataImport
         return ['counts' => $this->counts, 'errors' => $this->errors, 'codes' => $this->codes];
     }
 
-    /** @return array<string, list<array{row: int, cells: array<string, ?string>}>> */
+    /** @return array<string, list<SheetRow>> */
     private function sheets(string $path): array
     {
         foreach ($this->reader->headers($path) as $sheet => $headers) {
@@ -135,20 +145,44 @@ final class MasterDataImport
             if ($unknown !== []) {
                 throw new DomainException("Sheet {$sheet} has an unknown header in column ".((int) array_key_first($unknown) + 1).'.');
             }
+            $missing = array_diff(self::COLUMNS[$sheet], self::INFO, $headers);   // a deleted column would import as blank everywhere
+            if ($missing !== []) {
+                throw new DomainException("Sheet {$sheet} has no ".reset($missing).' column.');
+            }
         }
         $sheets = $this->reader->read($path);
         if (! isset($sheets['employees'])) {
             throw new DomainException('The workbook has no employees sheet.');
         }
+        if ($sheets['employees'] === []) {   // sites and rules alone would commit, and every re-run then fail on their dates
+            throw new DomainException('The employees sheet has no rows.');
+        }
+        foreach ($sheets as $sheet => $rows) {
+            foreach ($rows as $r) {
+                if ($r['unlabelled'] !== []) {
+                    throw new DomainException("Sheet {$sheet} has data in column {$r['unlabelled'][0]}, which has no header.");
+                }
+                foreach ($r['unreadable'] as $col) {
+                    $this->error($sheet, $r['row'], $col, 'The cell holds an error or a formula with no saved result; enter the value itself.');
+                }
+                foreach (array_intersect($r['numeric'], self::TEXT[$sheet] ?? []) as $col) {
+                    $this->error($sheet, $r['row'], $col, 'Enter this cell as text: as a number it has lost any leading 0.');
+                }
+            }
+        }
 
         return $sheets;
     }
 
-    /** @param  list<array{row: int, cells: array<string, ?string>}>  $rows */
+    /** @param  list<SheetRow>  $rows */
     private function residences(array $rows): void
     {
+        $seen = [];
         foreach ($rows as ['row' => $row, 'cells' => $c]) {
             $name = self::normalise($c['name_ar'] ?? null);
+            if ($this->repeated('residences', $row, $name, $seen)) {
+                continue;
+            }
             if ($this->residenceId($name) !== null) {
                 $this->counts['residences reused']++;
 
@@ -159,11 +193,15 @@ final class MasterDataImport
         }
     }
 
-    /** @param  list<array{row: int, cells: array<string, ?string>}>  $rows */
+    /** @param  list<SheetRow>  $rows */
     private function siteRows(array $rows, string $from): void
     {
+        $seen = [];
         foreach ($rows as ['row' => $row, 'cells' => $c]) {
             $name = self::normalise($c['name_ar'] ?? null);
+            if ($this->repeated('sites', $row, $name, $seen)) {
+                continue;
+            }
             $id = $this->siteId($name);
             if ($id !== null) {
                 $this->counts['sites reused'] += $id === '' ? 0 : 1;
@@ -180,7 +218,7 @@ final class MasterDataImport
         }
     }
 
-    /** @param  list<array{row: int, cells: array<string, ?string>}>  $rows */
+    /** @param  list<SheetRow>  $rows */
     private function fareRows(array $rows, string $from): void
     {
         foreach ($rows as ['row' => $row, 'cells' => $c]) {
@@ -196,7 +234,7 @@ final class MasterDataImport
         }
     }
 
-    /** @param  list<array{row: int, cells: array<string, ?string>}>  $rows */
+    /** @param  list<SheetRow>  $rows */
     private function employeeRows(array $rows, string $from): void
     {
         $seen = [];
@@ -234,7 +272,7 @@ final class MasterDataImport
         }
     }
 
-    /** @param  list<array{row: int, cells: array<string, ?string>}>  $rows */
+    /** @param  list<SheetRow>  $rows */
     private function overrides(array $rows, string $from): void
     {
         foreach ($rows as ['row' => $row, 'cells' => $c]) {
@@ -255,7 +293,7 @@ final class MasterDataImport
         }
     }
 
-    /** @param  list<array{row: int, cells: array<string, ?string>}>  $rows  the employees sheet */
+    /** @param  list<SheetRow>  $rows  the employees sheet */
     private function managers(array $rows, string $from): void
     {
         foreach ($rows as ['row' => $row, 'cells' => $c]) {
@@ -342,7 +380,28 @@ final class MasterDataImport
             return null;
         }
 
-        return $this->siteIds[$name] ??= self::key(Site::where('name_ar', $name)->value('id'));
+        // Work sites only: a row named like a leave day-type («غ») must collide visibly, not take over the leave site.
+        return $this->siteIds[$name] ??= self::key(Site::where(['kind' => SiteKind::Work->value, 'name_ar' => $name])->value('id'));
+    }
+
+    /**
+     * Whether a sheet already had this normalised name; the repeat is a row error, since its other columns would be lost.
+     *
+     * @param  array<string, true>  $seen
+     */
+    private function repeated(string $sheet, int $row, ?string $name, array &$seen): bool
+    {
+        if ($name === null) {
+            return false;
+        }
+        if (isset($seen[$name])) {
+            $this->error($sheet, $row, 'name_ar', __('validation.distinct', ['attribute' => 'name_ar']));
+
+            return true;
+        }
+        $seen[$name] = true;
+
+        return false;
     }
 
     /**

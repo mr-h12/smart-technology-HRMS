@@ -14,6 +14,7 @@ use Database\Seeders\SitesSeeder;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Artisan;
 use Illuminate\Support\Facades\DB;
+use OpenSpout\Common\Entity\Cell;
 use OpenSpout\Common\Entity\Row;
 use OpenSpout\Writer\XLSX\Writer;
 use PHPUnit\Framework\Attributes\Test;
@@ -60,7 +61,7 @@ class ImportMasterDataTest extends TestCase
     public function commit_creates_everything_audited(): void
     {
         $manager = $this->makeUser('manager');
-        $report = $this->files[] = sys_get_temp_dir().'/master-report-'.uniqid().'.csv';   // not tempnam(): that file is already 0600
+        $report = $this->files[] = $this->freshPath();   // the command refuses an existing report
         $sheets = $this->valid();
         $sheets['employees'][2]['manager_email'] = $manager->email;
 
@@ -107,9 +108,11 @@ class ImportMasterDataTest extends TestCase
             $this->employee('ENG-2', 'engineer', ['fingerprint_name' => 'fp x', 'salary' => '12000']),     // row 7, repeats row 6 (unwritten)
         ];
         $sheets['fare_overrides'] = [['ref' => 'OFF-1', 'site' => 'موقع أ', 'amount' => '30']];
+        $report = $this->freshPath();
 
-        [$code, $out] = $this->import($this->workbook($sheets), ['--commit' => true]);
+        [$code, $out] = $this->import($this->workbook($sheets), ['--commit' => true, '--report' => $report]);
 
+        $this->assertFileDoesNotExist($report);
         $this->assertNotSame(0, $code);
         foreach (['employees row 3 national_id', 'employees row 4 residence', 'employees row 5 national_id', 'employees row 6 salary', 'employees row 7 fingerprint_name'] as $expected) {
             $this->assertStringContainsString($expected, $out);
@@ -136,6 +139,66 @@ class ImportMasterDataTest extends TestCase
         $this->assertStringNotContainsString('29001010100002', $out);
         $this->assertStringNotContainsString('سسس', $out);
         $this->assertSame($before, $this->counts());
+    }
+
+    #[Test]
+    public function unreadable_cells_and_numeric_phones_are_row_errors(): void
+    {
+        $before = $this->counts();
+        $sheets = $this->valid();
+        $sheets['employees'][0]['insured_basic'] = new Cell\ErrorCell('#N/A');           // row 2: a broken VLOOKUP
+        $sheets['employees'][1]['salary'] = new Cell\FormulaCell('=VLOOKUP(A1,B:C,2,0)'); // row 3: a formula with no saved value
+        $sheets['employees'][2]['phone'] = 1012345678;                                    // row 4: typed as a number, its 0 is gone
+
+        [$code, $out] = $this->import($this->workbook($sheets), ['--commit' => true]);
+
+        $this->assertNotSame(0, $code);
+        foreach (['employees row 2 insured_basic', 'employees row 3 salary', 'employees row 4 phone'] as $expected) {
+            $this->assertStringContainsString($expected, $out);
+        }
+        $this->assertStringContainsString('as text', $out);
+        $this->assertStringNotContainsString('1012345678', $out);
+        $this->assertStringNotContainsString('#N/A', $out);
+        $this->assertStringNotContainsString('VLOOKUP', $out);
+        $this->assertSame($before, $this->counts());
+    }
+
+    #[Test]
+    public function repeated_names_and_dates_are_row_errors(): void
+    {
+        $this->seed(SitesSeeder::class);   // brings the leave site «غ»
+        $before = $this->counts();
+        $sheets = $this->valid();
+        $sheets['residences'][] = ['name_ar' => 'سكن  أ'];                                      // row 4, repeats row 2
+        $sheets['sites'] = [$this->site('موقع أ'), $this->site(' موقع أ', ['name_en' => 'Other']), $this->site('غ')];   // rows 3 and 4
+        $sheets['fares'][] = ['residence' => 'سكن أ', 'site' => 'موقع أ', 'amount' => '26'];   // row 3, same residence, site and date
+
+        [$code, $out] = $this->import($this->workbook($sheets), ['--commit' => true]);
+
+        $this->assertNotSame(0, $code);
+        foreach (['residences row 4 name_ar', 'sites row 3 name_ar', 'sites row 4 name_ar', 'fares row 3 --from'] as $expected) {
+            $this->assertStringContainsString($expected, $out);
+        }
+        $this->assertSame(4, preg_match_all('/^\s*\w+ row \d+ /m', $out), $out);
+        $this->assertSame($before, $this->counts());
+    }
+
+    #[Test]
+    public function a_report_that_cannot_be_written_stops_the_commit(): void
+    {
+        stream_wrapper_register('fulldisk', FullDiskStream::class);
+        try {
+            foreach ([false, true] as $failOnlyTheFlush) {   // a write refused at once, or one buffered and refused on flush
+                FullDiskStream::$acceptWrites = $failOnlyTheFlush;
+                [$code, $out] = $this->import($this->workbook($this->valid()), ['--commit' => true, '--report' => 'fulldisk://r.csv']);
+
+                $this->assertNotSame(0, $code);
+                $this->assertStringContainsString('The report could not be written', $out);
+                $this->assertSame(0, Employee::withTrashed()->count());
+            }
+        } finally {
+            stream_wrapper_unregister('fulldisk');
+        }
     }
 
     #[Test]
@@ -186,10 +249,12 @@ class ImportMasterDataTest extends TestCase
         Employee::query()->get()->each->delete();   // soft-deleted rows still count
         $residences = Residence::count();
 
-        [$code, $out] = $this->import($this->workbook($this->valid()), ['--commit' => true]);
+        $report = $this->freshPath();
+        [$code, $out] = $this->import($this->workbook($this->valid()), ['--commit' => true, '--report' => $report]);
 
         $this->assertNotSame(0, $code);
         $this->assertStringContainsString('Employees already exist; this import is for an empty system.', $out);
+        $this->assertFileDoesNotExist($report);   // a retry with the same path is not refused as "already exists"
         $this->assertSame(3, Employee::withTrashed()->count());
         $this->assertSame($residences, Residence::count());
     }
@@ -239,15 +304,25 @@ class ImportMasterDataTest extends TestCase
     {
         $before = $this->counts();
         $valid = $this->valid();
-        $duplicate = $this->workbook([...$valid, 'sites' => [['name_ar', 'name_en', 'name_en'], ['موقع أ', 'Site A', 'A'], ['موقع ب', 'Site B', 'B']]]);   // valid but for the repeat
+        $duplicate = $this->workbook([...$valid, 'sites' => [   // valid but for the repeated name_en
+            ['name_ar', 'name_en', 'outside_alexandria', 'allowance_mode', 'allowance_value', 'name_en'],
+            ['موقع أ', 'Site A', '0', 'share_of_wage', '0.5', 'A'],
+            ['موقع ب', 'Site B', '0', null, null, 'B'],
+        ]]);
         $unknown = $this->valid();
         $unknown['employees'][0]['salry'] = '9000';
         $misnamed = $this->valid();
         $misnamed['fare_override'] = $misnamed['fare_overrides'];   // a typo would silently drop the overrides
         unset($misnamed['fare_overrides']);
+        $noColumn = $this->valid();   // a deleted column would import as blank for every row
+        $noColumn['employees'] = array_map(fn (array $e) => array_diff_key($e, ['national_id' => 0]), $noColumn['employees']);
+        $noEmployees = [...$this->valid(), 'employees' => [array_keys($this->employee('X', 'office'))], 'fare_overrides' => [['ref', 'site', 'amount']]];
+        $stray = $this->valid();   // data in a column whose header is blank
+        $stray['employees'][0][''] = 'note';
         unset($valid['employees']);
 
-        foreach ([$duplicate, $this->workbook($unknown), $this->workbook($misnamed), $this->workbook($valid)] as $path) {
+        $cases = [$duplicate, $this->workbook($unknown), $this->workbook($misnamed), $this->workbook($noColumn), $this->workbook($noEmployees), $this->workbook($stray), $this->workbook($valid)];
+        foreach ($cases as $path) {
             [$code, $out] = $this->import($path, ['--commit' => true]);
             $this->assertNotSame(0, $code, $out);
             $this->assertStringContainsString('nothing was saved', $out);
@@ -308,12 +383,18 @@ class ImportMasterDataTest extends TestCase
             $writer->getCurrentSheet()->setName($name);
             $raw = array_is_list($rows[0] ?? []) ? $rows : [array_keys($rows[0]), ...array_map(array_values(...), $rows)];
             foreach ($raw as $values) {
-                $writer->addRow(Row::fromValues($values));
+                $writer->addRow(new Row(array_map(fn ($v) => $v instanceof Cell ? $v : Cell::fromValue($v), $values)));
             }
         }
         $writer->close();
 
         return $path;
+    }
+
+    /** A path no file has yet (tempnam() would create one). */
+    private function freshPath(): string
+    {
+        return $this->files[] = sys_get_temp_dir().'/master-report-'.uniqid().'.csv';
     }
 
     private function tempPath(): string
@@ -333,5 +414,46 @@ class ImportMasterDataTest extends TestCase
             'overrides' => EmployeeFareOverride::count(),
             'audit' => DB::table('audit_log')->count(),
         ];
+    }
+}
+
+/** A file that opens but cannot keep its bytes, like a full disk. */
+final class FullDiskStream
+{
+    public static bool $acceptWrites = false;
+
+    /** @var resource|null */
+    public $context;
+
+    public function url_stat(string $path, int $flags): array|false
+    {
+        return false;
+    }
+
+    public function stream_open(string $path, string $mode, int $options, ?string &$opened): bool
+    {
+        return true;
+    }
+
+    public function stream_metadata(string $path, int $option, mixed $value): bool
+    {
+        return true;
+    }
+
+    public function stream_write(string $data): int
+    {
+        return self::$acceptWrites ? strlen($data) : 0;
+    }
+
+    public function stream_flush(): bool
+    {
+        return ! self::$acceptWrites;   // each mode fails one way only, so both checks are needed
+    }
+
+    public function stream_close(): void {}
+
+    public function unlink(string $path): bool
+    {
+        return true;
     }
 }

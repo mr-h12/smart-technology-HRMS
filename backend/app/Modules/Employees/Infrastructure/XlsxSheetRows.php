@@ -7,7 +7,9 @@ namespace App\Modules\Employees\Infrastructure;
 use DateInterval;
 use DateTimeInterface;
 use OpenSpout\Common\Entity\Cell;
+use OpenSpout\Common\Entity\Cell\ErrorCell;
 use OpenSpout\Common\Entity\Cell\FormulaCell;
+use OpenSpout\Common\Entity\Cell\NumericCell;
 use OpenSpout\Reader\XLSX\Options;
 use OpenSpout\Reader\XLSX\Reader;
 
@@ -16,9 +18,12 @@ final class XlsxSheetRows
 {
     /**
      * Sheet name => its non-blank rows after row 1, with their 1-based Excel row numbers. Cells are trimmed strings, blank is null;
-     * a column without a header is left out.
+     * a column without a header is left out of `cells`. Each row also lists what a string cannot say:
+     * - `unreadable`: headers whose cell has no known value (an error such as #N/A, or a formula with no saved result); `cells` holds null;
+     * - `numeric`: headers whose cell is a number rather than text (a phone typed as a number has lost its leading 0);
+     * - `unlabelled`: 1-based column numbers holding a value under a blank header.
      *
-     * @return array<string, list<array{row: int, cells: array<string, ?string>}>>
+     * @return array<string, list<array{row: int, cells: array<string, ?string>, unreadable: list<string>, numeric: list<string>, unlabelled: list<int>}>>
      */
     public function read(string $path): array
     {
@@ -37,12 +42,19 @@ final class XlsxSheetRows
 
                         continue;
                     }
-                    $cells = [];
+                    $cells = $unreadable = $numeric = [];
                     foreach ($headers as $i => $header) {
                         $cells[$header] = $values[$i] ?? null;
+                        $cell = $row->cells[$i] ?? null;
+                        if ($cell !== null && self::unreadable($cell)) {
+                            $unreadable[] = $header;
+                        } elseif ($cell instanceof NumericCell || ($cell instanceof FormulaCell && (is_int($cell->getComputedValue()) || is_float($cell->getComputedValue())))) {
+                            $numeric[] = $header;
+                        }
                     }
-                    if (array_filter($cells, fn (?string $v) => $v !== null) !== []) {
-                        $rows[] = ['row' => $n, 'cells' => $cells];
+                    $unlabelled = array_map(fn (int $i) => $i + 1, array_keys(array_diff_key(array_filter($values, fn (?string $v) => $v !== null), $headers)));
+                    if (array_filter($cells, fn (?string $v) => $v !== null) !== [] || $unreadable !== [] || $unlabelled !== []) {
+                        $rows[] = ['row' => $n, 'cells' => $cells, 'unreadable' => $unreadable, 'numeric' => $numeric, 'unlabelled' => $unlabelled];
                     }
                 }
                 $sheets[$sheet->getName()] = $rows;
@@ -78,6 +90,14 @@ final class XlsxSheetRows
         } finally {
             $reader->close();
         }
+    }
+
+    private static function unreadable(Cell $cell): bool
+    {
+        // An error cached for a formula reaches us as a null result. A formula never calculated (written by a program, not by
+        // Excel, which saves results) reads as float 0.0 in OpenSpout 5, where a saved 0 reads as int 0: XlsxSheetRowsTest pins it.
+        return $cell instanceof ErrorCell
+            || ($cell instanceof FormulaCell && ($cell->getComputedValue() === null || $cell->getComputedValue() === 0.0));
     }
 
     private static function value(Cell $cell): ?string

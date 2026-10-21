@@ -54,11 +54,17 @@ final class ImportMasterDataCommand extends Command
         }
         Auth::setUser($actor);   // the audit log and created_by stamp this account
 
+        $exit = self::FAILURE;
         try {
-            return $this->import($import, $file, $from, $report);
+            return $exit = $this->import($import, $file, $from, $report);
         } finally {
             if ($report !== null) {
-                fclose($report);
+                $closed = fclose($report);
+                if ($exit !== self::SUCCESS) {
+                    @unlink($reportPath);   // a refused or failed run leaves no file, so the retry may use the same path
+                } elseif (! $closed) {
+                    $this->error('WARNING: the report could not be closed. If this run committed, the import IS saved: regenerate the ref,code list.');
+                }
             }
         }
     }
@@ -68,7 +74,8 @@ final class ImportMasterDataCommand extends Command
     {
         $commit = (bool) $this->option('commit');
         try {
-            $result = $import->run($file, $from, $commit);
+            // The report is written and flushed before the commit: a mapping that cannot be saved stops the import.
+            $result = $import->run($file, $from, $commit, $report === null ? null : fn ($codes) => $this->writeReport($report, $codes));
         } catch (DomainException $e) {
             return $this->refuse($e->getMessage());
         }
@@ -81,12 +88,6 @@ final class ImportMasterDataCommand extends Command
             return $this->refuse(count($result['errors']).' errors.');
         }
 
-        if ($report !== null) {
-            fputcsv($report, ['ref', 'code'], escape: '');
-            foreach ($result['codes'] as $c) {
-                fputcsv($report, [$c['ref'], $c['code']], escape: '');
-            }
-        }
         $this->info($commit ? 'COMMITTED' : 'DRY RUN: nothing was saved');
 
         return self::SUCCESS;
@@ -98,6 +99,22 @@ final class ImportMasterDataCommand extends Command
         $this->error('FAILED: nothing was saved');
 
         return self::FAILURE;
+    }
+
+    /**
+     * @param  resource  $report
+     * @param  list<array{ref: string, code: int}>  $codes
+     */
+    private function writeReport($report, array $codes): void
+    {
+        $ok = true;
+        foreach ([['ref', 'code'], ...array_map(fn (array $c) => [$c['ref'], $c['code']], $codes)] as $line) {
+            $written = @fputcsv($report, $line, escape: '');
+            $ok = $ok && is_int($written) && $written > 0;
+        }
+        if (! $ok || ! @fflush($report)) {
+            throw new DomainException('The report could not be written.');
+        }
     }
 
     /** @return resource|null a new report readable by its owner only; null when it cannot be created */
