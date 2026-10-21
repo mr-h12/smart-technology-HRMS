@@ -129,11 +129,22 @@ const to12 = (v: string): { text: string; pm: boolean | null } => {
 }
 
 /**
+ * Stops a Save while a time box near `from` (its form or dialog, else the page) still waits for AM/PM: the first such box gets the
+ * cursor and keeps its hint. A period-less "10:15" must never reach the API, which would read it as a valid 24-hour time.
+ */
+export function stopAtMissingPeriod(from: Element): boolean {
+  const box = (from.closest('form, [role="dialog"]') ?? document).querySelector<HTMLElement>('[data-needs-period]')
+  box?.focus()
+  return !!box
+}
+
+/**
  * A 12-hour time: a box for the hour and minutes plus an AM/PM (ص/م) choice. `value` in and out is "HH:MM" (24-hour), '' for none.
  * A blank value has no AM/PM chosen; a 12-hour time typed without one is never guessed: the box asks for the choice, and it, like an
- * unreadable entry, goes out as typed so the server names the field. `label` names the AM/PM group; the rest goes to the box.
+ * unreadable entry, goes out as typed; a Save calls `stopAtMissingPeriod` first. `label` names the AM/PM group; `quietHint` keeps the
+ * hint for screen readers only; the rest goes to the box.
  */
-export function TimeInput({ value, onChange, label, className, disabled, ...rest }: { value: string; onChange: (v: string) => void; label: string } & Omit<React.ComponentProps<'input'>, 'value' | 'onChange' | 'onBlur' | 'type'>) {
+export function TimeInput({ value, onChange, label, quietHint, className, disabled, ...rest }: { value: string; onChange: (v: string) => void; label: string; quietHint?: boolean } & Omit<React.ComponentProps<'input'>, 'value' | 'onChange' | 'onBlur' | 'type'>) {
   const { t } = useTranslation()
   const descId = useId()
   const root = useRef<HTMLDivElement>(null)
@@ -156,7 +167,7 @@ export function TimeInput({ value, onChange, label, className, disabled, ...rest
     <div ref={root} className="grid w-full gap-1">
       <div className="flex gap-1.5">
         <Input {...rest} ref={box} type="text" dir="ltr" inputMode="numeric" autoComplete="off" placeholder="--:--" disabled={disabled} value={draft.text}
-          aria-invalid={rest['aria-invalid'] || needsChoice || undefined} aria-describedby={[rest['aria-describedby'], descId].filter(Boolean).join(' ')}
+          aria-invalid={rest['aria-invalid'] || needsChoice || undefined} data-needs-period={needsChoice || undefined} aria-describedby={[rest['aria-describedby'], descId].filter(Boolean).join(' ')}
           className={cn('h-11 flex-1 tabular sm:h-9 rtl:text-right', className)}
           onChange={(e) => emit(e.target.value, draft.pm)}
           onBlur={() => { const v = to24(draft.text, draft.pm); if (isHhmm(v)) setDraft(to12(v)) }} />
@@ -173,7 +184,7 @@ export function TimeInput({ value, onChange, label, className, disabled, ...rest
         </div>
       </div>
       {/* the box's description: the hint while a choice is missing, otherwise (for screen readers only) the chosen AM/PM */}
-      <p id={descId} className={needsChoice ? 'text-[13px] text-warning' : 'sr-only'}>
+      <p id={descId} className={needsChoice && !quietHint ? 'text-[13px] text-warning' : 'sr-only'}>
         {needsChoice ? t('time.choosePeriod') : draft.pm === null ? t('time.noPeriod') : t(draft.pm ? 'time.pmName' : 'time.amName')}
       </p>
     </div>

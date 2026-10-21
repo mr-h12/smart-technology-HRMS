@@ -246,7 +246,7 @@ function InTime({ was, label, className, disabled, onCommit }: { was: string; la
   return (
     <div ref={box} className="w-44" onBlur={(e) => { if (!box.current?.contains(e.relatedTarget)) done(latest.current) }}
       onKeyDown={(e) => { if (e.key === 'Escape') put(was); else if (e.key === 'Enter' && e.target instanceof HTMLInputElement) e.target.blur() }}>
-      <TimeInput value={v} label={label} aria-label={label} className={className} disabled={disabled} onChange={put} />
+      <TimeInput value={v} label={label} aria-label={label} quietHint className={className} disabled={disabled} onChange={put} />
     </div>
   )
 }

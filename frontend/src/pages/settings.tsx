@@ -4,7 +4,7 @@ import { useTranslation } from 'react-i18next'
 import { useSearchParams } from 'react-router-dom'
 import { toast } from 'sonner'
 import { PageHeader } from '@/components/common/PageHeader'
-import { ErrorBanner, type Row, TextField, toErrs, useForm } from '@/components/form'
+import { ErrorBanner, type Row, stopAtMissingPeriod, TextField, toErrs, useForm } from '@/components/form'
 import { TableSkeleton } from '@/components/layout/PageSkeleton'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card'
@@ -60,7 +60,8 @@ function RulesForm({ initial, loadErr }: { initial: Row; loadErr?: unknown }) {
   const [busy, setBusy] = useState(false)
   const dirty = JSON.stringify(form) !== JSON.stringify(saved)
   const errs = toErrs(err)
-  function save() {
+  function save(e: React.MouseEvent<HTMLElement>) {
+    if (stopAtMissingPeriod(e.currentTarget)) return
     setBusy(true)
     setErr(undefined)
     send<Row>('/settings', { method: 'PUT', body: form })

@@ -2,7 +2,7 @@ import { useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { toast } from 'sonner'
 import { StatusBadge } from '@/components/common/StatusBadge'
-import { ErrorBanner, Field, localName, ltrDates, type Row, SelectField, TextField, toErrs, useForm } from '@/components/form'
+import { ErrorBanner, Field, localName, ltrDates, type Row, SelectField, stopAtMissingPeriod, TextField, toErrs, useForm } from '@/components/form'
 import { TableSkeleton } from '@/components/layout/PageSkeleton'
 import { Button } from '@/components/ui/button'
 import { Textarea } from '@/components/ui/input'
@@ -98,7 +98,7 @@ function DayForm({ day, sites, path, loadErr, onDone, onReload }: { day: Day; si
       .then(() => { toast.success(t('common.saved')); onDone() }, setErr)
       .finally(() => setBusy(false))
   }
-  const save = () => run(() => send(path, { method: 'PUT', body: { version, site_id: form.site_id || null, ...Object.fromEntries(shown.map((f) => [f, toBody(f, form[f])])) } }))
+  const save = (e: React.MouseEvent<HTMLElement>) => !stopAtMissingPeriod(e.currentTarget) && run(() => send(path, { method: 'PUT', body: { version, site_id: form.site_id || null, ...Object.fromEntries(shown.map((f) => [f, toBody(f, form[f])])) } }))
   const clear = () => run(() => send(`${path}?version=${version}`, { method: 'DELETE' }))
 
   function field(f: string) {

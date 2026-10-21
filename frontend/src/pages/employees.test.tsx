@@ -263,6 +263,35 @@ test('create sends only the pay fields the type uses', async () => {
   expect(body).not.toHaveProperty('salary')
 })
 
+test('create is blocked while a shift time has no AM/PM; choosing PM sends 12:00 and 22:15', async () => {
+  const post = vi.fn(() => json(201, { data: { id: 'e9' } }))
+  mockFetch({ 'GET /api/v1/residences': residences, 'POST /api/v1/employees': post })
+  createForm()
+  const start = await screen.findByLabelText('بداية الوردية')
+  const end = screen.getByLabelText('انتهاء الوردية')
+  await user.type(start, '12:00')
+  await user.type(end, '10:15')
+  await user.click(screen.getByRole('button', { name: 'حفظ' }))
+  expect(post).not.toHaveBeenCalled()
+  expect(start).toHaveFocus()
+  expect(screen.getAllByText('اختر ص أو م.')).toHaveLength(2)
+  for (const f of ['بداية الوردية', 'انتهاء الوردية'])
+    await user.click(within(screen.getByRole('group', { name: `صباحًا أو مساءً: ${f}` })).getByRole('button', { name: 'مساءً' }))
+  await user.click(screen.getByRole('button', { name: 'حفظ' }))
+  await waitFor(() => expect(post).toHaveBeenCalledTimes(1))
+  expect(JSON.parse((post.mock.calls[0] as unknown as [string, RequestInit])[1].body as string)).toMatchObject({ shift_start: '12:00', shift_end: '22:15' })
+})
+
+test('a pay change is blocked while a shift time has no AM/PM', async () => {
+  openEmp(history)
+  await user.click((await screen.findAllByRole('button', { name: 'إضافة تغيير' }))[1])
+  await user.type(screen.getByLabelText('ساري اعتبارًا من'), '2025-01-01')
+  await user.type(screen.getByLabelText('انتهاء الوردية'), '11:30')
+  await user.click(within(screen.getByRole('dialog')).getByRole('button', { name: 'حفظ' }))
+  expect(screen.getByLabelText('انتهاء الوردية')).toHaveFocus()
+  expect(vi.mocked(fetch).mock.calls.some(([, i]) => i?.method === 'POST')).toBe(false)
+})
+
 test('list load failure shows the banner', async () => {
   mockFetch({ 'GET /api/v1/employees': () => json(500, { error: { code: 'server_error', message: 'تعذر التحميل' } }) })
   renderWithAuth(<EmployeesPage />, ['employee.view.all'])

@@ -17,7 +17,7 @@ import { Dialog, DialogBody, DialogContent, DialogFooter, DialogHeader, DialogTi
 import { Textarea } from '@/components/ui/input'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
-import { cairoToday, ErrorBanner, Field, type Errs, FormDialog, type FormApi, formatTime, type Row, SelectField, TextField, toErrs, useForm, useMoney } from '@/components/form'
+import { cairoToday, ErrorBanner, Field, type Errs, FormDialog, type FormApi, formatTime, type Row, SelectField, stopAtMissingPeriod, TextField, toErrs, useForm, useMoney } from '@/components/form'
 import { useDebounced } from '@/hooks/useDebounced'
 import { useAuth } from '@/lib/auth'
 import { RESIDENCES, USERS, useApi, useList, useSave } from '@/lib/query'
@@ -218,8 +218,9 @@ function EmployeeForm({ emp, loadErr }: { emp?: Row; loadErr?: unknown }) {
   const has = (k: string) => !emp || k in emp
   const editable = can(id ? 'employee.edit' : 'employee.create')
 
-  async function save(ev: React.FormEvent) {
+  async function save(ev: React.FormEvent<HTMLFormElement>) {
     ev.preventDefault()
+    if (stopAtMissingPeriod(ev.currentTarget)) return
     setErr(undefined)
     try {
       if (id) {
@@ -502,7 +503,8 @@ function ChangeDialog({ kind, emp }: { kind: 'type' | 'pay'; emp: Row }) {
   const inForce = typeOn(emp, form.effective_from ?? '')
   const shown = ['effective_from', ...(kind === 'type' ? ['type'] : payFields(inForce))]
 
-  async function submit() {
+  async function submit(e: React.MouseEvent<HTMLElement>) {
+    if (stopAtMissingPeriod(e.currentTarget)) return
     setErr(undefined)
     if (kind === 'type' && form.type === inForce) return setSameType(true)
     try {

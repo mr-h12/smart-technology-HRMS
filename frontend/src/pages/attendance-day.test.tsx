@@ -49,6 +49,27 @@ test('an engineer day saves its fields with the version', async () => {
   expect(toast.success).toHaveBeenCalledWith('تم حفظ التغييرات.')
 })
 
+test('Save is blocked while a time has no AM/PM: no request, the hint shows and the first such box gets the cursor', async () => {
+  const put = vi.fn(() => json(200, { data: day({ state: 'stored', version: 1, site_id: 's1' }) }))
+  mockFetch(routes(day(), { [`PUT ${URL}`]: put }))
+  open()
+  await user.selectOptions(await siteSelect(), 's1')
+  const inTime = screen.getByLabelText('وقت الحضور')
+  const outTime = screen.getByLabelText('وقت الانصراف')
+  await user.type(inTime, '12:00')
+  await user.type(outTime, '10:15')
+  await user.click(screen.getByRole('button', { name: 'حفظ' }))
+  expect(put).not.toHaveBeenCalled()
+  expect(inTime).toHaveFocus()
+  expect(screen.getAllByText('اختر ص أو م.')).toHaveLength(2)
+  expect(outTime).toHaveAttribute('aria-invalid', 'true')
+  for (const f of ['وقت الحضور', 'وقت الانصراف'])
+    await user.click(within(screen.getByRole('group', { name: `صباحًا أو مساءً: ${f}` })).getByRole('button', { name: 'مساءً' }))
+  await user.click(screen.getByRole('button', { name: 'حفظ' }))
+  await waitFor(() => expect(put).toHaveBeenCalledTimes(1))
+  expect(body(put)).toMatchObject({ in_time: '12:00', out_time: '22:15' })
+})
+
 test('choosing a leave type hides times and minutes', async () => {
   const put = vi.fn(() => json(200, { data: day() }))
   mockFetch(routes(day(), { [`PUT ${URL}`]: put }))

@@ -419,6 +419,9 @@ test('an office in-time typed without AM/PM writes nothing, asks for the choice 
   edit('/attendance?group=office')
   const input = within(await table()).getByLabelText('وقت الحضور Office-2')
   await user.type(input, '1:15')
+  // on the sheet the hint is for screen readers only (the row does not grow); the toast says it on leaving
+  expect(input).toHaveAccessibleDescription('اختر ص أو م.')
+  expect(screen.getAllByText('اختر ص أو م.').every((el) => el.classList.contains('sr-only'))).toBe(true)
   fireEvent.blur(input)
   expect(input).toHaveValue('')
   expect(toast.error).toHaveBeenCalledWith('اختر ص أو م.')

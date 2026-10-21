@@ -343,6 +343,18 @@ const rules = {
 }
 const RULES = ['site.view.all', 'setting.view.all', 'setting.manage.all']
 
+test('rules Save is blocked while a shift time has no AM/PM', async () => {
+  const put = vi.fn(() => json(200, { data: rules }))
+  mockFetch({ 'GET /api/v1/settings': () => json(200, { data: { ...rules, worker_shift_end: '' } }), 'PUT /api/v1/settings': put })
+  renderWithAuth(<SettingsPage />, RULES, { path: '/settings?tab=rules' })
+  const end = await screen.findByLabelText('انتهاء وردية العمال المثبتين')
+  await user.type(end, '10:15')
+  await user.click(screen.getByRole('button', { name: 'حفظ التغييرات' }))
+  expect(put).not.toHaveBeenCalled()
+  expect(end).toHaveFocus()
+  expect(screen.getByText('اختر ص أو م.')).toBeInTheDocument()
+})
+
 test('rules tab loads the settings, saves typed values and toasts', async () => {
   const put = vi.fn(() => json(200, { data: { ...rules, office_grace_minutes: '20', weekly_off_field: 'friday,thursday' } }))
   mockFetch({ 'GET /api/v1/settings': () => json(200, { data: rules }), 'PUT /api/v1/settings': put })
