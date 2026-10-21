@@ -16,3 +16,7 @@ backend/.phpunit.result.cache
 backend/bootstrap/cache/*.php
 backend/.deptrac.cache
 backups/
+.claude/dev-accounts.md
+.claude/excel-preview/
+.claude/gate-*/
+.claude/verify-runs/
