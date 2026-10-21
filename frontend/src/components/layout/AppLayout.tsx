@@ -213,7 +213,7 @@ function ProfileMenu() {
       <DropdownMenuTrigger asChild>
         <button
           type="button"
-          className={cn('flex min-h-10 items-center gap-2 rounded-xl border p-1 transition-colors hover:bg-muted lg:ps-1.5 lg:pe-3', FOCUS)}
+          className={cn('flex min-h-10 items-center gap-2 rounded-xl border p-1 transition-colors max-sm:min-h-11 hover:bg-muted lg:ps-1.5 lg:pe-3', FOCUS)}
           aria-label={t('nav.profile')}
         >
           <UserAvatar name={me.name} size="sm" />
@@ -256,7 +256,7 @@ function Navbar({ onOpenMobile }: { onOpenMobile: () => void }) {
     .filter((item) => pathname === item.path || pathname.startsWith(`${item.path}/`))
     .sort((a, b) => b.path.length - a.path.length)[0]
   return (
-    <header className="sticky top-0 z-30 flex min-h-16 items-center gap-2 border-b bg-card px-3 py-2 sm:gap-3 sm:px-4">
+    <header className="sticky top-0 z-30 flex min-h-16 items-center gap-2 border-b bg-card px-3 py-2 pt-[max(0.5rem,env(safe-area-inset-top))] sm:gap-3 sm:px-4">
       <Button variant="ghost" size="icon" className="lg:hidden" onClick={onOpenMobile} aria-label={t('nav.open')}>
         <Menu className="size-5" aria-hidden />
       </Button>
@@ -305,7 +305,7 @@ export function AppLayout() {
 
   return (
     <TooltipProvider>
-      <div className="flex min-h-dvh bg-background text-foreground">
+      <div className="flex min-h-dvh bg-background text-foreground pb-[env(safe-area-inset-bottom)] pl-[env(safe-area-inset-left)] pr-[env(safe-area-inset-right)]">
         <Toaster theme={theme} dir={rtl ? 'rtl' : 'ltr'} position={rtl ? 'top-left' : 'top-right'} richColors closeButton toastOptions={{ className: 'font-sans' }} />
         <a
           href="#page-content"

@@ -11,7 +11,7 @@ export type Row = Record<string, any> // eslint-disable-line @typescript-eslint/
 export type Errs = Record<string, string>
 
 export const selectCls =
-  'flex h-9 w-full rounded-md border border-input bg-card px-3 text-sm outline-none focus-visible:outline-2 focus-visible:outline-solid focus-visible:outline-offset-2 focus-visible:outline-ring disabled:cursor-not-allowed disabled:opacity-50 aria-invalid:border-destructive'
+  'flex h-9 w-full rounded-md border border-input bg-card px-3 text-sm max-sm:h-11 max-sm:text-base outline-none focus-visible:outline-2 focus-visible:outline-solid focus-visible:outline-offset-2 focus-visible:outline-ring disabled:cursor-not-allowed disabled:opacity-50 aria-invalid:border-destructive'
 
 export const toErrs = (e: unknown): Errs =>
   e instanceof ApiError ? Object.fromEntries(e.details.filter((d) => d.field).map((d) => [d.field!, d.message])) : {}
@@ -172,7 +172,8 @@ export function TimeInput({ value, onChange, label, quietHint, className, disabl
           className={cn('h-11 flex-1 tabular sm:h-9 rtl:text-right', (rest['aria-invalid'] || needsChoice) && 'focus-visible:border-destructive focus-visible:outline-destructive', className)}
           onChange={(e) => emit(e.target.value, draft.pm)}
           onBlur={() => { const v = to24(draft.text, draft.pm); if (isHhmm(v)) setDraft(to12(v)) }} />
-        <div role="group" aria-label={t('time.period', { field: label })} className="flex shrink-0 overflow-hidden rounded-md border border-input bg-card">
+        {/* an inset outline, not a border, draws the frame: the buttons fill the box's full height (44 px on a phone) */}
+        <div role="group" aria-label={t('time.period', { field: label })} className="flex shrink-0 overflow-hidden rounded-md bg-card outline-1 -outline-offset-1 outline-solid outline-input">
           {[false, true].map((pm) => (
             // mousedown keeps the cursor where it is, so a click here is not the box being left; from outside, the click moves it into the box
             <button key={String(pm)} type="button" aria-pressed={draft.pm === pm} aria-label={t(pm ? 'time.pmName' : 'time.amName')} disabled={disabled}

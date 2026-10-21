@@ -261,13 +261,18 @@
   * {
     @apply border-border outline-ring;
   }
+  /* App feel on a phone. Preflight already sets -webkit-text-size-adjust and -webkit-tap-highlight-color; pinch zoom stays. */
   html {
+    text-size-adjust: 100%;
+    touch-action: manipulation; /* no double-tap zoom */
+    overscroll-behavior: none; /* no rubber-band bounce or pull-to-refresh of the whole page */
     font-variant-numeric: tabular-nums;
     -webkit-font-smoothing: antialiased;
     -moz-osx-font-smoothing: grayscale;
   }
   body {
     @apply bg-background text-foreground font-sans;
+    overscroll-behavior: none;
     font-size: var(--text-body);
     line-height: var(--text-body--line-height);
   }

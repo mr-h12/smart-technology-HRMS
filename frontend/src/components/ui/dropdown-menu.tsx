@@ -35,7 +35,7 @@ export function DropdownMenuItem({
   return (
     <DropdownMenuPrimitive.Item
       className={cn(
-        'relative flex cursor-pointer items-center gap-2.5 rounded-md px-2.5 py-2 text-sm outline-none select-none data-[highlighted]:bg-muted data-[disabled]:pointer-events-none data-[disabled]:opacity-50 [&_svg]:size-4 [&_svg]:text-muted-foreground',
+        'relative flex cursor-pointer items-center gap-2.5 rounded-md px-2.5 py-2 text-sm max-sm:min-h-11 outline-none select-none data-[highlighted]:bg-muted data-[disabled]:pointer-events-none data-[disabled]:opacity-50 [&_svg]:size-4 [&_svg]:text-muted-foreground',
         variant === 'destructive' && 'text-destructive data-[highlighted]:bg-destructive/10 [&_svg]:text-destructive',
         className,
       )}
@@ -48,7 +48,7 @@ export function DropdownMenuRadioItem({ className, children, ...props }: React.C
   return (
     <DropdownMenuPrimitive.RadioItem
       className={cn(
-        'relative flex cursor-pointer items-center gap-2.5 rounded-md py-2 pe-8 ps-2.5 text-sm outline-none select-none data-[highlighted]:bg-muted',
+        'relative flex cursor-pointer items-center gap-2.5 rounded-md py-2 pe-8 ps-2.5 text-sm max-sm:min-h-11 outline-none select-none data-[highlighted]:bg-muted',
         className,
       )}
       {...props}

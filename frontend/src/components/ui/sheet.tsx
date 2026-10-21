@@ -24,12 +24,13 @@ export function SheetContent({
           side === 'right' ? 'end-0 w-full border-s sm:max-w-md' : 'start-0 w-72 border-e',
           'data-[state=open]:animate-fade-in',
           className,
+          'pt-[env(safe-area-inset-top)] pb-[env(safe-area-inset-bottom)] pl-[env(safe-area-inset-left)] pr-[env(safe-area-inset-right)]',
         )}
         {...props}
       >
         {children}
         {!hideClose && (
-          <SheetPrimitive.Close className="absolute top-2 end-2 grid size-11 place-items-center rounded-md text-muted-foreground transition outline-none hover:bg-muted hover:text-foreground focus-visible:outline-2 focus-visible:outline-solid focus-visible:outline-offset-2 focus-visible:outline-ring">
+          <SheetPrimitive.Close className="absolute top-[calc(0.5rem+env(safe-area-inset-top))] end-2 grid size-11 place-items-center rounded-md text-muted-foreground transition outline-none hover:bg-muted hover:text-foreground focus-visible:outline-2 focus-visible:outline-solid focus-visible:outline-offset-2 focus-visible:outline-ring">
             <X className="size-4" />
             <span className="sr-only">{t('common.close')}</span>
           </SheetPrimitive.Close>

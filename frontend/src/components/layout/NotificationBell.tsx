@@ -37,7 +37,7 @@ export function NotificationBell() {
         <button
           type="button"
           aria-label={t('notifications.open', { count: unread })}
-          className={cn('relative grid size-10 shrink-0 place-items-center rounded-xl border text-muted-foreground transition-colors hover:bg-muted hover:text-foreground', FOCUS)}
+          className={cn('relative grid size-10 shrink-0 max-sm:size-11 place-items-center rounded-xl border text-muted-foreground transition-colors hover:bg-muted hover:text-foreground', FOCUS)}
         >
           <Bell className="size-5" aria-hidden />
           {unread > 0 && (

@@ -1,0 +1,13 @@
+{
+  "id": "/",
+  "name": "سمارت تكنولوجي — الموارد البشرية",
+  "short_name": "HR سمارت",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "dir": "rtl",
+  "lang": "ar",
+  "theme_color": "#ffffff",
+  "background_color": "#faf8f5",
+  "icons": [{ "src": "/stis-icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" }]
+}

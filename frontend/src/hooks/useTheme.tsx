@@ -14,6 +14,9 @@ const subscribe = (listener: () => void) => {
 const setTheme = (t: Theme) => {
   current = t
   document.documentElement.classList.toggle('dark', t === 'dark')
+  // the phone's status bar takes the header's colour (--card) of the theme chosen here, not the OS one
+  const bar = getComputedStyle(document.documentElement).getPropertyValue('--card').trim()
+  if (bar) document.querySelectorAll<HTMLMetaElement>('meta[name="theme-color"]').forEach((m) => (m.content = bar))
   try {
     localStorage.setItem('hrms-theme', t)
   } catch {
