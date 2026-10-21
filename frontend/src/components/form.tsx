@@ -5,6 +5,7 @@ import { Dialog, DialogBody, DialogContent, DialogFooter, DialogHeader, DialogTi
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { ApiError } from '@/lib/api'
+import { cn } from '@/lib/utils'
 
 export type Row = Record<string, any> // eslint-disable-line @typescript-eslint/no-explicit-any
 export type Errs = Record<string, string>
@@ -42,11 +43,18 @@ export const ltrDates = (text: string) => text.split(/(\d{4}-\d{2}-\d{2})/).map(
 /** Today's date in Cairo as YYYY-MM-DD. */
 export const cairoToday = () => new Date().toLocaleDateString('en-CA', { timeZone: 'Africa/Cairo' })
 
-/** Formats a stored UTC timestamp as Cairo wall time in the current language. */
+/** Formats a stored UTC timestamp as Cairo wall time (12-hour) in the current language. */
 export function useCairoTime() {
   const { i18n } = useTranslation()
-  const f = new Intl.DateTimeFormat(intlLocale(i18n.language), { timeZone: 'Africa/Cairo', dateStyle: 'short', timeStyle: 'medium' })
+  const f = new Intl.DateTimeFormat(intlLocale(i18n.language), { timeZone: 'Africa/Cairo', dateStyle: 'short', timeStyle: 'medium', hour12: true })
   return (iso: string | null | undefined) => (iso ? f.format(new Date(iso)) : '—')
+}
+
+/** A stored "HH:MM" (or "HH:MM:SS") time as 12-hour text: "9:00 AM", «9:00 ص»; '—' when blank. */
+export function formatTime(v: string | number | null | undefined, lng: string) {
+  const m = /^(\d{2}):(\d{2})/.exec(String(v ?? ''))
+  if (!m) return v == null || v === '' ? '—' : String(v)
+  return new Intl.DateTimeFormat(intlLocale(lng), { hour: 'numeric', minute: '2-digit', hour12: true, timeZone: 'UTC' }).format(Date.UTC(1970, 0, 1, +m[1], +m[2]))
 }
 
 export function useMoney() {
@@ -75,11 +83,79 @@ export function Field({ name, id = name, label, errs, children }: { name: string
 export const asciiDigits = (v: string) =>
   v.replace(/[٠-٩۰-۹]/g, (c) => String(c.charCodeAt(0) - (c < '۰' ? 0x660 : 0x6f0))).replace(/٫/g, '.')
 
+/** `type="time"` renders the 12-hour `TimeInput`; its value stays "HH:MM" (24-hour). */
 export function TextField({ name, label, values, set, errs, ns = '', ...rest }: { name: string; label: string; values: Row; set: (k: string, v: string) => void; errs: Errs; ns?: string } & Omit<React.ComponentProps<'input'>, 'form'>) {
   return (
     <Field name={name} id={ns + name} label={label} errs={errs}>
-      {(p) => <Input {...p} {...rest} value={values[name] ?? ''} onChange={(e) => set(name, rest.inputMode === 'decimal' || rest.inputMode === 'numeric' ? asciiDigits(e.target.value) : e.target.value)} />}
+      {(p) =>
+        rest.type === 'time' ? (
+          <TimeInput {...p} label={label} disabled={rest.disabled} value={values[name] ?? ''} onChange={(v) => set(name, v)} />
+        ) : (
+          <Input {...p} {...rest} value={values[name] ?? ''} onChange={(e) => set(name, rest.inputMode === 'decimal' || rest.inputMode === 'numeric' ? asciiDigits(e.target.value) : e.target.value)} />
+        )
+      }
     </Field>
+  )
+}
+
+const pad = (n: number) => String(n).padStart(2, '0')
+
+/**
+ * Typed text ("9:30", "930", "9", Arabic digits) and the AM/PM choice → "HH:MM" (24-hour); '' when blank, null when it is not a time.
+ * An hour of 0 or 13–23 is already 24-hour and ignores the choice. 12 AM is 00, 12 PM is 12.
+ */
+function to24(text: string, pm: boolean): string | null {
+  const s = asciiDigits(text).trim()
+  if (!s) return ''
+  const m = /^(\d{1,2})(?::?(\d{2}))?$/.exec(s)
+  if (!m) return null
+  const h = +m[1]
+  const min = +(m[2] ?? 0)
+  if (h > 23 || min > 59) return null
+  return `${pad(h >= 1 && h <= 12 ? (h % 12) + (pm ? 12 : 0) : h)}:${pad(min)}`
+}
+
+/** "HH:MM" → the box text ("5:30") and whether it is PM; anything else shows as it is. */
+const to12 = (v: string) => {
+  const m = /^(\d{2}):(\d{2})/.exec(v)
+  return m ? { text: `${+m[1] % 12 || 12}:${m[2]}`, pm: +m[1] >= 12 } : { text: v, pm: false }
+}
+
+/**
+ * A 12-hour time: a box for the hour and minutes plus an AM/PM (ص/م) choice. `value` in and out is "HH:MM" (24-hour), '' for none;
+ * an unreadable entry goes out as typed so the server names the field. `label` names the AM/PM group; the rest goes to the box.
+ */
+export function TimeInput({ value, onChange, label, className, disabled, ...rest }: { value: string; onChange: (v: string) => void; label: string } & Omit<React.ComponentProps<'input'>, 'value' | 'onChange' | 'onBlur' | 'type'>) {
+  const { t } = useTranslation()
+  const [shown, setShown] = useState(value) // the value the box and the choice stand for
+  const [draft, setDraft] = useState(() => to12(value))
+  if (value !== shown) {
+    setShown(value)
+    setDraft(to12(value))
+  }
+  const emit = (text: string, pm: boolean) => {
+    const v = to24(text, pm) ?? text
+    setDraft({ text, pm })
+    setShown(v)
+    onChange(v)
+  }
+  return (
+    <div className="flex w-full gap-1.5">
+      <Input {...rest} type="text" dir="ltr" inputMode="numeric" autoComplete="off" placeholder="--:--" disabled={disabled} value={draft.text}
+        className={cn('h-11 flex-1 tabular sm:h-9 rtl:text-right', className)}
+        onChange={(e) => emit(e.target.value, draft.pm)}
+        onBlur={() => { const v = to24(draft.text, draft.pm); if (v) setDraft(to12(v)) }} />
+      <div role="group" aria-label={t('time.period', { field: label })} className="flex shrink-0 overflow-hidden rounded-md border border-input bg-card">
+        {[false, true].map((pm) => (
+          // mousedown keeps the cursor in the box, so a click here is not the box being left
+          <button key={String(pm)} type="button" aria-pressed={draft.pm === pm} aria-label={t(pm ? 'time.pmName' : 'time.amName')} disabled={disabled}
+            className="min-w-11 px-2 text-sm font-semibold text-muted-foreground outline-none hover:bg-muted focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-solid focus-visible:outline-ring disabled:cursor-not-allowed disabled:opacity-50 aria-pressed:bg-primary aria-pressed:text-primary-foreground sm:min-w-9"
+            onMouseDown={(e) => e.preventDefault()} onClick={() => emit(draft.text, pm)}>
+            {t(pm ? 'time.pm' : 'time.am')}
+          </button>
+        ))}
+      </div>
+    </div>
   )
 }
 

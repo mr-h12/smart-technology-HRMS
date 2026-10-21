@@ -17,7 +17,7 @@ import { Dialog, DialogBody, DialogContent, DialogFooter, DialogHeader, DialogTi
 import { Textarea } from '@/components/ui/input'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
-import { cairoToday, ErrorBanner, Field, type Errs, FormDialog, type FormApi, type Row, SelectField, TextField, toErrs, useForm, useMoney } from '@/components/form'
+import { cairoToday, ErrorBanner, Field, type Errs, FormDialog, type FormApi, formatTime, type Row, SelectField, TextField, toErrs, useForm, useMoney } from '@/components/form'
 import { useDebounced } from '@/hooks/useDebounced'
 import { useAuth } from '@/lib/auth'
 import { RESIDENCES, USERS, useApi, useList, useSave } from '@/lib/query'
@@ -423,10 +423,9 @@ function ManagerHistory({ emp }: { emp: Row }) {
 }
 
 function History({ emp }: { emp: Row }) {
-  const { t } = useTranslation()
+  const { t, i18n } = useTranslation()
   const { can } = useAuth()
   const money = useMoney()
-  const cell = (v: string | null) => (v == null ? '—' : v)
   return (
     <div className="space-y-6">
       <Card className="overflow-hidden">
@@ -472,8 +471,8 @@ function History({ emp }: { emp: Row }) {
                   {['salary', 'raise', 'insured_basic', 'daily_wage'].map((k) => (
                     <TableCell key={k}>{money(c[k])}</TableCell>
                   ))}
-                  <TableCell>{cell(c.shift_start)}</TableCell>
-                  <TableCell>{cell(c.shift_end)}</TableCell>
+                  <TableCell>{formatTime(c.shift_start, i18n.language)}</TableCell>
+                  <TableCell>{formatTime(c.shift_end, i18n.language)}</TableCell>
                 </TableRow>
               ))}
             </TableBody>

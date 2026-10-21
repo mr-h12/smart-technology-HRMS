@@ -1,7 +1,7 @@
 import { CalendarOff, Check, CircleHelp, Clock, Eye, type LucideIcon, Stethoscope, UserX } from 'lucide-react'
-import { useId } from 'react'
+import { useId, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
-import { localName, type Row } from '@/components/form'
+import { formatTime, localName, type Row, TimeInput } from '@/components/form'
 import { Button } from '@/components/ui/button'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 import { type SheetAction, type SheetRow, statusOf } from '@/lib/day-sheet'
@@ -85,15 +85,10 @@ export function SheetRows({ rows, office, editable, date, sites, selected, pendi
       <span className={cn(compact && 'hidden 2xl:inline')}>{t(label)}</span>
     </Button>
   ))
-  const inTime = (r: SheetRow, h: string) => {
-    const was = r.day.in_time ? String(r.day.in_time).slice(0, 5) : ''
-    const commit = (v: string) => v && v !== was && onApply({ kind: 'time', in_time: v }, r, t('attendance.sheet.actionOn', { action: t('attendance.day.in_time'), name: name(r) }))
-    return (
-      <input key={`${r.employee.id}/${r.day.version}`} type="time" defaultValue={was} disabled={pending.has(r.employee.id)} aria-label={t('attendance.sheet.inTime', { name: name(r) })}
-        className={cn(FOCUS, h, 'rounded-md border bg-card px-2 text-sm tabular disabled:opacity-50')}
-        onBlur={(e) => { if (!e.currentTarget.value) e.currentTarget.value = was; commit(e.currentTarget.value) }} onKeyDown={(e) => { if (e.key === 'Escape') e.currentTarget.value = was; else if (e.key === 'Enter') e.currentTarget.blur() }} />
-    )
-  }
+  const inTime = (r: SheetRow, h: string) => (
+    <InTime key={`${r.employee.id}/${r.day.version}`} was={r.day.in_time ? String(r.day.in_time).slice(0, 5) : ''} className={h} disabled={pending.has(r.employee.id)} label={t('attendance.sheet.inTime', { name: name(r) })}
+      onCommit={(v) => onApply({ kind: 'time', in_time: v }, r, t('attendance.sheet.actionOn', { action: t('attendance.day.in_time'), name: name(r) }))} />
+  )
   const pill = (r: SheetRow) => {
     const s = status(r)
     const { cls, text, icon: Icon } = LOOK[s]
@@ -112,7 +107,7 @@ export function SheetRows({ rows, office, editable, date, sites, selected, pendi
   }
   const where = (r: SheetRow) => {
     if (office && editable) return inTime(r, 'h-9')
-    if (office) return <span className="text-sm tabular">{r.day.in_time ? String(r.day.in_time).slice(0, 5) : '—'}</span>
+    if (office) return <span className="text-sm tabular">{formatTime(r.day.in_time, lang)}</span>
     const s = status(r)
     if (s === 'present') return <span className="rounded-md border bg-card px-2 py-0.5 text-xs">{siteName(r.day.site_id)}</span>
     if (s === 'missing' && r.last_site_id) return <span className="text-xs text-muted-foreground">{t('attendance.sheet.lastSite', { site: siteName(r.last_site_id) })}</span>
@@ -225,5 +220,28 @@ export function SheetRows({ rows, office, editable, date, sites, selected, pendi
         ))}
       </ul>
     </>
+  )
+}
+
+/**
+ * The office in-time on the sheet. It is applied when focus leaves it (Enter in the box leaves it), or on an AM/PM click while the box
+ * is not focused; Escape, a blank or an unreadable time puts the stored one back. A new day version remounts it (its `key`).
+ */
+function InTime({ was, label, className, disabled, onCommit }: { was: string; label: string; className: string; disabled: boolean; onCommit: (v: string) => void }) {
+  const [v, setV] = useState(was)
+  // the sheet's own Escape blurs the box before React re-renders, so the blur reads the value from here, not from `v`
+  const latest = useRef(was)
+  const put = (x: string) => { latest.current = x; setV(x) }
+  const box = useRef<HTMLDivElement>(null)
+  const done = (x: string) => {
+    const ok = /^\d{2}:\d{2}$/.test(x) ? x : was
+    put(ok)
+    if (ok !== was) onCommit(ok)
+  }
+  return (
+    <div ref={box} className="w-44" onBlur={(e) => { if (!box.current?.contains(e.relatedTarget)) done(latest.current) }}
+      onKeyDown={(e) => { if (e.key === 'Escape') put(was); else if (e.key === 'Enter' && e.target instanceof HTMLInputElement) e.target.blur() }}>
+      <TimeInput value={v} label={label} aria-label={label} className={className} disabled={disabled} onChange={(x) => { put(x); if (!box.current?.contains(document.activeElement)) done(x) }} />
+    </div>
   )
 }

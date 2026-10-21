@@ -656,5 +656,12 @@
       "line": "أيام غير مسجلة — {{group}}: {{count}}",
       "period": "{{start}} – {{end}}"
     }
+  },
+  "time": {
+    "am": "ص",
+    "pm": "م",
+    "amName": "صباحًا",
+    "pmName": "مساءً",
+    "period": "صباحًا أو مساءً: {{field}}"
   }
 }

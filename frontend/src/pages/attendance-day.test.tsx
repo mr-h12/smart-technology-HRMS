@@ -1,4 +1,4 @@
-import { screen, waitFor } from '@testing-library/react'
+import { screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { afterEach, expect, test, vi } from 'vitest'
 import i18n from '@/i18n'
@@ -39,8 +39,11 @@ test('an engineer day saves its fields with the version', async () => {
   await user.selectOptions(select, 's2')
   await user.type(screen.getByLabelText('دقائق العمل خارج الإسكندرية'), '٣٠')
   await user.type(screen.getByLabelText('السلفة'), '500')
+  await user.type(screen.getByLabelText('وقت الحضور'), '8')
+  await user.type(screen.getByLabelText('وقت الانصراف'), '5:30')
+  await user.click(within(screen.getByRole('group', { name: 'صباحًا أو مساءً: وقت الانصراف' })).getByRole('button', { name: 'مساءً' }))
   await user.click(screen.getByRole('button', { name: 'حفظ' }))
-  expect(body(put)).toMatchObject({ version: null, site_id: 's2', outside_minutes: 30, advance_amount: '500', in_time: null })
+  expect(body(put)).toMatchObject({ version: null, site_id: 's2', outside_minutes: 30, advance_amount: '500', in_time: '08:00', out_time: '17:30', late_minutes: null })
   await waitFor(() => expect(onOpenChange).toHaveBeenCalledWith(false))
   expect(toast.success).toHaveBeenCalledWith('تم حفظ التغييرات.')
 })
@@ -73,7 +76,8 @@ test('an office day offers present and the leave types, not the work sites', asy
   expect(screen.getByRole('option', { name: 'حاضر' })).toHaveValue('')
   expect(screen.getByRole('option', { name: 'Leave-friday' })).toBeInTheDocument()
   expect(screen.queryByRole('option', { name: 'Site-1' })).toBeNull()
-  expect(screen.getByLabelText('وقت الحضور')).toHaveValue('09:30')
+  expect(screen.getByLabelText('وقت الحضور')).toHaveValue('9:30')
+  expect(within(screen.getByRole('group', { name: 'صباحًا أو مساءً: وقت الحضور' })).getByRole('button', { name: 'صباحًا' })).toHaveAttribute('aria-pressed', 'true')
   expect(screen.getByText('تأخير محسوب: 15 دقيقة')).toBeInTheDocument()
   expect(screen.getByText('مستورد من Excel')).toBeInTheDocument()
 })

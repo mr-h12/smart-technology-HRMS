@@ -252,10 +252,14 @@ test('create sends only the pay fields the type uses', async () => {
   await user.type(screen.getByLabelText('المرتب'), '9000')
   await user.selectOptions(screen.getByLabelText('نوع الموظف'), 'day_laborer')
   await user.type(screen.getByLabelText('الأجر اليومي'), '250')
+  await user.type(screen.getByLabelText('بداية الوردية'), '730')
+  await user.type(screen.getByLabelText('انتهاء الوردية'), '3:30')
+  await user.click(within(screen.getByRole('group', { name: 'صباحًا أو مساءً: انتهاء الوردية' })).getByRole('button', { name: 'مساءً' }))
   await user.click(screen.getByRole('button', { name: 'حفظ' }))
   const call = vi.mocked(fetch).mock.calls.find(([, i]) => i?.method === 'POST')!
   const body = JSON.parse(call[1]!.body as string)
   expect(body.daily_wage).toBe('250')
+  expect(body).toMatchObject({ shift_start: '07:30', shift_end: '15:30' })
   expect(body).not.toHaveProperty('salary')
 })
 
@@ -336,7 +340,7 @@ test('a record without the sensitive fields hides them, the pay section and the 
 
 test('view-only users with the data see pay read-only', async () => {
   const full = { ...emp, gender: 'male', pay_method: 'bank', bank_account: 'EG01', national_id: '29001011234567', current_pay: null,
-    pay_changes: [{ id: 'p1', effective_from: '2026-01-01', salary: '9000.000000', raise: '0', insured_basic: null, daily_wage: null, shift_start: null, shift_end: null }] }
+    pay_changes: [{ id: 'p1', effective_from: '2026-01-01', salary: '9000.000000', raise: '0', insured_basic: null, daily_wage: null, shift_start: '08:00:00', shift_end: '16:30:00' }] }
   mockFetch({ 'GET /api/v1/residences': residences, 'GET /api/v1/employees/e1': () => json(200, { data: full }) })
   const { unmount } = renderWithAuth(<EmployeeDetailRoute id="e1" />, ['employee.view.all'], { router: false })
   expect(await screen.findByLabelText('الرقم القومي')).toBeDisabled()
@@ -346,7 +350,7 @@ test('view-only users with the data see pay read-only', async () => {
   unmount()
   renderWithAuth(<EmployeeDetailRoute id="e1" tab="history" />, ['employee.view.all'], { router: false })
   expect(await screen.findByText('سجل تغييرات الأجر')).toBeInTheDocument()
-  expect(screen.getByRole('row', { name: /2026-01-01/ })).toBeInTheDocument()
+  expect(screen.getByRole('row', { name: /2026-01-01/ })).toHaveTextContent(/8:00 ص.*4:30 م/)
   expect(screen.queryByRole('button', { name: 'إضافة تغيير' })).toBeNull()
 })
 

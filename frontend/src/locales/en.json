@@ -649,5 +649,12 @@
       "line": "Missing days, {{group}}: {{count}}",
       "period": "{{start}} – {{end}}"
     }
+  },
+  "time": {
+    "am": "AM",
+    "pm": "PM",
+    "amName": "AM",
+    "pmName": "PM",
+    "period": "AM or PM: {{field}}"
   }
 }
