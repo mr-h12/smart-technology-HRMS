@@ -14,11 +14,11 @@ export class ApiError extends Error {
   }
 }
 
-type Options = { method?: string; body?: unknown }
+type Options = { method?: string; body?: unknown; signal?: AbortSignal }
 
 export type Pagination = { page: number; per_page: number; total: number; total_pages: number; has_next_page: boolean; has_previous_page: boolean }
 
-const TOKEN_KEY = 'hrms.auth.token.v1'
+export const TOKEN_KEY = 'hrms.auth.token.v1'
 
 // ponytail: the token lives only in localStorage; where storage is blocked, sign-in does not stick.
 export function getToken(): string | null {
@@ -44,7 +44,7 @@ export function setUnauthorizedHandler(fn: () => void): void {
   onUnauthorized = fn
 }
 
-async function call(path: string, { method = 'GET', body }: Options = {}) {
+async function call(path: string, { method = 'GET', body, signal }: Options = {}) {
   const token = getToken()
   const res = await fetch(`/api/v1${path}`, {
     method,
@@ -55,6 +55,7 @@ async function call(path: string, { method = 'GET', body }: Options = {}) {
       ...(body !== undefined && { 'Content-Type': 'application/json' }),
     },
     body: body === undefined ? undefined : JSON.stringify(body),
+    signal,
   })
   const json = await res.json().catch(() => null)
   if (!res.ok) {
@@ -75,7 +76,7 @@ export async function api<T = unknown>(path: string, opts?: Options): Promise<T>
 }
 
 /** Like api(), for list endpoints: also returns `meta` (meta.pagination). */
-export async function apiList<T = unknown>(path: string): Promise<{ data: T[]; meta: { pagination: Pagination } }> {
-  const j = await call(path)
+export async function apiList<T = unknown>(path: string, opts?: { signal?: AbortSignal }): Promise<{ data: T[]; meta: { pagination: Pagination } }> {
+  const j = await call(path, opts)
   return { data: j.data, meta: j.meta }
 }

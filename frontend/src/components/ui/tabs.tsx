@@ -4,9 +4,33 @@ import { cn } from '@/lib/utils'
 
 export const Tabs = TabsPrimitive.Root
 
+/**
+ * A strip that scrolls sideways on a phone keeps the selected tab in view, on mount and whenever the selection or the labels change.
+ * It scrolls only the strip, never the page. scrollBy moves in screen pixels in both directions, so it is right in RTL too.
+ */
 export function TabsList({ className, ...props }: React.ComponentProps<typeof TabsPrimitive.List>) {
+  const ref = React.useRef<HTMLDivElement>(null)
+  React.useEffect(() => {
+    const list = ref.current
+    if (!list) return
+    const show = () => {
+      const tab = list.querySelector('[data-state=active]')?.getBoundingClientRect()
+      const box = list.getBoundingClientRect()
+      const dx = !tab ? 0 : tab.left < box.left ? tab.left - box.left : tab.right > box.right ? tab.right - box.right : 0
+      if (dx) list.scrollBy({ left: dx })
+    }
+    show()
+    const watch = new MutationObserver(show)
+    watch.observe(list, { attributes: true, attributeFilter: ['data-state'], subtree: true, childList: true, characterData: true }) // a label change (language) moves the tabs too
+    document.fonts?.addEventListener('loadingdone', show) // so does a font finishing its load
+    return () => {
+      document.fonts?.removeEventListener('loadingdone', show)
+      watch.disconnect()
+    }
+  }, [])
   return (
     <TabsPrimitive.List
+      ref={ref}
       className={cn('inline-flex h-10 max-w-full items-center gap-1 overflow-x-auto rounded-xl border bg-muted p-1 text-muted-foreground scrollbar-thin', className)}
       {...props}
     />
@@ -26,5 +50,5 @@ export function TabsTrigger({ className, ...props }: React.ComponentProps<typeof
 }
 
 export function TabsContent({ className, ...props }: React.ComponentProps<typeof TabsPrimitive.Content>) {
-  return <TabsPrimitive.Content className={cn('mt-5 outline-none data-[state=active]:animate-fade-in', className)} {...props} />
+  return <TabsPrimitive.Content className={cn('mt-5 outline-none', className)} {...props} />
 }

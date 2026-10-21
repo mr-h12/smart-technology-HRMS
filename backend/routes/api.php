@@ -27,6 +27,7 @@ Route::middleware('auth')->group(function (): void {
 
     Route::prefix('employees')->controller(EmployeeController::class)->group(function (): void {
         Route::get('/', 'index')->middleware('permission:employee.view');
+        Route::get('summary', 'summary')->middleware('permission:employee.view');
         Route::post('/', 'store')->middleware('permission:employee.create');
         Route::middleware([])->whereUuid('employee')->group(function (): void {
             Route::get('{employee}', 'show')->middleware(['permission:employee.view', 'employee.scope']);

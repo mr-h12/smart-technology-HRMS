@@ -12,4 +12,6 @@ Run on the host, in this folder:
 - `npm run test`: Vitest (locale key parity, api client)
 - `npm run lint`: oxlint
 
+Data: reads go through `useList`/`useApi` (`src/lib/query.ts`), writes through `useSave`; a form that edits a record loads it with `useApi(path, { fresh: true })` and starts only when `ready`.
+
 Every UI string is an i18n key in `src/locales/ar.json` and `en.json` (same keys in both; a test enforces it). Arabic RTL is the default.

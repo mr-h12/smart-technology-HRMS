@@ -1,5 +1,5 @@
 import { Bus, CalendarOff, House, MapPin, Plus, type LucideIcon } from 'lucide-react'
-import { useCallback, useEffect, useState, type ReactNode } from 'react'
+import { useState, type ReactNode } from 'react'
 import { useTranslation } from 'react-i18next'
 import { EmptyState } from '@/components/common/EmptyState'
 import { RowActions } from '@/components/common/RowActions'
@@ -12,8 +12,8 @@ import { Button } from '@/components/ui/button'
 import { Card, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Dialog, DialogBody, DialogContent, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
-import { api, apiList } from '@/lib/api'
 import { useAuth } from '@/lib/auth'
+import { RESIDENCES, USERS, useApi, useSave } from '@/lib/query'
 
 const LEAVE_CODES = ['friday', 'official_holiday', 'sick', 'rest', 'absent', 'other']
 const MODES = ['none', 'share_of_wage', 'fixed']
@@ -60,8 +60,9 @@ function ListCard({ title, description, action, err, loading, empty, icon, notic
   )
 }
 
-function SiteDialog({ kind, site, reload, ...dialog }: { kind: 'work' | 'leave'; site?: Row; reload: () => void } & Controlled) {
+function SiteDialog({ kind, site, ...dialog }: { kind: 'work' | 'leave'; site?: Row } & Controlled) {
   const { t } = useTranslation()
+  const send = useSave()
   const addKey = kind === 'work' ? 'site.add' : 'site.addLeaveType'
   const init = { name_ar: site?.name_ar ?? '', name_en: site?.name_en ?? '', leave_code: site?.leave_code ?? LEAVE_CODES[0], outside_alexandria: site?.outside_alexandria ? 'true' : '', active: site?.active === false ? '' : 'true' }
   const body = (form: Row) => ({
@@ -78,8 +79,8 @@ function SiteDialog({ kind, site, reload, ...dialog }: { kind: 'work' | 'leave';
       title={t(site ? 'site.edit' : addKey)}
       trigger={site ? undefined : <Button type="button" variant="outline" size="sm"><Plus />{t(addKey)}</Button>}
       init={init}
-      submit={(form) => (site ? api(`/sites/${site.id}`, { method: 'PATCH', body: body(form) }) : api('/sites', { method: 'POST', body: body(form) }))}
-      onDone={reload}
+      submit={(form) => (site ? send(`/sites/${site.id}`, { method: 'PATCH', body: body(form) }) : send('/sites', { body: body(form) }))}
+      onDone={() => {}}
       shown={['name_ar', 'name_en', 'leave_code']}
     >
       {(f) => (
@@ -103,11 +104,8 @@ function SiteDialog({ kind, site, reload, ...dialog }: { kind: 'work' | 'leave';
 function RuleHistory({ siteId }: { siteId: string }) {
   const { t } = useTranslation()
   const money = useMoney()
-  const [rules, setRules] = useState<Row[]>([])
-  const [err, setErr] = useState<unknown>()
-  useEffect(() => {
-    api<Row>(`/sites/${siteId}`).then((s) => { setErr(undefined); setRules(s.allowance_rules) }).catch(setErr)
-  }, [siteId])
+  const { data: site, err } = useApi<Row>(`/sites/${siteId}`)
+  const rules: Row[] = site?.allowance_rules ?? []
   return (
     <>
       <ErrorBanner err={err} shown={[]} />
@@ -136,12 +134,13 @@ function RuleHistory({ siteId }: { siteId: string }) {
 /** Allowance-rule history for a site, with an add form (a rule applies from its date until the next). */
 function RulesDialog({ site, ...dialog }: { site: Row } & Controlled) {
   const { t } = useTranslation()
+  const send = useSave()
   return (
     <FormDialog
       {...dialog}
       title={`${t('site.allowanceHistory')}: ${site.name_ar}`}
       init={{ mode: 'fixed' }}
-      submit={(form) => api(`/sites/${site.id}/allowance-rules`, { method: 'POST', body: { effective_from: form.effective_from, mode: form.mode, ...(form.mode !== 'none' && { value: form.value }) } })}
+      submit={(form) => send(`/sites/${site.id}/allowance-rules`, { body: { effective_from: form.effective_from, mode: form.mode, ...(form.mode !== 'none' && { value: form.value }) } })}
       onDone={() => {}}
       shown={['effective_from', 'mode', 'value']}
       footer="site.addRule"
@@ -175,41 +174,55 @@ function ManagersDialog({ site, open, onOpenChange }: { site: Row; open: boolean
 
 function ManagersBody({ siteId, onDone }: { siteId: string; onDone: () => void }) {
   const { t } = useTranslation()
-  const [users, setUsers] = useState<Row[]>()
-  const [ticked, setTicked] = useState<Set<string>>(new Set())
+  const site = useApi<Row>(`/sites/${siteId}`, { fresh: true }) // the ticks start from the site as it is now, never from the cache
+  const users = useApi<Row[]>(USERS) // shared with the accounts list and the audit filter
+  const err = site.err ?? users.err
+  return site.ready && site.data && users.data ? (
+    <ManagersForm siteId={siteId} managerIds={site.data.managers.map((m: Row) => m.id)} users={users.data.filter((u) => u.is_active)} loadErr={err} onDone={onDone} />
+  ) : (
+    <>
+      <DialogBody className="grid gap-1">
+        <ErrorBanner err={err} shown={[]} />
+        {!err && <TableSkeleton rows={3} />}
+      </DialogBody>
+      <DialogFooter>
+        <Button type="button" disabled>
+          {t('common.save')}
+        </Button>
+      </DialogFooter>
+    </>
+  )
+}
+
+/** The ticks start from the site's current managers, then belong to the user. */
+function ManagersForm({ siteId, managerIds, users, loadErr, onDone }: { siteId: string; managerIds: string[]; users: Row[]; loadErr?: unknown; onDone: () => void }) {
+  const { t } = useTranslation()
+  const send = useSave()
+  const [ticked, setTicked] = useState(() => new Set(managerIds))
   const [err, setErr] = useState<unknown>()
   const [busy, setBusy] = useState(false)
-  useEffect(() => {
-    Promise.all([api<Row>(`/sites/${siteId}`), apiList<Row>('/users?active=true&per_page=100')])
-      .then(([s, u]) => {
-        setUsers(u.data)
-        setTicked(new Set(s.managers.map((m: Row) => m.id)))
-      })
-      .catch(setErr)
-  }, [siteId])
   const toggle = (id: string, on: boolean) => setTicked((s) => { const n = new Set(s); if (on) n.add(id); else n.delete(id); return n })
   function save() {
     setBusy(true)
     setErr(undefined)
-    api(`/sites/${siteId}/managers`, { method: 'PUT', body: { manager_ids: users!.filter((u) => ticked.has(u.id)).map((u) => u.id) } })
+    send(`/sites/${siteId}/managers`, { method: 'PUT', body: { manager_ids: users.filter((u) => ticked.has(u.id)).map((u) => u.id) } })
       .then(onDone, setErr)
       .finally(() => setBusy(false))
   }
   return (
     <>
       <DialogBody className="grid gap-1">
+        <ErrorBanner err={loadErr} shown={[]} />
         <ErrorBanner err={err} shown={[]} />
-        {users
-          ? users.map((u) => (
-              <label key={u.id} className="flex min-h-11 items-center gap-3 rounded-md px-2 text-sm hover:bg-muted">
-                <input type="checkbox" checked={ticked.has(u.id)} onChange={(e) => toggle(u.id, e.target.checked)} />
-                {u.name}
-              </label>
-            ))
-          : !err && <TableSkeleton rows={3} />}
+        {users.map((u) => (
+          <label key={u.id} className="flex min-h-11 items-center gap-3 rounded-md px-2 text-sm hover:bg-muted">
+            <input type="checkbox" checked={ticked.has(u.id)} onChange={(e) => toggle(u.id, e.target.checked)} />
+            {u.name}
+          </label>
+        ))}
       </DialogBody>
       <DialogFooter>
-        <Button type="button" disabled={busy || !users} onClick={save}>
+        <Button type="button" disabled={busy} onClick={save}>
           {t('common.save')}
         </Button>
       </DialogFooter>
@@ -221,7 +234,7 @@ function ManagersBody({ siteId, onDone }: { siteId: string; onDone: () => void }
 function SiteList({ kind }: { kind: 'work' | 'leave' }) {
   const { t } = useTranslation()
   const { can } = useAuth()
-  const { rows, total, err, loading, reload } = useList(`/sites${LIST}&kind=${kind}`)
+  const { rows, total, err, loading } = useList(`/sites${LIST}&kind=${kind}`)
   const [page, setPage] = useState(1)
   const [dlg, setDlg] = useState<{ type: 'edit' | 'rules' | 'managers'; row: Row }>()
   const close = { open: true, onOpenChange: () => setDlg(undefined) }
@@ -235,7 +248,7 @@ function SiteList({ kind }: { kind: 'work' | 'leave' }) {
     <ListCard
       title={t(work ? 'settings.tab.sites' : 'settings.tab.leaveTypes')}
       description={t(work ? 'settings.desc.sites' : 'settings.desc.leaveTypes')}
-      action={can('site.manage') && <SiteDialog kind={kind} reload={reload} />}
+      action={can('site.manage') && <SiteDialog kind={kind} />}
       err={err}
       loading={loading}
       empty={!rows.length}
@@ -276,7 +289,7 @@ function SiteList({ kind }: { kind: 'work' | 'leave' }) {
           ))}
         </TableBody>
       </Table>
-      {dlg?.type === 'edit' && <SiteDialog kind={kind} site={dlg.row} reload={reload} {...close} />}
+      {dlg?.type === 'edit' && <SiteDialog kind={kind} site={dlg.row} {...close} />}
       {dlg?.type === 'rules' && <RulesDialog site={dlg.row} {...close} />}
       {dlg?.type === 'managers' && <ManagersDialog site={dlg.row} {...close} />}
     </ListCard>
@@ -286,16 +299,17 @@ function SiteList({ kind }: { kind: 'work' | 'leave' }) {
 export const SitesTab = () => <SiteList kind="work" />
 export const LeaveTypesTab = () => <SiteList kind="leave" />
 
-function ResidenceDialog({ residence, reload, ...dialog }: { residence?: Row; reload: () => void } & Controlled) {
+function ResidenceDialog({ residence, ...dialog }: { residence?: Row } & Controlled) {
   const { t } = useTranslation()
+  const send = useSave()
   return (
     <FormDialog
       {...dialog}
       title={t(residence ? 'site.edit' : 'residence.add')}
       trigger={residence ? undefined : <Button type="button" variant="outline" size="sm"><Plus />{t('residence.add')}</Button>}
       init={{ name_ar: residence?.name_ar ?? '' }}
-      submit={(form) => (residence ? api(`/residences/${residence.id}`, { method: 'PATCH', body: { name_ar: form.name_ar } }) : api('/residences', { method: 'POST', body: { name_ar: form.name_ar } }))}
-      onDone={reload}
+      submit={(form) => (residence ? send(`/residences/${residence.id}`, { method: 'PATCH', body: { name_ar: form.name_ar } }) : send('/residences', { body: { name_ar: form.name_ar } }))}
+      onDone={() => {}}
       shown={['name_ar']}
     >
       {(f) => <TextField name="name_ar" label={t('employee.name_ar')} {...f} />}
@@ -306,14 +320,14 @@ function ResidenceDialog({ residence, reload, ...dialog }: { residence?: Row; re
 export function ResidencesTab() {
   const { t } = useTranslation()
   const { can } = useAuth()
-  const { rows, total, err, loading, reload } = useList(`/residences${LIST}`)
+  const { rows, total, err, loading } = useList(RESIDENCES)
   const [page, setPage] = useState(1)
   const [edit, setEdit] = useState<Row>()
   return (
     <ListCard
       title={t('settings.tab.residences')}
       description={t('settings.desc.residences')}
-      action={can('site.manage') && <ResidenceDialog reload={reload} />}
+      action={can('site.manage') && <ResidenceDialog />}
       err={err}
       loading={loading}
       empty={!rows.length}
@@ -341,7 +355,7 @@ export function ResidencesTab() {
           ))}
         </TableBody>
       </Table>
-      {edit && <ResidenceDialog residence={edit} reload={reload} open onOpenChange={() => setEdit(undefined)} />}
+      {edit && <ResidenceDialog residence={edit} open onOpenChange={() => setEdit(undefined)} />}
     </ListCard>
   )
 }
@@ -356,15 +370,16 @@ function inForce(fares: Row[], today: string) {
   return best
 }
 
-function FareDialog({ residence, site, reload, children }: { residence: Row; site: Row; reload: () => void; children: React.ReactNode }) {
+function FareDialog({ residence, site, children }: { residence: Row; site: Row; children: React.ReactNode }) {
   const { t } = useTranslation()
+  const send = useSave()
   return (
     <FormDialog
       title={`${residence.name_ar} / ${site.name_ar}`}
       trigger={<Button type="button" variant="soft" size="sm" className="min-w-20 tabular-nums">{children}</Button>}
       init={{}}
-      submit={(form) => api('/fares', { method: 'POST', body: { residence_id: residence.id, site_id: site.id, effective_from: form.effective_from, amount: form.amount } })}
-      onDone={reload}
+      submit={(form) => send('/fares', { body: { residence_id: residence.id, site_id: site.id, effective_from: form.effective_from, amount: form.amount } })}
+      onDone={() => {}}
       shown={['effective_from', 'amount']}
     >
       {(f) => (
@@ -380,44 +395,38 @@ function FareDialog({ residence, site, reload, children }: { residence: Row; sit
 export function FaresTab() {
   const { t } = useTranslation()
   const money = useMoney()
-  const [data, setData] = useState<{ sites: Row[]; residences: Row[]; fares: Row[]; over: boolean }>()
-  const [err, setErr] = useState<unknown>()
-  const load = useCallback(() => {
-    Promise.all([apiList<Row>(`/sites${LIST}&kind=work&active=true`), apiList<Row>(`/residences${LIST}`), apiList<Row>(`/fares${LIST}&date=${cairoToday()}`)])
-      .then(([s, r, f]) => {
-        setErr(undefined)
-        setData({ sites: s.data, residences: r.data, fares: f.data, over: [s, r, f].some((x) => x.meta.pagination.total > x.data.length) })
-      })
-      .catch(setErr)
-  }, [])
-  useEffect(load, [load])
-  const best = inForce(data?.fares ?? [], cairoToday())
+  const today = cairoToday()
+  const lists = [useList(`/sites${LIST}&kind=work&active=true`), useList(RESIDENCES), useList(`/fares${LIST}&date=${today}`)]
+  const [sites, residences, fares] = lists
+  const err = lists.find((l) => l.err)?.err
+  const ready = !err && !lists.some((l) => l.loading) // one failed list leaves just the banner
+  const best = inForce(fares.rows, today)
   return (
     <ListCard
       title={t('settings.tab.fares')}
       description={t('settings.desc.fares')}
       err={err}
-      loading={!data && !err}
-      empty={!!data && (!data.sites.length || !data.residences.length)}
+      loading={!ready && !err}
+      empty={ready && (!sites.rows.length || !residences.rows.length)}
       icon={Bus}
       // ponytail: one 100-row page of in-force fares; paginate if a site x residence grid ever exceeds it
-      notice={<Notice show={!!data?.over} text={t('fare.tooMany')} />}
+      notice={<Notice show={lists.some((l) => l.total > l.rows.length)} text={t('fare.tooMany')} />}
     >
-      {data && (
+      {ready && (
         <Table>
           <TableHeader>
             <TableRow>
               <TableHead className="sticky start-0 z-10 bg-muted">{t('fare.residence')}</TableHead>
-              {data.sites.map((s) => <TableHead key={s.id}>{s.name_ar}</TableHead>)}
+              {sites.rows.map((s) => <TableHead key={s.id}>{s.name_ar}</TableHead>)}
             </TableRow>
           </TableHeader>
           <TableBody>
-            {data.residences.map((r) => (
+            {residences.rows.map((r) => (
               <TableRow key={r.id}>
                 <TableCell className="sticky start-0 z-10 bg-card font-medium">{r.name_ar}</TableCell>
-                {data.sites.map((s) => (
+                {sites.rows.map((s) => (
                   <TableCell key={s.id}>
-                    <FareDialog residence={r} site={s} reload={load}>
+                    <FareDialog residence={r} site={s}>
                       {best.has(`${r.id}|${s.id}`) ? money(best.get(`${r.id}|${s.id}`)!.amount) : '—'}
                     </FareDialog>
                   </TableCell>

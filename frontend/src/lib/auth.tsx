@@ -1,7 +1,8 @@
 import { createContext, useContext, useEffect, useState, type ReactNode } from 'react'
 import { useTranslation } from 'react-i18next'
 import { Navigate } from 'react-router-dom'
-import { api, getToken, setToken, setUnauthorizedHandler } from './api'
+import { api, getToken, setToken, setUnauthorizedHandler, TOKEN_KEY } from './api'
+import { queryClient } from './query'
 
 export type Me = { id: string; name: string; email: string; role: { id: string; slug: string; name: string; name_ar: string }; permissions: string[] }
 
@@ -25,9 +26,19 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [loading, setLoading] = useState(() => getToken() !== null)
 
   useEffect(() => {
-    // a 401 has already cleared the token; with me null, RequireAuth sends the user to /login
-    setUnauthorizedHandler(() => setMe(null))
-    return () => setUnauthorizedHandler(() => {})
+    const drop = () => {
+      queryClient.clear()
+      setMe(null) // with me null, RequireAuth sends the user to /login
+    }
+    // a 401 has already cleared the token
+    setUnauthorizedHandler(drop)
+    // another tab signed out or in as someone else (key null: that tab cleared all storage)
+    const onStorage = (e: StorageEvent) => (e.key === TOKEN_KEY || e.key === null) && drop()
+    window.addEventListener('storage', onStorage)
+    return () => {
+      setUnauthorizedHandler(() => {})
+      window.removeEventListener('storage', onStorage)
+    }
   }, [])
 
   useEffect(() => {
@@ -44,11 +55,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     login: async (email, password) => {
       const r = await api<{ token: string; user: Me }>('/auth/login', { method: 'POST', body: { email, password } })
       setToken(r.token)
+      queryClient.clear()
       setMe(r.user)
     },
     logout: async () => {
       await api('/auth/logout', { method: 'POST' }).catch(() => {})
       setToken(null)
+      queryClient.clear()
       setMe(null)
     },
     can: (ability) => canDo(me?.permissions ?? [], ability),

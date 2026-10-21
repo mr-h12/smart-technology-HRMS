@@ -38,23 +38,21 @@ final class EmployeeService
      */
     public function list(array $filters, ?string $ownerId = null): array
     {
-        $query = Employee::query()->select('employees.*')->selectRaw(self::CURRENT_TYPE.' as current_type', [self::today()])->orderBy('code');
+        $query = $this->visibleTo($ownerId)->select('employees.*')->selectRaw(self::CURRENT_TYPE.' as current_type', [self::today()])->orderBy('code');
 
         if (isset($filters['type'])) {
             $query->whereRaw(self::CURRENT_TYPE.' = ?', [self::today(), $filters['type']]);
         }
 
-        if ($ownerId !== null) {
-            $query->whereRaw(self::CURRENT_MANAGER.' = ?', [self::today(), $ownerId]);
-        }
-
         if (isset($filters['search']) && $filters['search'] !== '') {
-            $like = '%'.addcslashes($filters['search'], '%_\\').'%';
+            $search = $filters['search'];
+            $like = '%'.addcslashes($search, '%_\\').'%';
+            // Every arm must be indexable or Postgres scans the table: trigram indexes for the text, the code's unique index for a number.
             $query->where(fn (Builder $q) => $q
                 ->where('name_ar', 'ilike', $like)
                 ->orWhere('name_en', 'ilike', $like)
                 ->when($ownerId === null, fn (Builder $q) => $q->orWhere('national_id', 'like', $like))
-                ->orWhereRaw('code::text = ?', [$filters['search']]));
+                ->when(preg_match('/^[1-9]\d{0,8}$/D', $search) === 1, fn (Builder $q) => $q->orWhere('code', (int) $search)));
         }
 
         $page = $query->paginate(min(max($filters['per_page'] ?? 20, 1), 100));
@@ -70,6 +68,28 @@ final class EmployeeService
                 'has_previous_page' => $page->currentPage() > 1,
             ],
         ];
+    }
+
+    /** @return array<string, int> `total` plus one count per employee type, by the type in force today, over the list's scope; `total` also counts employees with no type in force yet, so it can exceed the sum of the types */
+    public function countsByType(?string $ownerId = null): array
+    {
+        $counts = $this->visibleTo($ownerId)->toBase()
+            ->selectRaw(self::CURRENT_TYPE.' as type, count(*) as n', [self::today()])
+            ->groupBy('type')->pluck('n', 'type');
+        $byType = array_map(fn (EmployeeType $t) => (int) ($counts[$t->value] ?? 0), array_column(EmployeeType::cases(), null, 'value'));
+
+        return ['total' => (int) $counts->sum(), ...$byType];
+    }
+
+    /** @return Builder<Employee> live employees, or only those a manager has today */
+    private function visibleTo(?string $ownerId): Builder
+    {
+        $query = Employee::query();
+        if ($ownerId !== null) {
+            $query->whereRaw(self::CURRENT_MANAGER.' = ?', [self::today(), $ownerId]);
+        }
+
+        return $query;
     }
 
     /**

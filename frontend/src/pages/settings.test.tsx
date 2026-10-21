@@ -1,6 +1,7 @@
-import { screen, waitFor, within } from '@testing-library/react'
+import { act, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { afterEach, beforeEach, expect, test, vi } from 'vitest'
+import { queryClient } from '@/lib/query'
 import { json, me, mockFetch, renderApp, renderWithAuth } from '@/test-utils'
 import { SettingsPage } from './settings'
 vi.mock('sonner', () => ({ toast: { success: vi.fn() }, Toaster: () => null }))
@@ -105,6 +106,7 @@ test('residences list renders and a load failure shows the banner', async () => 
   const { unmount } = renderWithAuth(<SettingsPage />, MANAGE, { path: '/settings?tab=residences' })
   expect(await screen.findByText('العجمي')).toBeInTheDocument()
   unmount()
+  queryClient.clear() // a later visit, after the cached list has expired
   mockFetch({ 'GET /api/v1/residences': () => json(500, { error: { code: 'server_error', message: 'تعذر التحميل' } }) })
   renderWithAuth(<SettingsPage />, MANAGE, { path: '/settings?tab=residences' })
   expect(await screen.findByRole('alert')).toHaveTextContent('تعذر التحميل')
@@ -264,7 +266,7 @@ test('site managers dialog pre-checks current managers and saves the ticked ids'
   mockFetch({
     'GET /api/v1/sites': list([sites[0]]),
     'GET /api/v1/sites/s1': () => json(200, { data: { ...sites[0], managers: [{ id: 'u1', name: 'خالد' }], allowance_rules: [] } }),
-    'GET /api/v1/users': list([{ id: 'u1', name: 'خالد', is_active: true }, { id: 'u2', name: 'سامي', is_active: true }]),
+    'GET /api/v1/users': list([{ id: 'u1', name: 'خالد', is_active: true }, { id: 'u2', name: 'سامي', is_active: true }, { id: 'u3', name: 'معطل', is_active: false }]),
     'PUT /api/v1/sites/s1/managers': put,
   })
   renderWithAuth(<SettingsPage />, [...MANAGE, 'site.assign_manager.all'])
@@ -275,7 +277,38 @@ test('site managers dialog pre-checks current managers and saves the ticked ids'
   await user.click(screen.getByRole('checkbox', { name: 'سامي' }))
   await user.click(screen.getByRole('button', { name: 'حفظ' }))
   expect(body(put)).toEqual({ manager_ids: ['u1', 'u2'] })
-  expect(urlWith('/users')).toContain('active=true')
+  expect(screen.queryByRole('checkbox', { name: 'معطل' })).toBeNull() // only active accounts can manage a site
+  expect(urlWith('/users')).toBe('/api/v1/users?per_page=100') // the lookup every page shares
+})
+
+test('switching tabs back to one already shown makes no new request', async () => {
+  mockFetch({ 'GET /api/v1/sites': list(sites), 'GET /api/v1/residences': list(residences), 'GET /api/v1/fares': list([]) })
+  renderWithAuth(<SettingsPage />, MANAGE, { path: '/settings?tab=fares' })
+  await screen.findByRole('row', { name: /العجمي/ })
+  await user.click(screen.getByRole('tab', { name: 'المواقع' }))
+  await screen.findByText('موقع أ')
+  await user.click(screen.getByRole('tab', { name: 'المواصلات' }))
+  await screen.findByRole('row', { name: /العجمي/ })
+  expect(calls('GET').filter(([u]) => String(u).includes('/fares'))).toHaveLength(1)
+})
+
+test('adding a site shows it in the fares grid too', async () => {
+  let all = [sites[0]]
+  mockFetch({
+    'GET /api/v1/sites': () => json(200, { data: all, meta: { pagination: pg(all.length) } }),
+    'GET /api/v1/residences': list(residences),
+    'GET /api/v1/fares': list([]),
+    'POST /api/v1/sites': () => { all = [...all, { id: 's9', name_ar: 'موقع جديد', kind: 'work', leave_code: null, active: true }]; return json(201, { data: {} }) },
+  })
+  renderWithAuth(<SettingsPage />, MANAGE, { path: '/settings?tab=fares' })
+  await screen.findByRole('columnheader', { name: 'موقع أ' })
+  await user.click(screen.getByRole('tab', { name: 'المواقع' }))
+  await user.click(await screen.findByRole('button', { name: 'إضافة موقع' }))
+  await user.type(screen.getByLabelText('الاسم بالعربية'), 'موقع جديد')
+  await user.click(screen.getByRole('button', { name: 'حفظ' }))
+  await screen.findByText('موقع جديد')
+  await user.click(screen.getByRole('tab', { name: 'المواصلات' }))
+  expect(await screen.findByRole('columnheader', { name: 'موقع جديد' })).toBeInTheDocument()
 })
 
 test('without manage permissions there is no add button and no row actions', async () => {
@@ -344,4 +377,52 @@ test('the rules tab is hidden without setting.view', async () => {
   renderWithAuth(<SettingsPage />, MANAGE, { path: '/settings?tab=rules' })
   expect(await screen.findByRole('tab', { name: 'المواقع' })).toHaveAttribute('aria-selected', 'true')
   expect(screen.queryByRole('tab', { name: 'قواعد العمل' })).toBeNull()
+})
+
+test('the rules form starts from the settings as they are now, not from the cache', async () => {
+  let current = rules
+  let release = () => {}
+  let hold: Promise<void> | undefined
+  mockFetch({ 'GET /api/v1/settings': () => (hold ?? Promise.resolve()).then(() => json(200, { data: current })) as unknown as Response, 'GET /api/v1/sites': list(sites) })
+  renderWithAuth(<SettingsPage />, RULES, { path: '/settings?tab=rules' })
+  expect(await screen.findByLabelText('فترة السماح للتأخير (دقيقة)')).toHaveValue('15')
+  await user.click(screen.getByRole('tab', { name: 'المواقع' }))
+  await screen.findByText('موقع أ')
+  current = { ...rules, office_grace_minutes: '20' } // another HR user saved meanwhile
+  hold = new Promise<void>((r) => (release = r))
+  await user.click(screen.getByRole('tab', { name: 'قواعد العمل' }))
+  expect(screen.queryByLabelText('فترة السماح للتأخير (دقيقة)')).toBeNull() // no form from the cached copy while the fresh one is on its way
+  release()
+  expect(await screen.findByLabelText('فترة السماح للتأخير (دقيقة)')).toHaveValue('20')
+})
+
+test('a failed background refetch keeps the rules form and what was typed, with a banner', async () => {
+  let fail = false
+  mockFetch({ 'GET /api/v1/settings': () => (fail ? json(500, { error: { code: 'server_error', message: 'تعذر التحميل' } }) : json(200, { data: rules })) })
+  renderWithAuth(<SettingsPage />, RULES, { path: '/settings?tab=rules' })
+  const grace = await screen.findByLabelText('فترة السماح للتأخير (دقيقة)')
+  await user.type(grace, '5')
+  fail = true
+  await act(() => queryClient.invalidateQueries())
+  expect(await screen.findByRole('alert')).toHaveTextContent('تعذر التحميل')
+  expect(screen.getByLabelText('فترة السماح للتأخير (دقيقة)')).toBe(grace)
+  expect(grace).toHaveValue('155')
+})
+
+test('the managers dialog ticks the managers as they are now, not as cached', async () => {
+  let managers = [{ id: 'u1', name: 'خالد' }]
+  mockFetch({
+    'GET /api/v1/sites': list([sites[0]]),
+    'GET /api/v1/sites/s1': () => json(200, { data: { ...sites[0], managers, allowance_rules: [] } }),
+    'GET /api/v1/users': list([{ id: 'u1', name: 'خالد', is_active: true }, { id: 'u2', name: 'سامي', is_active: true }]),
+  })
+  renderWithAuth(<SettingsPage />, [...MANAGE, 'site.assign_manager.all'])
+  const open = async () => { await rowMenu('موقع أ'); await user.click(await screen.findByRole('menuitem', { name: 'المديرون' })) }
+  await open()
+  expect(await screen.findByRole('checkbox', { name: 'سامي' })).not.toBeChecked()
+  await user.keyboard('{Escape}')
+  await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull())
+  managers = [{ id: 'u1', name: 'خالد' }, { id: 'u2', name: 'سامي' }]
+  await open()
+  await waitFor(() => expect(screen.getByRole('checkbox', { name: 'سامي' })).toBeChecked())
 })

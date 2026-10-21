@@ -3,8 +3,10 @@
 namespace Tests\Feature;
 
 use App\Modules\Employees\Infrastructure\Eloquent\EmployeeTypeChange;
+use App\Modules\Identity\Infrastructure\Eloquent\Role;
 use Illuminate\Foundation\Http\Middleware\TrimStrings;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Facades\DB;
 use Tests\TestCase;
 
 class EmployeesApiTest extends TestCase
@@ -64,6 +66,15 @@ class EmployeesApiTest extends TestCase
         $this->getJson('/api/v1/employees?search='.urlencode('أحمد'))->assertJsonCount(1, 'data');
         $this->getJson('/api/v1/employees?search=29801011234567')->assertJsonCount(1, 'data');
         $this->getJson('/api/v1/employees?per_page=1')->assertJsonPath('meta.pagination.total', 2)->assertJsonPath('meta.pagination.total_pages', 2);
+    }
+
+    public function test_search_matches_the_exact_code(): void
+    {
+        $this->make();
+        $this->make();
+        $this->getJson('/api/v1/employees?search=2')->assertJsonCount(1, 'data')->assertJsonPath('data.0.code', 2);
+        $this->getJson('/api/v1/employees?search=02')->assertJsonCount(0, 'data');
+        $this->getJson('/api/v1/employees?search=99999999999')->assertOk()->assertJsonCount(0, 'data');
     }
 
     public function test_show_ignores_future_pay_change_and_returns_decimal_strings(): void
@@ -158,5 +169,28 @@ class EmployeesApiTest extends TestCase
 
         EmployeeTypeChange::where('employee_id', $id)->where('type', 'engineer')->delete();
         $this->getJson('/api/v1/employees')->assertJsonPath('data.0.current_type', 'office');
+    }
+
+    public function test_summary_counts_live_employees_by_the_type_in_force_today_in_one_query(): void
+    {
+        $this->make();
+        $moved = $this->make();
+        $this->make(['type' => 'day_laborer', 'salary' => null, 'daily_wage' => '350']);
+        $gone = $this->make();
+        $this->postJson("/api/v1/employees/$moved/type-changes", ['type' => 'engineer', 'effective_from' => '2026-02-01'])->assertCreated();
+        $this->postJson("/api/v1/employees/$moved/type-changes", ['type' => 'permanent_worker', 'effective_from' => '2999-01-01'])->assertCreated();
+        $this->deleteJson("/api/v1/employees/$gone")->assertNoContent();
+
+        DB::enableQueryLog();
+        $this->getJson('/api/v1/employees/summary')->assertOk()->assertExactJsonStructure(['data', 'meta' => ['request_id']])
+            ->assertJsonPath('data', ['total' => 3, 'office' => 1, 'engineer' => 1, 'permanent_worker' => 0, 'day_laborer' => 1]);
+        $this->assertCount(1, preg_grep('/from "employees"/', array_column(DB::getQueryLog(), 'query')));
+    }
+
+    public function test_summary_needs_employee_view(): void
+    {
+        Role::create(['slug' => 'empty', 'name' => 'Empty', 'name_ar' => 'فارغ']);
+        $this->signIn('empty');
+        $this->getJson('/api/v1/employees/summary')->assertStatus(403)->assertJsonPath('error.code', 'permission_denied');
     }
 }

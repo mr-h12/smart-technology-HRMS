@@ -12,6 +12,7 @@ It replaces 6 Excel workbooks. Standalone now; a REST API for the company's Lara
 - `docs/client-questions.md`: questions still open with the client, by release. Check it before building a module; the client may change settled defaults during the build.
 - `docs/adr/`: decisions that are hard to reverse (stack, wage model).
 - `docs/templates/`: the client's 11 official forms. PDFs we generate must match these layouts.
+- `docs/coding-standards.md`: the mandatory engineering standard for all code (adapted from the CRM). Read it before writing code. Where docs differ, the first in this order wins: CLAUDE.md, `docs/hrms-module-plan.md`, `docs/calculations.md`, this standard, then everything else (CONTEXT.md is the glossary for terms, the ADRs record decisions, the templates are the PDF layouts); see its §1.
 
 ## Stack
 Mirror the CRM (github.com/mr-h12/smart-technology-CRM, see `docs/adr/0001-mirror-crm-stack.md`): Laravel 13 / PHP 8.4, PostgreSQL 17, Redis queues, Docker; `/api/v1`, UUIDv7 ids, the CRM response envelope; modules `Domain/Application/Infrastructure/Presentation` enforced by deptrac; PHPStan; PHPUnit; the CRM's custom RBAC, audit log and browsershot PDF queue. Frontend keeps the demo's look (Tailwind 4, shadcn/Radix, tokens, fonts) and uses react-i18next; the demo's mock data and DOM-rewrite translator are not carried over.

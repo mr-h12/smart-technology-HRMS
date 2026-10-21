@@ -47,7 +47,9 @@ final class BearerSessionResolver
             return null;
         }
 
-        $session->update(['last_activity_at' => $now]);
+        if (IdleTimeout::needsTouch($session->last_activity_at, $now)) {
+            $session->update(['last_activity_at' => $now]);
+        }
         $request->attributes->set(SessionAttribute::NAME, (string) $session->id);
 
         return $user;

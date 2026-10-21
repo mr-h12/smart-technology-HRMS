@@ -1,10 +1,10 @@
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { Button } from '@/components/ui/button'
 import { Dialog, DialogBody, DialogContent, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
-import { ApiError, apiList } from '@/lib/api'
+import { ApiError } from '@/lib/api'
 
 export type Row = Record<string, any> // eslint-disable-line @typescript-eslint/no-explicit-any
 export type Errs = Record<string, string>
@@ -99,25 +99,7 @@ export function useForm(initial: Row = {}) {
   return { form, setForm, set: (k: string, v: string) => setForm((f) => ({ ...f, [k]: v })) }
 }
 
-/** Loads a list endpoint; `total` lets pages warn when more rows exist than were fetched; `loading` is true until the first answer. */
-export function useList(path: string) {
-  const [rows, setRows] = useState<Row[]>([])
-  const [total, setTotal] = useState(0)
-  const [err, setErr] = useState<unknown>()
-  const [loading, setLoading] = useState(true)
-  const reload = useCallback(() => {
-    apiList<Row>(path)
-      .then((r) => {
-        setErr(undefined)
-        setRows(r.data)
-        setTotal(r.meta.pagination.total)
-      })
-      .catch(setErr)
-      .finally(() => setLoading(false))
-  }, [path])
-  useEffect(reload, [reload])
-  return { rows, total, err, loading, reload }
-}
+export { useList } from '@/lib/query'
 
 /** Controlled-dialog props for a dialog opened from a row menu; it mounts only while open. */
 export type Controlled = { open?: boolean; onOpenChange?: (open: boolean) => void }

@@ -21,12 +21,12 @@ final class AuthorizePermission
     /** @param  Closure(Request): Response  $next */
     public function handle(Request $request, Closure $next, string $ability): Response
     {
-        $userId = $request->user()?->getAuthIdentifier();
-        if ($userId === null) {
+        $user = $request->user();
+        if ($user === null) {
             throw new AuthenticationException;
         }
 
-        $decision = $this->authorize->decide((string) $userId, $ability);
+        $decision = $this->authorize->decide($user, $ability);
         if (! $decision->granted()) {
             throw AuthorizationRefused::of($ability);
         }

@@ -100,5 +100,9 @@ test('clear filters resets the query and the page', async () => {
   await user.selectOptions(screen.getByLabelText('نوع السجل'), 'sites')
   await waitFor(() => expect(String(list.mock.lastCall?.[0])).toMatch(/entity_type=sites.*page=1|page=1.*entity_type=sites/))
   await user.click(screen.getByRole('button', { name: 'مسح عوامل التصفية' }))
-  await waitFor(() => expect(String(list.mock.lastCall?.[0])).not.toContain('entity_type'))
+  // back on the first query, which the cache answers without a new request
+  expect(screen.getByLabelText('نوع السجل')).toHaveValue('')
+  expect(screen.getByText('صفحة 1 من 3')).toBeInTheDocument()
+  expect(screen.queryByRole('button', { name: 'مسح عوامل التصفية' })).toBeNull()
+  expect(String(list.mock.calls[0][0])).not.toContain('entity_type')
 })

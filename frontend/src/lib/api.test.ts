@@ -55,3 +55,11 @@ test('a 401 with a token clears it and calls the handler; without a token it onl
   await api('/auth/login', { method: 'POST', body: {} }).catch(() => {})
   expect(onUnauthorized).toHaveBeenCalledTimes(1)
 })
+
+test('passes the abort signal to fetch', async () => {
+  const f = vi.fn(async (_url: string, _init?: RequestInit) => new Response(JSON.stringify({ data: [], meta: {} }), { status: 200 }))
+  vi.stubGlobal('fetch', f)
+  const signal = new AbortController().signal
+  await apiList('/employees', { signal })
+  expect(f.mock.calls[0][1]?.signal).toBe(signal)
+})
