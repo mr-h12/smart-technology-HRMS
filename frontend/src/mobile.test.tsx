@@ -68,7 +68,7 @@ test('the manifest is valid and its icons exist', () => {
   expect(m.orientation).toBeUndefined()
   expect(m.theme_color).toMatch(/^#[0-9a-f]{6}$/i)
   expect(m.background_color).toMatch(/^#[0-9a-f]{6}$/i)
-  expect(m.icons.length).toBeGreaterThan(0)
+  expect(m.icons.map((i: { sizes: string; purpose: string }) => `${i.sizes} ${i.purpose}`)).toEqual(expect.arrayContaining(['192x192 any', '512x512 any', '512x512 maskable']))
   for (const icon of m.icons) expect(published, icon.src).toContain(icon.src)
 })
 
