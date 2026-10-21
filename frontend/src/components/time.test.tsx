@@ -89,6 +89,21 @@ test('a 12-hour time typed with no AM/PM is not guessed: it asks for one and goe
   expect(box()).toHaveAccessibleDescription('PM')
 })
 
+test('after an AM/PM click the box has the shared focus ring, not the warning one', async () => {
+  render(<Form />)
+  await user.click(pm()) // the click puts the cursor in the box
+  expect(box()).toHaveFocus()
+  expect(box()).toHaveClass('focus-visible:outline-ring')
+  expect(box()).not.toHaveClass('focus-visible:outline-destructive')
+})
+
+test('a box that needs AM/PM has the warning ring', async () => {
+  render(<Form />)
+  await user.type(box(), '3:30')
+  expect(box()).toHaveClass('focus-visible:outline-destructive')
+  expect(box()).not.toHaveClass('focus-visible:outline-ring')
+})
+
 test('choosing AM/PM while the box is not focused puts the cursor in the box', async () => {
   render(<Form />)
   await user.click(pm())

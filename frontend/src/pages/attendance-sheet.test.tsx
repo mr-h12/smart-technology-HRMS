@@ -346,6 +346,29 @@ test('more than 500 rows in one action are refused with a toast', async () => {
   expect(bulk).not.toHaveBeenCalled()
 })
 
+const TIP = 'اكتب الوقت ثم اختر ص أو م، أو اكتبه بنظام 24 ساعة مثل 0920.'
+const tip = () => screen.queryByText((_, el) => el?.tagName === 'P' && el.textContent === TIP)
+
+test('the office sheet tells an editor how to type a time, with the example digits isolated left to right', async () => {
+  mockFetch({ ...routes, 'GET /api/v1/attendance/period': officePeriod, 'GET /api/v1/attendance/sheet': () => sheet(office, 'office') })
+  edit('/attendance?group=office')
+  await table()
+  expect(tip()).toBeInTheDocument()
+  expect(tip()!.querySelector('bdi[dir="ltr"]')).toHaveTextContent('0920')
+})
+
+test('no typing tip for a field group or for a reader of the office sheet', async () => {
+  mockFetch(routes)
+  const { unmount } = edit()
+  await table()
+  expect(tip()).toBeNull()
+  unmount()
+  mockFetch({ ...routes, 'GET /api/v1/attendance/period': officePeriod, 'GET /api/v1/attendance/sheet': () => sheet(office, 'office') })
+  open('/attendance?group=office')
+  await table()
+  expect(tip()).toBeNull()
+})
+
 test('an office in-time edit posts site null and the time', async () => {
   const bulk = bulkOk()
   mockFetch({ ...routes, 'GET /api/v1/attendance/period': officePeriod, 'GET /api/v1/attendance/sheet': () => sheet(office, 'office'), 'POST /api/v1/attendance/days/bulk': bulk })

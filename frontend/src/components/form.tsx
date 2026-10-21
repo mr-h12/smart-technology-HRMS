@@ -168,7 +168,8 @@ export function TimeInput({ value, onChange, label, quietHint, className, disabl
       <div className="flex gap-1.5">
         <Input {...rest} ref={box} type="text" dir="ltr" inputMode="numeric" autoComplete="off" placeholder="--:--" disabled={disabled} value={draft.text}
           aria-invalid={rest['aria-invalid'] || needsChoice || undefined} data-needs-period={needsChoice || undefined} aria-describedby={[rest['aria-describedby'], descId].filter(Boolean).join(' ')}
-          className={cn('h-11 flex-1 tabular sm:h-9 rtl:text-right', className)}
+          // the shared focus ring, except on a box that needs AM/PM or has an error: there it turns to the warning colour
+          className={cn('h-11 flex-1 tabular sm:h-9 rtl:text-right', (rest['aria-invalid'] || needsChoice) && 'focus-visible:border-destructive focus-visible:outline-destructive', className)}
           onChange={(e) => emit(e.target.value, draft.pm)}
           onBlur={() => { const v = to24(draft.text, draft.pm); if (isHhmm(v)) setDraft(to12(v)) }} />
         <div role="group" aria-label={t('time.period', { field: label })} className="flex shrink-0 overflow-hidden rounded-md border border-input bg-card">

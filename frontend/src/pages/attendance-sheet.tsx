@@ -1,7 +1,7 @@
 import { useQueryClient } from '@tanstack/react-query'
 import { CheckCheck, ClipboardPaste, Lock, ScanBarcode, Undo2, Users } from 'lucide-react'
 import { useEffect, useId, useRef, useState } from 'react'
-import { useTranslation } from 'react-i18next'
+import { Trans, useTranslation } from 'react-i18next'
 import { toast } from 'sonner'
 import { EmptyState } from '@/components/common/EmptyState'
 import { cairoToday, ErrorBanner, intlLocale, localName, ltrDates, type Row, SelectField } from '@/components/form'
@@ -396,6 +396,11 @@ export function DaySheet({ group, date, period, onDate, onOpenDay }: { group: st
             <div role="status" aria-label={t('attendance.sheet.command')} className="flex min-h-6 flex-wrap items-center gap-1.5">
               {batch ? <BatchPreview batch={batch} count={shown.length} /> : <span className="text-xs text-muted-foreground">{t(editable ? 'attendance.sheet.commandHelp' : 'attendance.sheet.commandFind')}</span>}
             </div>
+            {office && editable && (
+              <p className="text-xs text-muted-foreground">
+                <Trans i18nKey="attendance.sheet.timeTip" components={{ n: <bdi dir="ltr" /> }} />
+              </p>
+            )}
             <ul aria-label={t('attendance.sheet.keys.label')} className="hidden flex-wrap gap-x-4 gap-y-1 text-xs text-muted-foreground lg:flex">
               {KEYS.filter(([, , write]) => editable || !write).map(([glyphs, key]) => (
                 <li key={key} className="flex items-center gap-1">

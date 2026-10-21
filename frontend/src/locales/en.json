@@ -551,6 +551,7 @@
       "command": "Quick entry",
       "commandHint": "ID 12 · list 12, 15 · range 10-20",
       "commandHelp": "Enter marks the IDs present; a name only selects the matches.",
+      "timeTip": "Type the time, then choose AM or PM, or type it in 24-hour form, like <n>0920</n>.",
       "commandFind": "Type IDs or part of a name to find employees.",
       "matched": "{{count}} matched",
       "unknown": "Not on this sheet: {{ids}}",
