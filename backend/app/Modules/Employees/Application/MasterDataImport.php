@@ -125,10 +125,13 @@ final class MasterDataImport
     private function sheets(string $path): array
     {
         foreach ($this->reader->headers($path) as $sheet => $headers) {
+            if (! isset(self::COLUMNS[$sheet])) {   // a misspelt sheet would otherwise be dropped unread
+                throw new DomainException("Sheet {$sheet} is not one this import reads (".implode(', ', array_keys(self::COLUMNS)).').');
+            }
             if (count($headers) !== count(array_unique($headers))) {
                 throw new DomainException("Sheet {$sheet} repeats a header in row 1.");
             }
-            $unknown = array_diff($headers, self::COLUMNS[$sheet] ?? $headers);
+            $unknown = array_diff($headers, self::COLUMNS[$sheet]);
             if ($unknown !== []) {
                 throw new DomainException("Sheet {$sheet} has an unknown header in column ".((int) array_key_first($unknown) + 1).'.');
             }

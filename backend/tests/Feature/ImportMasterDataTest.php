@@ -207,6 +207,19 @@ class ImportMasterDataTest extends TestCase
     }
 
     #[Test]
+    public function refuses_an_unwritable_report_path_before_importing(): void
+    {
+        $before = $this->counts();
+
+        [$code, $out] = $this->import($this->workbook($this->valid()), ['--commit' => true, '--report' => '/nonexistent-dir/r.csv']);
+
+        $this->assertNotSame(0, $code);
+        $this->assertStringContainsString('The report file cannot be created', $out);
+        $this->assertStringContainsString('nothing was saved', $out);
+        $this->assertSame($before, $this->counts());
+    }
+
+    #[Test]
     public function refuses_a_malformed_workbook_before_any_write(): void
     {
         $before = $this->counts();
@@ -214,9 +227,12 @@ class ImportMasterDataTest extends TestCase
         $duplicate = $this->workbook([...$valid, 'sites' => [['name_ar', 'name_en', 'name_en'], ['موقع أ', 'Site A', 'A'], ['موقع ب', 'Site B', 'B']]]);   // valid but for the repeat
         $unknown = $this->valid();
         $unknown['employees'][0]['salry'] = '9000';
+        $misnamed = $this->valid();
+        $misnamed['fare_override'] = $misnamed['fare_overrides'];   // a typo would silently drop the overrides
+        unset($misnamed['fare_overrides']);
         unset($valid['employees']);
 
-        foreach ([$duplicate, $this->workbook($unknown), $this->workbook($valid)] as $path) {
+        foreach ([$duplicate, $this->workbook($unknown), $this->workbook($misnamed), $this->workbook($valid)] as $path) {
             [$code, $out] = $this->import($path, ['--commit' => true]);
             $this->assertNotSame(0, $code, $out);
             $this->assertStringContainsString('nothing was saved', $out);

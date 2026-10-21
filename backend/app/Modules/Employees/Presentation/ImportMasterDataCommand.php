@@ -43,8 +43,26 @@ final class ImportMasterDataCommand extends Command
                 return $this->refuse("That account lacks the permission {$ability}.");
             }
         }
+        // Opened before the import: a commit whose ref→code mapping cannot be saved must not happen.
+        $reportPath = $text($this->option('report'));
+        $report = $reportPath === '' ? null : $this->openReport($reportPath);
+        if ($reportPath !== '' && $report === null) {
+            return $this->refuse('The report file cannot be created at that path.');
+        }
         Auth::setUser($actor);   // the audit log and created_by stamp this account
 
+        try {
+            return $this->import($import, $file, $from, $report);
+        } finally {
+            if ($report !== null) {
+                fclose($report);
+            }
+        }
+    }
+
+    /** @param  resource|null  $report */
+    private function import(MasterDataImport $import, string $file, string $from, $report): int
+    {
         $commit = (bool) $this->option('commit');
         try {
             $result = $import->run($file, $from, $commit);
@@ -60,9 +78,11 @@ final class ImportMasterDataCommand extends Command
             return $this->refuse(count($result['errors']).' errors.');
         }
 
-        $report = $text($this->option('report'));
-        if ($report !== '') {
-            $this->writeReport($report, $result['codes']);
+        if ($report !== null) {
+            fputcsv($report, ['ref', 'code'], escape: '');
+            foreach ($result['codes'] as $c) {
+                fputcsv($report, [$c['ref'], $c['code']], escape: '');
+            }
         }
         $this->info($commit ? 'COMMITTED' : 'DRY RUN: nothing was saved');
 
@@ -77,21 +97,15 @@ final class ImportMasterDataCommand extends Command
         return self::FAILURE;
     }
 
-    /** @param  list<array{ref: string, code: int}>  $codes */
-    private function writeReport(string $path, array $codes): void
+    /** @return resource|null the report, emptied and readable by its owner only; null when it cannot be created */
+    private function openReport(string $path)
     {
-        touch($path);
-        chmod($path, 0600);   // before any content is written: only the owner reads it
-        $out = fopen($path, 'w');
-        if ($out === false) {
-            $this->error('The report could not be written.');
+        // @: a missing directory is answered by the null, not by an ErrorException.
+        if (! @touch($path) || ! @chmod($path, 0600)) {   // the mode is set before any content is written
+            return null;
+        }
+        $out = @fopen($path, 'w');
 
-            return;
-        }
-        fputcsv($out, ['ref', 'code'], escape: '');
-        foreach ($codes as $c) {
-            fputcsv($out, [$c['ref'], $c['code']], escape: '');
-        }
-        fclose($out);
+        return $out === false ? null : $out;
     }
 }
