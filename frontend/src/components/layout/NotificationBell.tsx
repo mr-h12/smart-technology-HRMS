@@ -41,7 +41,7 @@ export function NotificationBell() {
         >
           <Bell className="size-5" aria-hidden />
           {unread > 0 && (
-            <span aria-hidden className="absolute -end-1.5 -top-1.5 grid h-5 min-w-5 place-items-center rounded-full bg-primary px-1 text-[11px] font-semibold text-primary-foreground tabular-nums">
+            <span aria-hidden className="absolute -end-1 -top-1 grid h-5 min-w-5 place-items-center rounded-full bg-primary px-1 text-[11px] font-semibold text-primary-foreground tabular-nums">
               {unread > 9 ? '9+' : unread}
             </span>
           )}
@@ -68,8 +68,8 @@ export function NotificationBell() {
             {n.data.groups.map((g) => (
               <DropdownMenuItem key={`${g.group}-${g.period_start}`} onSelect={() => open(n, g.group, g.period_start)} className={cn('flex-col items-start gap-0.5', !n.read_at && 'font-semibold')}>
                 <span>
+                  {!n.read_at && <><span className="sr-only">{t('notifications.unread')}</span> </>}
                   {t('notifications.missingDays.line', { group: t(`attendance.group.${g.group}`), count: g.missing })}
-                  {!n.read_at && <span className="sr-only"> {t('notifications.unread')}</span>}
                 </span>
                 <span className="text-xs font-normal text-muted-foreground tabular-nums">{ltrDates(t('notifications.missingDays.period', { start: g.period_start, end: g.period_end }))}</span>
               </DropdownMenuItem>

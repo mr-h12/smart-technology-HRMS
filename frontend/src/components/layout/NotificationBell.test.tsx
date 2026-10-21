@@ -2,12 +2,16 @@ import { act, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { useLocation } from 'react-router-dom'
 import { afterEach, expect, test, vi } from 'vitest'
+import i18n from '@/i18n'
 import { queryClient } from '@/lib/query'
 import { json, mockFetch, pagination, renderWithAuth } from '@/test-utils'
 import { NotificationBell } from './NotificationBell'
 
 const user = userEvent.setup()
-afterEach(() => vi.unstubAllGlobals())
+afterEach(async () => {
+  vi.unstubAllGlobals()
+  await i18n.changeLanguage('ar')
+})
 
 const missing = (id: string, read_at: string | null, groups: { group: string; period_start: string; period_end: string; missing: number }[]) => ({
   id, type: 'attendance_missing_days', date: '2026-10-20', read_at, data: { date: '2026-10-20', groups },
@@ -33,10 +37,10 @@ test('the bell shows the unread count and the missing-days lines', async () => {
   await user.click(bell)
   const items = await screen.findAllByRole('menuitem')
   expect(items).toHaveLength(3)
-  expect(items[1]).toHaveTextContent('أيام غير مسجلة في المهندسون: 22')
+  expect(items[1]).toHaveTextContent('أيام غير مسجلة — المهندسون: 22')
   expect(items[1]).toHaveTextContent('2026-09-26 – 2026-10-25')
-  expect(items[0]).toHaveTextContent('أيام غير مسجلة في المهندسون: 3')
-  expect(items[2]).toHaveTextContent('أيام غير مسجلة في عمال اليومية: 4')
+  expect(items[0]).toHaveTextContent('أيام غير مسجلة — المهندسون: 3')
+  expect(items[2]).toHaveTextContent('أيام غير مسجلة — عمال اليومية: 4')
   expect(screen.getByText(/أيام حضور غير مسجلة حتى/, { selector: '.font-semibold' })).toBeInTheDocument() // the unread one is bold
 })
 
@@ -110,8 +114,25 @@ test('each notification is a group named by its title, and unread lines say so',
   await user.click(await screen.findByRole('button', { name: 'فتح الإشعارات (1 غير مقروء)' }))
   const groups = await screen.findAllByRole('group', { name: 'أيام حضور غير مسجلة حتى 2026-10-20' })
   expect(groups).toHaveLength(2)
-  expect(within(groups[0]).getByRole('menuitem', { name: /المهندسون: 22/ })).toHaveAccessibleName(/غير مقروء/)
+  // the unread word comes first, then a pause, and the range follows the count directly
+  expect(within(groups[0]).getByRole('menuitem', { name: /المهندسون: 22/ })).toHaveAccessibleName(/^غير مقروء، أيام غير مسجلة — المهندسون: 22\s*2026-09-26 – 2026-10-25$/)
   expect(within(groups[1]).getByRole('menuitem', { name: /عمال اليومية: 4/ })).not.toHaveAccessibleName(/غير مقروء/)
+})
+
+test('in English an unread line also starts with the unread word', async () => {
+  await i18n.changeLanguage('en')
+  mockFetch({ 'GET /api/v1/notifications': inbox([unread]) })
+  renderWithAuth(<NotificationBell />, [])
+  await user.click(await screen.findByRole('button', { name: 'Open notifications (1 unread)' }))
+  expect(await screen.findByRole('menuitem', { name: /Engineers: 22/ })).toHaveAccessibleName(/^unread, Missing days, Engineers: 22\s*2026-09-26 – 2026-10-25$/)
+})
+
+test('the badge stays on the bell, clear of the account button beside it', async () => {
+  mockFetch({ 'GET /api/v1/notifications': inbox([unread]) })
+  renderWithAuth(<NotificationBell />, [])
+  const badge = (await screen.findByRole('button', { name: 'فتح الإشعارات (1 غير مقروء)' })).querySelector('span')!
+  expect(badge).toHaveClass('-end-1', '-top-1')
+  expect(badge).not.toHaveClass('-end-1.5', '-top-1.5')
 })
 
 test('while loading, the menu says so to screen readers', async () => {
