@@ -4,11 +4,10 @@ declare(strict_types=1);
 
 namespace App\Modules\Employees\Presentation;
 
+use App\Modules\Employees\Application\EmployeeRules;
 use App\Modules\Employees\Application\EmployeeService;
 use App\Modules\Employees\Domain\DocumentKind;
 use App\Modules\Employees\Domain\EmployeeType;
-use App\Modules\Employees\Domain\Gender;
-use App\Modules\Employees\Domain\PayMethod;
 use App\Modules\Identity\Presentation\RequestScope;
 use App\Support\Http\ApiEnvelope;
 use Illuminate\Http\JsonResponse;
@@ -18,8 +17,6 @@ use Illuminate\Validation\Rule;
 
 final class EmployeeController
 {
-    private const MONEY = ['nullable', 'regex:/^\d{1,12}(\.\d{1,6})?$/D'];
-
     public function __construct(private readonly EmployeeService $employees) {}
 
     public function index(Request $request): JsonResponse
@@ -41,12 +38,7 @@ final class EmployeeController
 
     public function store(Request $request): JsonResponse
     {
-        $data = $request->validate([
-            ...$this->identity(false),
-            'type' => ['required', Rule::enum(EmployeeType::class)],
-            ...$this->pay(),
-            'effective_from' => ['required', 'date_format:Y-m-d'],
-        ]);
+        $data = $request->validate(EmployeeRules::store());
 
         return ApiEnvelope::single($request, $this->employees->create($data), 201);
     }
@@ -58,7 +50,7 @@ final class EmployeeController
 
     public function update(Request $request, string $employee): JsonResponse
     {
-        $data = $request->validate($this->identity(true, $employee));
+        $data = $request->validate(EmployeeRules::identity(true, $employee));
 
         return ApiEnvelope::single($request, $this->employees->update($employee, $data));
     }
@@ -82,7 +74,7 @@ final class EmployeeController
 
     public function payChange(Request $request, string $employee): JsonResponse
     {
-        $data = $request->validate([...$this->pay(), 'effective_from' => ['required', 'date_format:Y-m-d']]);
+        $data = $request->validate([...EmployeeRules::pay(), 'effective_from' => ['required', 'date_format:Y-m-d']]);
 
         return ApiEnvelope::single($request, $this->employees->addPayChange($employee, $data), 201);
     }
@@ -106,46 +98,5 @@ final class EmployeeController
         ]);
 
         return ApiEnvelope::single($request, $this->employees->upsertDocument($employee, DocumentKind::from($kind), $data));
-    }
-
-    /** @return array<string, array<mixed>> */
-    private function pay(): array
-    {
-        return [
-            'salary' => self::MONEY,
-            'raise' => self::MONEY,
-            'insured_basic' => self::MONEY,
-            'daily_wage' => self::MONEY,
-            'shift_start' => ['nullable', 'date_format:H:i'],
-            'shift_end' => ['nullable', 'date_format:H:i'],
-        ];
-    }
-
-    /** @return array<string, array<mixed>> */
-    private function identity(bool $patch, ?string $id = null): array
-    {
-        $r = fn (array $rules) => $patch ? ['sometimes', ...$rules] : $rules;
-        $unique = fn (string $col) => Rule::unique('employees', $col)->ignore($id);
-
-        return [
-            'name_ar' => $r(['required', 'string']),
-            'name_en' => ['nullable', 'string'],
-            'fingerprint_name' => ['nullable', 'string', $unique('fingerprint_name')],
-            'gender' => $r(['required', Rule::enum(Gender::class)]),
-            'national_id' => ['nullable', 'digits:14', $unique('national_id')],
-            'insurance_no' => ['nullable', 'string'],
-            'phone' => ['nullable', 'string'],
-            'address' => ['nullable', 'string'],
-            'department' => ['nullable', 'string'],
-            'residence_id' => ['nullable', 'uuid', Rule::exists('residences', 'id')->whereNull('deleted_at')],
-            'pay_method' => ['sometimes', Rule::enum(PayMethod::class)],
-            'bank_account' => ['nullable', 'string'],
-            'hire_date' => ['nullable', 'date_format:Y-m-d'],
-            'contract_end_date' => ['nullable', 'date_format:Y-m-d'],
-            'termination_date' => ['nullable', 'date_format:Y-m-d'],
-            'termination_reason' => ['nullable', 'string'],
-            'hr_notes' => ['nullable', 'string'],
-            'crm_user_id' => ['nullable', 'uuid'],
-        ];
     }
 }

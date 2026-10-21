@@ -5,9 +5,8 @@ declare(strict_types=1);
 namespace App\Modules\Sites\Presentation;
 
 use App\Modules\Identity\Presentation\RequestScope;
+use App\Modules\Sites\Application\SiteRules;
 use App\Modules\Sites\Application\SiteService;
-use App\Modules\Sites\Domain\AllowanceMode;
-use App\Modules\Sites\Domain\LeaveCode;
 use App\Modules\Sites\Domain\Name;
 use App\Modules\Sites\Domain\SiteKind;
 use App\Support\Http\ApiEnvelope;
@@ -56,11 +55,7 @@ final class SiteController
 
     public function allowanceRule(Request $request, string $site): JsonResponse
     {
-        $data = $request->validate([
-            'effective_from' => ['required', 'date_format:Y-m-d'],
-            'mode' => ['required', Rule::enum(AllowanceMode::class)],
-            'value' => ['nullable', 'regex:/^\d{1,12}(\.\d{1,6})?$/D'],
-        ]);
+        $data = $request->validate(SiteRules::allowanceRule());
 
         return ApiEnvelope::single($request, $this->sites->addRule($site, $data), 201);
     }
@@ -81,15 +76,7 @@ final class SiteController
         if ($request->has('name_ar')) {
             $request->merge(['name_ar' => Name::normalise($request->input('name_ar'))]);
         }
-        $r = fn (array $rules) => $patch ? ['sometimes', ...$rules] : $rules;
 
-        return $request->validate([
-            'name_ar' => $r(['required', 'string', Rule::unique('sites', 'name_ar')->whereNull('deleted_at')->ignore($id)]),
-            'name_en' => ['nullable', 'string'],
-            'kind' => $r(['required', Rule::enum(SiteKind::class)]),
-            'leave_code' => ['nullable', Rule::enum(LeaveCode::class)],
-            'outside_alexandria' => ['sometimes', 'boolean'],
-            'active' => ['sometimes', 'boolean'],
-        ]);
+        return $request->validate(SiteRules::site($patch, $id));
     }
 }

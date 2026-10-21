@@ -5,12 +5,12 @@ declare(strict_types=1);
 namespace App\Modules\Sites\Presentation;
 
 use App\Modules\Sites\Application\FareService;
+use App\Modules\Sites\Application\SiteRules;
 use App\Modules\Sites\Domain\Name;
 use App\Support\Http\ApiEnvelope;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Http\Response;
-use Illuminate\Validation\Rule;
 
 final class ResidenceController
 {
@@ -51,8 +51,7 @@ final class ResidenceController
         if ($request->has('name_ar')) {
             $request->merge(['name_ar' => Name::normalise($request->input('name_ar'))]);
         }
-        $rules = ['required', 'string', Rule::unique('residences', 'name_ar')->whereNull('deleted_at')->ignore($id)];
 
-        return $request->validate(['name_ar' => $patch ? ['sometimes', ...$rules] : $rules]);
+        return $request->validate(SiteRules::residence($patch, $id));
     }
 }
