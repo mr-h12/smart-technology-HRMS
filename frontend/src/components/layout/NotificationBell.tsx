@@ -47,7 +47,7 @@ export function NotificationBell() {
           )}
         </button>
       </DropdownMenuTrigger>
-      <DropdownMenuContent align="end" className="max-h-[min(32rem,var(--radix-dropdown-menu-content-available-height))] w-80 max-w-[calc(100vw-1.5rem)] overflow-y-auto">
+      <DropdownMenuContent align="end" className="max-h-[min(32rem,var(--radix-dropdown-menu-content-available-height))] w-80 max-w-[calc(100vw-1.5rem)] overflow-y-auto overscroll-contain">
         <DropdownMenuLabel className="text-sm text-foreground">{t('notifications.title')}</DropdownMenuLabel>
         <DropdownMenuSeparator />
         {err && <p className="px-2.5 py-2 text-sm text-destructive">{t('notifications.loadFailed')}</p>}

@@ -1,3 +1,5 @@
+/// <reference types="node" />
+import { readFileSync } from 'node:fs'
 import { act, render, renderHook, screen } from '@testing-library/react'
 import { afterEach, expect, test } from 'vitest'
 import '@/i18n'
@@ -9,6 +11,9 @@ import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { useTheme } from '@/hooks/useTheme'
 import indexHtml from '../index.html?raw'
 import manifest from '../public/manifest.webmanifest?raw'
+
+// vitest stubs every CSS import (even ?raw) as '', so the stylesheet is read from disk
+const css = readFileSync(`${import.meta.dirname}/index.css`, 'utf8')
 
 // the keys only: the files in public/, which the build copies to the site root
 const published = Object.keys(import.meta.glob('../public/*')).map((f) => f.replace('../public', ''))
@@ -78,6 +83,17 @@ test('index.html links the manifest, allows pinch zoom and asks for a full-scree
   expect(meta('apple-mobile-web-app-title')).toBe('HR سمارت')
   const media = [...doc.querySelectorAll('meta[name="theme-color"]')].map((m) => m.getAttribute('media'))
   expect(media).toEqual(['(prefers-color-scheme: light)', '(prefers-color-scheme: dark)'])
+})
+
+// index.html and the manifest cannot read CSS, so they repeat the token values; this keeps the copies equal to index.css.
+test('the colours in index.html and the manifest are the tokens in index.css', () => {
+  const token = (block: string, name: string) => css.match(new RegExp(`\\n${block} \\{[^}]*?--${name}: (#[0-9a-f]{6});`, 'i'))?.[1]
+  const doc = new DOMParser().parseFromString(indexHtml, 'text/html')
+  const bars = [...doc.querySelectorAll('meta[name="theme-color"]')].map((m) => m.getAttribute('content'))
+  expect(bars).toEqual([token(':root', 'card'), token('.dark', 'card')])
+  expect(doc.querySelector('head script')?.textContent, 'the bootstrap copies a meta, never its own colour').not.toMatch(/#[0-9a-f]{3,6}\b/i)
+  const m = JSON.parse(manifest)
+  expect([m.theme_color, m.background_color]).toEqual([token(':root', 'card'), token(':root', 'background')])
 })
 
 // The bar colour is the header's (--card), read from the stylesheet, so it never drifts from the tokens.

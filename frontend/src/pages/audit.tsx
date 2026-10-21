@@ -51,7 +51,7 @@ function Details({ entry, onClose }: { entry: Row; onClose: () => void }) {
             {time(entry.occurred_at)} · {entry.user?.name ?? '—'}
           </SheetDescription>
         </div>
-        <div className="grid flex-1 content-start gap-4 overflow-y-auto p-5 sm:grid-cols-2">
+        <div className="grid flex-1 content-start gap-4 overflow-y-auto overscroll-contain p-5 sm:grid-cols-2">
           {sides.map(([k, values]) => (
             <section key={k} aria-label={t(`audit.${k}`)} className="min-w-0 rounded-lg border p-3">
               <h3 className="mb-2 text-xs font-semibold text-muted-foreground">{t(`audit.${k}`)}</h3>
