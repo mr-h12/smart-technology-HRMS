@@ -23,15 +23,16 @@ export function queryKey(path: string): string[] {
 /** Lookups several pages share. One exact string each: query keys depend on query-string order, so every caller must use these to hit one cache entry. */
 export const USERS = '/users?per_page=100'
 export const RESIDENCES = '/residences?per_page=100'
+export const SITES = '/sites?per_page=100'
 
 // Both hooks cache the whole envelope ({data, meta}) under the same key shape, so they never collide.
 const fetchEnvelope = (path: string) => ({ signal }: { signal: AbortSignal }) => apiList<Row>(path, { signal })
 const none: Row[] = []
 
-/** Loads a list endpoint; `total` lets pages warn when more rows exist than were fetched; `loading` is true until the first answer. */
-export function useList(path: string) {
+/** Loads a list endpoint; `total` lets pages warn when more rows exist than were fetched; `loading` is true until the first answer; `refetchInterval` (ms) polls. */
+export function useList(path: string, { refetchInterval }: { refetchInterval?: number } = {}) {
   const qc = useQueryClient()
-  const q = useQuery({ queryKey: queryKey(path), queryFn: fetchEnvelope(path), placeholderData: keepPreviousData })
+  const q = useQuery({ queryKey: queryKey(path), queryFn: fetchEnvelope(path), placeholderData: keepPreviousData, refetchInterval })
   const reload = useCallback(() => void qc.invalidateQueries({ queryKey: queryKey(path) }), [qc, path])
   const ok = !q.isError && q.data
   return { rows: ok ? ok.data : none, total: ok ? ok.meta.pagination.total : 0, err: q.error ?? undefined, loading: q.isPending, reload }
@@ -44,17 +45,19 @@ export function useList(path: string) {
  * `fresh` is for a form that starts from this record: it refetches on every mount even when the cache is fresh, and `ready`
  * turns true once an answer has arrived after the mount (it stays true after that, whatever later refetches do). Start the
  * form from `data` only when `ready`; a cached copy is never fresh enough to seed a form.
+ * `keep` shows the previous path's `data` while a new path loads (a header that must not blink); check that it is the record you asked for.
  */
-export function useApi<T = Row>(path: string | null, { fresh = false } = {}) {
+export function useApi<T = Row>(path: string | null, { fresh = false, keep = false } = {}) {
   const qc = useQueryClient()
   const mountedAt = useRef(Date.now())
-  const q = useQuery({ queryKey: queryKey(path ?? ''), queryFn: path === null ? skipToken : fetchEnvelope(path), ...(fresh && { refetchOnMount: 'always' as const }) })
+  const q = useQuery({ queryKey: queryKey(path ?? ''), queryFn: path === null ? skipToken : fetchEnvelope(path), ...(fresh && { refetchOnMount: 'always' as const }), ...(keep && { placeholderData: keepPreviousData }) })
   const reload = useCallback(() => void (path !== null && qc.invalidateQueries({ queryKey: queryKey(path) })), [qc, path])
   return { data: q.data?.data as T | undefined, err: q.error ?? undefined, loading: q.isLoading, reload, ready: q.dataUpdatedAt >= mountedAt.current }
 }
 
 /**
- * Returns `save(path, {method, body}, invalidate?)`: sends the write (POST by default) and, on success, marks stale every query
+ * Returns `save(path, {method, body}, invalidate?)`: sends the write (POST by default) and, whether it succeeds or is refused
+ * (a refusal such as 409/422 means the screen is out of date), marks stale every query
  * under each `invalidate` path (default: the path's resource, e.g. '/sites/1' → ['sites']), so what is on screen refetches.
  * Every write is audited, so the audit log is always marked stale too.
  */
@@ -62,9 +65,11 @@ export function useSave() {
   const qc = useQueryClient()
   return useCallback(
     async <T = Row>(path: string, opts: { method?: string; body?: unknown } = {}, invalidate: string[] = [queryKey(path)[0] ?? '']) => {
-      const r = await api<T>(path, { method: 'POST', ...opts })
-      for (const p of [...invalidate, '/audit-log']) void qc.invalidateQueries({ queryKey: queryKey(p) })
-      return r
+      try {
+        return await api<T>(path, { method: 'POST', ...opts })
+      } finally {
+        for (const p of [...invalidate, '/audit-log']) void qc.invalidateQueries({ queryKey: queryKey(p) })
+      }
     },
     [qc],
   )

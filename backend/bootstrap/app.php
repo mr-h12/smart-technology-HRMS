@@ -3,6 +3,8 @@
 use App\Http\Middleware\AddRequestId;
 use App\Http\Middleware\ForgetResolvedGuards;
 use App\Http\Middleware\SetLocaleFromRequest;
+use App\Modules\Attendance\Domain\AttendanceRefused;
+use App\Modules\Attendance\Presentation\AlertMissingDaysCommand;
 use App\Modules\Employees\Presentation\EnsureEmployeeInScope;
 use App\Modules\Identity\Domain\Authentication\AuthenticationRefused;
 use App\Modules\Identity\Domain\Rbac\AuthorizationRefused;
@@ -27,7 +29,7 @@ return Application::configure(basePath: dirname(__DIR__))
         apiPrefix: 'api/v1',
         commands: __DIR__.'/../routes/console.php',
     )
-    ->withCommands([CreateUserCommand::class])
+    ->withCommands([CreateUserCommand::class, AlertMissingDaysCommand::class])
     ->withMiddleware(function (Middleware $middleware): void {
         // Global, not api-group: unmatched routes (404) never enter the api group.
         $middleware->prepend(AddRequestId::class);
@@ -70,6 +72,13 @@ return Application::configure(basePath: dirname(__DIR__))
 
         $exceptions->render(fn (AuthorizationRefused $e, Request $request) => ApiEnvelope::error(
             $request, 403, 'permission_denied', __('identity.refusal.permission_denied'),
+        ));
+
+        // An attendance refusal (stale version, locked period, future date) is an answer, not a fault.
+        $exceptions->dontReport(AttendanceRefused::class);
+
+        $exceptions->render(fn (AttendanceRefused $e, Request $request) => ApiEnvelope::error(
+            $request, $e->reason->status(), $e->reason->value, __('attendance.refusal.'.$e->reason->value, $e->params), $e->details,
         ));
 
         $exceptions->render(fn (ThrottleRequestsException $e, Request $request) => ApiEnvelope::error(

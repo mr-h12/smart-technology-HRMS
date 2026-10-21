@@ -5,7 +5,10 @@ namespace Tests\Feature;
 use App\Modules\Identity\Domain\Rbac\AuthorizationRefused;
 use App\Modules\Identity\Infrastructure\Eloquent\Permission;
 use App\Modules\Identity\Infrastructure\Eloquent\Role;
+use App\Modules\Identity\Presentation\RequestScope;
+use ArgumentCountError;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Exceptions;
 use Illuminate\Support\Facades\Route;
 use Tests\TestCase;
@@ -18,18 +21,21 @@ class RbacTest extends TestCase
     {
         $grants = fn (string $slug) => Role::where('slug', $slug)->firstOrFail()->permissions
             ->map(fn ($p) => "{$p->resource}.{$p->action}.{$p->scope}")->sort()->values()->all();
-        $this->assertSame(17, Permission::count());
+        $this->assertSame(21, Permission::count());
         $this->assertSame(['employee.view.own', 'site.view.own'], $grants('manager'));
-        $this->assertSame(['audit_log.view.all', 'employee.view.all', 'setting.view.all', 'site.view.all'], $grants('ceo'));
-        $this->assertCount(11, $grants('hr'));
+        $this->assertSame(['attendance.view.all', 'audit_log.view.all', 'employee.view.all', 'setting.view.all', 'site.view.all'], $grants('ceo'));
+        $this->assertCount(15, $grants('hr'));
+        foreach (['attendance.view.all', 'attendance.edit.all', 'attendance.lock.all', 'holiday.manage.all'] as $name) {
+            $this->assertContains($name, $grants('hr'));
+        }
         $this->assertNotContains('user.manage.all', $grants('hr'));
-        $this->assertCount(15, $grants('developer'));
+        $this->assertCount(19, $grants('developer'));
     }
 
     public function test_every_api_route_requires_auth_and_a_permission(): void
     {
         $open = ['api/v1/health', 'api/v1/auth/login'];
-        $authOnly = ['api/v1/auth/me', 'api/v1/auth/logout'];
+        $authOnly = ['api/v1/auth/me', 'api/v1/auth/logout', 'api/v1/notifications', 'api/v1/notifications/{notification}/read'];
         foreach (Route::getRoutes() as $route) {
             if (! str_starts_with($route->uri(), 'api/v1') || in_array($route->uri(), $open, true)) {
                 continue;
@@ -64,6 +70,12 @@ class RbacTest extends TestCase
         $this->signIn('manager');
         $this->postJson('/api/v1/employees', [])->assertStatus(403);
         Exceptions::assertNotReported(AuthorizationRefused::class);
+    }
+
+    public function test_the_narrowest_scope_needs_at_least_one_permission(): void
+    {
+        $this->expectException(ArgumentCountError::class);   // zero abilities would read as `all` (fails open)
+        RequestScope::narrowestOwnerId(new Request);
     }
 
     public function test_permission_is_checked_by_name_not_role(): void

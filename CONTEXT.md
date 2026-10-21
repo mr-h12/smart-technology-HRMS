@@ -35,7 +35,7 @@ A place where a day of work is done, usually a client location.
 _Avoid_: location, project, place (المكان)
 
 **Leave day-type**:
-A non-work value recorded instead of a site for a day: Friday, official holiday, sick, rest, absent (غ). It gets its own row in site costing. Stored as a `sites` row with `kind=leave` and a `leave_code`; the UI calls them أنواع الإجازات / Leave types and never "leave site".
+A non-work value recorded instead of a site for a day: Friday, Saturday, official holiday, sick, rest, absent (غ). It gets its own row in site costing. Stored as a `sites` row with `kind=leave` and a `leave_code`; the UI calls them أنواع الإجازات / Leave types and never "leave site".
 _Avoid_: leave site
 
 **Residence** (محل الإقامة):
@@ -51,6 +51,30 @@ An approved request that cancels one day's lateness.
 
 **Early leave** (انصراف مبكر):
 Either a one-day permission to leave before shift end, or a permanent change to the employee's shift.
+
+**Attendance day** (يوم حضور):
+One employee's record for one date: one site, one leave day-type, or (office) present. A day with none is a missing day, never an absence.
+_Avoid_: timesheet row, punch
+
+**Attendance lock** (قفل الحضور):
+HR's freeze of one group's period; nobody edits until HR reopens with a reason.
+_Avoid_: close (that is the Release 2 payroll period close)
+
+**Official holiday** (إجازة رسمية):
+A dated day off for everyone, kept in Settings.
+_Avoid_: public holiday, vacation
+
+**Derived day** (يوم تلقائي):
+A weekly off day or official holiday the system fills in until HR records the day; stored at lock.
+_Avoid_: default day, auto row
+
+**Day sheet** (كشف اليوم):
+One group's attendance for one date, where HR marks many employees at once.
+_Avoid_: roll call, check-in screen
+
+**Last site** (آخر موقع):
+The work site of an employee's latest recorded work day in the 7 days before a date.
+_Avoid_: yesterday's site
 
 ## Pay
 

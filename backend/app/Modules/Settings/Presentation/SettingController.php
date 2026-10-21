@@ -30,6 +30,8 @@ final class SettingController
         'office_grace_minutes' => self::INTEGER,
         'office_shift_start' => self::TIME,
         'office_shift_end' => self::TIME,
+        'worker_shift_start' => self::TIME,
+        'worker_shift_end' => self::TIME,
         'weekly_off_office' => self::DAYS,
         'weekly_off_field' => self::DAYS,
         'leave_days_under_one_year' => self::INTEGER,

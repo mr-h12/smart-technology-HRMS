@@ -44,21 +44,23 @@ export function setUnauthorizedHandler(fn: () => void): void {
   onUnauthorized = fn
 }
 
-async function call(path: string, { method = 'GET', body, signal }: Options = {}) {
+/** Sends the request; a FormData body goes as-is (the browser sets the multipart boundary), any other body as JSON. Throws ApiError on an error envelope. */
+async function send(path: string, { method = 'GET', body, signal }: Options = {}): Promise<Response> {
   const token = getToken()
+  const isJson = body !== undefined && !(body instanceof FormData)
   const res = await fetch(`/api/v1${path}`, {
     method,
     headers: {
       Accept: 'application/json',
       'Accept-Language': i18n.language,
       ...(token ? { Authorization: `Bearer ${token}` } : {}),
-      ...(body !== undefined && { 'Content-Type': 'application/json' }),
+      ...(isJson && { 'Content-Type': 'application/json' }),
     },
-    body: body === undefined ? undefined : JSON.stringify(body),
+    body: isJson ? JSON.stringify(body) : (body as FormData | undefined),
     signal,
   })
-  const json = await res.json().catch(() => null)
   if (!res.ok) {
+    const json = await res.json().catch(() => null)
     // only if no newer sign-in replaced the token while this request was in flight
     if (res.status === 401 && token && getToken() === token) {
       setToken(null)
@@ -67,7 +69,14 @@ async function call(path: string, { method = 'GET', body, signal }: Options = {}
     const e = json?.error
     throw new ApiError(e?.code ?? 'unknown_error', e?.message ?? res.statusText, res.status, e?.details ?? [])
   }
-  return json
+  return res
+}
+
+const call = async (path: string, opts?: Options) => (await send(path, opts)).json().catch(() => null)
+
+/** A file download (the body as a Blob), with the same headers and error handling as api(). */
+export async function apiBlob(path: string): Promise<Blob> {
+  return (await send(path)).blob()
 }
 
 /** Calls /api/v1 and returns the envelope's `data`; throws ApiError on an error envelope. */

@@ -1,5 +1,5 @@
 import { afterEach, expect, test, vi } from 'vitest'
-import { api, ApiError, apiList, getToken, setToken, setUnauthorizedHandler } from './api'
+import { api, apiBlob, ApiError, apiList, getToken, setToken, setUnauthorizedHandler } from './api'
 
 const reply = (status: number, body: unknown) =>
   vi.stubGlobal('fetch', vi.fn(async () => new Response(JSON.stringify(body), { status })))
@@ -62,4 +62,36 @@ test('passes the abort signal to fetch', async () => {
   const signal = new AbortController().signal
   await apiList('/employees', { signal })
   expect(f.mock.calls[0][1]?.signal).toBe(signal)
+})
+
+test('FormData bodies are sent without a JSON content type', async () => {
+  const f = vi.fn(async (_url: string, _init?: RequestInit) => new Response(JSON.stringify({ data: {} }), { status: 200 }))
+  vi.stubGlobal('fetch', f)
+  const body = new FormData()
+  body.set('group', 'engineer')
+  await api('/attendance/import/preview', { method: 'POST', body })
+  const init = f.mock.calls[0][1]!
+  expect(init.body).toBe(body)
+  expect(init.headers).not.toHaveProperty('Content-Type')
+})
+
+test('apiBlob returns the body as a Blob with the bearer token', async () => {
+  const f = vi.fn(async (_url: string, _init?: RequestInit) => new Response('xlsx-bytes', { status: 200 }))
+  vi.stubGlobal('fetch', f)
+  setToken('b'.repeat(64))
+  const blob = await apiBlob('/attendance/template?group=engineer')
+  expect(await blob.text()).toBe('xlsx-bytes')
+  expect(f.mock.calls[0][0]).toBe('/api/v1/attendance/template?group=engineer')
+  expect((f.mock.calls[0][1]!.headers as Record<string, string>).Authorization).toBe(`Bearer ${'b'.repeat(64)}`)
+})
+
+test('apiBlob shares the error envelope and the 401 handling', async () => {
+  const onUnauthorized = vi.fn()
+  setUnauthorizedHandler(onUnauthorized)
+  reply(401, { error: { code: 'unauthenticated', message: 'x' } })
+  setToken('b'.repeat(64))
+  const err = await apiBlob('/attendance/template').catch((e) => e)
+  expect(err).toMatchObject({ code: 'unauthenticated', status: 401 })
+  expect(getToken()).toBeNull()
+  expect(onUnauthorized).toHaveBeenCalledTimes(1)
 })

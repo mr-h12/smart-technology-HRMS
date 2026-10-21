@@ -111,6 +111,8 @@ test('account create shows a server field error under its field', async () => {
   await user.type(screen.getByLabelText('الاسم'), 'سارة')
   await user.type(screen.getByLabelText('البريد الإلكتروني'), 'sara@smart.test')
   await user.selectOptions(await screen.findByLabelText('الدور'), 'r1')
+  expect(screen.getByLabelText('كلمة المرور')).toHaveAttribute('type', 'text') // no browser-generated password
+  expect(screen.getByLabelText('كلمة المرور')).toHaveAttribute('autocomplete', 'off')
   await user.type(screen.getByLabelText('كلمة المرور'), 'secret123')
   await user.click(screen.getByRole('button', { name: 'حفظ' }))
   expect(await screen.findByText('البريد مستخدم')).toBeInTheDocument()
@@ -152,8 +154,12 @@ test('the row menu sets a new password', async () => {
   const row = await screen.findByRole('row', { name: /سارة/ })
   await user.click(within(row).getByRole('button', { name: 'الإجراءات' }))
   await user.click(await screen.findByRole('menuitem', { name: 'تعيين كلمة مرور جديدة' }))
-  expect(screen.getByLabelText('كلمة المرور')).toHaveAttribute('dir', 'ltr')
-  await user.type(screen.getByLabelText('كلمة المرور'), 'newpass123')
+  const field = screen.getByLabelText('كلمة المرور')
+  expect(field).toHaveAttribute('dir', 'ltr')
+  // Visible text, not type=password: Safari fills its own strong password into a new-password field, so what the developer typed was never sent.
+  expect(field).toHaveAttribute('type', 'text')
+  expect(field).toHaveAttribute('autocomplete', 'off')
+  await user.type(field, 'newpass123')
   await user.click(screen.getByRole('button', { name: 'حفظ' }))
   expect(JSON.parse((put.mock.calls[0] as unknown as [string, RequestInit])[1].body as string)).toEqual({ password: 'newpass123' })
 })

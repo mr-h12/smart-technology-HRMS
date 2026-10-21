@@ -1,22 +1,23 @@
-import { Bus, CalendarOff, House, MapPin, SlidersHorizontal } from 'lucide-react'
+import { Bus, CalendarDays, CalendarOff, House, MapPin, SlidersHorizontal } from 'lucide-react'
 import { useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { useSearchParams } from 'react-router-dom'
 import { toast } from 'sonner'
 import { PageHeader } from '@/components/common/PageHeader'
-import { ErrorBanner, type Row, TextField, toErrs, useForm } from '@/components/form'
+import { ErrorBanner, type Row, stopAtMissingPeriod, TextField, toErrs, useForm } from '@/components/form'
 import { TableSkeleton } from '@/components/layout/PageSkeleton'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { useAuth } from '@/lib/auth'
 import { useApi, useSave } from '@/lib/query'
+import { HolidaysTab } from './holidays'
 import { FaresTab, LeaveTypesTab, ResidencesTab, SitesTab } from './sites'
 
 const GROUPS: [string, string[]][] = [
   ['time', ['month_days', 'day_hours', 'overtime_multiplier']],
   ['lateness', ['lateness_multiplier_office', 'lateness_multiplier_engineer', 'lateness_multiplier_permanent_worker', 'lateness_multiplier_day_laborer', 'office_grace_minutes']],
-  ['schedule', ['office_shift_start', 'office_shift_end', 'weekly_off_office', 'weekly_off_field']],
+  ['schedule', ['office_shift_start', 'office_shift_end', 'worker_shift_start', 'worker_shift_end', 'weekly_off_office', 'weekly_off_field']],
   ['leave', ['leave_days_under_one_year', 'leave_days_one_year_plus', 'leave_casual_days']],
 ]
 const KEYS = GROUPS.flatMap(([, keys]) => keys)
@@ -59,7 +60,8 @@ function RulesForm({ initial, loadErr }: { initial: Row; loadErr?: unknown }) {
   const [busy, setBusy] = useState(false)
   const dirty = JSON.stringify(form) !== JSON.stringify(saved)
   const errs = toErrs(err)
-  function save() {
+  function save(e: React.MouseEvent<HTMLElement>) {
+    if (stopAtMissingPeriod(e.currentTarget)) return
     setBusy(true)
     setErr(undefined)
     send<Row>('/settings', { method: 'PUT', body: form })
@@ -86,7 +88,7 @@ function RulesForm({ initial, loadErr }: { initial: Row; loadErr?: unknown }) {
         key={k}
         name={k}
         label={t(`rule.${k}`)}
-        {...(k.startsWith('office_shift_') ? { type: 'time' } : { inputMode: INTEGER.includes(k) ? 'numeric' : 'decimal' })}
+        {...(k.endsWith('_shift_start') || k.endsWith('_shift_end') ? { type: 'time' } : { inputMode: INTEGER.includes(k) ? 'numeric' : 'decimal' })}
         values={form}
         set={set}
         errs={errs}
@@ -120,6 +122,7 @@ const TABS = [
   { value: 'residences', key: 'settings.tab.residences', icon: House, ability: 'site.view', Body: ResidencesTab },
   { value: 'leave-types', key: 'settings.tab.leaveTypes', icon: CalendarOff, ability: 'site.view', Body: LeaveTypesTab },
   { value: 'fares', key: 'settings.tab.fares', icon: Bus, ability: 'site.view', Body: FaresTab },
+  { value: 'holidays', key: 'settings.tab.holidays', icon: CalendarDays, ability: 'attendance.view', Body: HolidaysTab },
   { value: 'rules', key: 'settings.tab.rules', icon: SlidersHorizontal, ability: 'setting.view', Body: RulesTab },
 ]
 /** One page of tabs synced to `?tab=`; a missing, unknown or hidden tab shows the first visible one. */
@@ -134,7 +137,7 @@ export function SettingsPage() {
       <PageHeader title={t('nav.settings')} description={t('settings.subtitle')} />
       {tab && (
         <Tabs value={tab} onValueChange={(v) => setParams({ tab: v }, { replace: true })}>
-          <TabsList>
+          <TabsList className="sm:h-auto sm:flex-wrap">
             {tabs.map(({ value, key, icon: Icon }) => (
               <TabsTrigger key={value} value={value}>
                 <Icon className="size-4" aria-hidden /> {t(key)}

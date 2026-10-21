@@ -70,9 +70,10 @@ class SitesApiTest extends TestCase
     {
         $this->site();
         $this->postJson('/api/v1/sites', ['name_ar' => 'غ', 'kind' => 'leave', 'leave_code' => 'absent', 'active' => false])->assertCreated();
-        $this->getJson('/api/v1/sites')->assertJsonCount(2, 'data')->assertJsonPath('meta.pagination.total', 2);
-        $this->getJson('/api/v1/sites?kind=leave')->assertJsonCount(1, 'data')->assertJsonPath('data.0.leave_code', 'absent');
-        $this->getJson('/api/v1/sites?active=true')->assertJsonCount(1, 'data')->assertJsonPath('data.0.kind', 'work');
+        // plus the Saturday migration's active «اجازة السبت»
+        $this->getJson('/api/v1/sites')->assertJsonCount(3, 'data')->assertJsonPath('meta.pagination.total', 3);
+        $this->assertContains('absent', $this->getJson('/api/v1/sites?kind=leave')->assertJsonCount(2, 'data')->json('data.*.leave_code'));
+        $this->assertEqualsCanonicalizing(['leave', 'work'], $this->getJson('/api/v1/sites?active=true')->assertJsonCount(2, 'data')->json('data.*.kind'));
         $this->getJson('/api/v1/sites?active=false')->assertJsonCount(1, 'data');
         $this->getJson('/api/v1/sites?kind=bogus')->assertStatus(422);
         $this->getJson('/api/v1/sites/not-a-uuid')->assertNotFound();
@@ -190,7 +191,7 @@ class SitesApiTest extends TestCase
     {
         $this->seed(SitesSeeder::class);
         $this->seed(SitesSeeder::class);
-        $this->assertSame(5, \DB::table('sites')->count());
+        $this->assertSame(6, \DB::table('sites')->count());   // 5 seeded + the Saturday migration's row
         $this->assertSame(4, \DB::table('residences')->count());
         $this->assertSame('absent', \DB::table('sites')->where('name_ar', 'غ')->value('leave_code'));
         $this->assertSame(0, Fare::count());

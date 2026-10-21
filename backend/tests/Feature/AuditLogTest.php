@@ -70,7 +70,7 @@ class AuditLogTest extends TestCase
                 $this->assertStringContainsString('append-only', $e->getMessage());
             }
         }
-        $this->assertSame(1, DB::table('audit_log')->count());
+        $this->assertSame(1, DB::table('audit_log')->where('event', 'TEST')->count());   // the Saturday migration's CREATED row is there too
     }
 
     public function test_login_events(): void

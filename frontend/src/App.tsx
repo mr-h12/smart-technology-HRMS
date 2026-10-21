@@ -6,6 +6,7 @@ import { LoginPage } from '@/pages/login'
 
 // Every page but login loads on demand, so the first download stays small.
 const page = <K extends string>(load: () => Promise<Record<K, ComponentType>>, name: K) => lazy(() => load().then((m) => ({ default: m[name] })))
+const AttendancePage = page(() => import('@/pages/attendance'), 'AttendancePage')
 const AuditPage = page(() => import('@/pages/audit'), 'AuditPage')
 const AccountsPage = page(() => import('@/pages/console'), 'AccountsPage')
 const RolesPage = page(() => import('@/pages/console'), 'RolesPage')
@@ -28,6 +29,7 @@ export function AppRoutes() {
         <Route path="employees" element={<EmployeesPage />} />
         <Route path="employees/new" element={<EmployeeRoute />} />
         <Route path="employees/:id" element={<EmployeeRoute />} />
+        <Route path="attendance" element={<AttendancePage />} />
         <Route path="settings" element={<SettingsPage />} />
         {/* old links, kept for one release */}
         <Route path="sites" element={<Navigate to="/settings?tab=sites" replace />} />

@@ -1,11 +1,15 @@
 <?php
 
+use App\Modules\Attendance\Presentation\AttendanceController;
+use App\Modules\Attendance\Presentation\AttendanceLockController;
+use App\Modules\Attendance\Presentation\HolidayController;
 use App\Modules\Audit\Presentation\AuditLogController;
 use App\Modules\Employees\Domain\DocumentKind;
 use App\Modules\Employees\Presentation\EmployeeController;
 use App\Modules\Identity\Presentation\AuthController;
 use App\Modules\Identity\Presentation\RoleController;
 use App\Modules\Identity\Presentation\UserController;
+use App\Modules\Notifications\Presentation\NotificationController;
 use App\Modules\Settings\Presentation\SettingController;
 use App\Modules\Sites\Presentation\FareController;
 use App\Modules\Sites\Presentation\ResidenceController;
@@ -71,6 +75,44 @@ Route::middleware('auth')->group(function (): void {
     Route::prefix('fares')->controller(FareController::class)->group(function (): void {
         Route::get('/', 'index')->middleware('permission:site.view');
         Route::post('/', 'store')->middleware('permission:site.manage');
+    });
+
+    Route::prefix('attendance')->controller(AttendanceController::class)->group(function (): void {
+        Route::get('period', 'period')->middleware('permission:attendance.view');
+        Route::get('grid', 'grid')->middleware('permission:attendance.view');
+        Route::get('missing', 'missing')->middleware('permission:attendance.view');
+        Route::get('sheet', 'sheet')->middleware('permission:attendance.view');
+        Route::get('template', 'template')->middleware(['permission:attendance.view', 'permission:attendance.edit']);
+        Route::post('import/preview', 'preview')->middleware(['permission:attendance.view', 'permission:attendance.edit']);
+        Route::post('import/confirm', 'confirm')->middleware(['permission:attendance.view', 'permission:attendance.edit']);
+        Route::post('days/bulk', 'bulk')->middleware('permission:attendance.edit');
+        // A registrar where() would replace whereUuid(), so the date shape goes on each route.
+        Route::middleware([])->whereUuid('employee')->group(function (): void {
+            $date = '\d{4}-\d{2}-\d{2}';
+            Route::get('days/{employee}/{date}', 'show')->middleware(['permission:attendance.view', 'employee.scope'])->where('date', $date);
+            Route::put('days/{employee}/{date}', 'update')->middleware(['permission:attendance.edit', 'employee.scope'])->where('date', $date);
+            Route::delete('days/{employee}/{date}', 'destroy')->middleware(['permission:attendance.edit', 'employee.scope'])->where('date', $date);
+        });
+    });
+
+    Route::prefix('attendance/locks')->controller(AttendanceLockController::class)->group(function (): void {
+        Route::post('/', 'store')->middleware('permission:attendance.lock');
+        Route::post('reopen', 'reopen')->middleware('permission:attendance.lock');
+    });
+
+    Route::prefix('attendance/holidays')->controller(HolidayController::class)->group(function (): void {
+        Route::get('/', 'index')->middleware('permission:attendance.view');
+        Route::post('/', 'store')->middleware('permission:holiday.manage');
+        Route::middleware([])->whereUuid('holiday')->group(function (): void {
+            Route::patch('{holiday}', 'update')->middleware('permission:holiday.manage');
+            Route::delete('{holiday}', 'destroy')->middleware('permission:holiday.manage');
+        });
+    });
+
+    // Auth only: each account sees and marks only its own rows (the inbox filters by user).
+    Route::prefix('notifications')->controller(NotificationController::class)->group(function (): void {
+        Route::get('/', 'index');
+        Route::patch('{notification}/read', 'read')->whereUuid('notification');
     });
 
     Route::get('audit-log', [AuditLogController::class, 'index'])->middleware('permission:audit_log.view');

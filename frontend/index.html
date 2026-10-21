@@ -5,13 +5,24 @@
     <link rel="icon" type="image/png" sizes="32x32" href="/stis-icon-32.png" />
     <link rel="icon" type="image/png" sizes="192x192" href="/stis-icon-192.png" />
     <link rel="apple-touch-icon" href="/stis-apple-touch-icon.png" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <link rel="manifest" href="/manifest.webmanifest" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+    <!-- the header's colour (--card) per theme; the script below and useTheme make both follow the in-app theme, not the OS -->
+    <meta name="theme-color" content="#ffffff" media="(prefers-color-scheme: light)" />
+    <meta name="theme-color" content="#111827" media="(prefers-color-scheme: dark)" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="default" />
+    <meta name="apple-mobile-web-app-title" content="HR سمارت" />
     <title>Smart Technology HRMS</title>
     <script>
       try {
         if (localStorage.getItem('hrms-theme') === 'dark') document.documentElement.classList.add('dark')
         if (localStorage.getItem('hrms-lang') === 'en') { document.documentElement.lang = 'en'; document.documentElement.dir = 'ltr' }
       } catch (e) {}
+      var bars = document.querySelectorAll('meta[name="theme-color"]')
+      var bar = bars[document.documentElement.classList.contains('dark') ? 1 : 0].content
+      bars.forEach(function (m) { m.content = bar })
     </script>
   </head>
   <body>

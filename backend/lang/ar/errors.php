@@ -13,6 +13,7 @@ return [
     'duplicate_date' => 'يوجد سجل آخر بنفس التاريخ.',
     'leave_code_required' => 'كود الإجازة مطلوب لأنواع الإجازات.',
     'leave_code_not_allowed' => 'كود الإجازة يخص أنواع الإجازات فقط.',
+    'leave_code_taken' => 'يوجد نوع إجازة نشط آخر بنفس الكود.',
     'allowance_value_required' => 'القيمة مطلوبة ما لم يكن نوع البدل "بدون بدل".',
     'employee_type' => [
         'office' => 'موظف مثبت شركة',

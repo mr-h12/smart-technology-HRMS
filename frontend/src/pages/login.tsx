@@ -29,12 +29,12 @@ export function LoginPage() {
   if (me) return <Navigate to="/" replace />
 
   return (
-    <div className="flex min-h-dvh flex-col bg-background text-foreground">
-      <header className="flex justify-end gap-2 p-3 sm:p-4">
+    <div className="flex min-h-dvh flex-col bg-background text-foreground pb-[env(safe-area-inset-bottom)] pl-[env(safe-area-inset-left)] pr-[env(safe-area-inset-right)]">
+      <header className="flex justify-end gap-2 p-3 pt-[max(0.75rem,env(safe-area-inset-top))] sm:p-4">
         <LanguageToggle />
         <ThemeToggle />
       </header>
-      <main className="flex flex-1 items-start justify-center px-4 pt-[10vh]">
+      <main className="flex flex-1 items-start justify-center px-4 pt-[10svh]">
         <Card className="w-full max-w-sm">
           <form onSubmit={submit}>
             <CardContent className="space-y-5 p-6">

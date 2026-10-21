@@ -18,6 +18,7 @@ import { USERS, useApi } from '@/lib/query'
 const ENTITIES = [
   'employees', 'employee_type_changes', 'employee_pay_changes', 'employee_documents', 'employee_fare_overrides', 'employee_manager_assignments',
   'sites', 'site_allowance_rules', 'residences', 'fares', 'users', 'roles', 'settings',
+  'attendance_days', 'attendance_locks', 'official_holidays', 'notifications',
 ]
 const PER_PAGE = 20
 const EVENT_VARIANT: Record<string, BadgeVariant> = { CREATED: 'success', UPDATED: 'info', DELETED: 'danger' }
@@ -42,7 +43,7 @@ function Details({ entry, onClose }: { entry: Row; onClose: () => void }) {
   return (
     <Sheet open onOpenChange={(o) => !o && onClose()}>
       <SheetContent side="right" className="sm:max-w-[440px]">
-        <div className="space-y-1 border-b p-5 pe-12">
+        <div className="space-y-1 border-b p-5 pe-14">
           <SheetTitle>
             {label.event(entry)} · {label.entity(entry)}
           </SheetTitle>
@@ -50,7 +51,7 @@ function Details({ entry, onClose }: { entry: Row; onClose: () => void }) {
             {time(entry.occurred_at)} · {entry.user?.name ?? '—'}
           </SheetDescription>
         </div>
-        <div className="grid flex-1 content-start gap-4 overflow-y-auto p-5 sm:grid-cols-2">
+        <div className="grid flex-1 content-start gap-4 overflow-y-auto overscroll-contain p-5 sm:grid-cols-2">
           {sides.map(([k, values]) => (
             <section key={k} aria-label={t(`audit.${k}`)} className="min-w-0 rounded-lg border p-3">
               <h3 className="mb-2 text-xs font-semibold text-muted-foreground">{t(`audit.${k}`)}</h3>

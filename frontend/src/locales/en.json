@@ -39,7 +39,8 @@
       "settings": "Settings",
       "admin": "System administration"
     },
-    "settings": "Settings"
+    "settings": "Settings",
+    "attendance": "Attendance"
   },
   "toggle": {
     "language": "Language",
@@ -157,7 +158,8 @@
       "sick": "Sick leave",
       "rest": "Rest day",
       "absent": "Absent",
-      "other": "Other"
+      "other": "Other",
+      "saturday": "Saturday"
     },
     "allowance_mode": {
       "none": "No allowance",
@@ -269,7 +271,9 @@
       "user": "User accounts",
       "role": "Roles and permissions",
       "audit_log": "Audit log",
-      "setting": "Business rules"
+      "setting": "Business rules",
+      "attendance": "Attendance",
+      "holiday": "Official holidays"
     },
     "action": {
       "view": "View",
@@ -277,7 +281,16 @@
       "edit": "Edit",
       "delete": "Delete",
       "assign_manager": "Assign manager",
-      "manage": "Manage"
+      "manage": "Manage",
+      "lock": "Lock"
+    },
+    "attendance": {
+      "view": "Attendance: view",
+      "edit": "Attendance: edit",
+      "lock": "Attendance: lock period"
+    },
+    "holiday": {
+      "manage": "Official holidays: manage"
     }
   },
   "audit": {
@@ -310,7 +323,9 @@
       "ROLE_CREATED": "Role created",
       "ROLE_UPDATED": "Role updated",
       "ROLE_PERMISSIONS_UPDATED": "Role permissions updated",
-      "SITE_MANAGERS_UPDATED": "Site managers updated"
+      "SITE_MANAGERS_UPDATED": "Site managers updated",
+      "ATTENDANCE_LOCKED": "Attendance period locked",
+      "ATTENDANCE_REOPENED": "Attendance period reopened"
     },
     "entity": {
       "employees": "Employees",
@@ -325,7 +340,11 @@
       "fares": "Fares",
       "users": "Accounts",
       "roles": "Roles",
-      "settings": "Business rules"
+      "settings": "Business rules",
+      "attendance_days": "Attendance days",
+      "attendance_locks": "Attendance locks",
+      "official_holidays": "Official holidays",
+      "notifications": "Notifications"
     }
   },
   "settings": {
@@ -334,7 +353,8 @@
       "residences": "Residences",
       "leaveTypes": "Leave types",
       "fares": "Transport fares",
-      "rules": "Business rules"
+      "rules": "Business rules",
+      "holidays": "Official holidays"
     },
     "subtitle": "Manage sites, residences, leave types, transport fares and business rules.",
     "desc": {
@@ -342,7 +362,8 @@
       "residences": "Areas employees travel from to reach a site.",
       "leaveTypes": "Days recorded instead of a work site, such as Fridays, official holidays and absences.",
       "fares": "The fare from each residence to each site, effective from its date.",
-      "rules": "The numbers payroll, lateness and leave calculations rely on."
+      "rules": "The numbers payroll, lateness and leave calculations rely on.",
+      "holidays": "Days recorded automatically as an official holiday for everyone."
     }
   },
   "status": {
@@ -376,7 +397,9 @@
     "weekly_off_field": "Weekly rest: site staff",
     "leave_days_under_one_year": "Leave days, under one year of service",
     "leave_days_one_year_plus": "Leave days, one year of service or more",
-    "leave_casual_days": "Casual leave days"
+    "leave_casual_days": "Casual leave days",
+    "worker_shift_start": "Permanent workers' shift start",
+    "worker_shift_end": "Permanent workers' shift end"
   },
   "weekday": {
     "saturday": "Saturday",
@@ -386,5 +409,256 @@
     "wednesday": "Wednesday",
     "thursday": "Thursday",
     "friday": "Friday"
+  },
+  "attendance": {
+    "subtitle": "Each employee's days, by their group's period.",
+    "groupLabel": "Group",
+    "group": {
+      "office": "Office staff",
+      "engineer": "Engineers",
+      "permanent_worker": "Permanent workers",
+      "day_laborer": "Day laborers"
+    },
+    "prevPeriod": "Previous period",
+    "nextPeriod": "Next period",
+    "periodRange": "{{start}} to {{end}}",
+    "employee": "Employee",
+    "missingCount": "Missing days",
+    "locked": "Locked",
+    "lock": "Lock period",
+    "reopen": "Reopen period",
+    "lockTitle": "Lock this period's attendance",
+    "lockBody": "Once locked, nobody can edit this period's days until it is reopened.",
+    "lockMissing": "These days are still missing:",
+    "lockConfirmMissing": "Lock anyway, with missing days",
+    "reopenTitle": "Reopen this period's attendance",
+    "reopenReason": "Reason for reopening",
+    "lockedBy": "Locked by {{name}} at {{time}}",
+    "present": "Present",
+    "state": {
+      "missing": "Missing",
+      "derived": "Automatic",
+      "future": "Upcoming",
+      "notEmployed": "Not employed"
+    },
+    "short": {
+      "friday": "Fri",
+      "saturday": "Sat",
+      "official_holiday": "Hol",
+      "sick": "Sick",
+      "rest": "Rest",
+      "absent": "Abs",
+      "other": "Other"
+    },
+    "leaveName": {
+      "friday": "Friday",
+      "saturday": "Saturday",
+      "official_holiday": "Official holiday",
+      "sick": "Sick leave",
+      "rest": "Rest",
+      "absent": "Absent",
+      "other": "Other"
+    },
+    "legend": "Legend",
+    "empty": "No employees in this group during this period.",
+    "tab": {
+      "grid": "Period grid",
+      "sheet": "Day sheet",
+      "import": "Import from Excel",
+      "importShort": "Import"
+    },
+    "day": {
+      "title": "{{date}} — {{name}}",
+      "siteOrType": "Site or day type",
+      "chooseSite": "Choose a site or day type",
+      "workSites": "Work sites",
+      "leaveTypes": "Leave types",
+      "in_time": "In time",
+      "out_time": "Out time",
+      "scheduled_in": "Scheduled in",
+      "scheduled_out": "Scheduled out",
+      "late_minutes": "Late minutes",
+      "ot_minutes": "Overtime minutes",
+      "outside_minutes": "Minutes outside Alexandria",
+      "outside_amount": "Outside-Alexandria amount",
+      "transport": "Transport",
+      "advance_amount": "Advance",
+      "note": "Note",
+      "hintLate": "Computed lateness: {{minutes}} min",
+      "hintOt": "Computed overtime: {{minutes}} min",
+      "derivedNote": "This day was set automatically ({{type}}). Choose a site if the employee worked.",
+      "missingNote": "This day is not recorded yet.",
+      "lockedNote": "The period is locked; its days cannot be edited.",
+      "readOnlyNote": "View only: you do not have permission to edit attendance.",
+      "clear": "Clear day",
+      "conflict": "Someone else changed this day. Load the latest version, then re-enter your changes.",
+      "loadLatest": "Load latest"
+    },
+    "transport": {
+      "full": "Full",
+      "half": "Half",
+      "none": "None"
+    },
+    "source": {
+      "entered": "Entered",
+      "imported": "Imported",
+      "derived": "Automatic"
+    },
+    "sheet": {
+      "kpi": {
+        "total": "Total",
+        "accounted": "{{done}} of {{total}} recorded",
+        "worked": "At a site",
+        "onTime": "On time",
+        "late": "Late",
+        "leave": "Leave",
+        "absent": "Absent"
+      },
+      "days": "Period days",
+      "cohortsSite": "By last site",
+      "cohortsDept": "By department",
+      "noLastSite": "No last site",
+      "noDepartment": "No department",
+      "action": {
+        "details": "Details",
+        "present": "Present",
+        "absent": "Absent",
+        "sick": "Sick"
+      },
+      "lateBy": "Late {{minutes}} min",
+      "lastSite": "Last site: {{site}}",
+      "totals": "Period totals",
+      "locked": "This period is locked; the sheet is read-only.",
+      "noMatch": "No employees match.",
+      "dayLabel": "{{date}} — {{count}} not recorded",
+      "rowAction": "{{action}}: {{name}}",
+      "actionOn": "{{action}} {{name}}",
+      "actionCount": "{{action}} ({{count}})",
+      "select": "Select {{name}}",
+      "selectPage": "Select this page",
+      "inTime": "In time, {{name}}",
+      "rest": "Mark the rest present ({{count}})",
+      "sweep": "All present",
+      "sweepFor": "Mark the rest of {{cohort}} present",
+      "bulk": {
+        "label": "Selection actions",
+        "count": "{{count}} selected",
+        "setSite": "Set site",
+        "pickSite": "Choose a site",
+        "clear": "Clear",
+        "apply": "Apply"
+      },
+      "command": "Quick entry",
+      "commandHint": "ID 12 · list 12, 15 · range 10-20",
+      "commandHelp": "Enter marks the IDs present; a name only selects the matches.",
+      "timeTip": "Type the time, then choose AM or PM, or type it in 24-hour form, like <n>0920</n>.",
+      "commandFind": "Type IDs or part of a name to find employees.",
+      "matched": "{{count}} matched",
+      "unknown": "Not on this sheet: {{ids}}",
+      "capped": "Only the first {{max}} IDs were used",
+      "paste": {
+        "button": "Paste IDs",
+        "title": "Paste employee IDs",
+        "hint": "Paste IDs from Excel or WhatsApp: one per line, comma-separated, or ranges.",
+        "label": "Employee IDs",
+        "idsOnly": "Paste employee IDs only; names are not recorded from here."
+      },
+      "toast": {
+        "applied": "{{count}} recorded",
+        "skippedNoSite": "{{count}} skipped: no last site. Record them from Details.",
+        "tooMany": "At most {{max}} rows can be recorded at once; narrow the choice.",
+        "conflict": "Someone else just changed {{names}}; the sheet was reloaded. Check it and try again.",
+        "rowError": "{{name}}: {{message}}",
+        "nothingToChange": "Nothing to change",
+        "undone": "Undone: {{label}}",
+        "undoneOn": "Undone: {{label}} ({{date}})",
+        "undoConflict": "{{names}} changed since; that undo was dropped."
+      },
+      "undo": "Undo ({{count}})",
+      "keys": {
+        "label": "Keyboard shortcuts",
+        "command": "Quick entry",
+        "move": "Move between rows",
+        "mark": "Present, absent, sick",
+        "details": "Details",
+        "undo": "Undo",
+        "clear": "Clear"
+      }
+    },
+    "import": {
+      "desc": "Download the period's template (one employee per row, one day per column), pick the site or day type in each cell, then upload it to review the changes before saving.",
+      "download": "Download template",
+      "file": "Excel file (.xlsx, up to 5 MB)",
+      "choose": "Choose file",
+      "noFile": "No file chosen",
+      "badFile": "Choose an .xlsx file of 5 MB or less.",
+      "preview": "Preview changes",
+      "notSaved": "Nothing is saved yet. Review the preview, then confirm.",
+      "summary": "Changes: {{changes}} · Unchanged: {{unchanged}} · Errors: {{errors}}",
+      "changes": "Changes",
+      "errors": "Errors",
+      "cell": "Cell",
+      "date": "Date",
+      "from": "Current value",
+      "to": "New value",
+      "message": "Error",
+      "confirm": "Confirm and save",
+      "done": "{{saved}}; {{skipped}}.",
+      "saved_one": "Saved 1 day",
+      "saved_other": "Saved {{count}} days",
+      "skipped_zero": "no cells with errors",
+      "skipped_one": "skipped 1 cell with errors",
+      "skipped_other": "skipped {{count}} cells with errors",
+      "error": {
+        "unknown_employee": "Unknown employee ID.",
+        "unknown_site": "Unknown site or day type.",
+        "duplicate_row": "This employee appears twice in the file.",
+        "concurrency_conflict": "Someone else changed this record. Load the latest version and try again.",
+        "period_locked": "This attendance period is locked and cannot be edited.",
+        "future_date": "Attendance cannot be recorded for a future date.",
+        "employee_not_active": "The employee is not employed on this date.",
+        "field_not_allowed": "This field does not apply to this day.",
+        "out_of_bounds": "The value is outside the allowed range.",
+        "site_required": "Choose a site or a day type.",
+        "site_not_allowed": "Office staff are not recorded on a work site.",
+        "site_inactive": "This site is inactive.",
+        "out_before_in": "The out time is before the in time.",
+        "times_need_both": "Enter both the in and out times.",
+        "template_mismatch": "The file does not match this period's attendance template.",
+        "unreadable_file": "The file could not be read.",
+        "too_many_rows": "The file has more than {{max}} rows."
+      }
+    }
+  },
+  "holiday": {
+    "add": "Add holiday",
+    "edit": "Edit holiday",
+    "date": "Date",
+    "name": "Holiday name",
+    "delete": "Delete",
+    "deleteConfirm": "Delete the official holiday \"{{name}}\"?"
+  },
+  "notifications": {
+    "title": "Notifications",
+    "open": "Open notifications ({{count}} unread)",
+    "empty": "No notifications.",
+    "loadFailed": "Couldn't load notifications.",
+    "unread": "unread,",
+    "pause": ",",
+    "missingDays": {
+      "title": "Missing attendance days as of {{date}}",
+      "line": "Missing days, {{group}}: {{count}}",
+      "period": "{{start}} – {{end}}"
+    }
+  },
+  "time": {
+    "am": "AM",
+    "pm": "PM",
+    "amName": "AM",
+    "pmName": "PM",
+    "period": "AM or PM: {{field}}",
+    "choosePeriod": "Choose AM or PM.",
+    "noPeriod": "No AM or PM chosen",
+    "invalid": "Invalid time."
   }
 }

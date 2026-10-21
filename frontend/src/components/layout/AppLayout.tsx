@@ -1,4 +1,5 @@
 import {
+  CalendarCheck,
   ChevronDown,
   Languages,
   LogOut,
@@ -25,14 +26,21 @@ import { Tooltip, TooltipProvider } from '@/components/ui/misc'
 import { Sheet, SheetContent, SheetDescription, SheetTitle } from '@/components/ui/sheet'
 import { useTheme } from '@/hooks/useTheme'
 import { useAuth } from '@/lib/auth'
-import { cn } from '@/lib/utils'
+import { cn, FOCUS } from '@/lib/utils'
+import { NotificationBell } from './NotificationBell'
 import { TableSkeleton } from './PageSkeleton'
 import { SegmentedControl } from './SegmentedControl'
 
 /** An item shows when the user has any of its `abilities`. */
 export const NAV: { group: string; items: { path: string; key: string; icon: LucideIcon; abilities: string[] }[] }[] = [
-  { group: 'nav.group.hr', items: [{ path: '/employees', key: 'nav.employees', icon: Users, abilities: ['employee.view'] }] },
-  { group: 'nav.group.settings', items: [{ path: '/settings', key: 'nav.settings', icon: Settings, abilities: ['site.view', 'setting.view'] }] },
+  {
+    group: 'nav.group.hr',
+    items: [
+      { path: '/employees', key: 'nav.employees', icon: Users, abilities: ['employee.view'] },
+      { path: '/attendance', key: 'nav.attendance', icon: CalendarCheck, abilities: ['attendance.view'] },
+    ],
+  },
+  { group: 'nav.group.settings', items: [{ path: '/settings', key: 'nav.settings', icon: Settings, abilities: ['site.view', 'setting.view', 'attendance.view'] }] },
   {
     group: 'nav.group.admin',
     items: [
@@ -46,8 +54,6 @@ export const NAV: { group: string; items: { path: string; key: string; icon: Luc
 /** The first page the user may open; the fallback is the 1a landing page. */
 export const homePath = (can: (ability: string) => boolean) =>
   NAV.flatMap((g) => g.items).find((n) => n.abilities.some(can))?.path ?? '/employees'
-
-const FOCUS = 'focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring'
 
 export function LanguageToggle() {
   const { t, i18n } = useTranslation()
@@ -168,11 +174,11 @@ function SidebarNav({ collapsed = false, onNavigate }: { collapsed?: boolean; on
 }
 
 /** Sidebar header: the CRM puts the collapse control here, beside the product name. */
-function SidebarHeader({ collapsed = false, onToggleCollapse }: { collapsed?: boolean; onToggleCollapse?: () => void }) {
+function SidebarHeader({ collapsed = false, onToggleCollapse, className }: { collapsed?: boolean; onToggleCollapse?: () => void; className?: string }) {
   const { t } = useTranslation()
   const { can } = useAuth()
   return (
-    <div className={cn('flex min-h-16 items-center gap-3 border-b py-3', collapsed ? 'justify-center px-0' : 'px-4')}>
+    <div className={cn('flex min-h-16 items-center gap-3 border-b py-3', collapsed ? 'justify-center px-0' : 'px-4', className)}>
       {onToggleCollapse ? (
         <button
           type="button"
@@ -207,7 +213,7 @@ function ProfileMenu() {
       <DropdownMenuTrigger asChild>
         <button
           type="button"
-          className={cn('flex min-h-10 items-center gap-2 rounded-xl border p-1 transition-colors hover:bg-muted lg:ps-1.5 lg:pe-3', FOCUS)}
+          className={cn('flex min-h-10 items-center gap-2 rounded-xl border p-1 transition-colors max-sm:min-h-11 hover:bg-muted lg:ps-1.5 lg:pe-3', FOCUS)}
           aria-label={t('nav.profile')}
         >
           <UserAvatar name={me.name} size="sm" />
@@ -250,7 +256,7 @@ function Navbar({ onOpenMobile }: { onOpenMobile: () => void }) {
     .filter((item) => pathname === item.path || pathname.startsWith(`${item.path}/`))
     .sort((a, b) => b.path.length - a.path.length)[0]
   return (
-    <header className="sticky top-0 z-30 flex min-h-16 items-center gap-2 border-b bg-card px-3 py-2 sm:gap-3 sm:px-4">
+    <header className="sticky top-0 z-30 flex min-h-16 items-center gap-2 border-b bg-card px-3 py-2 pt-[max(0.5rem,env(safe-area-inset-top))] sm:gap-3 sm:px-4">
       <Button variant="ghost" size="icon" className="lg:hidden" onClick={onOpenMobile} aria-label={t('nav.open')}>
         <Menu className="size-5" aria-hidden />
       </Button>
@@ -272,6 +278,7 @@ function Navbar({ onOpenMobile }: { onOpenMobile: () => void }) {
         <div className="hidden sm:block">
           <ThemeToggle />
         </div>
+        <NotificationBell />
         <ProfileMenu />
       </div>
     </header>
@@ -298,7 +305,7 @@ export function AppLayout() {
 
   return (
     <TooltipProvider>
-      <div className="flex min-h-dvh bg-background text-foreground">
+      <div className="flex min-h-dvh bg-background text-foreground pb-[env(safe-area-inset-bottom)] pl-[env(safe-area-inset-left)] pr-[env(safe-area-inset-right)]">
         <Toaster theme={theme} dir={rtl ? 'rtl' : 'ltr'} position={rtl ? 'top-left' : 'top-right'} richColors closeButton toastOptions={{ className: 'font-sans' }} />
         <a
           href="#page-content"
@@ -329,10 +336,11 @@ export function AppLayout() {
         </div>
 
         <Sheet open={mobileOpen} onOpenChange={setMobileOpen}>
-          <SheetContent side="left" className="w-64 p-0">
+          <SheetContent side="left" className="w-72 p-0">
             <SheetTitle className="sr-only">{t('nav.main')}</SheetTitle>
             <SheetDescription className="sr-only">{t('app.name')}</SheetDescription>
-            <SidebarHeader />
+            {/* pe-14 keeps the brand out of the 44 px close button's lane */}
+            <SidebarHeader className="pe-14" />
             <div className="flex-1 overflow-y-auto overscroll-contain px-2 py-3">
               <SidebarNav onNavigate={() => setMobileOpen(false)} />
             </div>

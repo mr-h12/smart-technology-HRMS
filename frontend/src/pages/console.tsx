@@ -21,6 +21,12 @@ function useRoleName() {
   return (r: Row | null | undefined) => (r ? (i18n.language === 'ar' ? r.name_ar : r.name) : '—')
 }
 
+/**
+ * Another account's password, shown as typed. A type=password + new-password field gets Safari's generated strong password
+ * in place of what the developer types, so the account got a password nobody knew.
+ */
+const noGenerator = { type: 'text', dir: 'ltr', autoComplete: 'off', autoCapitalize: 'off', autoCorrect: 'off', spellCheck: false } as const
+
 /** Without role.view the role list is not loaded, so the field stays locked to the account's current role. */
 function AccountDialog({ account, roles, ...dialog }: { account?: Row; roles: Row[] } & Controlled) {
   const { t } = useTranslation()
@@ -46,7 +52,7 @@ function AccountDialog({ account, roles, ...dialog }: { account?: Row; roles: Ro
           <TextField name="name" label={t('console.name')} {...f} />
           <TextField name="email" label={t('auth.email')} type="email" dir="ltr" {...f} />
           <SelectField name="role_id" label={t('console.role')} blank={pick} disabled={!pick} options={options.map((r) => [r.id, roleName(r)])} {...f} />
-          {!account && <TextField name="password" label={t('auth.password')} type="password" autoComplete="new-password" {...f} />}
+          {!account && <TextField name="password" label={t('auth.password')} {...noGenerator} {...f} />}
         </>
       )}
     </FormDialog>
@@ -65,7 +71,7 @@ function PasswordDialog({ account, ...dialog }: { account: Row } & Controlled) {
       onDone={() => {}}
       shown={['password']}
     >
-      {(f) => <TextField name="password" label={t('auth.password')} type="password" dir="ltr" autoComplete="new-password" {...f} />}
+      {(f) => <TextField name="password" label={t('auth.password')} {...noGenerator} {...f} />}
     </FormDialog>
   )
 }
@@ -244,7 +250,7 @@ function RoleDialog() {
   )
 }
 
-const ACTIONS = ['view', 'create', 'edit', 'delete', 'assign_manager', 'manage']
+const ACTIONS = ['view', 'create', 'edit', 'delete', 'assign_manager', 'manage', 'lock']
 
 /** One row per resource, one column per action; keyed by role and its grants so a saved role resets the controls. */
 function Matrix({ role, perms, editable }: { role: Row; perms: Row[]; editable: boolean }) {

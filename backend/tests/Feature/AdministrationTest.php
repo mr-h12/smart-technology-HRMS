@@ -75,6 +75,16 @@ class AdministrationTest extends TestCase
         $this->postJson('/api/v1/auth/login', ['email' => $m->email, 'password' => 'newpass99'])->assertCreated();
     }
 
+    public function test_a_password_the_developer_sets_signs_the_account_in(): void
+    {
+        $dev = $this->makeUser('developer');
+        $m = $this->makeUser('manager');
+        $this->withToken($this->token($dev))->putJson("/api/v1/users/{$m->id}/password", ['password' => 'password123'])->assertNoContent();
+        $this->flushHeaders();
+        $this->postJson('/api/v1/auth/login', ['email' => $m->email, 'password' => 'secret123'])->assertStatus(401);
+        $this->postJson('/api/v1/auth/login', ['email' => $m->email, 'password' => 'password123'])->assertCreated();
+    }
+
     public function test_sessions_are_listed_and_terminated(): void
     {
         $m = $this->makeUser('manager');
@@ -91,7 +101,7 @@ class AdministrationTest extends TestCase
     public function test_role_matrix_is_editable_and_audited(): void
     {
         $this->signIn('developer');
-        $this->getJson('/api/v1/permissions')->assertJsonCount(17, 'data');
+        $this->getJson('/api/v1/permissions')->assertJsonCount(21, 'data');
         $role = $this->postJson('/api/v1/roles', ['slug' => 'auditor', 'name' => 'Auditor', 'name_ar' => 'مراجع'])->assertCreated()->json('data.id');
         $pid = Permission::where(['resource' => 'audit_log', 'action' => 'view', 'scope' => 'all'])->value('id');
         $this->patchJson("/api/v1/roles/$role/permissions", ['permission_ids' => [$pid]])->assertOk()->assertJsonPath('data.permissions', ['audit_log.view.all']);

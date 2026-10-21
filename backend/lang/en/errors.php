@@ -13,6 +13,7 @@ return [
     'duplicate_date' => 'A record already exists on this date.',
     'leave_code_required' => 'Leave code is required for leave types.',
     'leave_code_not_allowed' => 'Leave code applies to leave types only.',
+    'leave_code_taken' => 'Another active leave type already uses this code.',
     'allowance_value_required' => 'Value is required unless the allowance type is "None".',
     'employee_type' => [
         'office' => 'Office employee',

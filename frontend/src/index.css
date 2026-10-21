@@ -109,12 +109,20 @@
   --destructive: #b42318;
   --border: #e7e5e4;
   --input: #78716c;
-  --ring: #c2410c;
+  --ring: #57534e;
   --link: #9a3412;
   --sidebar: #ffffff;
   --success: #166534;
   --warning: #9a4700;
   --info: #1d4ed8;
+  --success-bg: #eef8f1;
+  --success-border: #bbf7d0;
+  --warning-bg: #fff6ed;
+  --warning-border: #fed7aa;
+  --info-bg: #eff6ff;
+  --info-border: #bfdbfe;
+  --destructive-bg: #fef3f2;
+  --destructive-border: #fecdca;
 
   --elevation-1: 0 1px 2px 0 rgb(0 0 0 / 0.06), 0 1px 3px 0 rgb(0 0 0 / 0.1);
   --elevation-2: 0 8px 24px -4px rgb(0 0 0 / 0.14), 0 2px 8px -2px rgb(0 0 0 / 0.08);
@@ -149,12 +157,20 @@
   --destructive: #ff9b91;
   --border: #1f2937;
   --input: #6b7280;
-  --ring: #a5b4fc;
+  --ring: #9ca3af;
   --link: #a5b4fc;
   --sidebar: #111827;
   --success: #5ddb90;
   --warning: #ffca6a;
   --info: #7cc4ff;
+  --success-bg: color-mix(in srgb, var(--success) 14%, var(--card));
+  --success-border: color-mix(in srgb, var(--success) 40%, var(--card));
+  --warning-bg: color-mix(in srgb, var(--warning) 14%, var(--card));
+  --warning-border: color-mix(in srgb, var(--warning) 40%, var(--card));
+  --info-bg: color-mix(in srgb, var(--info) 14%, var(--card));
+  --info-border: color-mix(in srgb, var(--info) 40%, var(--card));
+  --destructive-bg: color-mix(in srgb, var(--destructive) 14%, var(--card));
+  --destructive-border: color-mix(in srgb, var(--destructive) 40%, var(--card));
 
   --elevation-1: 0 1px 2px 0 rgb(0 0 0 / 0.4), 0 1px 3px 0 rgb(0 0 0 / 0.3);
   --elevation-2: 0 8px 24px -4px rgb(0 0 0 / 0.55), 0 2px 8px -2px rgb(0 0 0 / 0.4);
@@ -219,6 +235,14 @@
   --color-success: var(--success);
   --color-warning: var(--warning);
   --color-info: var(--info);
+  --color-success-bg: var(--success-bg);
+  --color-success-border: var(--success-border);
+  --color-warning-bg: var(--warning-bg);
+  --color-warning-border: var(--warning-border);
+  --color-info-bg: var(--info-bg);
+  --color-info-border: var(--info-border);
+  --color-destructive-bg: var(--destructive-bg);
+  --color-destructive-border: var(--destructive-border);
   --color-chart-1: var(--chart-1);
   --color-chart-2: var(--chart-2);
   --color-chart-3: var(--chart-3);
@@ -235,15 +259,20 @@
 
 @layer base {
   * {
-    @apply border-border outline-ring/50;
+    @apply border-border outline-ring;
   }
+  /* App feel on a phone. Preflight already sets -webkit-text-size-adjust and -webkit-tap-highlight-color; pinch zoom stays. */
   html {
+    text-size-adjust: 100%;
+    touch-action: manipulation; /* no double-tap zoom */
+    overscroll-behavior: none; /* no rubber-band bounce or pull-to-refresh of the whole page */
     font-variant-numeric: tabular-nums;
     -webkit-font-smoothing: antialiased;
     -moz-osx-font-smoothing: grayscale;
   }
   body {
     @apply bg-background text-foreground font-sans;
+    overscroll-behavior: none;
     font-size: var(--text-body);
     line-height: var(--text-body--line-height);
   }

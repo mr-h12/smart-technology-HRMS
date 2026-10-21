@@ -42,6 +42,12 @@ test('a second mount of the same path within staleTime makes no new request', as
   expect(calls('/sites?page=1')).toBe(1)
 })
 
+test('useList passes refetchInterval through', async () => {
+  mockFetch({ 'GET /api/v1/sites': () => list([]) })
+  renderHook(() => useList('/sites', { refetchInterval: 20 }), { wrapper })
+  await waitFor(() => expect(calls('/sites')).toBeGreaterThanOrEqual(3))
+})
+
 test('a save refetches every list of that resource and leaves other resources alone', async () => {
   let n = 0
   mockFetch({
@@ -74,6 +80,23 @@ test('every save also marks the audit log stale, so the next visit shows the new
   const { result } = renderHook(() => ({ a: useList('/audit-log?page=1'), save: useSave() }), { wrapper })
   await waitFor(() => expect(result.current.a.loading).toBe(false))
   await act(() => result.current.save('/sites', { body: {} }))
+  await waitFor(() => expect(calls('/audit-log?page=1')).toBe(2))
+})
+
+test('a refused save still refetches what it touches and the audit log, and still throws', async () => {
+  mockFetch({
+    'GET /api/v1/attendance': () => list([]),
+    'GET /api/v1/audit-log': () => list([]),
+    'PUT /api/v1/attendance/days': () => json(409, { error: { code: 'period_locked', message: 'Locked' } }),
+  })
+  const { result } = renderHook(() => ({ a: useList('/attendance?period=x'), l: useList('/audit-log?page=1'), save: useSave() }), { wrapper })
+  await waitFor(() => expect(result.current.a.loading || result.current.l.loading).toBe(false))
+  let thrown: unknown
+  await act(async () => {
+    await result.current.save('/attendance/days', { method: 'PUT', body: {} }).catch((e) => (thrown = e))
+  })
+  expect(thrown).toMatchObject({ status: 409, code: 'period_locked' })
+  await waitFor(() => expect(calls('/attendance?period=x')).toBe(2))
   await waitFor(() => expect(calls('/audit-log?page=1')).toBe(2))
 })
 
