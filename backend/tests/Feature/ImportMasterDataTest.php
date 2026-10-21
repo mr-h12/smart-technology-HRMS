@@ -220,6 +220,21 @@ class ImportMasterDataTest extends TestCase
     }
 
     #[Test]
+    public function refuses_an_existing_report_and_leaves_it_untouched(): void
+    {
+        $report = $this->tempPath();
+        file_put_contents($report, "ref,code\nOFF-1,1\n");   // an earlier run's only ref→code map
+        $before = $this->counts();
+
+        [$code, $out] = $this->import($this->workbook($this->valid()), ['--commit' => true, '--report' => $report]);
+
+        $this->assertNotSame(0, $code);
+        $this->assertStringContainsString('The report file already exists', $out);
+        $this->assertSame("ref,code\nOFF-1,1\n", file_get_contents($report));
+        $this->assertSame($before, $this->counts());
+    }
+
+    #[Test]
     public function refuses_a_malformed_workbook_before_any_write(): void
     {
         $before = $this->counts();

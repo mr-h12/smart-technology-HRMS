@@ -45,6 +45,9 @@ final class ImportMasterDataCommand extends Command
         }
         // Opened before the import: a commit whose ref→code mapping cannot be saved must not happen.
         $reportPath = $text($this->option('report'));
+        if ($reportPath !== '' && file_exists($reportPath)) {   // it may hold an earlier run's only ref→code map
+            return $this->refuse('The report file already exists; give a new path.');
+        }
         $report = $reportPath === '' ? null : $this->openReport($reportPath);
         if ($reportPath !== '' && $report === null) {
             return $this->refuse('The report file cannot be created at that path.');
@@ -97,15 +100,16 @@ final class ImportMasterDataCommand extends Command
         return self::FAILURE;
     }
 
-    /** @return resource|null the report, emptied and readable by its owner only; null when it cannot be created */
+    /** @return resource|null a new report readable by its owner only; null when it cannot be created */
     private function openReport(string $path)
     {
-        // @: a missing directory is answered by the null, not by an ErrorException.
-        if (! @touch($path) || ! @chmod($path, 0600)) {   // the mode is set before any content is written
+        // 'x' creates or fails, so an existing file is never emptied; @: a failure is answered by the null, not an ErrorException.
+        $out = @fopen($path, 'x');
+        if ($out === false) {
             return null;
         }
-        $out = @fopen($path, 'w');
+        chmod($path, 0600);   // still empty: the mode is set before any content is written
 
-        return $out === false ? null : $out;
+        return $out;
     }
 }
