@@ -12,7 +12,7 @@ RUN set -eux; \
 COPY --from=composer:2 /usr/bin/composer /usr/bin/composer
 
 ENV TZ=UTC
-RUN printf 'date.timezone=UTC\nmemory_limit=512M\n' > /usr/local/etc/php/conf.d/zz-app.ini
+RUN printf 'date.timezone=UTC\nmemory_limit=512M\nupload_max_filesize=6M\npost_max_size=8M\n' > /usr/local/etc/php/conf.d/zz-app.ini
 
 COPY zzz-pool.conf /usr/local/etc/php-fpm.d/zzz-pool.conf
 

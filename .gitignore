@@ -16,3 +16,6 @@ backend/.phpunit.result.cache
 backend/bootstrap/cache/*.php
 backend/.deptrac.cache
 backups/
+.claude/*
+!.claude/skills/
+!.claude/launch.json
