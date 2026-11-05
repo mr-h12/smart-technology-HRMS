@@ -200,3 +200,10 @@ test('an error with no request (a queued job) has no request link', async () => 
   await user.click(await screen.findByRole('button', { name: 'عرض التفاصيل' }))
   expect(within(await screen.findByRole('dialog')).queryByRole('link')).toBeNull()
 })
+
+test('without system_log.view the page is not found and loads nothing', async () => {
+  mockFetch({})
+  renderWithAuth(<LogsPage />, ['employee.view.all', 'audit_log.view.all'])
+  expect(await screen.findByRole('heading', { name: 'الصفحة غير موجودة' })).toBeInTheDocument()
+  expect(vi.mocked(fetch).mock.calls.some(([u]) => String(u).includes('-log'))).toBe(false)
+})

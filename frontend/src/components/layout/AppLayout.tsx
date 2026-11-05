@@ -42,8 +42,8 @@ export const NAV: { group: string; items: { path: string; key: string; icon: Luc
     group: 'nav.group.hr',
     items: [
       { path: '/site-day', key: 'nav.siteDay', icon: ClipboardCheck, abilities: ['attendance.record'] },
-      { path: '/team-fares', key: 'nav.teamFares', icon: Bus, abilities: ['fare.manage', 'employee.view.own'] },
       { path: '/employees', key: 'nav.employees', icon: Users, abilities: ['employee.view'] },
+      { path: '/team-fares', key: 'nav.teamFares', icon: Bus, abilities: ['fare.manage', 'employee.view.own'] },
       { path: '/attendance', key: 'nav.attendance', icon: CalendarCheck, abilities: ['attendance.view'] },
       { path: '/leave', key: 'nav.leave', icon: CalendarDays, abilities: ['leave.view'] },
       { path: '/wage-proposals', key: 'nav.wageProposals', icon: HandCoins, abilities: ['employee.approve_wage'] },
