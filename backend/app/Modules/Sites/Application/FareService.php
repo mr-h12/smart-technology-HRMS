@@ -165,7 +165,6 @@ final class FareService
         $siteIds = $this->sites->idsManagedBy($managerId);
         // Deleted sites and residences still name the rows that point at them; only live sites are offered.
         $all = Site::withTrashed()->whereKey($siteIds)->orderBy('name_ar')->get();
-        $siteNames = $all->pluck('name_ar', 'id')->all();
         $sites = array_values($all->whereNull('deleted_at')->map(fn (Site $s) => ['id' => (string) $s->getKey(), 'name' => (string) $s->name_ar])->all());
         $employees = EmployeeReach::apply(Employee::query()->select('employees.*')
             ->selectRaw(Employee::TYPE_ON.' as type_on', [$date])
@@ -174,6 +173,8 @@ final class FareService
             ->where(fn (Builder $q) => $q->whereNull('termination_date')->orWhere('termination_date', '>=', $date))
             ->orderBy('code')->get();
         $residences = Residence::withTrashed()->whereKey($employees->pluck('residence_id')->filter()->unique()->values()->all())->pluck('name_ar', 'id')->all();
+        // A worker on one of these sites' crews today may be homed at another site, so their home sites are named too.
+        $siteNames = Site::withTrashed()->whereKey([...$siteIds, ...$employees->pluck('home_site_id')->filter()->unique()->values()->all()])->pluck('name_ar', 'id')->all();
 
         $rows = $employees->map(function (Employee $e) use ($date, $siteIds, $sites, $siteNames, $residences): array {
             $type = (string) $e->getAttribute('type_on');
@@ -194,7 +195,12 @@ final class FareService
 
                 return $row;
             }
-            $siteId = (string) $e->getAttribute('home_site_id');
+            $siteId = $e->getAttribute('home_site_id');
+            if ($siteId === null) {
+                // A day laborer a site manager added has only that day's crew, no home site: no site fare, as with no residence.
+                return [...$row, 'source' => $residenceId === null ? 'no_residence' : 'none'];
+            }
+            $siteId = (string) $siteId;
             $fare = $this->lookup->describe((string) $e->getKey(), $siteId, $date);
 
             return [

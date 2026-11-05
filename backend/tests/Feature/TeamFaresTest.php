@@ -3,6 +3,7 @@
 namespace Tests\Feature;
 
 use App\Modules\Employees\Application\EmployeeService;
+use App\Modules\Employees\Infrastructure\Eloquent\DayCrewChange;
 use App\Modules\Identity\Infrastructure\Eloquent\User;
 use App\Modules\Sites\Infrastructure\Eloquent\EmployeeFareOverride;
 use App\Modules\Sites\Infrastructure\Eloquent\Fare;
@@ -369,5 +370,20 @@ class TeamFaresTest extends TestCase
             ->assertJsonPath('data.sites', [])
             ->assertJsonPath('data.rows.0.residence', ['id' => $r, 'name' => 'R-1'])
             ->assertJsonPath('data.rows.0.site', ['id' => $s1, 'name' => 'S-1']);
+    }
+
+    public function test_team_fares_list_a_day_crew_laborer_with_no_home_site_or_a_home_site_elsewhere(): void
+    {
+        [$s1, $s2, $r, $lead] = $this->team();
+        $proposed = $this->employee('day_laborer', '2026-11-05');                            // added by the site manager: no home site, no residence
+        DayCrewChange::create(['employee_id' => $proposed, 'date' => '2026-11-05', 'site_id' => $s1]);
+        $loaned = $this->employee('day_laborer', '2026-01-01', ['residence_id' => $r]);     // homed at S-2, on S-1's crew today
+        $this->homeSite($loaned, $s2, '2026-01-01');
+        DayCrewChange::create(['employee_id' => $loaned, 'date' => '2026-11-05', 'site_id' => $s1]);
+        $this->actingAs($lead, 'api');
+
+        $rows = collect($this->getJson('/api/v1/team-fares')->assertOk()->assertJsonCount(3, 'data.rows')->json('data.rows'))->keyBy('employee_id');
+        $this->assertSame(['site' => null, 'amount' => null, 'source' => 'no_residence'], array_intersect_key($rows[$proposed], array_flip(['site', 'amount', 'source'])));
+        $this->assertSame(['id' => $s2, 'name' => 'S-2'], $rows[$loaned]['site']);
     }
 }

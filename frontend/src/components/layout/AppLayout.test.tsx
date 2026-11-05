@@ -2,6 +2,7 @@ import { screen, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { afterEach, beforeEach, expect, test, vi } from 'vitest'
 import { json, me, mockFetch, pagination, renderApp } from '@/test-utils'
+import { homePath } from './AppLayout'
 
 const user = userEvent.setup()
 const signedIn = (permissions: string[]) => {
@@ -117,4 +118,10 @@ test('a manager lands on /site-day', async () => {
   renderApp('/')
   expect(await screen.findByText('لا توجد مواقع مسندة إليك. تواصل مع الموارد البشرية.')).toBeInTheDocument()
   expect(screen.getByRole('link', { name: 'حضور الموقع' })).toHaveAttribute('aria-current', 'page')
+})
+
+test('HR and the Developer land on /employees, not on a page added later in the group', () => {
+  const holds = (abilities: string[]) => (a: string) => abilities.includes(a)
+  expect(homePath(holds(['employee.view', 'fare.manage', 'attendance.view', 'leave.view', 'employee.approve_wage', 'user.view']))).toBe('/employees')
+  expect(homePath(holds(['attendance.record', 'employee.view.own']))).toBe('/site-day')
 })
