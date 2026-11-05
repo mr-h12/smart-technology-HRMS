@@ -14,6 +14,7 @@ import { useDebounced } from '@/hooks/useDebounced'
 import { useAuth } from '@/lib/auth'
 import { USERS, useApi } from '@/lib/query'
 import { Actor, show } from './audit'
+import { NotFoundPage } from './pages'
 
 const PER_PAGE = 20
 const METHODS = ['GET', 'POST', 'PUT', 'PATCH', 'DELETE']
@@ -284,8 +285,10 @@ const TABS = [
 /** The tab lives in `?tab=`; a missing or unknown tab shows Requests. Switching tabs from the bar drops the other tab's request-ID filter. */
 export function LogsPage() {
   const { t } = useTranslation()
+  const { can } = useAuth()
   const [params, setParams] = useSearchParams()
   const tab = TABS.find((x) => x.value === params.get('tab'))?.value ?? 'requests'
+  if (!can('system_log.view')) return <NotFoundPage />
   return (
     <div className="space-y-6">
       <PageHeader title={t('page.logs')} description={t('logs.subtitle')} />
