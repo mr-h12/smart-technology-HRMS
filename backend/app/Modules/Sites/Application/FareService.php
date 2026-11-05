@@ -22,8 +22,6 @@ final class FareService
 {
     use Paginates;
 
-    private const HOME_SITE = '(select s.site_id from employee_site_assignments s where s.employee_id = employees.id and s.deleted_at is null and s.effective_from <= ?::date order by s.effective_from desc limit 1)';
-
     public function __construct(
         private readonly SiteService $sites,
         private readonly FareLookup $lookup,
@@ -154,7 +152,7 @@ final class FareService
     }
 
     /**
-     * A team lead's team on a date (EmployeeReach, employed on the date) with the fare in force: workers at their home site;
+     * A team lead's team on a date (EmployeeReach, employed on the date) with the fare in force: workers at their site on the date (as reach reads it);
      * engineers by their overrides at the manager's sites, since they never take the residence x site default.
      * ponytail: unpaginated with per-row lookups (~3 queries a worker); a team is tens of rows, one joined query if one passes a few hundred
      *
@@ -169,7 +167,7 @@ final class FareService
         $sites = array_values($all->whereNull('deleted_at')->map(fn (Site $s) => ['id' => (string) $s->getKey(), 'name' => (string) $s->name_ar])->all());
         $employees = EmployeeReach::apply(Employee::query()->select('employees.*')
             ->selectRaw(Employee::TYPE_ON.' as type_on', [$date])
-            ->selectRaw(self::HOME_SITE.' as home_site_id', [$date]), $managerId, $date)
+            ->selectRaw(Employee::SITE_ON.' as site_on', [$date, $date, $date]), $managerId, $date)
             ->where(fn (Builder $q) => $q->whereNull('hire_date')->orWhere('hire_date', '<=', $date))
             ->where(fn (Builder $q) => $q->whereNull('termination_date')->orWhere('termination_date', '>=', $date))
             ->orderBy('code')->get();
@@ -194,7 +192,7 @@ final class FareService
 
                 return $row;
             }
-            $siteId = (string) $e->getAttribute('home_site_id');
+            $siteId = (string) $e->getAttribute('site_on');
             $fare = $this->lookup->describe((string) $e->getKey(), $siteId, $date);
 
             return [
