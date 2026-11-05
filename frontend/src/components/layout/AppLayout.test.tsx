@@ -118,3 +118,9 @@ test('a manager lands on /site-day', async () => {
   expect(await screen.findByText('لا توجد مواقع مسندة إليك. تواصل مع الموارد البشرية.')).toBeInTheDocument()
   expect(screen.getByRole('link', { name: 'حضور الموقع' })).toHaveAttribute('aria-current', 'page')
 })
+
+test('HR lands on /employees', async () => {
+  signedIn(['employee.view.all', 'fare.manage.all', 'attendance.view.all', 'employee.approve_wage.all'])
+  renderApp('/')
+  expect(await screen.findByRole('link', { name: 'الموظفون', current: 'page' })).toBeInTheDocument()
+})
