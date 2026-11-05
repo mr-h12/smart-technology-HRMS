@@ -152,7 +152,7 @@ final class FareService
     }
 
     /**
-     * A team lead's team on a date (EmployeeReach, employed on the date) with the fare in force: workers at their site on the date (as reach reads it);
+     * A site manager's team on a date (EmployeeReach, employed on the date) with the fare in force: workers at their site on the date (as reach reads it);
      * engineers by their overrides at the manager's sites, since they never take the residence x site default.
      * ponytail: unpaginated with per-row lookups (~3 queries a worker); a team is tens of rows, one joined query if one passes a few hundred
      *
