@@ -27,7 +27,7 @@ _Avoid_: English name, device ID
 **Employee ID** (الرقم الوظيفي):
 The number the company gives each employee; stored as the employee's `code`, a whole number from 0. It stays visible. A number is never reissued: a new employee gets the highest ID ever issued + 1, even after renumbering, and a deleted employee's ID stays theirs. HR (permission `employee.edit_code`) may change an ID to any free number from 0 up to the highest issued, or swap it with another employee's. Changing an employee's ID or Arabic name after an attendance template download refuses that employee's rows in the old template; download a fresh one.
 _Avoid_: الكود; code (in the UI)
-0 is the CEO's ID and no one else's. Employees are selected by name; the ID tells two people with the same name apart and keys imports and pasted batches.
+0 is the CEO's ID and no one else's: whoever holds 0 is the CEO. It is given only while no one holds it, and never swapped. Employees are selected by name; the ID tells two people with the same name apart and keys imports and pasted batches.
 
 **Archive** (الأرشيف):
 The employees whose termination date has passed. The termination day itself is still worked, so an employee leaves the active list the day after. Reactivating an archived employee clears the termination date and reason, which counts the days since as employed again.
