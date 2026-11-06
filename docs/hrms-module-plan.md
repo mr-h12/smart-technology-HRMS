@@ -203,18 +203,18 @@ Status is verified against `main` at `7be93b9` (PR #3 merged) by reading the cod
 | Q8 (item 11) | Egyptian mobile only, `^01[0125]\d{8}$`, stored as text. | `phone` accepts any string (`'nullable', 'string'`, `EmployeeRules.php:54`); the master import keeps it as text (`MasterDataImport::TEXT`). | **First** list the stored phones that fail the pattern, on a copy of the production database. Then enforce the rule in `EmployeeRules` and the form. WhatsApp normalising (`+20…`) is separate, in Release 3. | Employees |
 
 ### Lateness deduction (`docs/calculations.md` §0a)
-- **Rule:** a 15-minute grace a day, then chargeable minutes × wage ÷ divisor × the **employee's** multiplier. Divisors: 14,400 for monthly staff, 480 for day laborers. The wage is the one in force in the system. No EGP-per-minute amount is imported.
+- **Rule:** a 15-minute grace a day, then chargeable minutes × wage ÷ divisor × the **type's** multiplier: office 1, engineers 1.5, permanent workers 2, day laborers 2 (2026-11-06, R27; it replaces the per-employee multiplier decided 2026-11-03). Divisors: 14,400 for monthly staff, 480 for day laborers. The wage is the one in force in the system. No EGP-per-minute amount is imported.
 - **Evidence (`معاملات_خصم_التأخير_لكلود.xlsx`, given 2026-11-03; reference only, not committed, because it names employees):**
   - 306 rows: 274 extracted, 32 need review.
   - Office: 27 rows, all ×1.
-  - Monthly site staff: 27 rows, 25 extracted (6 at ×1.5, 19 at ×2), 2 to match.
+  - Monthly site staff: 27 rows, 25 extracted (6 at ×1.5, 19 at ×2), 2 to match. Re-checked 2026-11-06 against the workbook's formulas: every ×1.5 is an engineer-template sheet and every ×2 a worker-template sheet, so the value follows the type.
   - Day laborers: 252 rows, 222 at ×2 (divisor 480), 30 to match.
   - 4 names appear twice. Rows are source records, not unique employees. Each is matched to an Employee ID by HR before use; a blank multiplier means unresolved, not 0.
 - **Conflicts with the earlier spec:**
-  - Multipliers were per type (engineers 1.5, workers 2; `CLAUDE.md` and `excel-system-analysis.md` item 13); now they are per employee.
+  - Multipliers stay per type, as in `CLAUDE.md` and `excel-system-analysis.md` item 13 (2026-11-06). The per-employee rule of 2026-11-03 is withdrawn.
   - The field types had no grace; now every type has one.
   - Both can move the October fixtures (engineers 315,451; day laborers 391,948). Explain every difference in the Excel-difference report, and do not edit a fixture to make a test pass.
-- **Where the multiplier lives:** on the employee, owned by Employees and set by HR only. Whether it is effective-dated waits for R27. Payroll reads it and refuses to compute an employee whose multiplier is blank.
+- **Where the multiplier lives:** the existing per-type settings (`lateness_multiplier_office`, `_engineer`, `_permanent_worker`, `_day_laborer`; seeded 1, 1.5, 2, 2). No field on the employee, and no matching of the multipliers workbook to employee codes.
 - Absence, early leave and overtime keep their own rules. The absence formula is verified for office staff only (R21).
 
 ### Other decisions recorded
@@ -239,10 +239,9 @@ Status is verified against `main` at `7be93b9` (PR #3 merged) by reading the cod
   - Add R19 (workday) to the attendance contracts. The shift default changes in one new migration, after R19 is answered.
   - The name picker (Q7) replaces order 4's "quick entry by name".
 - **Second developer:**
-  - WP-B1 gains the phone check on a database copy (Q8), the server-side notes rule (Q6) and the CEO-only 0 (Q2, after R23).
+  - WP-B1 gains the phone check on a database copy (Q8), the server-side notes rule (Q6) and the CEO-only 0 (Q2; R23 answered 2026-11-06: 0 is the CEO's alone).
   - The account-to-employee link (Q4) is a new small PR in Employees, before the site-manager workspace.
-  - The per-employee lateness multiplier field moves into Employees, before payroll, after R27.
-- **Third developer (Payroll):** builds §0a against the matched multipliers. It needs R21, R25, R26 and R27 answered first.
+- **Third developer (Payroll):** builds §0a with the multiplier per type. R26 and R27 are answered (2026-11-06); it still needs R21 and R25.
 
 ## Modules, ownership and parallel work
 **Status: proposal.** Owner approval needed. Developer names are the current team: **Youssef**, who built Releases 1a–1c, and **the second developer**, who joins now. A third developer may join later.

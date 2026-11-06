@@ -165,11 +165,11 @@ A day's late minutes minus the grace period, never below zero. Only these are de
 _Avoid_: net late minutes (that is the period's sum after exemptions)
 
 **Lateness multiplier** (معامل التأخير):
-How many minutes of pay one chargeable late minute costs. It belongs to the employee, not to the employee type or job title: 1 for office staff, 1.5 or 2 for monthly site staff, 2 for day laborers in the October Excel.
+How many minutes of pay one chargeable late minute costs. It belongs to the employee type, not to the person or the job title: 1 for office staff, 1.5 for engineers, 2 for permanent workers and day laborers.
 _Avoid_: penalty rate, lateness factor
 
 **Lateness deduction** (خصم التأخير):
-Chargeable late minutes × the employee's minute rate × their lateness multiplier. A different thing from the absence deduction, early leave and overtime, which have their own rules.
+Chargeable late minutes × the employee's minute rate × their type's lateness multiplier. A different thing from the absence deduction, early leave and overtime, which have their own rules.
 
 **Absence deduction** (خصم الغياب):
 The pay lost for a full day absent (غ). Separate from lateness: a lateness multiplier of 1 exempts no one from it.
