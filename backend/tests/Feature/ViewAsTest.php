@@ -43,7 +43,7 @@ class ViewAsTest extends TestCase
         $role = Role::where('slug', $roleSlug)->firstOrFail();
         foreach ($triples as $t) {
             [$resource, $action, $scope] = explode('.', $t);
-            $role->permissions()->attach(Permission::where(compact('resource', 'action', 'scope'))->value('id'));
+            $role->permissions()->syncWithoutDetaching([Permission::where(compact('resource', 'action', 'scope'))->value('id')]);
         }
     }
 

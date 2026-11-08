@@ -28,16 +28,15 @@ class AdministrationTest extends TestCase
         return $status;
     }
 
-    public function test_developer_creates_an_account_and_only_the_developer_can(): void
+    public function test_developer_creates_an_account(): void
     {
         $this->signIn('developer');
         $res = $this->postJson('/api/v1/users', ['name' => 'منى', 'email' => 'mona@smart.test', 'password' => 'abcd1234', 'role_id' => Role::where('slug', 'manager')->value('id')])
             ->assertCreated()->assertJsonMissingPath('data.password');
         $new = DB::table('audit_log')->where(['event' => 'USER_CREATED', 'entity_id' => $res->json('data.id')])->value('new_values');
         $this->assertStringNotContainsString('password', $new);
-        $this->signIn('hr');
+        $this->signIn('manager');
         $this->postJson('/api/v1/users', [])->assertStatus(403);
-        $this->getJson('/api/v1/users')->assertOk();                    // HR may list accounts to pick managers
     }
 
     public function test_create_normalises_email_and_rejects_case_duplicate(): void

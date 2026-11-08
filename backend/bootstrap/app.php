@@ -86,7 +86,7 @@ return Application::configure(basePath: dirname(__DIR__))
         $exceptions->dontReport(AuthorizationRefused::class);
 
         $exceptions->render(fn (AuthorizationRefused $e, Request $request) => ApiEnvelope::error(
-            $request, 403, 'permission_denied', __('identity.refusal.permission_denied'),
+            $request, 403, $e->reason, __('identity.refusal.'.$e->reason),
         ));
 
         // An attendance refusal (locked period, future date) is an answer, not a fault.

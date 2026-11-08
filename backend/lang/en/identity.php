@@ -8,6 +8,7 @@ return [
         'permission_denied' => 'You do not have permission to perform this action.',
         'rate_limited' => 'Too many attempts. Try again shortly.',
         'not_viewing_as' => 'You are not viewing as another account.',
+        'account_out_of_reach' => 'You cannot manage an account, or give a role, that holds permissions you do not have.',
     ],
     'view_as' => [
         'self' => 'You cannot view as your own account.',

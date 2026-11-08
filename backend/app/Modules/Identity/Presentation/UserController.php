@@ -31,6 +31,11 @@ final class UserController
         return ApiEnvelope::single($request, $this->users->create($request->all()), 201);
     }
 
+    public function assignableRoles(Request $request): JsonResponse
+    {
+        return ApiEnvelope::single($request, $this->users->assignableRoles());
+    }
+
     public function show(Request $request, string $user): JsonResponse
     {
         return ApiEnvelope::single($request, $this->users->show($user));

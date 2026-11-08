@@ -24,11 +24,12 @@ class RbacTest extends TestCase
         $this->assertSame(40, Permission::count());
         $this->assertSame(['attendance.record.own', 'employee.crew.own', 'employee.propose_laborer.own', 'employee.view.own', 'leave.request.own', 'leave.view.own', 'site.view.own'], $grants('manager'));
         $this->assertSame(['attendance.view.all', 'audit_log.view.all', 'employee.view.all', 'employee_document.view.all', 'leave.decide_escalated.all', 'leave.view.all', 'setting.view.all', 'site.view.all'], $grants('ceo'));
-        $this->assertCount(25, $grants('hr'));
+        $this->assertCount(26, $grants('hr'));
         foreach (['attendance.view.all', 'attendance.edit.all', 'attendance.lock.all', 'holiday.manage.all', 'employee.assign_site.all', 'employee.approve_wage.all', 'employee.edit_code.all', 'employee_document.view.all', 'employee_document.edit.all', 'fare.manage.all', 'leave.view.all', 'leave.request.all', 'leave.decide.all', 'leave.adjust.all'] as $name) {
             $this->assertContains($name, $grants('hr'));
         }
-        $this->assertNotContains('user.manage.all', $grants('hr'));
+        $this->assertContains('user.manage.all', $grants('hr'));        // R22: within reach, see HrAccountsTest
+        $this->assertNotContains('role.manage.all', $grants('hr'));
         $this->assertNotContains('leave.decide_escalated.all', $grants('hr'));
         $this->assertCount(32, $grants('developer'));
         $this->assertNotContains('leave.view.own', $grants('developer'));
@@ -100,6 +101,6 @@ class RbacTest extends TestCase
         $token = $this->postJson('/api/v1/auth/login', ['email' => $this->makeUser('hr')->email, 'password' => 'secret123'])->json('data.token');
         $perms = $this->withToken($token)->getJson('/api/v1/auth/me')->json('data.permissions');
         $this->assertContains('employee.create.all', $perms);
-        $this->assertNotContains('user.manage.all', $perms);
+        $this->assertNotContains('role.manage.all', $perms);
     }
 }

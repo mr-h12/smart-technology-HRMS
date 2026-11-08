@@ -72,7 +72,7 @@ class ErrorLogTest extends TestCase
         $this->getJson('/api/v1/nope')->assertNotFound();
         $this->signIn('hr');
         $this->postJson('/api/v1/employees', [])->assertStatus(422);
-        $this->postJson('/api/v1/users', [])->assertForbidden();
+        $this->postJson('/api/v1/roles', [])->assertForbidden();
 
         $this->assertSame($before, ErrorLogEntry::count());
     }
