@@ -46,7 +46,7 @@ Employee types, each with its own payroll cycle:
 ## Business rules
 These numbers are **settings** seeded with the values below. Read them from settings and keep them out of code literals:
 - Month = 30 days, day = 8 hours, overtime ×1.5.
-- Lateness (decided 2026-11-03, `docs/calculations.md` §0a): a 15-minute grace a day for every type, then chargeable minutes × wage ÷ divisor × **the employee's own multiplier** (office 1, monthly site staff 1.5 or 2, day laborers 2 in October). Divisor 14,400 for monthly staff, 480 for day laborers. A blank multiplier is unresolved, never 0.
+- Lateness (decided 2026-11-03, `docs/calculations.md` §0a): a 15-minute grace a day for every type, then chargeable minutes × wage ÷ divisor × **the multiplier of the employee's type** (office 1, engineers 1.5, permanent workers 2, day laborers 2; per type since 2026-11-06, R27). Divisor 14,400 for monthly staff, 480 for day laborers.
 - Office shift 09:00–17:00 (per-employee override). Weekly off per type: office Friday + Saturday, field Friday. Weekly off is paid for monthly staff.
 - Leave: under 1 year of service on Jan 1 → 10 days, 1 year or more → 21 days, 6 of them casual (عارضة) in both cases. The leave year starts Jan 1; nothing carries over. Passing 1 year mid-year alerts HR, who decides. Day laborers have no leave balance.
 - Social insurance (employee and company share) and income tax are **manual fields** HR types per employee per period. Blank means nothing is deducted.
