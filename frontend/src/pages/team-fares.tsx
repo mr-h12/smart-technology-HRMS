@@ -54,7 +54,7 @@ export function TeamFaresPage() {
       )}
       <ErrorBanner err={leads.err ?? err} shown={[]} />
       {path === null ? (
-        leads.loading ? <TableSkeleton /> : leads.data && <EmptyState icon={Users} title={t('teamFare.noLeads')} />
+        leads.loading ? <TableSkeleton /> : leads.data && <EmptyState icon={Users} title={t('teamFare.noManagers')} />
       ) : loading || !data ? (
         !err && <TableSkeleton />
       ) : !data.rows.length ? (
