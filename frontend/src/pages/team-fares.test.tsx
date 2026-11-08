@@ -79,7 +79,7 @@ test('an empty team says so', async () => {
   expect(await screen.findByText('مفيش عمال في التيم النهارده.')).toBeInTheDocument()
 })
 
-test('a team lead sees the team read-only', async () => {
+test('a site manager sees the team read-only', async () => {
   mockFetch({ 'GET /api/v1/team-fares': team() })
   renderWithAuth(<TeamFaresPage />, LEAD)
   await screen.findByText('محمود عبد الله')
@@ -96,19 +96,24 @@ test('the CEO gets not found', async () => {
   expect(urls('/team-fares')).toEqual([])
 })
 
-test('an all-scope user picks a team lead first', async () => {
+test('an all-scope user picks a site manager from the buttons first', async () => {
   mockFetch({
-    'GET /api/v1/sites/manager-candidates': () => json(200, { data: [{ id: 'm1', name: 'م. أحمد سامي' }] }),
+    'GET /api/v1/sites/manager-candidates': () => json(200, { data: [{ id: 'm1', name: 'م. أحمد سامي' }, { id: 'm2', name: 'م. هاني رزق' }] }),
     'GET /api/v1/team-fares': team(),
   })
   renderWithAuth(<TeamFaresPage />, HR)
-  const pick = await screen.findByRole('combobox', { name: 'مسؤول التيم' })
-  await screen.findByRole('option', { name: 'م. أحمد سامي' })
+  const managers = await screen.findByRole('group', { name: 'مدير الموقع' })
+  const pick = await within(managers).findByRole('button', { name: 'م. أحمد سامي' })
+  expect(screen.queryByRole('combobox')).toBeNull()
+  expect(pick).toHaveAttribute('aria-pressed', 'false')
+  expect(screen.getByText('اختر مدير الموقع')).toBeInTheDocument()
   expect(urls('/team-fares')).toEqual([])
-  await user.selectOptions(pick, 'm1')
+  await user.click(pick)
+  expect(pick).toHaveAttribute('aria-pressed', 'true')
+  expect(within(managers).getByRole('button', { name: 'م. هاني رزق' })).toHaveAttribute('aria-pressed', 'false')
   await screen.findByText('محمود عبد الله')
   expect(urls('/team-fares')).toEqual(['/api/v1/team-fares?manager_id=m1'])
-  expect(screen.getByText('اختار مسؤول التيم، سجّل السكن الناقص، وحدد المواصلات لكل سكن في كل موقع.')).toBeInTheDocument()
+  expect(screen.getByText('اختار مدير الموقع، سجّل السكن الناقص، وحدد المواصلات لكل سكن في كل موقع.')).toBeInTheDocument()
 })
 
 test('the route renders the page', async () => {
@@ -132,11 +137,10 @@ const saving = (extra = {}) => mockFetch({
   'PATCH /api/v1/employees/w4': () => json(200, { data: {} }),
   ...extra,
 })
-/** HR opens the page and picks the team lead m1. */
+/** HR opens the page and picks the site manager m1. */
 const asHr = async () => {
   const view = renderWithAuth(<TeamFaresPage />, HR)
-  await screen.findByRole('option', { name: 'م. أحمد سامي' })
-  await user.selectOptions(screen.getByRole('combobox', { name: 'مسؤول التيم' }), 'm1')
+  await user.click(await screen.findByRole('button', { name: 'م. أحمد سامي' }))
   return view
 }
 

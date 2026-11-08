@@ -53,10 +53,16 @@ const WEEKDAYS = ['sunday', 'monday', 'tuesday', 'wednesday', 'thursday', 'frida
 /** The `weekday.*` / `weekdayShort.*` key of an ISO date, read in UTC so no time zone moves it to another day. */
 export const weekdayOf = (date: string) => WEEKDAYS[new Date(`${date}T00:00:00Z`).getUTCDay()]
 
-/** Formats a stored UTC timestamp as Cairo wall time (12-hour) in the current language. */
-export function useCairoTime() {
+/** A role's name in the UI language; '—' when there is none. */
+export function useRoleName() {
   const { i18n } = useTranslation()
-  const f = new Intl.DateTimeFormat(intlLocale(i18n.language), { timeZone: 'Africa/Cairo', dateStyle: 'short', timeStyle: 'medium', hour12: true })
+  return (r: Row | null | undefined) => (r ? (i18n.language === 'ar' ? r.name_ar : r.name) : '—')
+}
+
+/** Formats a stored UTC timestamp as Cairo wall time (12-hour) in the current language; date and time unless `format` says otherwise. */
+export function useCairoTime(format: Intl.DateTimeFormatOptions = { dateStyle: 'short', timeStyle: 'medium' }) {
+  const { i18n } = useTranslation()
+  const f = new Intl.DateTimeFormat(intlLocale(i18n.language), { timeZone: 'Africa/Cairo', ...format, hour12: true })
   return (iso: string | null | undefined) => (iso ? f.format(new Date(iso)) : '—')
 }
 

@@ -247,7 +247,7 @@ test('a site with no workers today says so, and the action needs employee.view',
 
 test('without manage permissions there is no add button and no row actions', async () => {
   mockFetch({ 'GET /api/v1/sites': list(sites) })
-  renderWithAuth(<SettingsPage />, ['site.view.own'])
+  renderWithAuth(<SettingsPage />, ['site.view.all'])
   expect(await screen.findByText('موقع أ')).toBeInTheDocument()
   expect(screen.queryByRole('button', { name: 'إضافة موقع' })).toBeNull()
   expect(screen.queryByRole('button', { name: 'الإجراءات' })).toBeNull()
@@ -503,7 +503,7 @@ describe('fares', () => {
     fares()
     open()
     await screen.findByRole('option', { name: 'م. أحمد سامي' })
-    await user.selectOptions(screen.getByRole('combobox', { name: 'مسؤول التيم' }), 'm1')
+    await user.selectOptions(screen.getByRole('combobox', { name: 'مدير الموقع' }), 'm1')
     await waitFor(() => expect(fareUrls()).toContain('/api/v1/fares?per_page=100&date=2026-11-05&manager_id=m1'))
   })
 
@@ -533,11 +533,11 @@ describe('fares', () => {
     expect(JSON.parse(calls('POST')[0][1]!.body as string)).toEqual({ residence_id: 'r2', site_id: 's2', effective_from: '2026-11-05', amount: '8.5' })
   })
 
-  test('the fares tab needs site.view at all scope, and editing needs fare.manage', async () => {
+  test('the site, residence, leave-type and fare tabs need site.view at all scope, and editing needs fare.manage', async () => {
     fares()
     const { unmount } = renderWithAuth(<SettingsPage />, ['site.view.own', 'employee.view.own'])
-    await screen.findByRole('tab', { name: 'المواقع' })
-    expect(screen.queryByRole('tab', { name: 'المواصلات' })).toBeNull()
+    await screen.findByRole('heading', { level: 1, name: 'الإعدادات' })
+    expect(screen.queryByRole('tab')).toBeNull()
     unmount()
     open(['site.view.all'])
     await screen.findByRole('row', { name: /العجمي/ })
@@ -545,7 +545,7 @@ describe('fares', () => {
     expect(screen.queryByRole('button', { name: 'تعديل' })).toBeNull()
     expect(screen.getByText('مبلغ كل سكن في كل موقع.')).toBeInTheDocument()
     expect(screen.queryByText(/ومين حدده/)).toBeNull()
-    expect(screen.queryByRole('combobox', { name: 'مسؤول التيم' })).toBeNull()
+    expect(screen.queryByRole('combobox', { name: 'مدير الموقع' })).toBeNull()
     expect(fareUrls()).toHaveLength(1)
     expect(vi.mocked(fetch).mock.calls.map(([u]) => String(u)).filter((u) => u.includes('manager-candidates'))).toEqual([])
   })

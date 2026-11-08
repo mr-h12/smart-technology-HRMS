@@ -267,3 +267,15 @@ test('a row opens its request, keeps the list filters, and closing keeps the row
   await user.click(screen.getAllByRole('link', { name: 'سامي فؤاد' })[1])
   expect(await screen.findByRole('dialog', { name: 'تفاصيل طلب الإجازة' })).toBeInTheDocument()
 })
+
+test('without leave.view at all scope the type filter has no office option', async () => {
+  mockFetch({ [BALANCES]: () => balances() })
+  const { unmount } = renderWithAuth(page, ['leave.view.own'], { path: '/leave?tab=balances' })
+  await screen.findByText('سامي فؤاد')
+  const options = () => within(screen.getByRole('combobox', { name: 'نوع الموظف' })).getAllByRole('option').map((o) => o.getAttribute('value'))
+  expect(options()).toEqual(['', 'engineer', 'permanent_worker'])
+  unmount()
+  render()
+  await screen.findByText('سامي فؤاد')
+  expect(options()).toEqual(['', 'office', 'engineer', 'permanent_worker'])
+})

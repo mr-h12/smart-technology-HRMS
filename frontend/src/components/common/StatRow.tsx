@@ -37,7 +37,8 @@ function Tile({ stat, figure, progress, className }: { stat: Stat; figure: strin
       )}
     </>
   )
-  const tile = cn('block w-full rounded-xl border bg-card p-4 text-start', className)
+  // flex-col keeps a stretched button's content at the top, as in a div
+  const tile = cn('flex w-full flex-col rounded-xl border bg-card p-4 text-start', className)
   return stat.select ? (
     <button
       type="button"
@@ -54,7 +55,7 @@ function Tile({ stat, figure, progress, className }: { stat: Stat; figure: strin
   )
 }
 
-/** One hero and its secondaries (rules 1, 20). Below lg the hero spans the row and the stats sit 2-up under it; from lg a 3fr/2fr split. */
+/** One hero and its secondaries (rules 1, 20). Below lg the hero spans the row and the stats sit 2-up under it; from lg one row, the hero two columns wide. */
 export function StatRow({ label, hero, stats, layout = 'tiles' }: StatRowProps) {
   if (layout === 'strip')
     return (
@@ -73,10 +74,10 @@ export function StatRow({ label, hero, stats, layout = 'tiles' }: StatRowProps) 
       </div>
     )
   return (
-    <div role="group" aria-label={label} className={cn('grid gap-3', stats?.length && 'lg:grid-cols-[3fr_2fr]')}>
-      <Tile stat={hero} figure="text-kpi" progress={hero.progress} />
+    <div role="group" aria-label={label} className={cn('grid gap-3', stats?.length && 'lg:grid-flow-col lg:auto-cols-fr')}>
+      <Tile stat={hero} figure="text-kpi" progress={hero.progress} className={stats?.length ? 'lg:col-span-2' : undefined} />
       {!!stats?.length && (
-        <div className="grid grid-cols-2 gap-3">
+        <div className="grid grid-cols-2 gap-3 lg:contents">
           {stats.map((s) => (
             <Tile key={s.label} stat={s} figure={cn('text-lg leading-tight font-semibold', s.tone && TONE[s.tone])} />
           ))}

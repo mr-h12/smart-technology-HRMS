@@ -23,13 +23,12 @@ import { useDebounced } from '@/hooks/useDebounced'
 import { ApiError } from '@/lib/api'
 import { useAuth } from '@/lib/auth'
 import { cn } from '@/lib/utils'
-import { RESIDENCES, USERS, useApi, useList, useSave } from '@/lib/query'
+import { RESIDENCES, USERS, useApi, useList, useSave, WORK_SITES } from '@/lib/query'
 import { Documents } from './employee-documents'
 import { Leave } from './employee-leave'
 
 const TYPES = ['office', 'engineer', 'permanent_worker', 'day_laborer']
 const WORKERS = ['permanent_worker', 'day_laborer'] // a worker belongs to a home site; its manager follows the site
-const WORK_SITES = '/sites?per_page=100&kind=work&active=true' // the same list the fares grid loads
 const GENDERS = ['male', 'female']
 const PAY_METHODS = ['cash', 'bank']
 const IDENTITY = ['name_ar', 'name_en', 'fingerprint_name', 'gender', 'national_id', 'insurance_no', 'phone', 'address', 'department', 'residence_id', 'pay_method', 'bank_account', 'hire_date', 'contract_end_date', 'termination_date', 'termination_reason', 'hr_notes']
@@ -92,6 +91,9 @@ export function EmployeesPage() {
   const today = cairoToday()
   const open = (id: string) => navigate(`/employees/${id}`)
   const notes = rows.some((r) => 'hr_notes' in r) // the server sends notes only to the viewers allowed to read them
+  const office = can('employee.view.all') // a site manager never reaches office staff
+  const types = TYPES.filter((v) => office || v !== 'office')
+  const stats = STATS.filter(([k]) => office || k !== 'office')
 
   return (
     <div className="space-y-6">
@@ -110,8 +112,8 @@ export function EmployeesPage() {
         }
       />
 
-      <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 xl:grid-cols-5">
-        {STATS.map(([k, icon, tone]) => (
+      <div className={cn('grid grid-cols-2 gap-3', stats.length === 5 ? 'sm:grid-cols-3 xl:grid-cols-5' : 'xl:grid-cols-4')}>
+        {stats.map(([k, icon, tone]) => (
           <MiniStat key={k} label={t(`employee.stat.${k}`)} value={counts?.[k] ?? '—'} icon={icon} tone={tone} />
         ))}
       </div>
@@ -120,7 +122,7 @@ export function EmployeesPage() {
         <div className="space-y-3 border-b p-4">
           <div className="flex flex-col gap-3 xl:flex-row xl:items-center">
             <SearchInput value={q} onChange={filter(setQ)} placeholder={t('employee.search')} className="sm:w-full sm:max-w-md" />
-            <FilterSelect value={type} onChange={filter(setType)} label={t('employee.type')} allLabel={t('employee.allTypes')} options={TYPES.map((v) => [v, t(`enum.type.${v}`)])} />
+            <FilterSelect value={type} onChange={filter(setType)} label={t('employee.type')} allLabel={t('employee.allTypes')} options={types.map((v) => [v, t(`enum.type.${v}`)])} />
             <SegmentedControl
               label={t('employee.archive.view')}
               value={view}
@@ -347,7 +349,7 @@ function EmployeeForm({ emp, loadErr }: { emp?: Row; loadErr?: unknown }) {
     )
 
   const worker = WORKERS.includes(emp.current_type)
-  const tabs = TABS.filter(([v]) => v !== (worker ? 'manager' : 'site') && (v !== 'leave' || (can('leave.view') && emp.current_type !== 'day_laborer')))
+  const tabs = TABS.filter(([v]) => v !== (worker ? 'manager' : 'site') && (v !== 'leave' || (can('leave.view') && emp.current_type !== 'day_laborer')) && (v !== 'documents' || can('employee_document.view')))
   const tab = tabs.some(([v]) => v === params.get('tab')) ? params.get('tab')! : 'profile'
   return (
     <div className="mx-auto max-w-5xl space-y-6">

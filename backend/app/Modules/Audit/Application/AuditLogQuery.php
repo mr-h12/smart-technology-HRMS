@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Modules\Audit\Application;
 
 use App\Modules\Audit\Infrastructure\Eloquent\AuditLogEntry;
+use App\Modules\Identity\Infrastructure\Eloquent\User;
 use App\Support\Http\Paginates;
 use Illuminate\Database\Eloquent\Model;
 
@@ -18,7 +19,7 @@ final class AuditLogQuery
      */
     public function list(array $filters): array
     {
-        $query = AuditLogEntry::query()->with('user:id,name')->orderByDesc('occurred_at')->orderByDesc('id');
+        $query = AuditLogEntry::query()->with(['user:id,name', 'onBehalfOf:id,name'])->orderByDesc('occurred_at')->orderByDesc('id');
         foreach (['user_id', 'entity_type', 'entity_id'] as $key) {
             if (isset($filters[$key])) {
                 $query->where($key, $filters[$key]);
@@ -33,11 +34,12 @@ final class AuditLogQuery
     private function row(Model $m): array
     {
         /** @var AuditLogEntry $m */
-        $user = $m->user;
+        $person = fn (?User $u) => $u === null ? null : ['id' => (string) $u->id, 'name' => $u->name];
 
         return [
-            ...array_diff_key($m->toArray(), ['user' => true]),
-            'user' => $user === null ? null : ['id' => (string) $user->id, 'name' => $user->name],
+            ...array_diff_key($m->toArray(), ['user' => true, 'on_behalf_of' => true]),
+            'user' => $person($m->user),
+            'on_behalf_of' => $person($m->onBehalfOf),
         ];
     }
 }

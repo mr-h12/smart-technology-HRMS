@@ -1,6 +1,6 @@
-import { lazy, type ComponentType } from 'react'
+import { lazy, type ComponentType, type ReactNode } from 'react'
 import { BrowserRouter, Navigate, Route, Routes } from 'react-router-dom'
-import { AppLayout, homePath } from '@/components/layout/AppLayout'
+import { AppLayout, homePath, navAbilities } from '@/components/layout/AppLayout'
 import { AuthProvider, RequireAuth, useAuth } from '@/lib/auth'
 import { LoginPage } from '@/pages/login'
 
@@ -25,6 +25,13 @@ function Home() {
   return <Navigate to={homePath(can)} replace />
 }
 
+/** A page opened by URL that the user may not use is not found, like a missing one. Inside RequireAuth, so `me` is loaded. */
+function Gate({ abilities, children }: { abilities: string[]; children: ReactNode }) {
+  const { can } = useAuth()
+  return abilities.some(can) ? children : <NotFoundPage />
+}
+const nav = (path: string, page: ReactNode) => <Gate abilities={navAbilities(path)}>{page}</Gate>
+
 export function AppRoutes() {
   return (
     <Routes>
@@ -32,22 +39,22 @@ export function AppRoutes() {
       <Route element={<RequireAuth><AppLayout /></RequireAuth>}>
         <Route index element={<Home />} />
         <Route path="employees" element={<EmployeesPage />} />
-        <Route path="employees/new" element={<EmployeeRoute />} />
+        <Route path="employees/new" element={<Gate abilities={['employee.create']}><EmployeeRoute /></Gate>} />
         <Route path="employees/:id" element={<EmployeeRoute />} />
         <Route path="attendance" element={<AttendancePage />} />
         <Route path="leave" element={<LeavePage />} />
         <Route path="site-day" element={<SiteDayPage />} />
-        <Route path="wage-proposals" element={<WageProposalsPage />} />
+        <Route path="wage-proposals" element={nav('/wage-proposals', <WageProposalsPage />)} />
         <Route path="team-fares" element={<TeamFaresPage />} />
-        <Route path="settings" element={<SettingsPage />} />
+        <Route path="settings" element={nav('/settings', <SettingsPage />)} />
         {/* old links, kept for one release */}
         <Route path="sites" element={<Navigate to="/settings?tab=sites" replace />} />
         <Route path="residences" element={<Navigate to="/settings?tab=residences" replace />} />
         <Route path="fares" element={<Navigate to="/settings?tab=fares" replace />} />
-        <Route path="console/accounts" element={<AccountsPage />} />
-        <Route path="console/roles" element={<RolesPage />} />
-        <Route path="console/audit" element={<AuditPage />} />
-        <Route path="console/logs" element={<LogsPage />} />
+        <Route path="console/accounts" element={nav('/console/accounts', <AccountsPage />)} />
+        <Route path="console/roles" element={nav('/console/roles', <RolesPage />)} />
+        <Route path="console/audit" element={nav('/console/audit', <AuditPage />)} />
+        <Route path="console/logs" element={nav('/console/logs', <LogsPage />)} />
         <Route path="*" element={<NotFoundPage />} />
       </Route>
     </Routes>

@@ -118,9 +118,9 @@ function RulesForm({ initial, loadErr }: { initial: Row; loadErr?: unknown }) {
 }
 
 const TABS = [
-  { value: 'sites', key: 'settings.tab.sites', icon: MapPin, ability: 'site.view', Body: SitesTab },
-  { value: 'residences', key: 'settings.tab.residences', icon: House, ability: 'site.view', Body: ResidencesTab },
-  { value: 'leave-types', key: 'settings.tab.leaveTypes', icon: CalendarOff, ability: 'site.view', Body: LeaveTypesTab },
+  { value: 'sites', key: 'settings.tab.sites', icon: MapPin, ability: 'site.view.all', Body: SitesTab },
+  { value: 'residences', key: 'settings.tab.residences', icon: House, ability: 'site.view.all', Body: ResidencesTab },
+  { value: 'leave-types', key: 'settings.tab.leaveTypes', icon: CalendarOff, ability: 'site.view.all', Body: LeaveTypesTab },
   { value: 'fares', key: 'settings.tab.fares', icon: Bus, ability: 'site.view.all', Body: FaresTab },
   { value: 'holidays', key: 'settings.tab.holidays', icon: CalendarDays, ability: 'attendance.view', Body: HolidaysTab },
   { value: 'rules', key: 'settings.tab.rules', icon: SlidersHorizontal, ability: 'setting.view', Body: RulesTab },

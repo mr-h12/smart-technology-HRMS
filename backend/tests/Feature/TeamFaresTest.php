@@ -3,6 +3,7 @@
 namespace Tests\Feature;
 
 use App\Modules\Employees\Application\EmployeeService;
+use App\Modules\Employees\Infrastructure\Eloquent\DayCrewChange;
 use App\Modules\Identity\Infrastructure\Eloquent\User;
 use App\Modules\Sites\Infrastructure\Eloquent\EmployeeFareOverride;
 use App\Modules\Sites\Infrastructure\Eloquent\Fare;
@@ -390,5 +391,42 @@ class TeamFaresTest extends TestCase
             ->assertJsonPath('data.sites', [])
             ->assertJsonPath('data.rows.0.residence', ['id' => $r, 'name' => 'R-1'])
             ->assertJsonPath('data.rows.0.site', ['id' => $s1, 'name' => 'S-1']);
+    }
+
+    public function test_team_fares_list_a_laborer_with_no_home_site_on_the_site_lent_to_today(): void
+    {
+        $s1 = $this->workSite('S-1');
+        $r = $this->residence();
+        $this->fare($r, $s1, '2026-01-01', '35');
+        $this->signIn('hr');
+        $lead = $this->managerOf($s1);
+        $laborer = $this->employee('day_laborer', '2026-01-01', ['residence_id' => $r]);
+        DayCrewChange::create(['employee_id' => $laborer, 'date' => '2026-11-05', 'site_id' => $s1]);
+
+        $this->getJson("/api/v1/team-fares?manager_id={$lead->id}")->assertOk()
+            ->assertJsonCount(1, 'data.rows')
+            ->assertJsonPath('data.rows.0.employee_id', $laborer)
+            ->assertJsonPath('data.rows.0.site', ['id' => $s1, 'name' => 'S-1'])
+            ->assertJsonPath('data.rows.0.amount', '35.000000')
+            ->assertJsonPath('data.rows.0.source', 'default');
+    }
+
+    public function test_team_fares_list_a_worker_lent_from_another_managers_site_on_the_lent_site(): void
+    {
+        [$s1, $s2] = [$this->workSite('S-1'), $this->workSite('S-2')];
+        $r = $this->residence();
+        $this->fare($r, $s1, '2026-01-01', '35');
+        $this->signIn('hr');
+        $lead = $this->managerOf($s1);
+        $this->managerOf($s2);
+        $laborer = $this->employee('day_laborer', '2026-01-01', ['residence_id' => $r]);
+        $this->homeSite($laborer, $s2, '2026-01-01');
+        DayCrewChange::create(['employee_id' => $laborer, 'date' => '2026-11-05', 'site_id' => $s1]);
+
+        $this->getJson("/api/v1/team-fares?manager_id={$lead->id}")->assertOk()
+            ->assertJsonCount(1, 'data.rows')
+            ->assertJsonPath('data.rows.0.employee_id', $laborer)
+            ->assertJsonPath('data.rows.0.site', ['id' => $s1, 'name' => 'S-1'])
+            ->assertJsonPath('data.rows.0.amount', '35.000000');
     }
 }

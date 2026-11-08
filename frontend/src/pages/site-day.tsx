@@ -40,7 +40,7 @@ const writeWorking = (ids: string[]) => {
   }
 }
 
-const omit = (d: Drafts, id: string): Drafts => Object.fromEntries(Object.entries(d).filter(([k]) => k !== id))
+const omit = (d: Drafts, ...ids: string[]): Drafts => Object.fromEntries(Object.entries(d).filter(([k]) => !ids.includes(k)))
 
 /**
  * The site manager's attendance workspace, URL state `?site=&date=` (design Part 2, mockup A; owner, 2026-11-04; PR #22 review).
@@ -66,6 +66,8 @@ export function SiteDayPage() {
   const [saveErr, setSaveErr] = useState<unknown>()
   const [savingKey, setSavingKey] = useState<string | null>(null)
   const [savedKey, setSavedKey] = useState<string | null>(null)
+  // the last 409: the site|date it hit and the employees another user changed meanwhile (none named: the whole day)
+  const [stale, setStale] = useState<{ at: string; ids: string[] }>({ at: '', ids: [] })
   const save = useSave()
   const qc = useQueryClient()
   const siteId: string = site?.id ?? ''
@@ -133,22 +135,28 @@ export function SiteDayPage() {
     const savedPath = path
     const savedAt = key
     const sent = drafts // the drafts this request carries; rows stay read-only until it returns
+    const body = saveBody(day.site.id, day.date, rows, sent)
     setSavingKey(savedAt)
     setSaveErr(undefined)
     try {
-      const fresh = await save<SiteDay>('/attendance/site-day', { body: saveBody(day.site.id, day.date, rows, sent) }, ['/attendance'])
+      const fresh = await save<SiteDay>('/attendance/site-day', { body }, ['/attendance'])
       qc.setQueryData(queryKey(savedPath), (old: Row | undefined) => ({ ...old, data: fresh }))
       // clear only what was sent: anything changed since then stays unsaved
       setAll((a) => ({ ...a, [savedAt]: Object.fromEntries(Object.entries(a[savedAt] ?? {}).filter(([id, d]) => sent[id] !== d)) }))
       setSavedKey(savedAt)
     } catch (e) {
+      // a 409 detail's field is rows.N, N indexing the rows sent (as the day sheet reads it)
+      const who = (d: { field?: string | null }) => (d.field?.startsWith('rows.') ? body.rows[Number(d.field.split('.')[1])] : undefined)
+      setStale({ at: savedAt, ids: e instanceof ApiError && e.status === 409 ? e.details.flatMap((d) => who(d)?.employee_id ?? []) : [] })
       setSaveErr(e)
     } finally {
       setSavingKey(null)
     }
   }
+  // only the rows another user changed lose their draft; the rest stay to save again on the new versions
   const loadLatest = () => {
-    setAll((a) => ({ ...a, [key]: {} }))
+    const at = stale.at || key
+    setAll((a) => ({ ...a, [at]: stale.ids.length ? omit(a[at] ?? {}, ...stale.ids) : {} }))
     setSaveErr(undefined)
     reload()
   }
@@ -161,6 +169,7 @@ export function SiteDayPage() {
     </p>
   )
 
+  const staleNames = stale.at === key ? rows.filter((r) => stale.ids.includes(r.employee.id)).map((r) => localName(r.employee as Row, lang)) : []
   const needle = filter.trim().toLowerCase()
   const shown = needle ? rows.filter((r) => `${r.employee.name_ar} ${r.employee.name_en ?? ''} ${r.employee.code}`.toLowerCase().includes(needle)) : rows
   const workers = shown.filter((r) => r.section === 'workers')
@@ -236,7 +245,7 @@ export function SiteDayPage() {
       )}
       {saveErr !== undefined && (saveErr instanceof ApiError && saveErr.status === 409 ? (
         <Alert tone="danger">
-          <p>{t('siteDay.conflict')}</p>
+          <p>{staleNames.length ? t('siteDay.conflictRows', { names: new Intl.ListFormat(intlLocale(lang)).format(staleNames) }) : t('siteDay.conflict')}</p>
           <Button type="button" variant="outline" className="mt-2" onClick={loadLatest}>{t('siteDay.loadLatest')}</Button>
         </Alert>
       ) : <ErrorBanner err={saveErr} shown={[]} />)}

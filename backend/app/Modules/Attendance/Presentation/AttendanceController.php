@@ -39,10 +39,11 @@ final class AttendanceController
         return ApiEnvelope::single($request, $this->grid->period(EmployeeType::from($q['group']), $q['period_start'] ?? null, $q['date'] ?? null, RequestScope::ownerId($request)));
     }
 
+    /** `group=all` (grid only) is every field type over the engineers' window. */
     public function grid(Request $request): JsonResponse
     {
-        $q = $request->validate([...$this->periodRules(), 'per_page' => ['sometimes', 'integer', 'min:1'], 'page' => ['sometimes', 'integer', 'min:1']]);
-        $r = $this->grid->grid(EmployeeType::from($q['group']), $q['period_start'] ?? null, (int) ($q['per_page'] ?? 20), (int) ($q['page'] ?? 1), $q['date'] ?? null, RequestScope::ownerId($request));
+        $q = $request->validate([...$this->periodRules(), 'group' => ['required', Rule::in(['all', ...array_column(EmployeeType::cases(), 'value')])], 'per_page' => ['sometimes', 'integer', 'min:1'], 'page' => ['sometimes', 'integer', 'min:1'], 'site_id' => ['sometimes', 'uuid']]);
+        $r = $this->grid->grid($q['group'] === 'all' ? null : EmployeeType::from($q['group']), $q['period_start'] ?? null, (int) ($q['per_page'] ?? 20), (int) ($q['page'] ?? 1), $q['date'] ?? null, RequestScope::ownerId($request), $q['site_id'] ?? null);
 
         return ApiEnvelope::collection($request, $r['data'], $r['pagination']);
     }

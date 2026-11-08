@@ -33,6 +33,10 @@ _Avoid_: الكود; code (in the UI)
 The employees whose termination date has passed. The termination day itself is still worked, so an employee leaves the active list the day after. Reactivating an archived employee clears the termination date and reason, which counts the days since as employed again.
 _Avoid_: inactive list, deleted (a deleted employee is gone from both lists)
 
+**View as** (عرض كـ):
+The developer uses the app as another account, without its password, for at most 30 minutes; the audit log names the developer as the actor, on behalf of that account. In code: the permission `user.impersonate`, `user_sessions.impersonator_id` and `audit_log.on_behalf_of`.
+_Avoid_: log in as, switch user; impersonate outside those code names
+
 ## Work and attendance
 
 **Site** (موقع):

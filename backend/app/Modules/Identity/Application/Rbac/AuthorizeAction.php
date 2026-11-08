@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Modules\Identity\Application\Rbac;
 
+use App\Modules\Identity\Domain\Authentication\ViewAs;
 use App\Modules\Identity\Domain\Rbac\PermissionDecision;
 use App\Modules\Identity\Domain\Rbac\Scope;
 use App\Modules\Identity\Infrastructure\Eloquent\User;
@@ -22,10 +23,15 @@ final class AuthorizeAction
         return new PermissionDecision(array_values(array_map(fn (string $s) => Scope::from($s), $scopes)));
     }
 
-    /** @return list<string> sorted `resource.action.scope` triples */
+    /** @return list<string> sorted `resource.action.scope` triples; while viewing as, without what ViewAs blocks */
     public function permissionsOf(Authenticatable $user): array
     {
         // The guard's user, reused: no reload. Anything but our User grants nothing.
-        return $user instanceof User ? RolePermissions::of((string) $user->role_id) : [];
+        if (! $user instanceof User) {
+            return [];
+        }
+        $triples = RolePermissions::of((string) $user->role_id);
+
+        return $user->viewAs === null ? $triples : array_values(array_filter($triples, fn (string $t) => ! ViewAs::blocks($t)));
     }
 }

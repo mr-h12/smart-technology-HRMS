@@ -24,6 +24,7 @@ export function queryKey(path: string): string[] {
 export const USERS = '/users?per_page=100'
 export const RESIDENCES = '/residences?per_page=100'
 export const SITES = '/sites?per_page=100'
+export const WORK_SITES = '/sites?per_page=100&kind=work&active=true' // active work sites only
 
 // Both hooks cache the whole envelope ({data, meta}) under the same key shape, so they never collide.
 const fetchEnvelope = (path: string) => ({ signal }: { signal: AbortSignal }) => apiList<Row>(path, { signal })

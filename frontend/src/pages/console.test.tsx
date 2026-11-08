@@ -1,7 +1,7 @@
 import { cleanup, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { afterEach, beforeEach, expect, test, vi } from 'vitest'
-import { json, mockFetch, pagination, renderWithAuth } from '@/test-utils'
+import { json, me, mockFetch, pagination, renderApp, renderWithAuth } from '@/test-utils'
 import { toast } from 'sonner'
 import { AccountsPage, RolesPage } from './console'
 import { AuditPage } from './audit'
@@ -388,4 +388,71 @@ test('the matrix has an Edit ID column, so employee.edit_code can be granted', a
   await pickRole()
   expect(screen.getByRole('columnheader', { name: 'تعديل الرقم الوظيفي' })).toBeInTheDocument()
   expect(screen.getByRole('checkbox', { name: 'الموظفون: تعديل الرقم الوظيفي' })).toBeChecked()
+})
+
+const TOKEN = 'hrms.auth.token.v1'
+const accounts = [account, { ...account, id: 'u3', name: 'نور', email: 'nour@smart.test', is_active: false }, { ...account, id: 'u1', name: 'منى', email: 'hr@smart.test' }]
+const menuOf = async (name: RegExp) => {
+  await user.click(within(await screen.findByRole('row', { name })).getByRole('button', { name: 'الإجراءات' }))
+  return screen.findByRole('menu')
+}
+
+test('View as shows with user.impersonate only on active accounts other than the signed-in one', async () => {
+  mockFetch({ 'GET /api/v1/users': () => json(200, { data: accounts, meta: { pagination } }), 'GET /api/v1/roles': () => json(200, { data: [role] }) })
+  renderWithAuth(<AccountsPage />, ['user.view.all', 'user.manage.all', 'user.impersonate.all'])
+  expect(within(await menuOf(/سارة/)).getByRole('menuitem', { name: 'عرض كـ' })).toBeInTheDocument()
+  await user.keyboard('{Escape}')
+  expect(within(await menuOf(/نور/)).queryByRole('menuitem', { name: 'عرض كـ' })).toBeNull()
+  await user.keyboard('{Escape}')
+  expect(within(await menuOf(/منى/)).queryByRole('menuitem', { name: 'عرض كـ' })).toBeNull()
+})
+
+test('without user.impersonate there is no View as', async () => {
+  mockFetch({ 'GET /api/v1/users': () => json(200, { data: accounts, meta: { pagination } }), 'GET /api/v1/roles': () => json(200, { data: [role] }) })
+  renderWithAuth(<AccountsPage />, ['user.view.all', 'user.manage.all'])
+  expect(within(await menuOf(/سارة/)).queryByRole('menuitem', { name: 'عرض كـ' })).toBeNull()
+})
+
+test('View as alone gives the row a menu holding only View as', async () => {
+  mockFetch({ 'GET /api/v1/users': () => json(200, { data: accounts, meta: { pagination } }) })
+  renderWithAuth(<AccountsPage />, ['user.view.all', 'user.impersonate.all'])
+  expect(within(await menuOf(/سارة/)).getAllByRole('menuitem').map((i) => i.textContent)).toEqual(['عرض كـ'])
+  expect(within(screen.getByRole('row', { name: /نور/ })).queryByRole('button')).toBeNull()
+})
+
+const developerSignedIn = (start: () => Response) => {
+  localStorage.setItem(TOKEN, 'd'.repeat(64))
+  mockFetch({
+    'GET /api/v1/auth/me': () => json(200, { data: me(['user.view.all', 'user.impersonate.all']) }),
+    'GET /api/v1/users': () => json(200, { data: accounts, meta: { pagination } }),
+    'GET /api/v1/employees': () => json(200, { data: [], meta: { pagination } }),
+    'POST /api/v1/auth/view-as': start,
+  })
+  renderApp('/console/accounts')
+}
+const confirmViewAs = async (reason?: string) => {
+  await user.click(within(await menuOf(/سارة/)).getByRole('menuitem', { name: 'عرض كـ' }))
+  const dialog = await screen.findByRole('dialog', { name: 'عرض كـ: سارة' })
+  if (reason) await user.type(within(dialog).getByLabelText('السبب (اختياري)'), reason)
+  await user.click(within(dialog).getByRole('button', { name: 'عرض كـ' }))
+  return dialog
+}
+
+test('confirming View as sends the account and reason, stores the new token and lands on that account home page', async () => {
+  const sara = { ...me(['employee.view.all']), id: 'u2', name: 'سارة', view_as: { by: { id: 'u1', name: 'منى' }, expires_at: '2026-11-05T10:30:00Z' } }
+  const start = vi.fn(() => json(201, { data: { token: 'v'.repeat(64), token_type: 'Bearer', idle_timeout_seconds: 28800, user: sara } }))
+  developerSignedIn(start)
+  await confirmViewAs('فحص صلاحيات المدير')
+  await waitFor(() => expect(localStorage.getItem(TOKEN)).toBe('v'.repeat(64)))
+  expect(JSON.parse((start.mock.calls[0] as unknown as [string, RequestInit])[1].body as string)).toEqual({ user_id: 'u2', reason: 'فحص صلاحيات المدير' })
+  await waitFor(() => expect(screen.getByRole('link', { name: 'الموظفون' })).toHaveAttribute('aria-current', 'page'))
+  expect(screen.queryByRole('link', { name: 'حسابات المستخدمين' })).toBeNull()
+  expect(screen.getByText(/أنت الآن تعرض النظام كـ/)).toHaveTextContent('سارة')
+})
+
+test('a refused View as shows the API message and keeps the developer signed in', async () => {
+  developerSignedIn(() => json(422, { error: { code: 'validation_failed', message: 'x', details: [{ field: 'user_id', code: 'identity.view_as.not_allowed', message: 'لا يمكن العرض كحساب يملك صلاحية العرض كـ.' }] } }))
+  const dialog = await confirmViewAs()
+  expect(await within(dialog).findByText('لا يمكن العرض كحساب يملك صلاحية العرض كـ.')).toBeInTheDocument()
+  expect(localStorage.getItem(TOKEN)).toBe('d'.repeat(64))
 })

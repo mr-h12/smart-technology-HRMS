@@ -27,6 +27,8 @@ final class AttendanceGrid
     /** The last site looks this many days back from the sheet date (P31). */
     public const LAST_SITE_DAYS = 7;
 
+    private const FIELD = [EmployeeType::Engineer, EmployeeType::PermanentWorker, EmployeeType::DayLaborer];
+
     public function __construct(private readonly EmployeeRoster $roster, private readonly EffectiveDays $days, private readonly BusinessRules $rules, private readonly DayCrew $crew) {}
 
     /** @return array{group: string, start: string, end: string, prev_start: string, next_start: ?string, is_locked: bool, lock: ?array<string, mixed>, missing: int} */
@@ -47,12 +49,18 @@ final class AttendanceGrid
         ];
     }
 
-    /** @return array{data: list<array<string, mixed>>, pagination: array{page: int, per_page: int, total: int, total_pages: int, has_next_page: bool, has_previous_page: bool}} */
-    public function grid(EmployeeType $g, ?string $start, int $perPage, int $page, ?string $date = null, ?string $ownerId = null): array
+    /**
+     * $siteId keeps the employees with a live stored day at that site in the period (owner: who worked at the site in the period).
+     * A null $g is All (owner, 2026-11-05): every field type over the engineers' 26th→25th window.
+     *
+     * @return array{data: list<array<string, mixed>>, pagination: array{page: int, per_page: int, total: int, total_pages: int, has_next_page: bool, has_previous_page: bool}}
+     */
+    public function grid(?EmployeeType $g, ?string $start, int $perPage, int $page, ?string $date = null, ?string $ownerId = null, ?string $siteId = null): array
     {
-        $p = $this->periodAt($g, $start, $date);
-        $roster = $this->roster->ofType($g, $p->start, $p->end, $perPage, $page, $ownerId);
-        $days = $this->days->forPeriod($p, $roster['data']);
+        $p = $this->periodAt($g ?? EmployeeType::Engineer, $start, $date);
+        $ids = $siteId === null ? null : AttendanceDay::where('site_id', $siteId)->whereBetween('date', [$p->start, $p->end])->distinct()->pluck('employee_id')->map(fn ($id) => (string) $id)->all();
+        $roster = $this->roster->ofType($g === null ? self::FIELD : [$g], $p->start, $p->end, $perPage, $page, $ownerId, $ids);
+        $days = $g === null ? $this->fieldDays($p, $roster['data']) : $this->days->forPeriod($p, $roster['data']);
 
         return [
             'data' => array_map(fn (array $e) => [
@@ -201,6 +209,31 @@ final class AttendanceGrid
             ->selectRaw('distinct on (d.employee_id) d.employee_id, d.site_id')
             ->orderBy('d.employee_id')->orderByDesc('d.date')
             ->pluck('site_id', 'employee_id')->all();
+    }
+
+    /**
+     * Each day of $p under the field type the employee had that day, computed in that type's own period, so a day laborer's
+     * day keeps its half-month's lock and weekly off.
+     *
+     * @param  list<array<string, mixed>>  $employees  EmployeeRoster rows
+     * @return array<string, array<string, array<string, mixed>>> employee id → date → day
+     */
+    private function fieldDays(Period $p, array $employees): array
+    {
+        $days = [];
+        foreach (self::FIELD as $type) {
+            for ($q = Period::containing($type, $p->start); $q->start <= $p->end; $q = $q->next()) {
+                foreach ($this->days->forPeriod($q, $employees) as $id => $byDate) {
+                    foreach ($byDate as $date => $d) {
+                        if ($p->contains($date) && (! isset($days[$id][$date]) || $d['state'] !== 'not_employed')) {
+                            $days[$id][$date] = $d;
+                        }
+                    }
+                }
+            }
+        }
+
+        return $days;
     }
 
     /** @return list<array{employee_id: string, code: int, name_ar: string, name_en: ?string, date: string}> by code then date */

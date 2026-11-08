@@ -123,7 +123,15 @@ export function AuditPage() {
           title={{ header: t('audit.time'), cell: (r) => time(r.occurred_at) }}
           status={{ header: t('audit.action'), cell: (r) => <Badge variant={EVENT_VARIANT[r.event] ?? 'neutral'}>{label.event(r)}</Badge> }}
           fields={[
-            { header: t('audit.actor'), cell: (r) => <Actor user={r.user} /> },
+            {
+              header: t('audit.actor'),
+              cell: (r) => (
+                <div className="flex flex-col items-start gap-1">
+                  <Actor user={r.user} />
+                  {r.on_behalf_of && <span className="text-xs text-muted-foreground">{t('audit.onBehalfOf', { name: r.on_behalf_of.name })}</span>}
+                </div>
+              ),
+            },
             { header: t('audit.entityType'), cell: label.entity, tableFrom: 'md' },
             { header: t('audit.entityId'), cell: (r) => <bdi dir="ltr" className="font-mono text-xs text-muted-foreground">{r.entity_id}</bdi>, tableFrom: 'xl' },
           ]}

@@ -117,3 +117,11 @@ test('each entry is a row of the audit table whose phone card labels the actor a
   expect(within(row).getByText('معرّف السجل')).toBeInTheDocument()
   expect(within(row).getByText('abc-123')).toBeInTheDocument()
 })
+
+test('an entry made while viewing as another account names that account under the actor', async () => {
+  mockFetch({ 'GET /api/v1/audit-log': () => json(200, { data: [entry({ id: 'a1', on_behalf_of: { id: 'u2', name: 'سارة' } }), entry({ id: 'a2', on_behalf_of: null })], meta: { pagination } }) })
+  renderWithAuth(<AuditPage />, ['audit_log.view.all'])
+  const rows = within(await screen.findByRole('table', { name: 'سجل التدقيق' })).getAllByRole('row')
+  expect(within(rows[1]).getByText('نيابة عن سارة')).toBeInTheDocument()
+  expect(rows[2]).not.toHaveTextContent('نيابة عن')
+})

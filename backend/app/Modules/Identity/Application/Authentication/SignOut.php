@@ -6,10 +6,11 @@ namespace App\Modules\Identity\Application\Authentication;
 
 use App\Modules\Audit\Infrastructure\AuditLog;
 use App\Modules\Identity\Domain\Authentication\IdentityAuditEvents;
+use App\Modules\Identity\Domain\Authentication\ViewAsEnding;
 use App\Modules\Identity\Infrastructure\Eloquent\UserSession;
 use Illuminate\Support\Facades\DB;
 
-/** Ends this device's session only; idempotent. */
+/** Ends this device's session only; idempotent. Signing out of a view-as ends it and signs the developer out too. */
 final class SignOut
 {
     public function handle(string $userId, ?string $sessionId): void
@@ -18,6 +19,12 @@ final class SignOut
             return;
         }
         DB::transaction(function () use ($userId, $sessionId): void {
+            $session = UserSession::whereKey($sessionId)->where('user_id', $userId)->first();
+            if ($session?->impersonator_id !== null) {
+                $session->endViewAs(ViewAsEnding::Logout);
+
+                return;
+            }
             if (UserSession::whereKey($sessionId)->where('user_id', $userId)->delete() > 0) {
                 AuditLog::record(IdentityAuditEvents::LOGOUT, 'users', $userId, ['session_id' => $sessionId]);
             }

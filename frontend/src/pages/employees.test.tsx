@@ -621,3 +621,38 @@ test('editing the ID after a taken-ID answer clears the holder banner and the sw
   expect(within(dialog).queryByRole('alert')).toBeNull()
   expect(within(dialog).getByRole('button', { name: 'حفظ' })).toBeInTheDocument()
 })
+
+test('a site manager gets no office option in the type filter and no office tile', async () => {
+  mockFetch({
+    'GET /api/v1/employees': () => json(200, { data: [], meta: { pagination } }),
+    'GET /api/v1/employees/summary': () => json(200, { data: { total: 4, engineer: 1, permanent_worker: 2, day_laborer: 1 } }),
+  })
+  renderWithAuth(<EmployeesPage />, ['employee.view.own'])
+  const filter = await screen.findByRole('combobox', { name: 'نوع الموظف' })
+  expect(within(filter).getAllByRole('option').map((o) => o.getAttribute('value'))).toEqual(['', 'engineer', 'permanent_worker', 'day_laborer'])
+  expect(screen.getByRole('group', { name: 'المهندسون' })).toBeInTheDocument()
+  const tiles = screen.getByRole('group', { name: 'إجمالي الموظفين' }).parentElement!
+  expect(tiles.children).toHaveLength(4)
+  expect(tiles).toHaveClass('xl:grid-cols-4')
+  expect(screen.queryByRole('group', { name: 'موظفو الشركة' })).toBeNull()
+})
+
+test('HR keeps the office option and tile', async () => {
+  mockFetch({ 'GET /api/v1/employees': () => json(200, { data: [], meta: { pagination } }) })
+  renderWithAuth(<EmployeesPage />, ['employee.view.all'])
+  const filter = await screen.findByRole('combobox', { name: 'نوع الموظف' })
+  expect(within(filter).getByRole('option', { name: 'موظف مثبت شركة' })).toHaveValue('office')
+  const tiles = screen.getByRole('group', { name: 'إجمالي الموظفين' }).parentElement!
+  expect(tiles.children).toHaveLength(5)
+  expect(tiles).toHaveClass('xl:grid-cols-5')
+})
+
+test('the documents tab needs employee_document.view', async () => {
+  mockFetch({ 'GET /api/v1/employees/e1': () => json(200, { data: emp }), 'GET /api/v1/residences': residences })
+  const { unmount } = renderWithAuth(<EmployeeDetailRoute id="e1" tab="documents" />, ['employee.view.own'], { router: false })
+  expect(await screen.findByRole('tab', { name: 'البيانات' })).toHaveAttribute('aria-selected', 'true')
+  expect(screen.queryByRole('tab', { name: 'المستندات' })).toBeNull()
+  unmount()
+  renderWithAuth(<EmployeeDetailRoute id="e1" tab="documents" />, ['employee.view.all', 'employee_document.view.all'], { router: false })
+  expect(await screen.findByRole('tab', { name: 'المستندات' })).toHaveAttribute('aria-selected', 'true')
+})

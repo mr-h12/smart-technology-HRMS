@@ -114,10 +114,3 @@ test('a link to a proposal that is no longer waiting says so', async () => {
   expect(await screen.findByText(/لم يعد منتظراً/)).toBeInTheDocument()
   expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
 })
-
-test('without employee.approve_wage the page is not found and loads nothing', async () => {
-  mockFetch({})
-  renderWithAuth(<Routes><Route path="wage-proposals" element={<WageProposalsPage />} /></Routes>, ['employee.view.own'], { path: '/wage-proposals' })
-  expect(await screen.findByRole('heading', { name: 'الصفحة غير موجودة' })).toBeInTheDocument()
-  expect(vi.mocked(fetch).mock.calls.some(([u]) => String(u).includes('wage-proposals'))).toBe(false)
-})

@@ -4,20 +4,32 @@ import { Navigate } from 'react-router-dom'
 import { api, getToken, setToken, setUnauthorizedHandler, TOKEN_KEY } from './api'
 import { queryClient } from './query'
 
-export type Me = { id: string; name: string; email: string; role: { id: string; slug: string; name: string; name_ar: string }; permissions: string[] }
+export type Me = {
+  id: string
+  name: string
+  email: string
+  role: { id: string; slug: string; name: string; name_ar: string }
+  permissions: string[]
+  /** Set while a developer is viewing the app as this account. */
+  view_as: { by: { id: string; name: string }; expires_at: string } | null
+}
 
 type Auth = {
   me: Me | null
   loading: boolean
   login(email: string, password: string): Promise<void>
   logout(): Promise<void>
+  /** Signs in as another account (user.impersonate); the caller then goes to `/`. */
+  viewAs(userId: string, reason?: string): Promise<void>
+  /** Ends a view-as and signs back in as the developer; the caller then goes to `/`. */
+  endViewAs(): Promise<void>
   can(ability: string): boolean
 }
 
 /** `resource.action` matches any scope; `resource.action.scope` is exact. */
 export const canDo = (permissions: string[], ability: string) => permissions.some((p) => p === ability || p.startsWith(`${ability}.`))
 
-export const AuthContext = createContext<Auth>({ me: null, loading: false, login: async () => {}, logout: async () => {}, can: () => false })
+export const AuthContext = createContext<Auth>({ me: null, loading: false, login: async () => {}, logout: async () => {}, viewAs: async () => {}, endViewAs: async () => {}, can: () => false })
 
 export const useAuth = () => useContext(AuthContext)
 
@@ -49,15 +61,19 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       .finally(() => setLoading(false))
   }, [])
 
+  const signIn = async (path: string, body?: unknown) => {
+    const r = await api<{ token: string; user: Me }>(path, { method: 'POST', body })
+    setToken(r.token)
+    queryClient.clear()
+    setMe(r.user)
+  }
+
   const value: Auth = {
     me,
     loading,
-    login: async (email, password) => {
-      const r = await api<{ token: string; user: Me }>('/auth/login', { method: 'POST', body: { email, password } })
-      setToken(r.token)
-      queryClient.clear()
-      setMe(r.user)
-    },
+    login: (email, password) => signIn('/auth/login', { email, password }),
+    viewAs: (userId, reason) => signIn('/auth/view-as', { user_id: userId, reason: reason || null }),
+    endViewAs: () => signIn('/auth/view-as/end'),
     logout: async () => {
       await api('/auth/logout', { method: 'POST' }).catch(() => {})
       setToken(null)

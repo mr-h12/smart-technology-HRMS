@@ -5,6 +5,7 @@ import {
   CalendarDays,
   ChevronDown,
   ClipboardCheck,
+  Eye,
   HandCoins,
   Languages,
   LogOut,
@@ -21,10 +22,11 @@ import {
 } from 'lucide-react'
 import { Suspense, useEffect, useState } from 'react'
 import { useTranslation } from 'react-i18next'
-import { Link, NavLink, Outlet, useLocation } from 'react-router-dom'
-import { Toaster } from 'sonner'
+import { Link, NavLink, Outlet, useLocation, useNavigate } from 'react-router-dom'
+import { toast, Toaster } from 'sonner'
 import logoMark from '@/assets/logo-mark.png'
 import { UserAvatar } from '@/components/common/UserAvatar'
+import { useCairoTime, useRoleName } from '@/components/form'
 import { Button } from '@/components/ui/button'
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from '@/components/ui/dropdown-menu'
 import { Tooltip, TooltipProvider } from '@/components/ui/misc'
@@ -36,20 +38,20 @@ import { NotificationBell } from './NotificationBell'
 import { TableSkeleton } from './PageSkeleton'
 import { SegmentedControl } from './SegmentedControl'
 
-/** An item shows when the user has any of its `abilities`. */
+/** An item shows when the user has any of its `abilities`; App's route guard reads the same list (`navAbilities`). */
 export const NAV: { group: string; items: { path: string; key: string; icon: LucideIcon; abilities: string[] }[] }[] = [
   {
     group: 'nav.group.hr',
     items: [
-      { path: '/site-day', key: 'nav.siteDay', icon: ClipboardCheck, abilities: ['attendance.record'] },
       { path: '/employees', key: 'nav.employees', icon: Users, abilities: ['employee.view'] },
-      { path: '/team-fares', key: 'nav.teamFares', icon: Bus, abilities: ['fare.manage', 'employee.view.own'] },
       { path: '/attendance', key: 'nav.attendance', icon: CalendarCheck, abilities: ['attendance.view'] },
+      { path: '/site-day', key: 'nav.siteDay', icon: ClipboardCheck, abilities: ['attendance.record'] },
       { path: '/leave', key: 'nav.leave', icon: CalendarDays, abilities: ['leave.view'] },
       { path: '/wage-proposals', key: 'nav.wageProposals', icon: HandCoins, abilities: ['employee.approve_wage'] },
+      { path: '/team-fares', key: 'nav.teamFares', icon: Bus, abilities: ['fare.manage', 'employee.view.own'] },
     ],
   },
-  { group: 'nav.group.settings', items: [{ path: '/settings', key: 'nav.settings', icon: Settings, abilities: ['site.view', 'setting.view', 'attendance.view'] }] },
+  { group: 'nav.group.settings', items: [{ path: '/settings', key: 'nav.settings', icon: Settings, abilities: ['site.view.all', 'setting.view', 'attendance.view'] }] },
   {
     group: 'nav.group.admin',
     items: [
@@ -60,6 +62,8 @@ export const NAV: { group: string; items: { path: string; key: string; icon: Luc
     ],
   },
 ]
+
+export const navAbilities = (path: string) => NAV.flatMap((g) => g.items).find((n) => n.path === path)?.abilities ?? []
 
 /** The first page the user may open; the fallback is the 1a landing page. */
 export const homePath = (can: (ability: string) => boolean) =>
@@ -259,6 +263,32 @@ function ProfileMenu() {
   )
 }
 
+/** Above the header while a developer views the app as `me`: whose view it is, until when (Cairo time), and the way back. */
+function ViewAsBanner() {
+  const { t } = useTranslation()
+  const { me, endViewAs } = useAuth()
+  const navigate = useNavigate()
+  const time = useCairoTime({ hour: 'numeric', minute: '2-digit' })
+  const roleName = useRoleName()
+  const [busy, setBusy] = useState(false)
+  if (!me?.view_as) return null
+  const back = () => {
+    setBusy(true)
+    endViewAs()
+      .then(() => navigate('/'), (e: Error) => toast.error(e.message))
+      .finally(() => setBusy(false))
+  }
+  return (
+    <div role="status" className="flex flex-wrap items-center gap-x-3 gap-y-2 border-b border-warning-border bg-warning-bg px-3 py-2 pt-[max(0.5rem,env(safe-area-inset-top))] text-sm text-foreground sm:px-4">
+      <Eye aria-hidden className="size-4 shrink-0 text-warning" />
+      <p className="min-w-0 flex-1 font-medium">{t('auth.viewingAs', { name: me.name, role: roleName(me.role), time: time(me.view_as.expires_at) })}</p>
+      <Button type="button" size="sm" variant="outline" disabled={busy} onClick={back}>
+        {t('auth.endViewAs')}
+      </Button>
+    </div>
+  )
+}
+
 /** The CRM's top context bar: menu (below lg), breadcrumb, then preferences and the account menu. */
 function Navbar({ onOpenMobile }: { onOpenMobile: () => void }) {
   const { t } = useTranslation()
@@ -338,6 +368,7 @@ export function AppLayout() {
         </aside>
 
         <div className="flex min-w-0 flex-1 flex-col">
+          <ViewAsBanner />
           <Navbar onOpenMobile={() => setMobileOpen(true)} />
           <main id="page-content" className="mx-auto w-full max-w-[1600px] flex-1 scroll-mt-20 p-4 sm:p-6">
             <Suspense fallback={<TableSkeleton />}>

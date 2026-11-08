@@ -33,6 +33,12 @@ class AuditLogEntry extends Model
         return $this->belongsTo(User::class);
     }
 
+    /** @return BelongsTo<User, $this> */
+    public function onBehalfOf(): BelongsTo
+    {
+        return $this->belongsTo(User::class, 'on_behalf_of');
+    }
+
     /** The DB value of CUTOFF. */
     public static function cutoff(): string
     {

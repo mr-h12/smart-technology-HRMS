@@ -3,7 +3,6 @@ import { useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { DataList } from '@/components/common/DataList'
 import { EmptyState } from '@/components/common/EmptyState'
-import { FilterSelect } from '@/components/common/Filters'
 import { PageHeader } from '@/components/common/PageHeader'
 import { cairoToday, type Controlled, ErrorBanner, FormDialog, SelectField, TextField, useList, useMoney } from '@/components/form'
 import { TableSkeleton } from '@/components/layout/PageSkeleton'
@@ -26,7 +25,7 @@ const chipCls = 'min-h-tap rounded-full border bg-card px-3 text-[13px] font-med
 /** A stored decimal as a person types it: "35.500000" → "35.5". */
 const typed = (v: string) => v.replace(/(\.\d*?)0+$/, '$1').replace(/\.$/, '')
 
-/** «مواصلات التيم»: the team's fare today from residence × site, corrected per worker (mockup 1). HR picks a team lead and sets fares; the team lead reads. */
+/** «مواصلات التيم»: the team's fare today from residence × site, corrected per worker (mockup 1). HR picks a site manager and sets fares; the site manager reads. */
 export function TeamFaresPage() {
   const { t } = useTranslation()
   const { can } = useAuth()
@@ -42,7 +41,15 @@ export function TeamFaresPage() {
   return (
     <div className="space-y-4">
       <PageHeader title={t('teamFare.title')} description={t(edit ? 'teamFare.subtitle' : 'teamFare.subtitleView')} />
-      {pick && <FilterSelect value={lead} onChange={setLead} label={t('fare.lead')} allLabel={t('teamFare.pickLead')} options={(leads.data ?? []).map((m) => [m.id, m.name])} />}
+      {pick && (
+        <div role="group" aria-label={t('fare.lead')} className="flex flex-wrap gap-2">
+          {(leads.data ?? []).map((m) => (
+            <button key={m.id} type="button" aria-pressed={lead === m.id} onClick={() => setLead(m.id)} className={chipCls}>
+              {m.name}
+            </button>
+          ))}
+        </div>
+      )}
       <ErrorBanner err={leads.err ?? err} shown={[]} />
       {path === null ? (
         <EmptyState icon={Users} title={t('teamFare.pickLead')} />

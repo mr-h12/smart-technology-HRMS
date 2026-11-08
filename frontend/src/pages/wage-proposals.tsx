@@ -10,9 +10,7 @@ import { asciiDigits, ErrorBanner, type Errs, localName, ltrDates, TextField, to
 import { Button } from '@/components/ui/button'
 import { Card } from '@/components/ui/card'
 import { Dialog, DialogBody, DialogContent, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog'
-import { useAuth } from '@/lib/auth'
 import { useList, useSave } from '@/lib/query'
-import { NotFoundPage } from './pages'
 
 /** A row of `GET /employees/wage-proposals`: a daily wage a site manager proposed for a day laborer they added, waiting for HR. */
 export type WageProposal = {
@@ -35,11 +33,6 @@ export const plainAmount = (v: string) => (v.includes('.') ? v.replace(/\.?0+$/,
 
 /** `/wage-proposals`: HR approves or refuses each wage a site manager proposed (`employee.approve_wage.all`). `?proposal=` opens one (the bell). */
 export function WageProposalsPage() {
-  const { can } = useAuth()
-  return can('employee.approve_wage') ? <Proposals /> : <NotFoundPage />
-}
-
-function Proposals() {
   const { t, i18n } = useTranslation()
   const money = useMoney()
   const time = useCairoTime()

@@ -6,6 +6,7 @@ use App\Modules\Attendance\Application\AttendanceDays;
 use App\Modules\Attendance\Domain\AttendanceRefusal;
 use App\Modules\Attendance\Domain\AttendanceRefused;
 use App\Modules\Attendance\Infrastructure\Eloquent\AttendanceDay;
+use App\Modules\Settings\Application\BusinessRules;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
@@ -224,6 +225,67 @@ class AttendanceDaysTest extends TestCase
         $r = $this->getJson('/api/v1/attendance/grid?group=engineer&period_start=2026-09-26&per_page=50')->assertOk()
             ->assertJsonPath('meta.pagination.total', 2)->assertJsonPath('data.0.employee.id', $a)->assertJsonPath('data.1.employee.id', $b);
         $this->assertCount(30, $r->json('data.0.days'));
+    }
+
+    public function test_grid_site_filter_lists_only_who_worked_at_the_site_in_the_period(): void
+    {
+        $a = $this->employee('engineer');
+        $b = $this->employee('engineer');
+        $c = $this->employee('engineer');
+        $this->putDay($a, '2026-10-01', ['site_id' => $this->site]);
+        $this->putDay($b, '2026-10-01', ['site_id' => $this->workSite('Site-3')]);
+        $this->putDay($c, '2026-10-01', ['site_id' => $this->site]);
+        $this->deleteJson("/api/v1/attendance/days/{$c}/2026-10-01?version=1")->assertOk();   // a cleared day does not count
+        $this->getJson("/api/v1/attendance/grid?group=engineer&period_start=2026-09-26&site_id={$this->site}")->assertOk()
+            ->assertJsonPath('meta.pagination.total', 1)->assertJsonCount(1, 'data')->assertJsonPath('data.0.employee.id', $a);
+        $this->getJson("/api/v1/attendance/grid?group=engineer&period_start=2026-08-26&site_id={$this->site}")
+            ->assertOk()->assertJsonPath('meta.pagination.total', 0);                                    // the day is outside that period
+        $this->getJson('/api/v1/attendance/grid?group=engineer&site_id=nope')->assertStatus(422)->assertJsonPath('error.details.0.field', 'site_id');
+    }
+
+    public function test_grid_all_with_a_site_lists_every_field_type_that_worked_there_in_the_engineer_window(): void
+    {
+        $eng = $this->employee('engineer');
+        $lab = $this->employee('day_laborer');
+        $other = $this->employee('day_laborer');
+        $this->putDay($eng, '2026-10-01', ['site_id' => $this->site]);
+        $this->putDay($lab, '2026-10-18', ['site_id' => $this->site]);
+        $this->putDay($other, '2026-10-01', ['site_id' => $this->workSite('Site-3')]);
+        $r = $this->getJson("/api/v1/attendance/grid?group=all&period_start=2026-09-26&site_id={$this->site}")->assertOk()
+            ->assertJsonPath('meta.pagination.total', 2)->assertJsonPath('data.0.employee.id', $eng)->assertJsonPath('data.1.employee.id', $lab);
+        $this->assertCount(30, $r->json('data.1.days'));                                               // 2026-09-26..2026-10-25
+        $this->assertSame('stored', $r->json('data.1.days.22.state'));                                 // 2026-10-18
+        $this->assertSame('missing', $r->json('data.1.days.0.state'));                                 // 2026-09-26, in the laborers' 16–30 half-month
+    }
+
+    public function test_grid_all_without_a_site_lists_field_employees_but_not_office(): void
+    {
+        $eng = $this->employee('engineer');
+        $worker = $this->employee('permanent_worker');
+        $lab = $this->employee('day_laborer');
+        $this->employee('office');
+        $ids = array_column($this->getJson('/api/v1/attendance/grid?group=all&period_start=2026-09-26&per_page=50')->assertOk()
+            ->assertJsonPath('meta.pagination.total', 3)->json('data.*.employee'), 'id');
+        $this->assertSame([$eng, $worker, $lab], $ids);
+    }
+
+    public function test_grid_all_keeps_a_day_laborers_lock_per_half_month(): void
+    {
+        $eng = $this->employee('engineer');
+        $lab = $this->employee('day_laborer');
+        $this->postJson('/api/v1/attendance/locks', ['group' => 'day_laborer', 'period_start' => '2026-10-01', 'confirm_missing' => true])->assertCreated();
+        app(BusinessRules::class)->update(['weekly_off_field' => 'friday,saturday']);   // after the lock: only an open period derives it
+        $data = $this->getJson('/api/v1/attendance/grid?group=all&period_start=2026-09-26')->assertOk()->json('data');
+        $byId = array_column(array_map(fn (array $r) => ['id' => $r['employee']['id'], 'days' => $r['days']], $data), 'days', 'id');
+        $this->assertSame('derived', $byId[$eng][7]['state']);    // Saturday 2026-10-03, the engineer period is open
+        $this->assertSame('missing', $byId[$lab][7]['state']);    // the same Saturday in the laborers' locked 1–15
+        $this->assertSame('derived', $byId[$lab][21]['state']);   // Saturday 2026-10-17, the open 16–31
+    }
+
+    public function test_group_all_is_only_for_the_grid(): void
+    {
+        $this->getJson('/api/v1/attendance/period?group=all')->assertStatus(422)->assertJsonPath('error.details.0.field', 'group');
+        $this->getJson('/api/v1/attendance/missing?group=all')->assertStatus(422);
     }
 
     public function test_period_navigation(): void

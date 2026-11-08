@@ -24,6 +24,12 @@ final class RolePermissions
         });
     }
 
+    /** @param string $ability `resource.action`, in any scope */
+    public static function holds(string $roleId, string $ability): bool
+    {
+        return array_filter(self::of($roleId), fn (string $t) => str_starts_with($t, "{$ability}.")) !== [];
+    }
+
     /** Safe inside a transaction: the cache moves on only once it commits. */
     public static function forget(string $roleId): void
     {

@@ -264,9 +264,9 @@ test('«⋯» offers rest and other only, never leave that needs a request', asy
   expect(items).toEqual(['راحة', 'أخرى'])
 })
 
-test('a 409 keeps the changes and offers the latest', async () => {
+test('a 409 that names no row (a racing insert) keeps the changes, and load latest resets the whole day', async () => {
   const { siteDay } = routes([S1], { s1: S1_ROWS }, {
-    'POST /api/v1/attendance/site-day': () => json(409, { error: { code: 'concurrency_conflict', message: 'تغيّر', details: [{ field: 'rows.0', code: 'concurrency_conflict', message: 'تغيّر' }] } }),
+    'POST /api/v1/attendance/site-day': () => json(409, { error: { code: 'concurrency_conflict', message: 'تغيّر', details: [] } }),
   })
   render()
   await enter()
@@ -278,6 +278,28 @@ test('a 409 keeps the changes and offers the latest', async () => {
   await user.click(screen.getByRole('button', { name: 'تحميل الأحدث' }))
   await waitFor(() => expect(siteDay.mock.calls.length).toBeGreaterThan(calls))
   expect(within(group('Engineer-1')).getByRole('button', { name: 'مرضي' })).toHaveAttribute('aria-pressed', 'false')
+})
+
+test('a 409 that names one row: load latest resets only that row, and the other drafts stay', async () => {
+  // rows.N indexes the sent rows: Worker-1 (rows.0) was saved by another site manager, Engineer-1 (rows.1) was not
+  let latest = S1_ROWS
+  routes([S1], { s1: S1_ROWS }, {
+    'GET /api/v1/attendance/site-day': () => json(200, { data: answer(S1, latest) }),
+    'POST /api/v1/attendance/site-day': () => json(409, { error: { code: 'concurrency_conflict', message: 'تغيّر', details: [{ field: 'rows.0', code: 'concurrency_conflict', message: 'تغيّر' }] } }),
+  })
+  render()
+  await enter()
+  await user.click(within(await screen.findByRole('group', { name: 'Worker-1' })).getByRole('button', { name: 'غياب' }))
+  await user.click(within(group('Engineer-1')).getByRole('button', { name: 'مرضي' }))
+  await user.click(screen.getByRole('button', { name: 'حفظ اليوم' }))
+  expect(await screen.findByText(/عدّل شخص آخر يوم Worker-1 قبل حفظك/)).toBeInTheDocument()
+
+  latest = [row('w1', 'Worker-1', 'day_laborer', 'workers', { state: 'stored', version: 2, site_id: 'leave-sick', leave_code: 'sick' }), ...S1_ROWS.slice(1)]
+  await user.click(screen.getByRole('button', { name: 'تحميل الأحدث' }))
+  expect(await within(group('Worker-1')).findByRole('button', { name: 'مرضي' })).toHaveAttribute('aria-pressed', 'true')
+  expect(within(group('Worker-1')).getByRole('button', { name: 'غياب' })).toHaveAttribute('aria-pressed', 'false')
+  expect(within(group('Engineer-1')).getByRole('button', { name: 'مرضي' })).toHaveAttribute('aria-pressed', 'true')
+  expect(screen.getByText('تغييرات غير محفوظة: 1')).toBeInTheDocument()
 })
 
 test('a day laborer with nothing recorded can be removed from today; one already recorded cannot', async () => {

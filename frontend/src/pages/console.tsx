@@ -1,13 +1,14 @@
 import { UserPlus } from 'lucide-react'
 import { useState } from 'react'
 import { useTranslation } from 'react-i18next'
+import { useNavigate } from 'react-router-dom'
 import { toast } from 'sonner'
 import { DataList } from '@/components/common/DataList'
 import { PageHeader } from '@/components/common/PageHeader'
 import { RowActions } from '@/components/common/RowActions'
 import { StatusBadge } from '@/components/common/StatusBadge'
 import { UserAvatar } from '@/components/common/UserAvatar'
-import { type Controlled, ErrorBanner, FormDialog, type Row, SelectField, TextField, useCairoTime } from '@/components/form'
+import { type Controlled, ErrorBanner, FormDialog, type Row, SelectField, TextField, useCairoTime, useRoleName } from '@/components/form'
 import { TableSkeleton } from '@/components/layout/PageSkeleton'
 import { SegmentedControl } from '@/components/layout/SegmentedControl'
 import { Badge } from '@/components/ui/badge'
@@ -17,11 +18,6 @@ import { Dialog, DialogBody, DialogContent, DialogHeader, DialogTitle } from '@/
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 import { useAuth } from '@/lib/auth'
 import { USERS, useApi, useList, useSave } from '@/lib/query'
-
-function useRoleName() {
-  const { i18n } = useTranslation()
-  return (r: Row | null | undefined) => (r ? (i18n.language === 'ar' ? r.name_ar : r.name) : '—')
-}
 
 /**
  * Another account's password, shown as typed. A type=password + new-password field gets Safari's generated strong password
@@ -73,6 +69,27 @@ function PasswordDialog({ account, ...dialog }: { account: Row } & Controlled) {
       shown={['password']}
     >
       {(f) => <TextField name="password" label={t('auth.password')} {...noGenerator} {...f} />}
+    </FormDialog>
+  )
+}
+
+/** Confirming swaps the session to `account` and goes to `/`, so that account's landing page applies. */
+function ViewAsDialog({ account, ...dialog }: { account: Row } & Controlled) {
+  const { t } = useTranslation()
+  const { viewAs } = useAuth()
+  const navigate = useNavigate()
+  return (
+    <FormDialog
+      {...dialog}
+      title={`${t('console.viewAs')}: ${account.name}`}
+      description={t('console.viewAsHint')}
+      init={{}}
+      submit={({ reason }) => viewAs(account.id, reason)}
+      onDone={() => navigate('/')}
+      shown={['reason']}
+      footer="console.viewAs"
+    >
+      {(f) => <TextField name="reason" label={t('console.viewAsReason')} maxLength={500} {...f} />}
     </FormDialog>
   )
 }
@@ -131,16 +148,17 @@ function SessionsDialog({ account, open, onOpenChange }: { account: Row } & Cont
 
 export function AccountsPage() {
   const { t } = useTranslation()
-  const { can } = useAuth()
+  const { me, can } = useAuth()
   const roleName = useRoleName()
   const manage = can('user.manage')
+  const impersonate = can('user.impersonate')
   const viewRoles = can('role.view')
   // ponytail: one 100-account page; there are a handful of accounts
   const { rows, err, loading } = useList(USERS)
   const send = useSave()
   const { data: roles = [], err: rolesErr } = useApi<Row[]>(manage && viewRoles ? '/roles' : null)
   const [actErr, setActErr] = useState<unknown>()
-  const [dlg, setDlg] = useState<{ type: 'add' } | { type: 'edit' | 'password' | 'sessions'; row: Row }>()
+  const [dlg, setDlg] = useState<{ type: 'add' } | { type: 'edit' | 'password' | 'sessions' | 'viewAs'; row: Row }>()
   const close = { open: true, onOpenChange: () => setDlg(undefined) }
   const toggle = (u: Row) => {
     setActErr(undefined)
@@ -183,13 +201,16 @@ export function AccountsPage() {
               </div>
             ),
           }}
-          actions={manage ? (u) => (
+          actions={manage || impersonate ? (u) => (
             <RowActions
               items={[
-                { label: t('common.edit'), onSelect: () => setDlg({ type: 'edit', row: u }) },
-                { label: t('console.setPassword'), onSelect: () => setDlg({ type: 'password', row: u }) },
-                { label: t(u.is_active ? 'console.deactivate' : 'console.reactivate'), onSelect: () => toggle(u), destructive: u.is_active },
-                { label: t('console.sessions'), onSelect: () => setDlg({ type: 'sessions', row: u }) },
+                ...(manage ? [
+                  { label: t('common.edit'), onSelect: () => setDlg({ type: 'edit', row: u }) },
+                  { label: t('console.setPassword'), onSelect: () => setDlg({ type: 'password', row: u }) },
+                  { label: t(u.is_active ? 'console.deactivate' : 'console.reactivate'), onSelect: () => toggle(u), destructive: u.is_active },
+                  { label: t('console.sessions'), onSelect: () => setDlg({ type: 'sessions', row: u }) },
+                ] : []),
+                ...(impersonate && u.is_active && u.id !== me?.id ? [{ label: t('console.viewAs'), onSelect: () => setDlg({ type: 'viewAs', row: u }) }] : []),
               ]}
             />
           ) : undefined}
@@ -199,6 +220,7 @@ export function AccountsPage() {
       {dlg?.type === 'edit' && <AccountDialog account={dlg.row} roles={roles} {...close} />}
       {dlg?.type === 'password' && <PasswordDialog account={dlg.row} {...close} />}
       {dlg?.type === 'sessions' && <SessionsDialog account={dlg.row} {...close} />}
+      {dlg?.type === 'viewAs' && <ViewAsDialog account={dlg.row} {...close} />}
     </div>
   )
 }

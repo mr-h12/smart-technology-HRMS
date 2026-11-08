@@ -40,7 +40,7 @@ test('without a token any page redirects to login', async () => {
 
 test('nav hides what the user cannot do', async () => {
   localStorage.setItem('hrms.auth.token.v1', 't'.repeat(64))
-  mockFetch({ 'GET /api/v1/auth/me': () => json(200, { data: me(['site.view.own']) }), 'GET /api/v1/sites': () => json(200, { data: [], meta: { pagination } }) })
+  mockFetch({ 'GET /api/v1/auth/me': () => json(200, { data: me(['site.view.all']) }), 'GET /api/v1/sites': () => json(200, { data: [], meta: { pagination } }) })
   renderApp('/sites')
   expect(await screen.findByRole('link', { name: 'الإعدادات' })).toBeInTheDocument()
   expect(screen.queryByRole('link', { name: 'الموظفون' })).toBeNull()

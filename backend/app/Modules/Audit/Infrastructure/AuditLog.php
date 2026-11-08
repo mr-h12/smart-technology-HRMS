@@ -4,12 +4,13 @@ declare(strict_types=1);
 
 namespace App\Modules\Audit\Infrastructure;
 
+use App\Modules\Identity\Infrastructure\Eloquent\User;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
 use InvalidArgumentException;
 
-/** The one writer of audit_log rows; runs inside the caller's transaction. */
+/** The one writer of audit_log rows; runs inside the caller's transaction. While viewing as, the developer is the actor, on behalf of the target. */
 final class AuditLog
 {
     /**
@@ -21,11 +22,15 @@ final class AuditLog
         $request = request();
         $requestId = $request->attributes->get('request_id'); // set by AddRequestId (outside the module layers)
         $userAgent = $request->userAgent();
+        // hasUser(): a save inside the bearer guard must not re-enter it.
+        $signedIn = Auth::hasUser() ? Auth::user() : null;
+        $target = $actorId === null && $signedIn instanceof User && $signedIn->viewAs !== null ? $signedIn : null;
 
         DB::table('audit_log')->insert([
             'id' => (string) Str::uuid7(),
-            // hasUser(): a save inside the bearer guard must not re-enter it.
-            'user_id' => $actorId ?? (Auth::hasUser() ? Auth::id() : null),
+            'user_id' => $actorId ?? $target?->viewAs->byId ?? $signedIn?->getAuthIdentifier(),
+            // Only when set: migrations that ran before the column existed write audit rows too.
+            ...($target === null ? [] : ['on_behalf_of' => (string) $target->id]),
             'event' => $event,
             'entity_type' => $entityType,
             'entity_id' => $entityId,

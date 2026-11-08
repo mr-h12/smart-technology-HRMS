@@ -7,6 +7,7 @@ namespace App\Modules\Identity\Application\Administration;
 use App\Modules\Audit\Infrastructure\AuditLog;
 use App\Modules\Identity\Domain\Authentication\IdentityAuditEvents;
 use App\Modules\Identity\Domain\Authentication\IdleTimeout;
+use App\Modules\Identity\Domain\Authentication\ViewAsEnding;
 use App\Modules\Identity\Infrastructure\Eloquent\User;
 use App\Modules\Identity\Infrastructure\Eloquent\UserSession;
 use App\Support\Http\Paginates;
@@ -106,7 +107,7 @@ final class UserAdministration
             $user->save();
             AuditLog::record($active ? IdentityAuditEvents::USER_ACTIVATED : IdentityAuditEvents::USER_DEACTIVATED, 'users', (string) $user->id, $old, $changed);
             if (! $active) {
-                $user->sessions()->delete();
+                $user->revokeSessions();
                 RoleAdministration::assertRoleManagerRemains('is_active');
             }
 
@@ -121,7 +122,7 @@ final class UserAdministration
         DB::transaction(function () use ($id, $password): void {
             $user = User::findOrFail($id);
             $user->update(['password' => $password, 'failed_login_attempts' => 0, 'locked_until' => null]);
-            $user->sessions()->delete();
+            $user->revokeSessions();
             AuditLog::record(IdentityAuditEvents::PASSWORD_SET, 'users', (string) $user->id);
         });
     }
@@ -142,7 +143,8 @@ final class UserAdministration
     public function terminateSession(string $userId, string $sessionId): void
     {
         DB::transaction(function () use ($userId, $sessionId): void {
-            UserSession::whereKey($sessionId)->where('user_id', $userId)->firstOrFail()->delete();
+            $session = UserSession::whereKey($sessionId)->where('user_id', $userId)->firstOrFail();
+            $session->impersonator_id === null ? $session->delete() : $session->endViewAs(ViewAsEnding::Revoked);
             AuditLog::record(IdentityAuditEvents::ADMIN_SESSION_TERMINATED, 'users', $userId, ['session_id' => $sessionId]);
         });
     }

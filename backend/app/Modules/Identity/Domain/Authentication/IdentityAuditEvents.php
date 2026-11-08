@@ -36,4 +36,8 @@ final class IdentityAuditEvents
     public const ROLE_PERMISSIONS_UPDATED = 'ROLE_PERMISSIONS_UPDATED';
 
     public const SITE_MANAGERS_UPDATED = 'SITE_MANAGERS_UPDATED';
+
+    public const VIEW_AS_STARTED = 'VIEW_AS_STARTED';
+
+    public const VIEW_AS_ENDED = 'VIEW_AS_ENDED';
 }

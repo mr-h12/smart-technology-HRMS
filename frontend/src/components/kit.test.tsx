@@ -211,6 +211,24 @@ test('StatRow draws exactly one hero figure, untoned, and tones only the seconda
   for (const tile of within(row).getAllByRole('group')) expect(tile).not.toHaveAttribute('aria-label')
 })
 
+test('StatRow tiles put the hero and every stat in one row from lg, the hero two columns wide', () => {
+  render(
+    <StatRow
+      label="ملخص اليوم"
+      hero={{ label: 'الإجمالي', value: 120, progress: 0.5 }}
+      stats={[{ label: 'حاضر', value: 80 }, { label: 'غائب', value: 10 }, { label: 'إجازة', value: 5 }, { label: 'متبقي', value: 25 }]}
+    />,
+  )
+  const row = screen.getByRole('group', { name: 'ملخص اليوم' })
+  expect(row).toHaveClass('grid', 'lg:grid-flow-col', 'lg:auto-cols-fr')
+  const hero = within(row).getByText('الإجمالي').closest('[role="group"]')!
+  expect(hero).toHaveClass('lg:col-span-2')
+  const stats = within(row).getByText('حاضر').closest('[role="group"]')!.parentElement!
+  // below lg the stats sit 2-up under the hero; from lg their wrapper drops out so each tile is a column of the row
+  expect(stats).toHaveClass('grid-cols-2', 'lg:contents')
+  expect(stats.children).toHaveLength(4)
+})
+
 test('StatRow strip: one hero with its detail over one hairline-divided strip of every secondary', () => {
   render(
     <StatRow

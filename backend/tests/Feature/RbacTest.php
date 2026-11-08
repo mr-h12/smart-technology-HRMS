@@ -21,7 +21,7 @@ class RbacTest extends TestCase
     {
         $grants = fn (string $slug) => Role::where('slug', $slug)->firstOrFail()->permissions
             ->map(fn ($p) => "{$p->resource}.{$p->action}.{$p->scope}")->sort()->values()->all();
-        $this->assertSame(39, Permission::count());
+        $this->assertSame(40, Permission::count());
         $this->assertSame(['attendance.record.own', 'employee.crew.own', 'employee.propose_laborer.own', 'employee.view.own', 'leave.request.own', 'leave.view.own', 'site.view.own'], $grants('manager'));
         $this->assertSame(['attendance.view.all', 'audit_log.view.all', 'employee.view.all', 'employee_document.view.all', 'leave.decide_escalated.all', 'leave.view.all', 'setting.view.all', 'site.view.all'], $grants('ceo'));
         $this->assertCount(25, $grants('hr'));
@@ -30,18 +30,20 @@ class RbacTest extends TestCase
         }
         $this->assertNotContains('user.manage.all', $grants('hr'));
         $this->assertNotContains('leave.decide_escalated.all', $grants('hr'));
-        $this->assertCount(31, $grants('developer'));
+        $this->assertCount(32, $grants('developer'));
         $this->assertNotContains('leave.view.own', $grants('developer'));
         $this->assertContains('system_log.view.all', $grants('developer'));
+        $this->assertContains('user.impersonate.all', $grants('developer'));
         foreach (['ceo', 'hr', 'manager'] as $slug) {
             $this->assertNotContains('system_log.view.all', $grants($slug), $slug);
+            $this->assertEmpty(array_filter($grants($slug), fn ($t) => str_starts_with($t, 'user.impersonate.')), $slug);
         }
     }
 
     public function test_every_api_route_requires_auth_and_a_permission(): void
     {
         $open = ['api/v1/health', 'api/v1/auth/login'];
-        $authOnly = ['api/v1/auth/me', 'api/v1/auth/logout', 'api/v1/notifications', 'api/v1/notifications/{notification}/read'];
+        $authOnly = ['api/v1/auth/me', 'api/v1/auth/logout', 'api/v1/auth/view-as/end', 'api/v1/notifications', 'api/v1/notifications/{notification}/read'];
         foreach (Route::getRoutes() as $route) {
             if (! str_starts_with($route->uri(), 'api/v1') || in_array($route->uri(), $open, true)) {
                 continue;

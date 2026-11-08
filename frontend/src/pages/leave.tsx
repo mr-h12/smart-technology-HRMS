@@ -139,6 +139,7 @@ function Requests({ thisYear, highlight }: { thisYear: number; highlight: string
 /** `GET /leave/balances`: one row per monthly employee, every number the server's (docs/calculations.md §7). The year is the page's: the header names it. */
 function Balances({ thisYear, year, setYear }: { thisYear: number; year: string; setYear: (y: string) => void }) {
   const { t, i18n } = useTranslation()
+  const { can } = useAuth()
   const today = cairoToday()
   const [type, setType] = useState('')
   const [q, setQ] = useState('')
@@ -155,7 +156,7 @@ function Balances({ thisYear, year, setYear }: { thisYear: number; year: string;
     <Card className="overflow-hidden">
       <div className="flex flex-wrap items-center gap-3 border-b p-4">
         <SearchInput value={q} onChange={filter(setQ)} placeholder={t('leave.search')} className="sm:w-full sm:max-w-md" />
-        <FilterSelect value={type} onChange={filter(setType)} label={t('employee.type')} allLabel={t('employee.allTypes')} options={MONTHLY_TYPES.map((v) => [v, t(`enum.type.${v}`)])} />
+        <FilterSelect value={type} onChange={filter(setType)} label={t('employee.type')} allLabel={t('employee.allTypes')} options={MONTHLY_TYPES.filter((v) => v !== 'office' || can('leave.view.all')).map((v) => [v, t(`enum.type.${v}`)])} />
         <SegmentedControl
           label={t('leave.year')}
           value={year}

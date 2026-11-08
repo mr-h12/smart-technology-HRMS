@@ -34,6 +34,8 @@ Route::middleware('auth')->group(function (): void {
     Route::prefix('auth')->controller(AuthController::class)->group(function (): void {
         Route::post('logout', 'logout');
         Route::get('me', 'me');
+        Route::post('view-as', 'startViewAs')->middleware('permission:user.impersonate');
+        Route::post('view-as/end', 'endViewAs');
     });
 
     Route::prefix('employees/wage-proposals')->controller(WageProposalController::class)->whereUuid('proposal')->group(function (): void {

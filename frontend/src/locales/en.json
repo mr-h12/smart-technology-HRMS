@@ -262,7 +262,7 @@
     "setBy": "Set by",
     "fromExcel": "From Excel",
     "allLeads": "All",
-    "lead": "Team lead",
+    "lead": "Site manager",
     "add": "Add",
     "edit": "Edit",
     "pairTitle": "{{residence}} → {{site}}"
@@ -280,7 +280,9 @@
       "rate_limited": "Too many attempts. Please try again in a minute.",
       "unknown": "Unable to sign in. Please try again."
     },
-    "title": "Sign in to your account"
+    "title": "Sign in to your account",
+    "viewingAs": "You are viewing as {{name}} ({{role}}) until {{time}}",
+    "endViewAs": "Return to my account"
   },
   "console": {
     "addAccount": "Add account",
@@ -307,7 +309,10 @@
     "rolesSubtitle": "Choose what each role can view or change.",
     "resource": "Area",
     "usersCount": "Users: {{count}}",
-    "matrixTitle": "{{role}} permissions"
+    "matrixTitle": "{{role}} permissions",
+    "viewAs": "View as",
+    "viewAsHint": "You will use the app as this account, with its pages and permissions, until you return to your account or the time runs out. The audit log records what you do under your name.",
+    "viewAsReason": "Reason (optional)"
   },
   "perm": {
     "employee": {
@@ -326,7 +331,8 @@
     },
     "user": {
       "view": "User accounts: view",
-      "manage": "User accounts: manage"
+      "manage": "User accounts: manage",
+      "impersonate": "User accounts: view as"
     },
     "role": {
       "view": "Roles and permissions: view",
@@ -371,7 +377,8 @@
       "request": "Request",
       "decide": "Decide",
       "decide_escalated": "Decide escalated",
-      "adjust": "Adjust balance"
+      "adjust": "Adjust balance",
+      "impersonate": "View as"
     },
     "attendance": {
       "view": "Attendance: view",
@@ -429,7 +436,9 @@
       "ROLE_PERMISSIONS_UPDATED": "Role permissions updated",
       "SITE_MANAGERS_UPDATED": "Site managers updated",
       "ATTENDANCE_LOCKED": "Attendance period locked",
-      "ATTENDANCE_REOPENED": "Attendance period reopened"
+      "ATTENDANCE_REOPENED": "Attendance period reopened",
+      "VIEW_AS_STARTED": "Started viewing as an account",
+      "VIEW_AS_ENDED": "Stopped viewing as an account"
     },
     "entity": {
       "employees": "Employees",
@@ -450,7 +459,8 @@
       "official_holidays": "Official holidays",
       "notifications": "Notifications",
       "employee_site_assignments": "Workers' home sites"
-    }
+    },
+    "onBehalfOf": "on behalf of {{name}}"
   },
   "settings": {
     "tab": {
@@ -528,7 +538,10 @@
   "attendance": {
     "subtitle": "Each employee's days, by their group's period.",
     "groupLabel": "Group",
+    "siteFilter": "Site",
+    "allSites": "All sites",
     "group": {
+      "all": "All",
       "office": "Office staff",
       "engineer": "Engineers",
       "permanent_worker": "Permanent workers",
@@ -879,6 +892,7 @@
     "checkOutAll": "Check out all ({{count}})",
     "hrOwnsSites": "A site missing or wrong? Contact HR.",
     "conflict": "Someone else changed this day before you saved. Your changes are still on screen; load the latest, then enter them again.",
+    "conflictRows": "Someone else changed the day of {{names}} before you saved. Load the latest: those rows show what they saved, and your other changes stay for you to save.",
     "loadLatest": "Load latest",
     "saving": "Saving…",
     "unsaved": "Unsaved changes: {{count}}",
@@ -1061,7 +1075,7 @@
   },
   "teamFare": {
     "title": "Team transport",
-    "subtitle": "Choose a team lead, record missing residences, and set the fare for each residence at each site.",
+    "subtitle": "Choose a site manager, record missing residences, and set the fare for each residence at each site.",
     "subtitleView": "The team's workers' fares by residence and site.",
     "all": "Whole team ({{count}})",
     "missing": "No amount ({{count}})",
@@ -1094,7 +1108,7 @@
       "pair_one": "Everyone living in {{residence}} and working at {{site}} ({{count}} worker)",
       "pair_other": "Everyone living in {{residence}} and working at {{site}} ({{count}} workers)"
     },
-    "pickLead": "Choose a team lead",
+    "pickLead": "Pick a site manager",
     "empty": "No workers on the team today."
   },
   "logs": {

@@ -23,6 +23,7 @@ export const me = (permissions: string[]): Me => ({
   email: 'hr@smart.test',
   role: { id: 'r1', slug: 'hr', name: 'HR', name_ar: 'الموارد البشرية' },
   permissions,
+  view_as: null,
 })
 
 const withCache = (ui: React.ReactNode) => <QueryClientProvider client={queryClient}>{ui}</QueryClientProvider>
@@ -40,6 +41,6 @@ export const renderApp = (path: string) =>
 
 /** Renders `ui` signed in with exactly these permissions, without the /auth/me round trip; `path` seeds the router, `router: false` drops it. */
 export const renderWithAuth = (ui: React.ReactNode, permissions: string[], { path = '/', router = true } = {}) => {
-  const auth = <AuthContext.Provider value={{ me: me(permissions), loading: false, login: async () => {}, logout: async () => {}, can: (a) => canDo(permissions, a) }}>{ui}</AuthContext.Provider>
+  const auth = <AuthContext.Provider value={{ me: me(permissions), loading: false, login: async () => {}, logout: async () => {}, viewAs: async () => {}, endViewAs: async () => {}, can: (a) => canDo(permissions, a) }}>{ui}</AuthContext.Provider>
   return render(withCache(router ? <MemoryRouter initialEntries={[path]}>{auth}</MemoryRouter> : auth))
 }
