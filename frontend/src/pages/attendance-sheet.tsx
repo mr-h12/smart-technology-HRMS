@@ -217,6 +217,7 @@ export function DaySheet({ group, date, period, onDate, onOpenDay }: { group: st
       {period?.is_locked && <Alert tone="info" icon={Lock}>{t('attendance.sheet.locked')}</Alert>}
 
       <StatRow
+        layout="compact"
         label={t('attendance.sheet.kpi.label')}
         hero={{
           label: t('attendance.sheet.kpi.total'),
