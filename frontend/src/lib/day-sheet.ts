@@ -7,7 +7,7 @@ export type DayValue = (typeof DAY_VALUES)[number]
 /** One `rows[]` item of `GET /attendance/sheet`. */
 export type SheetRow = {
   employee: { id: string; code: number; name_ar: string; name_en: string | null; department: string | null; type: string }
-  /** Where the employee is on the date: the day's work site, else a worker's or office employee's site then, else an engineer's last site. */
+  /** Where the employee is on the date: the day's work site, else a non-engineer's site then, else the last site; null for a laborer off every crew. */
   site_id: string | null
   /** The server's rule for offering «تحديد الموقع»: no site, not an engineer, not taken off every crew on the date. */
   needs_site: boolean

@@ -237,7 +237,6 @@ export function SheetRows({ rows, group, editable, date, sites, selected, pendin
     </p>
   )
 
-  // under the name: in All the row's type, then its department
   const subline = (r: SheetRow, cls = '') => (all || r.employee.department) && (
     <div className={cn('text-xs text-muted-foreground', cls)}>
       {all && <span>{t(`enum.type.${r.employee.type}`)}</span>}

@@ -16,9 +16,9 @@ export type Stat = {
 export type StatRowProps = {
   /** The row's group name. */
   label: string
-  /** The one big number: text-kpi (30 px), nowrap, untoned. `progress` (0..1) draws a bar under it. */
+  /** The one big number: text-kpi (30 px; text-lg in `compact`), nowrap, untoned. `progress` (0..1) draws a bar under it. */
   hero: Stat & { progress?: number }
-  /** Secondary tiles, text-lg, nowrap; tone colours the number only, for real categories (rule 9). No icon prop. */
+  /** Secondary tiles, text-lg (text-base in `compact`), nowrap; tone colours the number only, for real categories (rule 9). No icon prop. */
   stats?: (Stat & { tone?: StatTone })[]
   /** `strip`: one bordered block, the hero over a hairline-divided strip of the stats (rows on a phone, one row of columns from md), so
    * no stat sits alone and the hero never stretches. For read-only figures: `select` and `progress` are ignored.
