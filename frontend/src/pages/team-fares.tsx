@@ -12,6 +12,7 @@ import { Card } from '@/components/ui/card'
 import { useAuth } from '@/lib/auth'
 import { RESIDENCES, useApi, useSave } from '@/lib/query'
 import { NotFoundPage } from './pages'
+import { ResidenceDialog as AddResidence } from './sites'
 
 export type Ref = { id: string; name: string }
 export type TeamFareRow = { employee_id: string; code: number; name: string; type: 'engineer' | 'permanent_worker' | 'day_laborer'; residence: Ref | null; site: Ref | null; amount: string | null; source: 'override' | 'default' | 'none' | 'no_residence'; default_amount: string | null; overrides: { site_id: string; amount: string }[] }
@@ -196,9 +197,10 @@ function TeamFareDialog({ row, team, ...dialog }: { row: TeamFareRow; team: Team
   )
 }
 
-/** HR records a worker's missing residence; the residence × site fare then applies. */
+/** HR records a missing residence, for an engineer too; with site.manage a residence not in the list can be added here and comes back selected. */
 function ResidenceDialog({ row, ...dialog }: { row: TeamFareRow } & Controlled) {
   const { t } = useTranslation()
+  const { can } = useAuth()
   const send = useSave()
   const { rows: residences } = useList(RESIDENCES)
   return (
@@ -209,7 +211,12 @@ function ResidenceDialog({ row, ...dialog }: { row: TeamFareRow } & Controlled) 
       submit={(form) => send(`/employees/${row.employee_id}`, { method: 'PATCH', body: { residence_id: form.residence_id } }, ['/team-fares', '/employees'])}
       shown={['residence_id']}
     >
-      {(f) => <SelectField name="residence_id" label={t('teamFare.col.residence')} blank options={residences.map((r) => [r.id, r.name_ar])} {...f} />}
+      {(f) => (
+        <>
+          <SelectField name="residence_id" label={t('teamFare.col.residence')} blank options={residences.map((r) => [r.id, r.name_ar])} {...f} />
+          {can('site.manage') && <AddResidence onDone={(saved) => f.set('residence_id', saved.id)} />}
+        </>
+      )}
     </FormDialog>
   )
 }

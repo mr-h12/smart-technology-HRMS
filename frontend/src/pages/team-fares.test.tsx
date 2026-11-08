@@ -335,3 +335,60 @@ test('a residence 422 shows in the dialog', async () => {
   await user.click(within(dialog).getByRole('button', { name: 'حفظ' }))
   expect(await within(dialog).findByText('رقم الحساب مطلوب')).toBeInTheDocument()
 })
+
+const CAN_ADD = [...HR, 'site.manage.all']
+const NEW_RESIDENCE = { id: 'r3', name_ar: 'سيدي بشر' }
+/** `/residences` answers with the new row once it has been posted, as the server does. */
+const addable = (extra = {}) => {
+  let residences = [{ id: 'r1', name_ar: 'كفر الدوار' }, { id: 'r2', name_ar: 'القاهرة' }]
+  saving({
+    ...ENGINEER_ROUTES,
+    'GET /api/v1/residences': () => json(200, { data: residences, meta: { pagination } }),
+    'POST /api/v1/residences': () => {
+      residences = [...residences, NEW_RESIDENCE]
+      return json(201, { data: NEW_RESIDENCE })
+    },
+    ...extra,
+  })
+}
+const openAdd = async (dialog: HTMLElement) => {
+  await user.click(within(dialog).getByRole('button', { name: 'إضافة محل إقامة' }))
+  return screen.findByRole('dialog', { name: 'إضافة محل إقامة' })
+}
+
+test('a residence added from the dialog ends up selected, and saving patches with its id', async () => {
+  addable()
+  await asHr(CAN_ADD)
+  const dialog = await openEngineerResidence()
+  const added = await openAdd(dialog)
+  await user.type(within(added).getByRole('textbox'), 'سيدي بشر')
+  await user.click(within(added).getByRole('button', { name: 'حفظ' }))
+  const select = await screen.findByRole('combobox', { name: 'السكن' })
+  expect(screen.getByRole('dialog', { name: 'سكن م. كريم فتحي' })).toBeInTheDocument()
+  await waitFor(() => expect(select).toHaveDisplayValue('سيدي بشر'))
+  expect(post('/residences')).toEqual([{ name_ar: 'سيدي بشر' }])
+  expect(patched()).toEqual([])
+  await user.click(within(screen.getByRole('dialog')).getByRole('button', { name: 'حفظ' }))
+  await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull())
+  expect(patched()).toEqual([['/api/v1/employees/e1', { residence_id: 'r3' }]])
+})
+
+test('without site.manage the dialog has the select and no add button', async () => {
+  addable()
+  await asHr()
+  const dialog = await openEngineerResidence()
+  expect(within(dialog).getByRole('combobox', { name: 'السكن' })).toBeInTheDocument()
+  expect(within(dialog).queryByRole('button', { name: 'إضافة محل إقامة' })).toBeNull()
+})
+
+test('a duplicate name shows inside the add dialog and leaves the selection alone', async () => {
+  addable({ 'POST /api/v1/residences': () => json(422, { error: { code: 'validation_failed', message: 'x', details: [{ field: 'name_ar', code: 'unique', message: 'الاسم ده موجود بالفعل' }] } }) })
+  await asHr(CAN_ADD)
+  const dialog = await openEngineerResidence()
+  const added = await openAdd(dialog)
+  await user.type(within(added).getByRole('textbox'), 'القاهرة')
+  await user.click(within(added).getByRole('button', { name: 'حفظ' }))
+  expect(await within(added).findByText('الاسم ده موجود بالفعل')).toBeInTheDocument()
+  expect(within(dialog).getByRole('combobox', { name: 'السكن', hidden: true })).toHaveValue('')
+  expect(patched()).toEqual([])
+})
