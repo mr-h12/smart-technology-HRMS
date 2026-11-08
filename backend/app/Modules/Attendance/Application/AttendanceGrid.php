@@ -168,6 +168,7 @@ final class AttendanceGrid
      */
     public function sheetOfEveryType(string $date, ?string $ownerId = null): array
     {
+        // ponytail: unpaginated, the whole company in PHP, one sheet() per type; page it in SQL if the company outgrows one response
         $rows = [];
         $days = [];
         foreach (EmployeeType::cases() as $g) {
