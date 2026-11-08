@@ -9,6 +9,8 @@ export type SheetRow = {
   employee: { id: string; code: number; name_ar: string; name_en: string | null; department: string | null; type: string }
   /** Where the employee is on the date: the day's work site, else a worker's or office employee's site then, else an engineer's last site. */
   site_id: string | null
+  /** The server's rule for offering «تحديد الموقع»: no site, not an engineer, not taken off every crew on the date. */
+  needs_site: boolean
   day: { state: 'stored' | 'derived' | 'missing'; source: string | null; version: number | null; site_id: string | null; leave_code: string | null } & Record<DayValue, string | number | null>
   hints: { late_minutes?: number; ot_minutes?: number }
   last_site_id: string | null

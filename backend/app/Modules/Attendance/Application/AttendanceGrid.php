@@ -140,9 +140,11 @@ final class AttendanceGrid
                     $totals[$kind]++;
                 }
             }
+            $site = $this->rowSite($g, $e, $day, $date, $lastSites[$e['id']] ?? null);
             $rows[] = [
                 'employee' => ['id' => $e['id'], 'code' => $e['code'], 'name_ar' => $e['name_ar'], 'name_en' => $e['name_en'], 'department' => $e['department'], 'type' => $g->value],
-                'site_id' => $this->rowSite($g, $e, $day, $date, $lastSites[$e['id']] ?? null),
+                'site_id' => $site,
+                'needs_site' => $site === null && $g !== EmployeeType::Engineer && ! Employment::offEveryCrewOn($e, $date),
                 'day' => array_intersect_key($day, array_flip(['state', 'source', 'version', 'site_id', 'leave_code', ...EffectiveDays::VALUES])),
                 'hints' => (object) $this->days->hints($g, $e, $day, $settings),
                 'last_site_id' => $lastSites[$e['id']] ?? null,

@@ -192,8 +192,7 @@ export function SheetRows({ rows, group, editable, date, sites, selected, pendin
       </DropdownMenu>
     )
   }
-  // an engineer's site comes from the recorded day, so only an office employee or worker can be given one here
-  const canSetSite = (r: SheetRow) => r.site_id === null && r.employee.type !== 'engineer' && can('employee.assign_site')
+  const canSetSite = (r: SheetRow) => r.needs_site && can('employee.assign_site')
   const setSite = (r: SheetRow) => canSetSite(r) && <MoveSiteDialog empId={r.employee.id} from={date} ariaLabel={t('attendance.sheet.rowAction', { action: t('site.set'), name: name(r) })} />
   const where = (r: SheetRow) => {
     if (all) return r.site_id ? <span className="rounded-md border bg-card px-2 py-0.5 text-xs">{siteName(r.site_id)}</span> : !canSetSite(r) && <span className="text-xs text-muted-foreground">{t('attendance.noSite')}</span>

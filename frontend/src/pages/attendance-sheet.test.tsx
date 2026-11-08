@@ -28,6 +28,7 @@ const row = (code: number, name: string, day: object, extra: object = {}) => ({
   day: { ...blank, state: 'missing', ...day },
   hints: {},
   last_site_id: null,
+  needs_site: false,
   totals: { worked: 12, leave: 4, absent: 1, missing: 2 },
   ...extra,
 })
@@ -1729,8 +1730,8 @@ const everyType = [
   { ...row(1, 'Engineer-1', { state: 'stored', source: 'entered', version: 1, site_id: 's1', in_time: '08:00', out_time: '16:00' }, { last_site_id: 's1', site_id: 's1' }), employee: { id: 'e1', code: 1, name_ar: 'Engineer-1', name_en: 'Engineer-1', department: null, type: 'engineer' } },
   { ...row(2, 'Engineer-2', {}, { site_id: null }), employee: { id: 'e2', code: 2, name_ar: 'Engineer-2', name_en: 'Engineer-2', department: null, type: 'engineer' } },
   { ...row(10, 'Office-1', { state: 'stored', source: 'entered', version: 1, in_time: '09:40' }, { hints: { late_minutes: 25 }, site_id: 's1' }), employee: { id: 'e10', code: 10, name_ar: 'Office-1', name_en: 'Office-1', department: 'Accounts', type: 'office' } },
-  { ...row(11, 'Office-2', {}, { site_id: null }), employee: { id: 'e11', code: 11, name_ar: 'Office-2', name_en: 'Office-2', department: null, type: 'office' } },
-  { ...row(20, 'Worker-1', {}, { site_id: null }), employee: { id: 'e20', code: 20, name_ar: 'Worker-1', name_en: 'Worker-1', department: null, type: 'permanent_worker' } },
+  { ...row(11, 'Office-2', {}, { site_id: null, needs_site: true }), employee: { id: 'e11', code: 11, name_ar: 'Office-2', name_en: 'Office-2', department: null, type: 'office' } },
+  { ...row(20, 'Worker-1', {}, { site_id: null, needs_site: true }), employee: { id: 'e20', code: 20, name_ar: 'Worker-1', name_en: 'Worker-1', department: null, type: 'permanent_worker' } },
 ]
 const allSheet = (rows: object[] = everyType) => json(200, { data: { group: 'all', date: '2026-10-18', days: days.map((d) => ({ ...d, missing: null })), rows } })
 const allRoutes = { ...placedRoutes, 'GET /api/v1/attendance/sheet': () => allSheet() }
@@ -1809,6 +1810,15 @@ test('the set-site button shows for an office employee or worker with no site, t
   expect(within(rowOf('Worker-1')).getByRole('button', { name: `${SET} Worker-1` })).toBeInTheDocument()
   expect(within(rowOf('Engineer-2')).queryByRole('button', { name: new RegExp(SET) })).toBeNull() // an engineer's site comes from the recorded day
   expect(within(rowOf('Office-1')).queryByRole('button', { name: new RegExp(SET) })).toBeNull() // has a site
+})
+
+test('the server decides who gets the set-site button: a laborer off every crew has none and reads as no site', async () => {
+  const offCrew = { ...row(21, 'Worker-2', {}, { site_id: null, needs_site: false }), employee: { id: 'e21', code: 21, name_ar: 'Worker-2', name_en: 'Worker-2', department: null, type: 'day_laborer' } }
+  mockFetch({ ...allRoutes, 'GET /api/v1/attendance/sheet': () => allSheet([offCrew]) })
+  open(allPath, ['attendance.view.all', 'employee.assign_site.all'])
+  await table()
+  expect(within(rowOf('Worker-2')).queryByRole('button', { name: new RegExp(SET) })).toBeNull()
+  expect(within(rowOf('Worker-2')).getByText('بدون موقع')).toBeInTheDocument()
 })
 
 test('no set-site button without employee.assign_site', async () => {

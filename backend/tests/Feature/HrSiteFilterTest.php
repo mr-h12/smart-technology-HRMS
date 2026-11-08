@@ -162,6 +162,38 @@ class HrSiteFilterTest extends TestCase
         $this->assertNull($this->rows('office')[$office]['site_id']);
     }
 
+    public function test_an_office_employee_with_no_site_needs_one(): void
+    {
+        $office = $this->employee('office');
+
+        $this->assertTrue($this->rows('office')[$office]['needs_site']);
+    }
+
+    public function test_a_worker_with_a_last_site_does_not_need_one(): void
+    {
+        $worker = $this->employee('permanent_worker');
+        $this->putDay($worker, '2026-10-18', ['site_id' => $this->s1])->assertOk();
+
+        $this->assertFalse($this->rows('permanent_worker')[$worker]['needs_site']);
+    }
+
+    public function test_an_engineer_with_no_site_does_not_need_one(): void
+    {
+        $engineer = $this->employee('engineer');
+
+        $this->assertFalse($this->rows('engineer')[$engineer]['needs_site']);
+    }
+
+    public function test_a_laborer_taken_off_every_crew_does_not_need_one(): void
+    {
+        $laborer = $this->employee('day_laborer');
+        DayCrewChange::create(['employee_id' => $laborer, 'date' => '2026-10-20', 'site_id' => null]);
+
+        $row = $this->rows('day_laborer')[$laborer];
+        $this->assertNull($row['site_id']);
+        $this->assertFalse($row['needs_site']);
+    }
+
     public function test_a_single_group_sheet_keeps_its_shape_and_adds_the_type(): void
     {
         $engineer = $this->employee('engineer');

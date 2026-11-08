@@ -8,6 +8,7 @@ const row = (code: number, o: { day?: Partial<SheetRow['day']>; last_site_id?: s
   day: { ...blank, state: 'missing', source: null, version: null, site_id: null, leave_code: null, ...o.day },
   hints: o.hints ?? {},
   last_site_id: o.last_site_id ?? null,
+  needs_site: false,
   totals: { worked: 0, leave: 0, absent: 0, missing: 0 },
 })
 const sheet = Array.from({ length: 12 }, (_, i) => row(i + 1))
