@@ -96,7 +96,7 @@ export function AttendancePage() {
   // group, period arrows and lock line: shared by both tabs; the arrows move the grid's period or the sheet's date
   const bar = (
     <>
-      <div className="flex flex-col gap-3 border-b p-4 sm:flex-row sm:items-end">
+      <div className="flex flex-col gap-3 border-b p-4 sm:flex-row sm:flex-wrap sm:items-end">
         <div className="sm:w-56">
           <SelectField name="group" label={t('attendance.groupLabel')} values={{ group }} set={(_, v) => set({ group: v, period: null, site: null })} errs={{}} options={groups.map((g) => [g, t(`attendance.group.${g}`)])} />
         </div>
