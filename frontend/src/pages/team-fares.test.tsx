@@ -96,24 +96,46 @@ test('the CEO gets not found', async () => {
   expect(urls('/team-fares')).toEqual([])
 })
 
-test('an all-scope user picks a site manager from the buttons first', async () => {
+const MANAGERS = [{ id: 'm1', name: 'م. أحمد سامي' }, { id: 'm2', name: 'م. هاني رزق' }]
+
+test('an all-scope user lands on the first site manager with no click, and picking another switches the team', async () => {
   mockFetch({
-    'GET /api/v1/sites/manager-candidates': () => json(200, { data: [{ id: 'm1', name: 'م. أحمد سامي' }, { id: 'm2', name: 'م. هاني رزق' }] }),
-    'GET /api/v1/team-fares': team(),
+    'GET /api/v1/sites/manager-candidates': () => json(200, { data: MANAGERS }),
+    'GET /api/v1/team-fares': (url: string) => (url.includes('manager_id=m2') ? team([row('w9', 'حسن علي', 'day_laborer', {})])() : team()()),
   })
   renderWithAuth(<TeamFaresPage />, HR)
-  const managers = await screen.findByRole('group', { name: 'مدير الموقع' })
-  const pick = await within(managers).findByRole('button', { name: 'م. أحمد سامي' })
-  expect(screen.queryByRole('combobox')).toBeNull()
-  expect(pick).toHaveAttribute('aria-pressed', 'false')
-  expect(screen.getByText('اختر مدير الموقع')).toBeInTheDocument()
-  expect(urls('/team-fares')).toEqual([])
-  await user.click(pick)
-  expect(pick).toHaveAttribute('aria-pressed', 'true')
-  expect(within(managers).getByRole('button', { name: 'م. هاني رزق' })).toHaveAttribute('aria-pressed', 'false')
   await screen.findByText('محمود عبد الله')
+  const managers = screen.getByRole('group', { name: 'مدير الموقع' })
+  const first = within(managers).getByRole('button', { name: 'م. أحمد سامي' })
+  const second = within(managers).getByRole('button', { name: 'م. هاني رزق' })
+  expect(first).toHaveAttribute('aria-pressed', 'true')
+  expect(second).toHaveAttribute('aria-pressed', 'false')
+  expect(screen.queryByRole('combobox')).toBeNull()
   expect(urls('/team-fares')).toEqual(['/api/v1/team-fares?manager_id=m1'])
   expect(screen.getByText('اختار مدير الموقع، سجّل السكن الناقص، وحدد المواصلات لكل سكن في كل موقع.')).toBeInTheDocument()
+
+  await user.click(second)
+  await screen.findByText('حسن علي')
+  expect(second).toHaveAttribute('aria-pressed', 'true')
+  expect(first).toHaveAttribute('aria-pressed', 'false')
+  expect(screen.queryByText('محمود عبد الله')).toBeNull()
+  expect(urls('/team-fares')).toEqual(['/api/v1/team-fares?manager_id=m1', '/api/v1/team-fares?manager_id=m2'])
+})
+
+test('while the site managers load the page shows the skeleton, not an empty state', async () => {
+  vi.stubGlobal('fetch', vi.fn(() => new Promise(() => {})))
+  renderWithAuth(<TeamFaresPage />, HR)
+  await screen.findByRole('group', { name: 'مدير الموقع' })
+  expect(document.querySelector('[aria-busy="true"]')).not.toBeNull()
+  expect(screen.queryByText('لسه مفيش مديرين مواقع.')).toBeNull()
+  expect(urls('/team-fares')).toEqual([])
+})
+
+test('with no site managers at all the page says so and asks for no team', async () => {
+  mockFetch({ 'GET /api/v1/sites/manager-candidates': () => json(200, { data: [] }) })
+  renderWithAuth(<TeamFaresPage />, HR)
+  expect(await screen.findByText('لسه مفيش مديرين مواقع.')).toBeInTheDocument()
+  expect(urls('/team-fares')).toEqual([])
 })
 
 test('the route renders the page', async () => {

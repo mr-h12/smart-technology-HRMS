@@ -1108,7 +1108,7 @@
       "pair_one": "Everyone living in {{residence}} and working at {{site}} ({{count}} worker)",
       "pair_other": "Everyone living in {{residence}} and working at {{site}} ({{count}} workers)"
     },
-    "pickLead": "Pick a site manager",
+    "noLeads": "No site managers yet.",
     "empty": "No workers on the team today."
   },
   "logs": {

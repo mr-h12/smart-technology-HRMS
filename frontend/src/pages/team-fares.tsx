@@ -33,8 +33,9 @@ export function TeamFaresPage() {
   const fillResidence = can('employee.edit')
   const pick = can('employee.view.all')
   const allowed = edit || can('employee.view.own')
-  const [lead, setLead] = useState('')
+  const [picked, setPicked] = useState('')
   const leads = useApi<Ref[]>(allowed && pick ? '/sites/manager-candidates' : null)
+  const lead = picked || leads.data?.[0]?.id
   const path = !allowed ? null : pick ? (lead ? `/team-fares?manager_id=${lead}` : null) : '/team-fares'
   const { data, err, loading } = useApi<TeamFares>(path)
   if (!allowed) return <NotFoundPage />
@@ -44,7 +45,7 @@ export function TeamFaresPage() {
       {pick && (
         <div role="group" aria-label={t('fare.lead')} className="flex flex-wrap gap-2">
           {(leads.data ?? []).map((m) => (
-            <button key={m.id} type="button" aria-pressed={lead === m.id} onClick={() => setLead(m.id)} className={chipCls}>
+            <button key={m.id} type="button" aria-pressed={lead === m.id} onClick={() => setPicked(m.id)} className={chipCls}>
               {m.name}
             </button>
           ))}
@@ -52,7 +53,7 @@ export function TeamFaresPage() {
       )}
       <ErrorBanner err={leads.err ?? err} shown={[]} />
       {path === null ? (
-        <EmptyState icon={Users} title={t('teamFare.pickLead')} />
+        leads.loading ? <TableSkeleton /> : leads.data && <EmptyState icon={Users} title={t('teamFare.noLeads')} />
       ) : loading || !data ? (
         !err && <TableSkeleton />
       ) : !data.rows.length ? (
