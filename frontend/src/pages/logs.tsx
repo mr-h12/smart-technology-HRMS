@@ -122,17 +122,18 @@ function RequestsTab() {
           rowKey={(r) => r.id}
           title={{ header: t('logs.time'), cell: (r) => time(r.occurred_at) }}
           status={{ header: t('logs.status'), cell: (r) => <Badge variant={tone(r.status)}>{r.status}</Badge> }}
+          // the table must fit its card with the details button: the request line and the account are capped per width and the duration (also in the details) joins from xl, as on the errors tab
           fields={[
             {
               header: t('logs.request'),
               cell: (r) => (
-                <span dir="ltr" title={`${r.method} ${r.path}`} className="inline-block max-w-full truncate align-bottom font-mono text-xs sm:max-w-xs lg:max-w-md">
+                <span dir="ltr" title={`${r.method} ${r.path}`} className="inline-block max-w-full truncate align-bottom font-mono text-xs sm:max-w-48 md:max-w-40 xl:max-w-64 2xl:max-w-md">
                   <span className="font-semibold">{r.method}</span> <span>{r.path}</span>
                 </span>
               ),
             },
-            { header: t('logs.duration'), cell: (r) => r.duration_ms, numeric: true },
-            { header: t('logs.account'), cell: (r) => <Actor user={r.user} />, tableFrom: 'md' },
+            { header: t('logs.duration'), cell: (r) => r.duration_ms, numeric: true, tableFrom: 'xl' },
+            { header: t('logs.account'), cell: (r) => <Actor user={r.user} className="md:max-w-32 xl:max-w-40 2xl:max-w-48" />, tableFrom: 'md' },
           ]}
           actions={(r) => (
             <Button variant="ghost" size="sm" onClick={() => setOpen(r)}>

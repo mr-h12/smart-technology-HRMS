@@ -359,6 +359,27 @@ class TeamFaresTest extends TestCase
         $this->postFare(['residence_id' => $r, 'site_id' => $s1, 'effective_from' => '2026-11-05', 'amount' => '30'])->assertForbidden();
     }
 
+    public function test_a_laborer_on_todays_crew_takes_the_fare_of_the_crew_site(): void
+    {
+        [$s1, $s2] = [$this->workSite('S-1'), $this->workSite('S-2')];
+        $r = $this->residence();
+        $this->fare($r, $s1, '2026-01-01', '35');
+        $this->signIn('hr');
+        $lead = $this->managerOf($s1, $s2);
+        $unhomed = $this->employee('day_laborer', '2026-01-01', ['residence_id' => $r]);
+        $this->homeSite($moved = $this->employee('day_laborer', '2026-01-01', ['residence_id' => $r]), $s2, '2026-01-01');
+        $this->actingAs($lead, 'api');
+        foreach ([$unhomed, $moved] as $id) {
+            $this->postJson('/api/v1/attendance/site-day/crew', ['site_id' => $s1, 'employee_id' => $id, 'action' => 'add'])->assertOk();
+        }
+
+        $rows = collect($this->getJson('/api/v1/team-fares')->assertOk()->json('data.rows'))->keyBy('employee_id');
+        foreach ([$unhomed, $moved] as $id) {
+            $this->assertSame(['id' => $s1, 'name' => 'S-1'], $rows[$id]['site']);
+            $this->assertSame(['35.000000', 'default'], [$rows[$id]['amount'], $rows[$id]['source']]);
+        }
+    }
+
     public function test_team_fares_name_a_deleted_residence_and_site(): void
     {
         [$s1, , $r, $lead] = $this->team();

@@ -179,3 +179,9 @@ test('the Settings page opens for a user with any of its abilities', async () =>
   renderApp('/settings')
   expect(await screen.findByRole('heading', { level: 1, name: 'الإعدادات' })).toBeInTheDocument()
 })
+
+test('HR lands on /employees', async () => {
+  signedIn(['employee.view.all', 'fare.manage.all', 'attendance.view.all', 'employee.approve_wage.all'])
+  renderApp('/')
+  expect(await screen.findByRole('link', { name: 'الموظفون', current: 'page' })).toBeInTheDocument()
+})

@@ -10,6 +10,7 @@ import { Button } from '@/components/ui/button'
 import { Card } from '@/components/ui/card'
 import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from '@/components/ui/sheet'
 import { useAuth } from '@/lib/auth'
+import { cn } from '@/lib/utils'
 import { USERS, useApi } from '@/lib/query'
 
 const ENTITIES = [
@@ -72,11 +73,11 @@ function Details({ entry, onClose }: { entry: Row; onClose: () => void }) {
   )
 }
 
-export function Actor({ user }: { user?: Row | null }) {
+export function Actor({ user, className }: { user?: Row | null; className?: string }) {
   return user ? (
-    <span className="inline-flex items-center gap-2">
+    <span className={cn('inline-flex max-w-full items-center gap-2', className)}>
       <UserAvatar name={user.name} size="sm" />
-      <span className="min-w-0 font-medium">{user.name}</span>
+      <span title={user.name} className="min-w-0 truncate font-medium">{user.name}</span>
     </span>
   ) : (
     '—'
