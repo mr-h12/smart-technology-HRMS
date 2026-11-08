@@ -68,6 +68,8 @@ export function SheetRows({ rows, allIds, group, editable, date, sites, selected
     return s ? localName(s, lang) : '—'
   }
   const status = (r: SheetRow) => statusOf(r, isOfficeRow(r))
+  // a row in a locked period (in All, its own type's) reads as on a read-only sheet
+  const writable = (r: SheetRow) => editable && !r.locked
   const workSites = sites.filter((s) => s.kind === 'work' && s.active)
   // the day's leave type (a derived day has no site: its code's leave type); the seeded ones have no name_en, so English falls back to the code's name
   const leaveName = (r: SheetRow, code: string) => {
@@ -136,7 +138,7 @@ export function SheetRows({ rows, allIds, group, editable, date, sites, selected
     const late = r.hints.late_minutes ?? 0
     const over = r.hints.ot_minutes ?? 0
     const hint = (f: TimeField) => (isOfficeRow(r) ? undefined : f === 'in_time' ? (late > 0 ? t('attendance.sheet.lateBy', { minutes: late }) : undefined) : over > 0 ? t('attendance.sheet.overBy', { minutes: over }) : undefined)
-    if (!editable) return fields.map((f) => cell(f, <><span className="text-sm">{formatTime(r.day[f], lang)}</span><Hint text={hint(f)} /></>))
+    if (!writable(r)) return fields.map((f) => cell(f, <><span className="text-sm">{formatTime(r.day[f], lang)}</span><Hint text={hint(f)} /></>))
     return (
       <TimeCells key={`${r.employee.id}/${r.day.in_time}/${r.day.out_time}`} cell={cell} disabled={pending.has(r.employee.id)}
         cells={fields.map((f) => ({ field: f, was: hhmm(r.day[f]) ?? '', label: t('attendance.sheet.rowAction', { action: t(`attendance.day.${f}`), name: name(r) }), hint: hint(f) }))}
@@ -200,7 +202,7 @@ export function SheetRows({ rows, allIds, group, editable, date, sites, selected
   const where = (r: SheetRow) => {
     if (all) return r.site_id ? <span className="rounded-md border bg-card px-2 py-0.5 text-xs">{siteName(r.site_id)}</span> : !canSetSite(r) && <span className="text-xs text-muted-foreground">{t('attendance.noSite')}</span>
     if (isOfficeRow(r)) return null
-    if (editable) return siteChip(r)
+    if (writable(r)) return siteChip(r)
     const s = status(r)
     if (s === 'present') return <span className="rounded-md border bg-card px-2 py-0.5 text-xs">{siteName(r.day.site_id)}</span>
     if (s === 'missing' && r.last_site_id) return <span className="text-xs text-muted-foreground">{t('attendance.sheet.lastSite', { site: siteName(r.last_site_id) })}</span>
@@ -280,7 +282,7 @@ export function SheetRows({ rows, allIds, group, editable, date, sites, selected
           <TableBody>
             {rows.map((r) => (
               <TableRow key={r.employee.id} className={cn(LINE, '[&>td]:py-1.5', selected.has(r.employee.id) && SELECTED)}>
-                {editable && <TableCell className="px-1 first:ps-2">{check(r)}</TableCell>}
+                {editable && <TableCell className="px-1 first:ps-2">{writable(r) && check(r)}</TableCell>}
                 {/* the code shares the employee cell (no column of its own): in English the "Employee ID" header alone pushed the table past its card at 1280 */}
                 <TableCell className="whitespace-normal">
                   <span className="flex flex-wrap items-baseline gap-x-2">
@@ -300,7 +302,7 @@ export function SheetRows({ rows, allIds, group, editable, date, sites, selected
                 {!office && fieldTimes(r)}
                 <TableCell>
                   <div className="flex items-center justify-end gap-1.5">
-                    {editable ? <>{quick(0, r, true)}{quick(1, r, true)}{more(r)}</> : details(r, true)}
+                    {writable(r) ? <>{quick(0, r, true)}{quick(1, r, true)}{more(r)}</> : details(r, true)}
                   </div>
                 </TableCell>
                 <TableCell className={cn('border-s', !selected.has(r.employee.id) && 'bg-muted/40')}>{tableTotals(r)}</TableCell>
@@ -320,7 +322,7 @@ export function SheetRows({ rows, allIds, group, editable, date, sites, selected
           <li key={r.employee.id} className={cn(LINE, 'space-y-1.5 px-4 py-2.5 last:border-0', selected.has(r.employee.id) && SELECTED)}>
             <div className="flex flex-wrap items-center gap-x-3 gap-y-1.5">
               <div className="flex min-w-0 grow basis-40 items-center gap-1.5">
-                {editable && <div className="-my-2.5 -ms-2.5">{check(r)}</div>}
+                {writable(r) && <div className="-my-2.5 -ms-2.5">{check(r)}</div>}
                 <div className="min-w-0">
                   <span className="flex items-center gap-2">
                     <span className="text-muted-foreground">{r.employee.code}</span>
@@ -333,7 +335,7 @@ export function SheetRows({ rows, allIds, group, editable, date, sites, selected
               <div className="flex min-w-0 grow items-center gap-2 sm:grow-0">
                 <div className="min-w-0">{where(r)}</div>
                 {setSite(r)}
-                <div className="ms-auto flex gap-2">{editable ? <>{quick(0, r)}{quick(1, r)}{more(r)}</> : details(r)}</div>
+                <div className="ms-auto flex gap-2">{writable(r) ? <>{quick(0, r)}{quick(1, r)}{more(r)}</> : details(r)}</div>
               </div>
             </div>
             {(isOfficeRow(r) || status(r) === 'present') && <div className="grid gap-x-3 gap-y-1.5 sm:grid-cols-2">{times(r, cardCell)}</div>}

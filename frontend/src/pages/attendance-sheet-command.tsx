@@ -7,7 +7,7 @@ import { Button } from '@/components/ui/button'
 import { Dialog, DialogBody, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { Textarea } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
-import { hhmm, MAX_BATCH, parseBatch, type SheetAction, type SheetRow, statusOf } from '@/lib/day-sheet'
+import { hhmm, isOfficeRow, MAX_BATCH, parseBatch, type SheetAction, type SheetRow, statusOf } from '@/lib/day-sheet'
 import { cn } from '@/lib/utils'
 import { QUICK, selectOnFocus } from './attendance-sheet-rows'
 
@@ -96,15 +96,14 @@ const TIMES = ['in_time', 'out_time'] as const
  * none still needing AM/PM. Only present (or late) rows are written; the rest are skipped with a count toast. `onApply` is the sheet's
  * `apply()` and resolves true once the rows are written.
  */
-export function TimesDialog({ rows, office, onOpenChange, onApply }: {
+export function TimesDialog({ rows, onOpenChange, onApply }: {
   rows: SheetRow[]
-  office: boolean
   onOpenChange: (open: boolean) => void
   onApply: (action: SheetAction, rows: SheetRow[], label: string) => Promise<boolean>
 }) {
   const { t } = useTranslation()
   const ids = { in_time: useId(), out_time: useId() }
-  const here = rows.filter((r) => ['present', 'late'].includes(statusOf(r, office)))
+  const here = rows.filter((r) => ['present', 'late'].includes(statusOf(r, isOfficeRow(r))))
   const shared = (f: (typeof TIMES)[number]) => {
     const all = new Set(here.map((r) => hhmm(r.day[f]) ?? ''))
     return all.size === 1 ? [...all][0] : null // null: the rows differ
