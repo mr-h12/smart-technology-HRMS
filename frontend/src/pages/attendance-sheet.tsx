@@ -7,7 +7,7 @@ import { Alert } from '@/components/common/Alert'
 import { EmptyState } from '@/components/common/EmptyState'
 import { SearchInput } from '@/components/common/Filters'
 import { StatRow, type StatTone } from '@/components/common/StatRow'
-import { cairoToday, ErrorBanner, intlLocale, localName, ltrDates, type Row, SelectField, weekdayOf } from '@/components/form'
+import { cairoToday, ErrorBanner, FormDialog, intlLocale, localName, ltrDates, type Row, SelectField, weekdayOf } from '@/components/form'
 import { ActionBar } from '@/components/layout/ActionBar'
 import { TableSkeleton } from '@/components/layout/PageSkeleton'
 import { paginate, Pagination } from '@/components/tables/Pagination'
@@ -27,6 +27,7 @@ type Sheet = { group: string; date: string; days: { date: string; missing: numbe
 export type Applied = { label: string; before: SheetRow[]; after: { employee_id: string; version: number | null }[] }
 
 const PER_PAGE = 50
+const [ABSENT, , AbsentIcon, ABSENT_TONE] = QUICK[1]
 // [filter, label key, the status's tone (a real category, so its number is coloured)]
 const KPIS: [Filter, string, StatTone][] = [
   ['missing', 'attendance.state.missing', 'warning'],
@@ -76,6 +77,8 @@ export function DaySheet({ group, date, site, period, onDate, onOpenDay }: { gro
   const [pasting, setPasting] = useState(false)
   const [timing, setTiming] = useState(false) // the bulk bar's times dialog
   const [siteChoice, setSiteChoice] = useState('') // the bulk bar's Set site: chosen first, written only by its Apply button
+  // the absent confirm, for the selection or for the rest; its count is fixed on open, so the closing dialog never shows the count after the write
+  const [askAbsent, setAskAbsent] = useState({ open: false, picked: false, count: 0 })
   const unselect = () => { setSelected(new Set()); setSiteChoice('') }
   const [shownDate, setShownDate] = useState(date)
   if (shownDate !== date) {
@@ -221,7 +224,7 @@ export function DaySheet({ group, date, site, period, onDate, onOpenDay }: { gro
     for (const id of ids) next[on ? 'add' : 'delete'](id)
     return next
   })
-  const bulk = (action: SheetAction, label: string) => void apply(action, picked, label).then((done) => done && unselect())
+  const bulk = (action: SheetAction, label: string) => apply(action, picked, label).then((done) => done && unselect())
   const noLeave = (a: SheetAction) => a.kind === 'leave' && !leaveTypeId(a.code)
 
   return (
@@ -319,7 +322,13 @@ export function DaySheet({ group, date, site, period, onDate, onOpenDay }: { gro
                 </Button>
               )}
               {editable && (
-                <Button type="button" size="sm" className="ms-auto" disabled={!rest.length} onClick={() => void apply({ kind: 'present' }, rest, t('attendance.sheet.rest', { count: rest.length }))}>
+                <Button type="button" variant="outline" size="sm" className={cn('ms-auto', ABSENT_TONE)} disabled={!rest.length || noLeave(ABSENT)} onClick={() => setAskAbsent({ open: true, picked: false, count: rest.length })}>
+                  <AbsentIcon aria-hidden />
+                  {t('attendance.sheet.restAbsent', { count: rest.length })}
+                </Button>
+              )}
+              {editable && (
+                <Button type="button" size="sm" disabled={!rest.length} onClick={() => void apply({ kind: 'present' }, rest, t('attendance.sheet.rest', { count: rest.length }))}>
                   <CheckCheck aria-hidden />
                   {t('attendance.sheet.rest', { count: rest.length })}
                 </Button>
@@ -335,7 +344,7 @@ export function DaySheet({ group, date, site, period, onDate, onOpenDay }: { gro
           <EmptyState icon={Users} title={t('attendance.sheet.noMatch')} />
         ) : (
           <>
-            <SheetRows rows={pageRows} group={group} editable={editable} date={date} sites={sites} selected={selected} pending={pending} leaveTypeId={leaveTypeId}
+            <SheetRows rows={pageRows} allIds={shown.map((r) => r.employee.id)} group={group} editable={editable} date={date} sites={sites} selected={selected} pending={pending} leaveTypeId={leaveTypeId}
               onToggle={toggle} onApply={(action, r, label) => apply(action, [r], label)} onOpenDay={onOpenDay} />
             <Pagination page={page} pageSize={PER_PAGE} total={shown.length} onPageChange={setPage} />
           </>
@@ -347,7 +356,8 @@ export function DaySheet({ group, date, site, period, onDate, onOpenDay }: { gro
         <ActionBar label={t('attendance.sheet.bulk.label')}>
           <span className="me-auto text-sm font-semibold">{t('attendance.sheet.bulk.count', { count: picked.length })}</span>
           {QUICK.map(([action, label, Icon, tone]) => (
-            <Button key={label} type="button" variant="outline" size="sm" className={tone} disabled={noLeave(action)} onClick={() => bulk(action, t(label))}>
+            <Button key={label} type="button" variant="outline" size="sm" className={tone} disabled={noLeave(action)}
+              onClick={() => (action === ABSENT ? setAskAbsent({ open: true, picked: true, count: picked.length }) : void bulk(action, t(label)))}>
               <Icon aria-hidden />
               {t(label)}
             </Button>
@@ -371,6 +381,14 @@ export function DaySheet({ group, date, site, period, onDate, onOpenDay }: { gro
           )}
           <Button type="button" variant="ghost" size="sm" onClick={unselect}>{t('attendance.sheet.bulk.clear')}</Button>
         </ActionBar>
+      )}
+      {/* a bulk absent (the rest, or the selection) asks first; one row's ✗ does not. apply() never throws: it toasts and resolves null, and the dialog closes either way */}
+      {editable && (
+        <FormDialog open={askAbsent.open} onOpenChange={(open) => setAskAbsent((a) => ({ ...a, open }))} title={t('attendance.sheet.absentConfirm.title')}
+          description={t('attendance.sheet.absentConfirm.body', { count: askAbsent.count })} footer="attendance.sheet.absentConfirm.ok" destructive init={{}} shown={[]}
+          submit={async () => { await (askAbsent.picked ? bulk(ABSENT, t(QUICK[1][1])) : apply(ABSENT, rest, t('attendance.sheet.restAbsent', { count: rest.length }))) }}>
+          {() => null}
+        </FormDialog>
       )}
       {editable && timing && (
         <TimesDialog rows={picked} office={office} onOpenChange={setTiming}

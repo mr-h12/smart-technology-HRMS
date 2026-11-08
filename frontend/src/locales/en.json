@@ -681,8 +681,15 @@
       "actionOn": "{{action}} {{name}}",
       "actionCount": "{{action}} ({{count}})",
       "select": "Select {{name}}",
-      "selectPage": "Select this page",
+      "selectAll": "Select all ({{count}})",
       "rest": "Mark the rest present ({{count}})",
+      "restAbsent": "Mark the rest absent ({{count}})",
+      "absentConfirm": {
+        "title": "Mark absent",
+        "body_one": "1 employee will be marked absent. Are you sure?",
+        "body_other": "{{count}} employees will be marked absent. Are you sure?",
+        "ok": "Mark absent"
+      },
       "sweep": "All present",
       "sweepFor": "Mark the rest of {{cohort}} present",
       "bulk": {
