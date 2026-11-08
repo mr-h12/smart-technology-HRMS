@@ -219,6 +219,10 @@ final class EmployeeService
                 if ($holder?->trashed()) {
                     throw ValidationException::withMessages(['code' => __('errors.code_deleted_holder')]);
                 }
+                // 0 marks the CEO (owner, 2026-11-06, R23): it is given only while free, and never swapped onto someone else.
+                if ($holder !== null && ($code === 0 || $employee->code === 0)) {
+                    throw ValidationException::withMessages(['code' => __('errors.code_zero_ceo')]);
+                }
                 if ($holder !== null && ! $swap) {
                     throw new EmployeeCodeTaken($code, (string) $holder->name_ar, $holder->name_en);
                 }

@@ -394,6 +394,28 @@ class EmployeesApiTest extends TestCase
         $this->patchJson("/api/v1/employees/$a/code", ['code' => 0, 'swap' => 1])->assertOk()->assertJsonPath('data.code', 0);   // nobody holds 0: a plain change
     }
 
+    public function test_zero_is_the_ceos_given_only_while_free_and_never_swapped(): void
+    {
+        $ceo = $this->make();
+        $b = $this->make();
+        $this->make();
+        $this->patchJson("/api/v1/employees/$ceo/code", ['code' => 0])->assertOk()->assertJsonPath('data.code', 0);
+
+        // nobody else takes 0, and the CEO swaps with no one: 422 on the field, not the 409 that offers a swap
+        foreach ([[$b, ['code' => 0]], [$b, ['code' => 0, 'swap' => true]], [$ceo, ['code' => 2]], [$ceo, ['code' => 2, 'swap' => true]]] as [$id, $body]) {
+            foreach (['ar', 'en'] as $locale) {
+                $this->patchJson("/api/v1/employees/$id/code", $body, ['Accept-Language' => $locale])->assertStatus(422)
+                    ->assertJsonPath('error.details.0.field', 'code')
+                    ->assertJsonPath('error.details.0.message', __('errors.code_zero_ceo', [], $locale));
+            }
+        }
+        $this->assertSame([0, 2], [DB::table('employees')->where('id', $ceo)->value('code'), DB::table('employees')->where('id', $b)->value('code')]);
+
+        // the CEO may move to a free number; 0 is then free for whoever HR gives it to
+        $this->patchJson("/api/v1/employees/$ceo/code", ['code' => 1])->assertOk()->assertJsonPath('data.code', 1);
+        $this->patchJson("/api/v1/employees/$b/code", ['code' => 0])->assertOk()->assertJsonPath('data.code', 0);
+    }
+
     public function test_swap_with_an_archived_holder(): void
     {
         $this->travelTo('2026-10-20 10:00:00');
