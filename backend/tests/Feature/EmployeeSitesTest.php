@@ -58,8 +58,8 @@ class EmployeeSitesTest extends TestCase
     {
         [$worker, $s1, $s2, $s3] = [$this->employee('permanent_worker'), $this->workSite('Site-1'), $this->workSite('Site-2'), $this->workSite('Site-3')];
 
-        $this->assertRefused($this->move($this->employee('engineer'), $s1, '2026-10-01'), 'effective_from', 'not_a_worker');
-        $this->assertRefused($this->move($this->employee('day_laborer', '2026-10-10'), $s1, '2026-10-01'), 'effective_from', 'not_a_worker');
+        $this->assertRefused($this->move($this->employee('engineer'), $s1, '2026-10-01'), 'effective_from', 'home_site_not_allowed');
+        $this->assertRefused($this->move($this->employee('day_laborer', '2026-10-10'), $s1, '2026-10-01'), 'effective_from', 'home_site_not_allowed');
         $this->move($worker, $this->workSite('Site-4', active: false), '2026-10-01')->assertStatus(422)->assertJsonPath('error.details.0.field', 'site_id');
         $this->move($worker, $this->leaveTypes()['sick'], '2026-10-01')->assertStatus(422)->assertJsonPath('error.details.0.field', 'site_id');
         $this->assertRefused($this->move($worker, $s1, '2026-10-01', ['returns_on' => '2026-10-02']), 'returns_on', 'no_previous_site');

@@ -258,15 +258,15 @@ class AttendanceDaysTest extends TestCase
         $this->assertSame('missing', $r->json('data.1.days.0.state'));                                 // 2026-09-26, in the laborers' 16–30 half-month
     }
 
-    public function test_grid_all_without_a_site_lists_field_employees_but_not_office(): void
+    public function test_grid_all_without_a_site_lists_every_type(): void
     {
         $eng = $this->employee('engineer');
         $worker = $this->employee('permanent_worker');
         $lab = $this->employee('day_laborer');
-        $this->employee('office');
+        $office = $this->employee('office');
         $ids = array_column($this->getJson('/api/v1/attendance/grid?group=all&period_start=2026-09-26&per_page=50')->assertOk()
-            ->assertJsonPath('meta.pagination.total', 3)->json('data.*.employee'), 'id');
-        $this->assertSame([$eng, $worker, $lab], $ids);
+            ->assertJsonPath('meta.pagination.total', 4)->json('data.*.employee'), 'id');
+        $this->assertSame([$eng, $worker, $lab, $office], $ids);
     }
 
     public function test_grid_all_keeps_a_day_laborers_lock_per_half_month(): void
@@ -282,7 +282,7 @@ class AttendanceDaysTest extends TestCase
         $this->assertSame('derived', $byId[$lab][21]['state']);   // Saturday 2026-10-17, the open 16–31
     }
 
-    public function test_group_all_is_only_for_the_grid(): void
+    public function test_group_all_has_no_period_or_missing_days_of_its_own(): void
     {
         $this->getJson('/api/v1/attendance/period?group=all')->assertStatus(422)->assertJsonPath('error.details.0.field', 'group');
         $this->getJson('/api/v1/attendance/missing?group=all')->assertStatus(422);

@@ -13,7 +13,7 @@ return [
     'duplicate_date' => 'A record already exists on this date.',
     'concurrency_conflict' => 'Someone else changed this record. Load the latest version and try again.',
     'no_leave_balance' => 'Day laborers have no leave balance.',
-    'not_a_worker' => 'Only workers have a home site; the employee is not a worker on this date.',
+    'home_site_not_allowed' => 'Only workers and office staff have a home site; this employee is neither on this date.',
     'no_previous_site' => 'There is no previous site to return to.',
     'later_move_inside' => 'Another move lies between the move date and the return date.',
     'leave_code_required' => 'Leave code is required for leave types.',

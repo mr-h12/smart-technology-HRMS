@@ -313,7 +313,7 @@ final class EmployeeService
     }
 
     /**
-     * Moves a worker to a home site from a date. With returns_on, a second row puts them back on the site they had the day before.
+     * Moves a worker, or an office employee, to a home site from a date. An office employee's site only lists them at it in HR's filter (owner, 2026-11-08); engineers have none. With returns_on, a second row puts them back on the site they had the day before.
      *
      * @param  array{site_id: string, effective_from: string, returns_on?: ?string}  $data
      * @return array<string, mixed>
@@ -324,8 +324,8 @@ final class EmployeeService
             $employee = Employee::findOrFail($id);
             $from = $data['effective_from'];
             $type = EffectiveDated::at($employee->typeChanges->map(fn ($t) => $this->row($t))->all(), $from)['type'] ?? null;
-            if (! in_array($type, [EmployeeType::PermanentWorker->value, EmployeeType::DayLaborer->value], true)) {
-                throw ValidationException::withMessages(['effective_from' => __('errors.not_a_worker')]);
+            if (! in_array($type, [EmployeeType::PermanentWorker->value, EmployeeType::DayLaborer->value, EmployeeType::Office->value], true)) {
+                throw ValidationException::withMessages(['effective_from' => __('errors.home_site_not_allowed')]);
             }
             $this->assertFreeDate($employee->siteAssignments(), $from);
 
