@@ -6,7 +6,9 @@ export type DayValue = (typeof DAY_VALUES)[number]
 
 /** One `rows[]` item of `GET /attendance/sheet`. */
 export type SheetRow = {
-  employee: { id: string; code: number; name_ar: string; name_en: string | null; department: string | null }
+  employee: { id: string; code: number; name_ar: string; name_en: string | null; department: string | null; type: string }
+  /** Where the employee is on the date: the day's work site, else a worker's or office employee's site then, else an engineer's last site. */
+  site_id: string | null
   day: { state: 'stored' | 'derived' | 'missing'; source: string | null; version: number | null; site_id: string | null; leave_code: string | null } & Record<DayValue, string | number | null>
   hints: { late_minutes?: number; ot_minutes?: number }
   last_site_id: string | null
@@ -19,6 +21,12 @@ export type BulkRow = { employee_id: string; version: number | null; clear?: tru
 export type SheetAction = { kind: 'present' } | { kind: 'leave'; code: 'absent' | 'sick' } | { kind: 'site'; siteId: string } | { kind: 'time'; in_time?: string; out_time?: string }
 
 export const MAX_BATCH = 500
+
+/** The site filter's value for the rows with no site. */
+export const NO_SITE = 'none'
+/** The rows at the filter's site; '' keeps them all. */
+export const atSite = (rows: SheetRow[], site: string) => (site ? rows.filter((r) => r.site_id === (site === NO_SITE ? null : site)) : rows)
+export const isOfficeRow = (r: SheetRow) => r.employee.type === 'office'
 
 /** Search form of a string: ASCII digits, lower case, and the Arabic letters people type interchangeably made one (أ/إ/آ→ا, ة→ه, ى→ي). */
 export const fold = (s: string) => asciiDigits(s).toLowerCase().replace(/[أإآ]/g, 'ا').replace(/ة/g, 'ه').replace(/ى/g, 'ي')

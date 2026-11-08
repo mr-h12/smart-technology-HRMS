@@ -15,19 +15,18 @@ import { Button } from '@/components/ui/button'
 import { Card } from '@/components/ui/card'
 import { ApiError } from '@/lib/api'
 import { useAuth } from '@/lib/auth'
-import { type BulkRow, bulkRows, MAX_BATCH, matches, type SheetAction, type SheetRow, statusOf, undoRows } from '@/lib/day-sheet'
+import { atSite, type BulkRow, bulkRows, isOfficeRow, MAX_BATCH, matches, type SheetAction, type SheetRow, statusOf, undoRows } from '@/lib/day-sheet'
 import { queryKey, SITES, useApi, useSave } from '@/lib/query'
 import { cn, FOCUS, OFF } from '@/lib/utils'
 import { PasteDialog, TimesDialog } from './attendance-sheet-command'
 import { QUICK, SheetRows, type Status } from './attendance-sheet-rows'
 
 type Filter = 'all' | 'missing' | 'present' | 'late' | 'leave' | 'absent'
-type Sheet = { group: string; date: string; days: { date: string; missing: number; off: boolean }[]; rows: SheetRow[] }
+type Sheet = { group: string; date: string; days: { date: string; missing: number | null; off: boolean }[]; rows: SheetRow[] }
 /** What one write changed, for undo (Task 21): the rows as they were, in request order, and the versions the server gave back. */
 export type Applied = { label: string; before: SheetRow[]; after: { employee_id: string; version: number | null }[] }
 
 const PER_PAGE = 50
-const bucket = (s: Status): Filter => (s === 'derived' ? 'leave' : s)
 // [filter, label key, the status's tone (a real category, so its number is coloured)]
 const KPIS: [Filter, string, StatTone][] = [
   ['missing', 'attendance.state.missing', 'warning'],
@@ -38,6 +37,7 @@ const KPIS: [Filter, string, StatTone][] = [
 const UNDO_DEPTH = 15
 const APPLIED_TOAST = 'attendance-sheet-applied'
 const OFFICE_KPIS: [Filter, string, StatTone][] = [KPIS[0], ['present', 'attendance.sheet.kpi.onTime', 'success'], ['late', 'attendance.sheet.kpi.late', 'warning'], KPIS[2], KPIS[3]]
+const ALL_KPIS: [Filter, string, StatTone][] = [KPIS[0], ['present', 'attendance.present', 'success'], KPIS[2], KPIS[3]]
 
 /**
  * Scrolls the day strip sideways to the selected day; only the strip, never the page. A module-level ref is stable, so React
@@ -58,12 +58,13 @@ function showDay(strip: HTMLDivElement | null) {
  * Kept mounted across dates, so the filters stay; page and selection reset.
  * Every write goes through `apply()` and one `POST /attendance/days/bulk`, and lands on a session-only undo stack.
  */
-export function DaySheet({ group, date, period, onDate, onOpenDay }: { group: string; date: string; period?: { group: string; start: string; end: string; is_locked: boolean }; onDate: (date: string) => void; onOpenDay: (employee: Row, date: string) => void }) {
+export function DaySheet({ group, date, site, period, onDate, onOpenDay }: { group: string; date: string; site: string; period?: { group: string; start: string; end: string; is_locked: boolean }; onDate: (date: string) => void; onOpenDay: (employee: Row, date: string) => void }) {
   const { t, i18n } = useTranslation()
   const { can } = useAuth()
   const qc = useQueryClient()
   const save = useSave()
   const office = group === 'office'
+  const all = group === 'all' // view only: each row's Details opens the day editor; quick recording stays inside a single group
   const path = `/attendance/sheet?${new URLSearchParams({ group, date })}`
   const { data: sheet, err, loading } = useApi<Sheet>(path)
   const { data: sites = [] } = useApi<Row[]>(SITES)
@@ -82,6 +83,13 @@ export function DaySheet({ group, date, period, onDate, onOpenDay }: { group: st
     setPage(1)
     unselect()
   }
+  const [shownSite, setShownSite] = useState(site)
+  if (shownSite !== site) {
+    setShownSite(site)
+    setCohort(null)
+    setPage(1)
+    unselect()
+  }
   // employee ids with a write in flight: the ref guards against a double send before React re-renders, the state disables their controls
   const flight = useRef(new Set<string>())
   const [pending, setPending] = useState<ReadonlySet<string>>(new Set())
@@ -91,7 +99,7 @@ export function DaySheet({ group, date, period, onDate, onOpenDay }: { group: st
   const undos = useRef<(Applied & { date: string })[]>([])
   const [undoCount, setUndoCount] = useState(0)
   // the header's period may still be the previous one while the next loads: write only into the period that holds this date
-  const editable = !!period && period.group === group && period.start <= date && date <= period.end && !period.is_locked && can('attendance.edit')
+  const editable = !all && !!period && period.group === group && period.start <= date && date <= period.end && !period.is_locked && can('attendance.edit')
   const leaveTypeId = (code: string) => sites.find((s) => s.kind === 'leave' && s.leave_code === code && s.active)?.id as string | undefined
   const workSites = sites.filter((s) => s.kind === 'work' && s.active)
 
@@ -179,9 +187,11 @@ export function DaySheet({ group, date, period, onDate, onOpenDay }: { group: st
     const s = sites.find((x) => x.id === id)
     return s ? localName(s, lang) : '—'
   }
-  const status = (r: SheetRow) => statusOf(r, office)
+  const status = (r: SheetRow) => statusOf(r, isOfficeRow(r))
+  // in All a late office employee counts as present: no other tile there splits out lateness
+  const bucket = (s: Status): Filter => (s === 'derived' ? 'leave' : all && s === 'late' ? 'present' : s)
   const cohortOf = (r: SheetRow) => (office ? r.employee.department : r.last_site_id) ?? ''
-  const rows = sheet.rows
+  const rows = atSite(sheet.rows, site)
   const count = (f: Filter) => rows.filter((r) => bucket(status(r)) === f).length
   const missing = count('missing')
   const groups = new Map<string, { total: number; done: number }>()
@@ -214,7 +224,7 @@ export function DaySheet({ group, date, period, onDate, onOpenDay }: { group: st
     <div className="space-y-4">
       {/* a failed background refetch: the last good sheet stays under the error */}
       <ErrorBanner err={err} shown={[]} />
-      {period?.is_locked && <Alert tone="info" icon={Lock}>{t('attendance.sheet.locked')}</Alert>}
+      {!all && period?.is_locked && <Alert tone="info" icon={Lock}>{t('attendance.sheet.locked')}</Alert>}
 
       <StatRow
         layout="compact"
@@ -226,7 +236,7 @@ export function DaySheet({ group, date, period, onDate, onOpenDay }: { group: st
           progress: rows.length ? (rows.length - missing) / rows.length : 0,
           select: { pressed: filter === 'all', onSelect: () => { pick('all'); setCohort(null) } },
         }}
-        stats={(office ? OFFICE_KPIS : KPIS).map(([f, label, tone]) => ({ label: t(label), value: count(f), tone, select: { pressed: filter === f, onSelect: () => pick(f) } }))}
+        stats={(office ? OFFICE_KPIS : all ? ALL_KPIS : KPIS).map(([f, label, tone]) => ({ label: t(label), value: count(f), tone, select: { pressed: filter === f, onSelect: () => pick(f) } }))}
       />
 
       <Card>
@@ -235,26 +245,27 @@ export function DaySheet({ group, date, period, onDate, onOpenDay }: { group: st
           {sheet.days.map((d) => {
             const current = d.date === date
             const isToday = d.date === today
+            const missingOn = site ? null : d.missing // the server counts the whole group, not the chosen site's rows
             return (
               <button
                 key={d.date}
                 type="button"
                 disabled={d.date > today}
                 aria-current={current ? 'date' : undefined}
-                aria-label={t('attendance.sheet.dayLabel', { date: d.date, count: d.missing })}
+                aria-label={missingOn === null ? d.date : t('attendance.sheet.dayLabel', { date: d.date, count: missingOn })}
                 onClick={() => onDate(d.date)}
                 className={cn(FOCUS, 'flex min-h-14 min-w-14 shrink-0 flex-col items-center justify-center rounded-lg border px-1.5 py-1 text-xs transition-colors disabled:cursor-not-allowed disabled:opacity-40', current ? 'border-primary bg-accent text-accent-foreground' : cn(d.off ? `${OFF} hover:bg-muted-foreground/15` : 'bg-card hover:bg-muted', isToday && 'text-primary'))}
               >
                 <span className={cn(!current && !isToday && 'text-muted-foreground')}>{t(`weekdayShort.${weekdayOf(d.date)}`)}</span>
                 <span className="text-sm font-semibold">{Number(d.date.slice(8))}</span>
-                <span className={cn('text-[11px] font-semibold text-warning', !d.missing && 'invisible')}>{d.missing}</span>
+                <span className={cn('text-[11px] font-semibold text-warning', !missingOn && 'invisible')}>{missingOn ?? 0}</span>
               </button>
             )
           })}
         </div>
       </Card>
 
-      {rows.length > 0 && (
+      {!all && rows.length > 0 && (
         <Card>
           <p id={cohortsId} className="px-4 pt-3 text-xs font-medium text-muted-foreground">{t(office ? 'attendance.sheet.cohortsDept' : 'attendance.sheet.cohortsSite')}</p>
           {/* chips as wide as their label: only a name longer than the whole row is cut, and its title keeps it */}
@@ -315,12 +326,12 @@ export function DaySheet({ group, date, period, onDate, onOpenDay }: { group: st
         )}
         {editable && <PasteDialog open={pasting} onOpenChange={setPasting} rows={rows} leaveTypeId={leaveTypeId} onApply={async (action, chosen, label) => !!(await apply(action, chosen, label))} />}
         {!rows.length ? (
-          <EmptyState icon={Users} title={t('attendance.empty')} />
+          <EmptyState icon={Users} title={t(site ? 'attendance.sheet.noMatch' : 'attendance.empty')} />
         ) : !shown.length ? (
           <EmptyState icon={Users} title={t('attendance.sheet.noMatch')} />
         ) : (
           <>
-            <SheetRows rows={pageRows} office={office} editable={editable} date={date} sites={sites} selected={selected} pending={pending} leaveTypeId={leaveTypeId}
+            <SheetRows rows={pageRows} group={group} editable={editable} date={date} sites={sites} selected={selected} pending={pending} leaveTypeId={leaveTypeId}
               onToggle={toggle} onApply={(action, r, label) => apply(action, [r], label)} onOpenDay={onOpenDay} />
             <Pagination page={page} pageSize={PER_PAGE} total={shown.length} onPageChange={setPage} />
           </>

@@ -410,16 +410,42 @@ test('the grid filters by work site: the pick goes out as site_id from page 1, a
   expect(screen.getByRole('combobox', { name: 'الموقع' })).toHaveValue('')
 })
 
-test('office has no site filter on the grid, and the sheet tab has none either', async () => {
+test.each([
+  ['grid', 'office'], ['grid', 'engineer'], ['grid', 'all'],
+  ['sheet', 'office'], ['sheet', 'engineer'], ['sheet', 'all'],
+])('all-scope attendance has the site filter on the %s tab for %s', async (tab, group) => {
+  mockFetch({ ...routes, 'GET /api/v1/attendance/sheet': () => new Promise<Response>(() => {}) as unknown as Response })
+  renderWithAuth(<AttendancePage />, ['attendance.view.all'], { path: `/attendance?group=${group}&tab=${tab}` })
+  expect(await screen.findByRole('combobox', { name: 'الموقع' })).toBeInTheDocument()
+})
+
+test('own-scope attendance has no site filter', async () => {
   mockFetch(routes)
-  const { unmount } = renderWithAuth(<AttendancePage />, ['attendance.view.all'], { path: '/attendance?group=office&tab=grid' })
+  renderWithAuth(<AttendancePage />, ['attendance.view.own'], { path: '/attendance?group=engineer&tab=grid' })
   await screen.findByRole('button', { name: 'Engineer-1 2026-10-01: Site-1' })
   expect(screen.queryByRole('combobox', { name: 'الموقع' })).toBeNull()
-  unmount()
+})
+
+test('«بدون موقع» is a sheet-only value: the grid neither offers it nor sends it', async () => {
+  const grid = vi.fn((_url: string) => json(200, { data: rows, meta: { pagination } }))
+  mockFetch({ ...routes, 'GET /api/v1/attendance/grid': grid })
+  renderWithAuth(<AttendancePage />, ['attendance.view.all'], { path: '/attendance?group=engineer&tab=grid&site=none' })
+  const filter = await screen.findByRole('combobox', { name: 'الموقع' })
+  await screen.findByRole('button', { name: 'Engineer-1 2026-10-01: Site-1' })
+  expect(filter).toHaveValue('')
+  expect(within(filter).queryByRole('option', { name: 'بدون موقع' })).toBeNull()
+  expect(grid.mock.calls.at(-1)?.[0]).not.toContain('site_id')
+})
+
+test('leaving the sheet tab clears «بدون موقع» instead of carrying it to the grid', async () => {
   mockFetch({ ...routes, 'GET /api/v1/attendance/sheet': () => new Promise<Response>(() => {}) as unknown as Response })
-  renderWithAuth(<AttendancePage />, ['attendance.view.all'], { path: '/attendance?group=engineer&tab=sheet' })
-  await screen.findByRole('combobox', { name: 'المجموعة' })
-  expect(screen.queryByRole('combobox', { name: 'الموقع' })).toBeNull()
+  renderWithAuth(<AttendancePage />, ['attendance.view.all'], { path: '/attendance?group=engineer&tab=sheet&site=none' })
+  const filter = await screen.findByRole('combobox', { name: 'الموقع' })
+  expect(within(filter).getByRole('option', { name: 'بدون موقع' })).toBeInTheDocument()
+  expect(filter).toHaveValue('none')
+  await user.click(screen.getByRole('tab', { name: 'جدول الفترة' }))
+  await user.click(await screen.findByRole('tab', { name: 'كشف اليوم' }))
+  await waitFor(async () => expect(await screen.findByRole('combobox', { name: 'الموقع' })).toHaveValue(''))
 })
 
 test('All is the first group on the grid: the grid asks for group=all (with the site), the header for the engineer window, and no lock or missing line shows', async () => {
@@ -440,9 +466,25 @@ test('All is the first group on the grid: the grid asks for group=all (with the 
   expect(screen.queryByText(/أيام غير مسجلة/)).toBeNull()
 })
 
-test('All is not offered on the sheet tab, where a URL group=all falls back to engineers', async () => {
+test('All is the first group on the sheet too: it asks for group=all and the header for the engineer window', async () => {
+  const sheet = vi.fn((_url: string) => new Promise<Response>(() => {}) as unknown as Response)
+  const head = vi.fn((_url: string) => json(200, { data: period }))
+  mockFetch({ ...routes, 'GET /api/v1/attendance/sheet': sheet, 'GET /api/v1/attendance/period': head })
+  renderWithAuth(<AttendancePage />, ['attendance.view.all'], { path: '/attendance?group=all&tab=sheet&date=2026-10-01' })
+  const select = await screen.findByRole('combobox', { name: 'المجموعة' })
+  expect(select).toHaveValue('all')
+  expect(within(select).getAllByRole('option')[0]).toHaveTextContent('الكل')
+  await waitFor(() => expect(sheet.mock.calls.at(-1)?.[0]).toContain('group=all'))
+  await screen.findAllByText('2026-09-26')
+  expect(head.mock.calls.every(([u]) => u.includes('group=engineer'))).toBe(true)
+})
+
+test('the default group stays engineers, and the import tab does not offer All', async () => {
   mockFetch({ ...routes, 'GET /api/v1/attendance/sheet': () => new Promise<Response>(() => {}) as unknown as Response })
-  renderWithAuth(<AttendancePage />, ['attendance.view.all'], { path: '/attendance?group=all&tab=sheet' })
+  const { unmount } = renderWithAuth(<AttendancePage />, ['attendance.view.all'], { path: '/attendance' })
+  expect(await screen.findByRole('combobox', { name: 'المجموعة' })).toHaveValue('engineer')
+  unmount()
+  renderWithAuth(<AttendancePage />, ['attendance.view.all', 'attendance.edit.all'], { path: '/attendance?group=all&tab=import' })
   const select = await screen.findByRole('combobox', { name: 'المجموعة' })
   expect(select).toHaveValue('engineer')
   expect(within(select).queryByRole('option', { name: 'الكل' })).toBeNull()

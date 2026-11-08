@@ -245,6 +245,7 @@
     "home": "Home site",
     "homeNone": "No home site",
     "move": "Move to a site",
+    "set": "Set site",
     "returnsOn": "Returns to the previous site on",
     "homeHistory": "Home site history",
     "workers": "Workers",
@@ -458,7 +459,7 @@
       "attendance_locks": "Attendance locks",
       "official_holidays": "Official holidays",
       "notifications": "Notifications",
-      "employee_site_assignments": "Workers' home sites"
+      "employee_site_assignments": "Home sites"
     },
     "onBehalfOf": "on behalf of {{name}}"
   },
@@ -539,6 +540,7 @@
     "subtitle": "Each employee's days, by their group's period.",
     "groupLabel": "Group",
     "siteFilter": "Site",
+    "noSite": "No site",
     "allSites": "All sites",
     "group": {
       "all": "All",

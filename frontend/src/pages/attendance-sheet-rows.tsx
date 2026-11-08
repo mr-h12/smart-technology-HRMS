@@ -3,12 +3,14 @@ import { type FocusEvent, type MouseEvent, type ReactNode, useId, useRef, useSta
 import { useTranslation } from 'react-i18next'
 import { toast } from 'sonner'
 import { formatTime, isHhmm, localName, type Row, TimeInput } from '@/components/form'
+import { useAuth } from '@/lib/auth'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuRadioGroup, DropdownMenuRadioItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
-import { hhmm, type SheetAction, type SheetRow, statusOf } from '@/lib/day-sheet'
+import { hhmm, isOfficeRow, type SheetAction, type SheetRow, statusOf } from '@/lib/day-sheet'
 import { cn, FOCUS } from '@/lib/utils'
+import { MoveSiteDialog } from './employees'
 
 export type Status = ReturnType<typeof statusOf>
 type TimeField = 'in_time' | 'out_time'
@@ -38,9 +40,10 @@ const TOTALS = [['worked', 'text-success', 'attendance.sheet.kpi.worked'], ['lea
  * One page of the day sheet: a table from xl up, cards below it (below xl the table is wider than its card, in both groups). Below 2xl
  * the table's actions are icons, and its totals always sit in two columns, so the table fits its card. Writes go back through `onApply` (the sheet's `apply()`).
  */
-export function SheetRows({ rows, office, editable, date, sites, selected, pending, leaveTypeId, onToggle, onApply, onOpenDay }: {
+export function SheetRows({ rows, group, editable, date, sites, selected, pending, leaveTypeId, onToggle, onApply, onOpenDay }: {
   rows: SheetRow[]
-  office: boolean
+  /** The group shown; a row's own type decides how it reads, the group only the table's columns. */
+  group: string
   editable: boolean
   date: string
   sites: Row[]
@@ -54,12 +57,15 @@ export function SheetRows({ rows, office, editable, date, sites, selected, pendi
 }) {
   const { t, i18n } = useTranslation()
   const lang = i18n.language
+  const { can } = useAuth()
+  const office = group === 'office'
+  const all = group === 'all'
   const name = (r: SheetRow) => localName(r.employee, lang)
   const siteName = (id: string | null) => {
     const s = sites.find((x) => x.id === id)
     return s ? localName(s, lang) : '—'
   }
-  const status = (r: SheetRow) => statusOf(r, office)
+  const status = (r: SheetRow) => statusOf(r, isOfficeRow(r))
   const workSites = sites.filter((s) => s.kind === 'work' && s.active)
   // the day's leave type (a derived day has no site: its code's leave type); the seeded ones have no name_en, so English falls back to the code's name
   const leaveName = (r: SheetRow, code: string) => {
@@ -71,7 +77,7 @@ export function SheetRows({ rows, office, editable, date, sites, selected, pendi
   const pageSome = pageIds.some((id) => selected.has(id))
   const noLeave = (a: SheetAction) => a.kind === 'leave' && !leaveTypeId(a.code)
   // a field row is present at its last site; without one there is nowhere to put it (bulk paths skip such rows with a toast)
-  const noSite = (a: SheetAction, r: SheetRow) => a.kind === 'present' && !office && !r.last_site_id
+  const noSite = (a: SheetAction, r: SheetRow) => a.kind === 'present' && !isOfficeRow(r) && !r.last_site_id
   const noSiteId = useId()
   // the select-page box: in the table header from xl, on its own line above the cards below it
   const pageCheck = <input type="checkbox" className={cn(FOCUS, 'size-4 accent-primary')} checked={pageAll} ref={(el) => { if (el) el.indeterminate = pageSome && !pageAll }} onChange={() => onToggle(pageIds, !pageAll)} />
@@ -122,11 +128,11 @@ export function SheetRows({ rows, office, editable, date, sites, selected, pendi
    * hints; boxes while the day is editable, plain text otherwise. Keyed by the stored times, so a refetch never wipes typing.
    */
   const times = (r: SheetRow, cell: (field: TimeField, node: ReactNode) => ReactNode) => {
-    const fields: TimeField[] = office ? ['in_time'] : status(r) === 'present' ? ['in_time', 'out_time'] : []
+    const fields: TimeField[] = isOfficeRow(r) ? ['in_time'] : status(r) === 'present' ? ['in_time', 'out_time'] : []
     if (!fields.length) return null
     const late = r.hints.late_minutes ?? 0
     const over = r.hints.ot_minutes ?? 0
-    const hint = (f: TimeField) => (office ? undefined : f === 'in_time' ? (late > 0 ? t('attendance.sheet.lateBy', { minutes: late }) : undefined) : over > 0 ? t('attendance.sheet.overBy', { minutes: over }) : undefined)
+    const hint = (f: TimeField) => (isOfficeRow(r) ? undefined : f === 'in_time' ? (late > 0 ? t('attendance.sheet.lateBy', { minutes: late }) : undefined) : over > 0 ? t('attendance.sheet.overBy', { minutes: over }) : undefined)
     if (!editable) return fields.map((f) => cell(f, <><span className="text-sm">{formatTime(r.day[f], lang)}</span><Hint text={hint(f)} /></>))
     return (
       <TimeCells key={`${r.employee.id}/${r.day.in_time}/${r.day.out_time}`} cell={cell} disabled={pending.has(r.employee.id)}
@@ -186,8 +192,12 @@ export function SheetRows({ rows, office, editable, date, sites, selected, pendi
       </DropdownMenu>
     )
   }
+  // an engineer's site comes from the recorded day, so only an office employee or worker can be given one here
+  const canSetSite = (r: SheetRow) => r.site_id === null && r.employee.type !== 'engineer' && can('employee.assign_site')
+  const setSite = (r: SheetRow) => canSetSite(r) && <MoveSiteDialog empId={r.employee.id} from={date} ariaLabel={t('attendance.sheet.rowAction', { action: t('site.set'), name: name(r) })} />
   const where = (r: SheetRow) => {
-    if (office) return null
+    if (all) return r.site_id ? <span className="rounded-md border bg-card px-2 py-0.5 text-xs">{siteName(r.site_id)}</span> : !canSetSite(r) && <span className="text-xs text-muted-foreground">{t('attendance.noSite')}</span>
+    if (isOfficeRow(r)) return null
     if (editable) return siteChip(r)
     const s = status(r)
     if (s === 'present') return <span className="rounded-md border bg-card px-2 py-0.5 text-xs">{siteName(r.day.site_id)}</span>
@@ -201,7 +211,7 @@ export function SheetRows({ rows, office, editable, date, sites, selected, pendi
       <span className={cn(compact && 'hidden 2xl:inline')}>{t('attendance.sheet.action.details')}</span>
     </Button>
   )
-  const totalLabel = (k: (typeof TOTALS)[number][0], label: string) => t(office && k === 'worked' ? 'attendance.present' : label)
+  const totalLabel = (r: SheetRow, k: (typeof TOTALS)[number][0], label: string) => t(isOfficeRow(r) && k === 'worked' ? 'attendance.present' : label)
   const totalTone = (r: SheetRow, k: (typeof TOTALS)[number][0], tone: string) => (r.totals[k] ? tone : 'text-muted-foreground')
   // two content-sized columns of "number label" (fr tracks let the labels overlap)
   const tableTotals = (r: SheetRow) => (
@@ -209,7 +219,7 @@ export function SheetRows({ rows, office, editable, date, sites, selected, pendi
       {TOTALS.map(([k, tone, label]) => (
         <div key={k} className="flex items-baseline gap-1">
           <div className={cn('text-sm leading-4 font-semibold', totalTone(r, k, tone))}>{r.totals[k]}</div>
-          <div className="text-[11px] leading-4 text-muted-foreground">{totalLabel(k, label)}</div>
+          <div className="text-[11px] leading-4 text-muted-foreground">{totalLabel(r, k, label)}</div>
         </div>
       ))}
     </div>
@@ -221,12 +231,26 @@ export function SheetRows({ rows, office, editable, date, sites, selected, pendi
       {TOTALS.map(([k, tone, label], i) => (
         <span key={k} className="flex items-baseline gap-1">
           {i > 0 && <span aria-hidden className="me-0.5 text-muted-foreground">·</span>}
-          <span className="text-muted-foreground">{totalLabel(k, label)}</span>
+          <span className="text-muted-foreground">{totalLabel(r, k, label)}</span>
           <span className={cn('font-semibold', totalTone(r, k, tone))}>{r.totals[k]}</span>
         </span>
       ))}
     </p>
   )
+
+  // under the name: in All the row's type, then its department
+  const subline = (r: SheetRow, cls = '') => (all || r.employee.department) && (
+    <div className={cn('text-xs text-muted-foreground', cls)}>
+      {all && <span>{t(`enum.type.${r.employee.type}`)}</span>}
+      {all && r.employee.department && ' · '}
+      {r.employee.department}
+    </div>
+  )
+  // the arrival and departure columns: an office row in All has no departure
+  const fieldTimes = (r: SheetRow) => {
+    const cells = times(r, tableCell)
+    return !cells ? <><TableCell /><TableCell /></> : isOfficeRow(r) ? <>{cells}<TableCell /></> : cells
+  }
 
   return (
     <>
@@ -262,16 +286,17 @@ export function SheetRows({ rows, office, editable, date, sites, selected, pendi
                     <span className="text-muted-foreground">{r.employee.code}</span>
                     <bdi className="font-medium">{name(r)}</bdi>
                   </span>
-                  {r.employee.department && <div className="text-xs text-muted-foreground">{r.employee.department}</div>}
+                  {subline(r)}
                 </TableCell>
                 {office && times(r, tableCell)}
                 <TableCell>
                   <div className="flex flex-wrap items-center gap-1.5">
                     {pill(r)}
                     {where(r)}
+                    {setSite(r)}
                   </div>
                 </TableCell>
-                {!office && (times(r, tableCell) ?? <><TableCell /><TableCell /></>)}
+                {!office && fieldTimes(r)}
                 <TableCell>
                   <div className="flex items-center justify-end gap-1.5">
                     {editable ? <>{present(r, true)}{more(r)}</> : details(r, true)}
@@ -300,16 +325,17 @@ export function SheetRows({ rows, office, editable, date, sites, selected, pendi
                     <span className="text-muted-foreground">{r.employee.code}</span>
                     <bdi className="truncate font-medium">{name(r)}</bdi>
                   </span>
-                  {r.employee.department && <div className="truncate text-xs text-muted-foreground">{r.employee.department}</div>}
+                  {subline(r, 'truncate')}
                 </div>
               </div>
               {pill(r)}
               <div className="flex min-w-0 grow items-center gap-2 sm:grow-0">
                 <div className="min-w-0">{where(r)}</div>
+                {setSite(r)}
                 <div className="ms-auto flex gap-2">{editable ? <>{present(r)}{more(r)}</> : details(r)}</div>
               </div>
             </div>
-            {(office || status(r) === 'present') && <div className="grid gap-x-3 gap-y-1.5 sm:grid-cols-2">{times(r, cardCell)}</div>}
+            {(isOfficeRow(r) || status(r) === 'present') && <div className="grid gap-x-3 gap-y-1.5 sm:grid-cols-2">{times(r, cardCell)}</div>}
             {cardTotals(r)}
           </li>
         ))}

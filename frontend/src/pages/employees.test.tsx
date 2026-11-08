@@ -98,6 +98,18 @@ test('an engineer keeps the manager tab', async () => {
   expect(screen.queryByRole('button', { name: 'نقل إلى موقع' })).toBeNull()
 })
 
+test('an office employee has a site as well as a manager, with the move, the site tab and the manager tab', async () => {
+  mockFetch({ 'GET /api/v1/employees/e1': () => json(200, { data: { ...worker, current_type: 'office', current_manager: { id: 'u1', name: 'خالد' } } }), 'GET /api/v1/residences': residences })
+  renderWithAuth(<EmployeeDetailRoute id="e1" tab="site" />, ['employee.view.all', 'employee.assign_site.all', 'employee.assign_manager.all'], { router: false })
+  expect(await screen.findByRole('tab', { name: 'الموقع' })).toHaveAttribute('aria-selected', 'true')
+  expect(screen.getAllByRole('term').map((d) => d.textContent)).toEqual(['الموقع الأساسي', 'المدير'])
+  expect(screen.getAllByRole('definition').map((d) => d.textContent)).toEqual(['موقع أ', 'خالد'])
+  expect(screen.getByRole('tab', { name: 'المدير' })).toBeInTheDocument()
+  expect(screen.getByRole('button', { name: 'نقل إلى موقع' })).toBeInTheDocument()
+  expect(screen.getByRole('button', { name: 'تعيين مدير' })).toBeInTheDocument()
+  expect(screen.getAllByRole('row').slice(1).map((r) => r.textContent)).toEqual(['موقع أ2026-06-01', 'موقع ب2026-01-01'])
+})
+
 test('no move button without employee.assign_site', async () => {
   mockFetch({ 'GET /api/v1/employees/e1': () => json(200, { data: worker }), 'GET /api/v1/residences': residences })
   renderWithAuth(<EmployeeDetailRoute id="e1" tab="site" />, ['employee.view.all'], { router: false })

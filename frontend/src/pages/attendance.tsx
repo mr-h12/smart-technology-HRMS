@@ -19,6 +19,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { cn, OFF } from '@/lib/utils'
 import { useAuth } from '@/lib/auth'
+import { NO_SITE } from '@/lib/day-sheet'
 import { SITES, useApi, useList, useSave, WORK_SITES } from '@/lib/query'
 import { DayEditor } from './attendance-day'
 import { ImportTab } from './attendance-import'
@@ -26,7 +27,7 @@ import { DaySheet } from './attendance-sheet'
 import { NotFoundPage } from './pages'
 
 const GROUPS = ['office', 'engineer', 'permanent_worker', 'day_laborer']
-/** The grid's every-field-group view (owner, 2026-11-05): engineers' 26th→25th window, no office, no lock (locking is per group). */
+/** The every-type view of the grid and the sheet (owner, 2026-11-08): engineers' 26th→25th window, no lock (locking is per group). */
 const ALL = 'all'
 const PER_PAGE = 50
 const TABS = ['sheet', 'grid', 'import'] // import only with attendance.edit
@@ -54,13 +55,13 @@ function pickDate(s: string | null) {
   return s && s <= today && !Number.isNaN(d.getTime()) && d.toISOString().slice(0, 10) === s ? s : today
 }
 
-/** HR's attendance page, URL state `?group=&period=&date=&tab=&site=` (site: the grid's filter, field groups only); the group defaults to engineers, the grid's period to the current one, the sheet's date to today. */
+/** HR's attendance page, URL state `?group=&period=&date=&tab=&site=` (site: all-scope attendance only, the sheet also takes `none`); the group defaults to engineers, the grid's period to the current one, the sheet's date to today. */
 export function AttendancePage() {
   const { t, i18n } = useTranslation()
   const [params, setParams] = useSearchParams()
   const { can } = useAuth()
   const tab = TABS.find((x) => x === params.get('tab') && (x !== 'import' || can('attendance.edit'))) ?? TABS[0]
-  const groups = tab === 'grid' ? [ALL, ...GROUPS] : GROUPS
+  const groups = tab === 'import' ? GROUPS : [ALL, ...GROUPS]
   const group = groups.find((g) => g === params.get('group')) ?? 'engineer'
   const all = group === ALL
   const periodGroup = all ? 'engineer' : group // All shares the engineers' window
@@ -75,14 +76,15 @@ export function AttendancePage() {
       return p
     }, { replace: true })
   const allowed = can('attendance.view') // without it nothing is fetched and the page is not found
-  const siteFilter = allowed && tab === 'grid' && group !== 'office'
-  const site = siteFilter ? params.get('site') ?? '' : ''
+  const siteFilter = can('attendance.view.all') && tab !== 'import'
+  const urlSite = siteFilter ? params.get('site') ?? '' : ''
+  const site = urlSite === NO_SITE && tab !== 'sheet' ? '' : urlSite
   const { data: workSites } = useApi<Row[]>(siteFilter ? WORK_SITES : null)
   // the sheet's period is the one holding its date; the grid's is the chosen one
   // the sheet keeps the last period while the next date's loads, so the header does not blink inside one period; a kept period
   // of another group, or one not holding the date, is not current: the header shows loading and offers no arrows or lock until the real one arrives
-  const { data: kept, err } = useApi<Period>(allowed ? `/attendance/period?${new URLSearchParams(tab === 'sheet' ? { group, date } : { group: periodGroup, ...(chosen && { period_start: chosen }) })}` : null, { keep: tab === 'sheet' })
-  const period = tab !== 'sheet' || (kept && kept.group === group && kept.start <= date && date <= kept.end) ? kept : undefined
+  const { data: kept, err } = useApi<Period>(allowed ? `/attendance/period?${new URLSearchParams(tab === 'sheet' ? { group: periodGroup, date } : { group: periodGroup, ...(chosen && { period_start: chosen }) })}` : null, { keep: tab === 'sheet' })
+  const period = tab !== 'sheet' || (kept && kept.group === periodGroup && kept.start <= date && date <= kept.end) ? kept : undefined
   const start = chosen ?? period?.start // the grid follows the URL as soon as an arrow moves it
   const move = (to: string) => set(tab === 'sheet' ? { date: to } : { period: to })
   const [day, setDay] = useState<{ employee: Row; date: string }>()
@@ -99,7 +101,7 @@ export function AttendancePage() {
           <SelectField name="group" label={t('attendance.groupLabel')} values={{ group }} set={(_, v) => set({ group: v, period: null, site: null })} errs={{}} options={groups.map((g) => [g, t(`attendance.group.${g}`)])} />
         </div>
         {siteFilter && (
-          <FilterSelect value={site} onChange={(v) => set({ site: v || null })} label={t('attendance.siteFilter')} allLabel={t('attendance.allSites')} options={(workSites ?? []).map((s) => [s.id, localName(s, i18n.language)])} />
+          <FilterSelect value={site} onChange={(v) => set({ site: v || null })} label={t('attendance.siteFilter')} allLabel={t('attendance.allSites')} options={[...(tab === 'sheet' ? [[NO_SITE, t('attendance.noSite')] as [string, string]] : []), ...(workSites ?? []).map((s): [string, string] => [s.id, localName(s, i18n.language)])]} />
         )}
         <div className="flex flex-wrap items-center gap-1">
           <Button variant="outline" size="icon" disabled={!period} onClick={() => period && move(period.prev_start)} aria-label={t('attendance.prevPeriod')}>
@@ -144,7 +146,7 @@ export function AttendancePage() {
         action={main ? lockAction : undefined}
         secondary={!main && lockAction ? [lockAction] : undefined}
       />
-      <Tabs value={tab} onValueChange={(v) => set({ tab: v })}>
+      <Tabs value={tab} onValueChange={(v) => set({ tab: v, ...(v !== 'sheet' && urlSite === NO_SITE && { site: null }) })}>
         <TabsList>
           <TabsTrigger value="sheet">
             <ListChecks className="size-4" aria-hidden /> {t('attendance.tab.sheet')}
@@ -162,7 +164,7 @@ export function AttendancePage() {
         </TabsList>
         <TabsContent value="sheet" className="space-y-4">
           <Card className="overflow-hidden [&>:last-child]:border-b-0">{bar}</Card>
-          <DaySheet key={group} group={group} date={date} period={period} onDate={(d) => set({ date: d })} onOpenDay={openDay} />
+          <DaySheet key={group} group={group} date={date} site={site} period={period} onDate={(d) => set({ date: d })} onOpenDay={openDay} />
         </TabsContent>
         <TabsContent value="grid">
           <Card className="overflow-hidden">
