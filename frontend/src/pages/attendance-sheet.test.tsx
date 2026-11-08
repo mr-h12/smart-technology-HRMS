@@ -135,6 +135,19 @@ test('period totals sit in the last cell of each row and at the bottom of each c
   for (const c of cards) expect(c.lastElementChild).toHaveTextContent(/^إجمالي الفترة.*12.*4.*1.*2/)
 })
 
+test('a card shows its period totals as one inline line: label then number, in the tone rules', async () => {
+  const one = row(1, 'Engineer-1', {}, { totals: { worked: 3, leave: 0, absent: 0, missing: 2 } })
+  mockFetch({ ...routes, 'GET /api/v1/attendance/sheet': () => sheet([one]) })
+  open()
+  const card = within(await screen.findByRole('list', { name: 'الموظف' })).getByRole('listitem')
+  const line = card.lastElementChild as HTMLElement
+  expect(line).toHaveTextContent(/في موقع\s*3.*إجازة\s*0.*غياب\s*0.*غير مسجل\s*2/)
+  expect(within(line).getByText('إجمالي الفترة')).toHaveClass('sr-only')
+  expect(within(line).getByText('3')).toHaveClass('text-success')
+  expect(within(line).getByText('2')).toHaveClass('text-warning')
+  for (const zero of within(line).getAllByText('0')) expect(zero).toHaveClass('text-muted-foreground')
+})
+
 test('the day strip marks the date and disables future days', async () => {
   const get = vi.fn((_url: string) => sheet(engineers))
   mockFetch({ ...routes, 'GET /api/v1/attendance/sheet': get })

@@ -30,6 +30,8 @@ export const QUICK: [SheetAction, string, LucideIcon, string][] = [
 ]
 // a selected row or card: full accent, so it still shows in dark mode (accent/60 was too faint there), and kept under the pointer
 const SELECTED = 'bg-accent hover:bg-accent'
+// the line between two employees: --border alone is nearly invisible against the card, in both themes
+const LINE = 'border-b border-input/60'
 const TOTALS = [['worked', 'text-success', 'attendance.sheet.kpi.worked'], ['leave', 'text-info', 'attendance.sheet.kpi.leave'], ['absent', 'text-destructive', 'attendance.sheet.kpi.absent'], ['missing', 'text-warning', 'attendance.state.missing']] as const
 
 /**
@@ -134,11 +136,11 @@ export function SheetRows({ rows, office, editable, date, sites, selected, pendi
   }
   // min-w-38 holds "12:00" and its AM/PM pair, so the auto-width table never crushes them; the status cell wraps instead
   const tableCell = (f: TimeField, node: ReactNode) => <TableCell key={f} className="px-1.5"><div className="min-w-38">{node}</div></TableCell>
-  // a card labels each box above it; the pair stacks below sm (≈309 px of card at 375) and sits side by side from sm
+  // a card labels each box above it below sm (the pair stacks in ≈309 px of card at 375) and beside it from sm, where the pair sits side by side
   const cardCell = (f: TimeField, node: ReactNode) => (
-    <div key={f}>
-      <p aria-hidden className="mb-1.5 text-xs font-medium text-muted-foreground">{t(`attendance.day.${f}`)}</p>
-      {node}
+    <div key={f} className="sm:flex sm:items-start sm:gap-2">
+      <p aria-hidden className="mb-1 text-xs font-medium whitespace-nowrap text-muted-foreground sm:mt-2.5 sm:mb-0">{t(`attendance.day.${f}`)}</p>
+      <div className="min-w-0 sm:grow">{node}</div>
     </div>
   )
   const pill = (r: SheetRow) => {
@@ -199,16 +201,31 @@ export function SheetRows({ rows, office, editable, date, sites, selected, pendi
       <span className={cn(compact && 'hidden 2xl:inline')}>{t('attendance.sheet.action.details')}</span>
     </Button>
   )
-  // the table's totals: two content-sized columns of "number label" (fr tracks let the labels overlap); a card spreads four across
-  const totals = (r: SheetRow, table = false) => (
-    <div className={table ? 'grid w-max grid-cols-[auto_auto] gap-x-4 gap-y-0.5' : 'grid grid-cols-4 gap-3'}>
+  const totalLabel = (k: (typeof TOTALS)[number][0], label: string) => t(office && k === 'worked' ? 'attendance.present' : label)
+  const totalTone = (r: SheetRow, k: (typeof TOTALS)[number][0], tone: string) => (r.totals[k] ? tone : 'text-muted-foreground')
+  // two content-sized columns of "number label" (fr tracks let the labels overlap)
+  const tableTotals = (r: SheetRow) => (
+    <div className="grid w-max grid-cols-[auto_auto] gap-x-4">
       {TOTALS.map(([k, tone, label]) => (
-        <div key={k} className={table ? 'flex items-baseline gap-1' : 'min-w-14'}>
-          <div className={cn('text-sm font-semibold', r.totals[k] ? tone : 'text-muted-foreground')}>{r.totals[k]}</div>
-          <div className={cn('text-[11px] text-muted-foreground', !table && 'truncate')}>{t(office && k === 'worked' ? 'attendance.present' : label)}</div>
+        <div key={k} className="flex items-baseline gap-1">
+          <div className={cn('text-sm leading-4 font-semibold', totalTone(r, k, tone))}>{r.totals[k]}</div>
+          <div className="text-[11px] leading-4 text-muted-foreground">{totalLabel(k, label)}</div>
         </div>
       ))}
     </div>
+  )
+  // one line of "label number" pairs; only a phone drops the visible heading, to keep the pairs on one line
+  const cardTotals = (r: SheetRow) => (
+    <p className="flex flex-wrap items-baseline gap-x-1.5 gap-y-0.5 text-xs">
+      <span className="sr-only sm:not-sr-only sm:me-1 sm:font-medium sm:text-muted-foreground">{t('attendance.sheet.totals')}</span>
+      {TOTALS.map(([k, tone, label], i) => (
+        <span key={k} className="flex items-baseline gap-1">
+          {i > 0 && <span aria-hidden className="me-0.5 text-muted-foreground">·</span>}
+          <span className="text-muted-foreground">{totalLabel(k, label)}</span>
+          <span className={cn('font-semibold', totalTone(r, k, tone))}>{r.totals[k]}</span>
+        </span>
+      ))}
+    </p>
   )
 
   return (
@@ -237,8 +254,8 @@ export function SheetRows({ rows, office, editable, date, sites, selected, pendi
           </TableHeader>
           <TableBody>
             {rows.map((r) => (
-              <TableRow key={r.employee.id} className={cn(selected.has(r.employee.id) && SELECTED)}>
-                {editable && <TableCell className="px-1 py-0 first:ps-2">{check(r)}</TableCell>}
+              <TableRow key={r.employee.id} className={cn(LINE, '[&>td]:py-1.5', selected.has(r.employee.id) && SELECTED)}>
+                {editable && <TableCell className="px-1 first:ps-2">{check(r)}</TableCell>}
                 {/* the code shares the employee cell (no column of its own): in English the "Employee ID" header alone pushed the table past its card at 1280 */}
                 <TableCell className="whitespace-normal">
                   <span className="flex flex-wrap items-baseline gap-x-2">
@@ -260,41 +277,40 @@ export function SheetRows({ rows, office, editable, date, sites, selected, pendi
                     {editable ? <>{present(r, true)}{more(r)}</> : details(r, true)}
                   </div>
                 </TableCell>
-                <TableCell className={cn('border-s', !selected.has(r.employee.id) && 'bg-muted/40')}>{totals(r, true)}</TableCell>
+                <TableCell className={cn('border-s', !selected.has(r.employee.id) && 'bg-muted/40')}>{tableTotals(r)}</TableCell>
               </TableRow>
             ))}
           </TableBody>
         </Table>
       </div>
       {editable && (
-        <label className="flex min-h-tap cursor-pointer items-center gap-1.5 border-b ps-1.5 pe-4 text-sm font-medium xl:hidden">
+        <label className={cn(LINE, 'flex min-h-tap cursor-pointer items-center gap-1.5 ps-1.5 pe-4 text-sm font-medium xl:hidden')}>
           <span className="flex min-h-tap min-w-tap items-center justify-center">{pageCheck}</span>
           {t('attendance.sheet.selectPage')}
         </label>
       )}
-      <ul aria-label={t('attendance.employee')} className="divide-y xl:hidden">
+      <ul aria-label={t('attendance.employee')} className="xl:hidden">
         {rows.map((r) => (
-          <li key={r.employee.id} className={cn('space-y-3 p-4', selected.has(r.employee.id) && SELECTED)}>
-            <div className="flex items-start justify-between gap-3">
-              {editable && <div className="-my-2.5 -ms-2.5">{check(r)}</div>}
-              <div className="min-w-0 flex-1">
-                <span className="flex items-center gap-2">
-                  <span className="text-muted-foreground">{r.employee.code}</span>
-                  <bdi className="truncate font-medium">{name(r)}</bdi>
-                </span>
-                {r.employee.department && <div className="truncate text-xs text-muted-foreground">{r.employee.department}</div>}
+          <li key={r.employee.id} className={cn(LINE, 'space-y-1.5 px-4 py-2.5 last:border-0', selected.has(r.employee.id) && SELECTED)}>
+            <div className="flex flex-wrap items-center gap-x-3 gap-y-1.5">
+              <div className="flex min-w-0 grow basis-40 items-center gap-1.5">
+                {editable && <div className="-my-2.5 -ms-2.5">{check(r)}</div>}
+                <div className="min-w-0">
+                  <span className="flex items-center gap-2">
+                    <span className="text-muted-foreground">{r.employee.code}</span>
+                    <bdi className="truncate font-medium">{name(r)}</bdi>
+                  </span>
+                  {r.employee.department && <div className="truncate text-xs text-muted-foreground">{r.employee.department}</div>}
+                </div>
               </div>
               {pill(r)}
+              <div className="flex min-w-0 grow items-center gap-2 sm:grow-0">
+                <div className="min-w-0">{where(r)}</div>
+                <div className="ms-auto flex gap-2">{editable ? <>{present(r)}{more(r)}</> : details(r)}</div>
+              </div>
             </div>
-            <div className="flex flex-wrap items-center justify-between gap-2">
-              <div className="min-w-0">{where(r)}</div>
-              <div className="flex gap-2">{editable ? <>{present(r)}{more(r)}</> : details(r)}</div>
-            </div>
-            {(office || status(r) === 'present') && <div className="grid gap-3 sm:grid-cols-2">{times(r, cardCell)}</div>}
-            <div className="border-t pt-3">
-              <p className="mb-1.5 text-[11px] font-medium text-muted-foreground">{t('attendance.sheet.totals')}</p>
-              {totals(r)}
-            </div>
+            {(office || status(r) === 'present') && <div className="grid gap-x-3 gap-y-1.5 sm:grid-cols-2">{times(r, cardCell)}</div>}
+            {cardTotals(r)}
           </li>
         ))}
       </ul>
