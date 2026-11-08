@@ -83,21 +83,25 @@ export function DaySheet({ group, date, site, period, onDate, onOpenDay }: { gro
     setPage(1)
     unselect()
   }
+  // newest last; each entry carries its own date, so an undo after a date change still writes the day it changed
+  const undos = useRef<(Applied & { date: string })[]>([])
+  const [undoCount, setUndoCount] = useState(0)
   const [shownSite, setShownSite] = useState(site)
   if (shownSite !== site) {
     setShownSite(site)
     setCohort(null)
     setPage(1)
     unselect()
+    // an undo left over from the old site would rewrite rows this filter hides
+    undos.current = []
+    setUndoCount(0)
+    toast.dismiss(APPLIED_TOAST)
   }
   // employee ids with a write in flight: the ref guards against a double send before React re-renders, the state disables their controls
   const flight = useRef(new Set<string>())
   const [pending, setPending] = useState<ReadonlySet<string>>(new Set())
   const daysId = useId()
   const cohortsId = useId()
-  // newest last; each entry carries its own date, so an undo after a date change still writes the day it changed
-  const undos = useRef<(Applied & { date: string })[]>([])
-  const [undoCount, setUndoCount] = useState(0)
   // the header's period may still be the previous one while the next loads: write only into the period that holds this date
   const editable = !all && !!period && period.group === group && period.start <= date && date <= period.end && !period.is_locked && can('attendance.edit')
   const leaveTypeId = (code: string) => sites.find((s) => s.kind === 'leave' && s.leave_code === code && s.active)?.id as string | undefined

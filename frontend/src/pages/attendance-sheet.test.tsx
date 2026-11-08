@@ -1663,6 +1663,27 @@ test('picking a site narrows the loaded rows without another request, and drops 
   expect(get.mock.calls[0][0]).not.toContain('site')
 })
 
+test('a site change empties undo: the bar disables, and neither it nor the toast writes the hidden rows', async () => {
+  const bulk = bulkOk()
+  mockFetch({ ...placedRoutes, 'POST /api/v1/attendance/days/bulk': bulk })
+  edit()
+  await table()
+  await user.click(within(screen.getByRole('table')).getByRole('button', { name: 'حاضر Engineer-1' }))
+  await waitFor(() => expect(undoButton()).toHaveTextContent('تراجع (1)'))
+  const toastUndo = vi.mocked(toast.success).mock.calls.at(-1)![1]!.action as { onClick: (e: { preventDefault: () => void }) => void }
+  const filter = await siteFilter()
+  await within(filter).findByRole('option', { name: 'Site-2' })
+  await user.selectOptions(filter, 's2')
+  await waitFor(() => expect(listed()).toEqual(['Engineer-2', 'Engineer-3']))
+  expect(undoButton()).toHaveTextContent('تراجع (0)')
+  expect(undoButton()).toHaveAttribute('aria-disabled', 'true')
+  expect(toast.dismiss).toHaveBeenCalledWith('attendance-sheet-applied')
+  await user.click(undoButton())
+  toastUndo.onClick({ preventDefault: () => {} })
+  await new Promise((resolve) => setTimeout(resolve))
+  expect(bulk).toHaveBeenCalledTimes(1)
+})
+
 test('marking the rest writes only the rows of the chosen site', async () => {
   const bulk = bulkOk()
   mockFetch({ ...placedRoutes, 'POST /api/v1/attendance/days/bulk': bulk })
