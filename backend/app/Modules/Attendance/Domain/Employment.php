@@ -38,6 +38,16 @@ final class Employment
     }
 
     /**
+     * Whether a day's crew change took the employee off every crew on $date, the one case homeSiteOn's null does not mean "no site assigned".
+     *
+     * @param  array<string, mixed>  $employee
+     */
+    public static function offEveryCrewOn(array $employee, string $date): bool
+    {
+        return array_filter($employee['crew'] ?? [], fn (array $c) => $c['date'] === $date && $c['site_id'] === null) !== [];
+    }
+
+    /**
      * @param  array<string, mixed>  $employee
      * @return array{start: ?string, end: ?string}
      */

@@ -182,7 +182,7 @@ final class AttendanceGrid
 
     /**
      * Where the employee is on $date, the one rule for the site filter: the day's work site, else a worker's or office employee's site on the date,
-     * else an engineer's last site. Null when none applies.
+     * else the last site (office staff have none). Null when none applies, and for a day laborer taken off every crew on $date, whatever their last site.
      *
      * @param  array<string, mixed>  $employee  EmployeeRoster row
      * @param  array<string, mixed>  $day
@@ -193,7 +193,11 @@ final class AttendanceGrid
             return $day['site_id'];
         }
 
-        return $g === EmployeeType::Engineer ? $lastSite : Employment::homeSiteOn($employee, $date);
+        return match (true) {
+            $g === EmployeeType::Engineer => $lastSite,
+            Employment::offEveryCrewOn($employee, $date) => null,
+            default => Employment::homeSiteOn($employee, $date) ?? $lastSite,
+        };
     }
 
     /**

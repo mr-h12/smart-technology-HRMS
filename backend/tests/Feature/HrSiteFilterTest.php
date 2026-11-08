@@ -115,6 +115,44 @@ class HrSiteFilterTest extends TestCase
         $this->assertSame($this->s2, $this->rows('engineer')[$engineer]['site_id']);
     }
 
+    public function test_a_worker_with_no_site_on_the_date_is_at_their_last_site(): void
+    {
+        [$worker, $laborer] = [$this->employee('permanent_worker'), $this->employee('day_laborer')];
+        $this->putDay($worker, '2026-10-18', ['site_id' => $this->s1])->assertOk();
+        $this->putDay($laborer, '2026-10-18', ['site_id' => $this->s2])->assertOk();
+
+        $this->assertSame($this->s1, $this->rows('permanent_worker')[$worker]['site_id']);
+        $this->assertSame($this->s2, $this->rows('day_laborer')[$laborer]['site_id']);
+    }
+
+    public function test_the_site_on_the_date_comes_before_the_last_site(): void
+    {
+        $worker = $this->employee('permanent_worker');
+        $this->homeSite($worker, $this->s1, '2026-10-01');
+        $this->putDay($worker, '2026-10-18', ['site_id' => $this->s2])->assertOk();
+
+        $this->assertSame($this->s1, $this->rows('permanent_worker')[$worker]['site_id']);
+    }
+
+    public function test_a_worker_with_neither_a_site_on_the_date_nor_a_last_site_has_no_site(): void
+    {
+        $worker = $this->employee('permanent_worker');
+
+        $this->assertNull($this->rows('permanent_worker')[$worker]['site_id']);
+    }
+
+    public function test_a_laborer_taken_off_every_crew_has_no_site_even_with_a_last_site(): void
+    {
+        $laborer = $this->employee('day_laborer');
+        $this->homeSite($laborer, $this->s1, '2026-10-01');
+        $this->putDay($laborer, '2026-10-18', ['site_id' => $this->s2])->assertOk();
+        DayCrewChange::create(['employee_id' => $laborer, 'date' => '2026-10-20', 'site_id' => null]);
+
+        $row = $this->rows('day_laborer')[$laborer];
+        $this->assertNull($row['site_id']);
+        $this->assertSame($this->s2, $row['last_site_id']);
+    }
+
     public function test_anyone_else_has_no_site(): void
     {
         [$engineer, $worker, $office] = [$this->employee('engineer'), $this->employee('day_laborer'), $this->employee('office')];

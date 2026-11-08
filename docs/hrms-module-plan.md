@@ -238,7 +238,7 @@ Status is verified against `main` at `7be93b9` (PR #3 merged) by reading the cod
 
 - **The filter** shows on the day sheet and the period grid, for every group, to a user holding all-scope attendance (`attendance.view.all`). The day sheet also offers «بدون موقع» for rows with no site.
 - **Office staff get a dated site that HR sets**, stored like a worker's home site. It only lists them at the site in this filter: no site manager reach, no pay, no fare, no site costing. Engineers cannot hold one.
-- **Where an employee is on a date** (each sheet row's `site_id`): the day's stored work site; else, for workers and office staff, their site on the date; else, for engineers, their last site; else none.
+- **Where an employee is on a date** (each sheet row's `site_id`): the day's stored work site; else, for workers and office staff, their site on the date; else, for every type, their last site (office staff have none); else none. A day laborer taken off every crew for the date has no site that day, whatever their last site.
 - **All on the day sheet** lists every type, each read in its own period, for reading only: Details on each row, quick recording stays inside a single group. Its day strip is the engineers' window and shows no missing count, since a count per date across different pay periods would be wrong.
 - **All on the period grid now includes office staff.** With a site, it lists who has a stored day there in the period, plus the office staff at that site on the period's last day.
 - **A row with no site** offers «تحديد الموقع» to a holder of `employee.assign_site`, for office staff and workers. Engineers have no such button.
