@@ -96,24 +96,46 @@ test('the CEO gets not found', async () => {
   expect(urls('/team-fares')).toEqual([])
 })
 
-test('an all-scope user picks a site manager from the buttons first', async () => {
+const MANAGERS = [{ id: 'm1', name: 'م. أحمد سامي' }, { id: 'm2', name: 'م. هاني رزق' }]
+
+test('an all-scope user lands on the first site manager with no click, and picking another switches the team', async () => {
   mockFetch({
-    'GET /api/v1/sites/manager-candidates': () => json(200, { data: [{ id: 'm1', name: 'م. أحمد سامي' }, { id: 'm2', name: 'م. هاني رزق' }] }),
-    'GET /api/v1/team-fares': team(),
+    'GET /api/v1/sites/manager-candidates': () => json(200, { data: MANAGERS }),
+    'GET /api/v1/team-fares': (url: string) => (url.includes('manager_id=m2') ? team([row('w9', 'حسن علي', 'day_laborer', {})])() : team()()),
   })
   renderWithAuth(<TeamFaresPage />, HR)
-  const managers = await screen.findByRole('group', { name: 'مدير الموقع' })
-  const pick = await within(managers).findByRole('button', { name: 'م. أحمد سامي' })
-  expect(screen.queryByRole('combobox')).toBeNull()
-  expect(pick).toHaveAttribute('aria-pressed', 'false')
-  expect(screen.getByText('اختر مدير الموقع')).toBeInTheDocument()
-  expect(urls('/team-fares')).toEqual([])
-  await user.click(pick)
-  expect(pick).toHaveAttribute('aria-pressed', 'true')
-  expect(within(managers).getByRole('button', { name: 'م. هاني رزق' })).toHaveAttribute('aria-pressed', 'false')
   await screen.findByText('محمود عبد الله')
+  const managers = screen.getByRole('group', { name: 'مدير الموقع' })
+  const first = within(managers).getByRole('button', { name: 'م. أحمد سامي' })
+  const second = within(managers).getByRole('button', { name: 'م. هاني رزق' })
+  expect(first).toHaveAttribute('aria-pressed', 'true')
+  expect(second).toHaveAttribute('aria-pressed', 'false')
+  expect(screen.queryByRole('combobox')).toBeNull()
   expect(urls('/team-fares')).toEqual(['/api/v1/team-fares?manager_id=m1'])
   expect(screen.getByText('اختار مدير الموقع، سجّل السكن الناقص، وحدد المواصلات لكل سكن في كل موقع.')).toBeInTheDocument()
+
+  await user.click(second)
+  await screen.findByText('حسن علي')
+  expect(second).toHaveAttribute('aria-pressed', 'true')
+  expect(first).toHaveAttribute('aria-pressed', 'false')
+  expect(screen.queryByText('محمود عبد الله')).toBeNull()
+  expect(urls('/team-fares')).toEqual(['/api/v1/team-fares?manager_id=m1', '/api/v1/team-fares?manager_id=m2'])
+})
+
+test('while the site managers load the page shows the skeleton, not an empty state', async () => {
+  vi.stubGlobal('fetch', vi.fn(() => new Promise(() => {})))
+  renderWithAuth(<TeamFaresPage />, HR)
+  await screen.findByRole('group', { name: 'مدير الموقع' })
+  expect(document.querySelector('[aria-busy="true"]')).not.toBeNull()
+  expect(screen.queryByText('لسه مفيش مديرين مواقع.')).toBeNull()
+  expect(urls('/team-fares')).toEqual([])
+})
+
+test('with no site managers at all the page says so and asks for no team', async () => {
+  mockFetch({ 'GET /api/v1/sites/manager-candidates': () => json(200, { data: [] }) })
+  renderWithAuth(<TeamFaresPage />, HR)
+  expect(await screen.findByText('لسه مفيش مديرين مواقع.')).toBeInTheDocument()
+  expect(urls('/team-fares')).toEqual([])
 })
 
 test('the route renders the page', async () => {
@@ -138,8 +160,8 @@ const saving = (extra = {}) => mockFetch({
   ...extra,
 })
 /** HR opens the page and picks the site manager m1. */
-const asHr = async () => {
-  const view = renderWithAuth(<TeamFaresPage />, HR)
+const asHr = async (permissions = HR) => {
+  const view = renderWithAuth(<TeamFaresPage />, permissions)
   await user.click(await screen.findByRole('button', { name: 'م. أحمد سامي' }))
   return view
 }
@@ -264,14 +286,31 @@ test('a site_id 422 shows in the banner when the dialog has no site field', asyn
   expect(await within(dialog).findByRole('alert')).toHaveTextContent('الموقع مش تبعك')
 })
 
-test('an engineer with no residence gets no residence button', async () => {
-  const rows = [row('w4', 'فتحي سالم', 'day_laborer', { residence: null, source: 'no_residence' }), row('e1', 'م. كريم فتحي', 'engineer', { residence: null, site: null })]
-  saving({ 'GET /api/v1/team-fares': team(rows) })
-  await asHr()
+const NO_RESIDENCE = [row('w4', 'فتحي سالم', 'day_laborer', { residence: null, source: 'no_residence' }), row('e1', 'م. كريم فتحي', 'engineer', { residence: null, site: null })]
+const ENGINEER_ROUTES = { 'GET /api/v1/team-fares': team(NO_RESIDENCE), 'PATCH /api/v1/employees/e1': () => json(200, { data: {} }) }
+/** Only the engineer's row can be asked for by position: both rows carry the same button text. */
+const openEngineerResidence = async () => {
   await screen.findByText('م. كريم فتحي')
-  expect(within(bodyRows()[0]).getByRole('button', { name: 'سجّل السكن' })).toBeInTheDocument()
-  expect(within(bodyRows()[1]).queryByRole('button', { name: 'سجّل السكن' })).toBeNull()
-  expect(within(bodyRows()[1]).getByText('السكن مش متسجل')).toBeInTheDocument()
+  await user.click(within(bodyRows()[1]).getByRole('button', { name: 'سجّل السكن' }))
+  return screen.findByRole('dialog', { name: 'سكن م. كريم فتحي' })
+}
+
+test('an engineer with no residence gets the button, and saving patches that engineer', async () => {
+  saving(ENGINEER_ROUTES)
+  await asHr()
+  const dialog = await openEngineerResidence()
+  await user.selectOptions(within(dialog).getByRole('combobox', { name: 'السكن' }), 'r2')
+  await user.click(within(dialog).getByRole('button', { name: 'حفظ' }))
+  await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull())
+  expect(patched()).toEqual([['/api/v1/employees/e1', { residence_id: 'r2' }]])
+})
+
+test('without employee.edit a row with no residence keeps the badge and has no button', async () => {
+  saving(ENGINEER_ROUTES)
+  await asHr(['fare.manage.all', 'employee.view.all', 'site.view.all', 'site.manage.all'])
+  await screen.findByText('م. كريم فتحي')
+  expect(screen.queryByRole('button', { name: 'سجّل السكن' })).toBeNull()
+  for (const r of bodyRows()) expect(within(r).getByText('السكن مش متسجل')).toBeInTheDocument()
 })
 
 const patched = () => vi.mocked(fetch).mock.calls.filter(([, i]) => i?.method === 'PATCH').map(([u, i]) => [String(u), JSON.parse(String(i!.body))])
@@ -295,4 +334,61 @@ test('a residence 422 shows in the dialog', async () => {
   await user.selectOptions(within(dialog).getByRole('combobox', { name: 'السكن' }), 'r1')
   await user.click(within(dialog).getByRole('button', { name: 'حفظ' }))
   expect(await within(dialog).findByText('رقم الحساب مطلوب')).toBeInTheDocument()
+})
+
+const CAN_ADD = [...HR, 'site.manage.all']
+const NEW_RESIDENCE = { id: 'r3', name_ar: 'سيدي بشر' }
+/** `/residences` answers with the new row once it has been posted, as the server does. */
+const addable = (extra = {}) => {
+  let residences = [{ id: 'r1', name_ar: 'كفر الدوار' }, { id: 'r2', name_ar: 'القاهرة' }]
+  saving({
+    ...ENGINEER_ROUTES,
+    'GET /api/v1/residences': () => json(200, { data: residences, meta: { pagination } }),
+    'POST /api/v1/residences': () => {
+      residences = [...residences, NEW_RESIDENCE]
+      return json(201, { data: NEW_RESIDENCE })
+    },
+    ...extra,
+  })
+}
+const openAdd = async (dialog: HTMLElement) => {
+  await user.click(within(dialog).getByRole('button', { name: 'إضافة محل إقامة' }))
+  return screen.findByRole('dialog', { name: 'إضافة محل إقامة' })
+}
+
+test('a residence added from the dialog ends up selected, and saving patches with its id', async () => {
+  addable()
+  await asHr(CAN_ADD)
+  const dialog = await openEngineerResidence()
+  const added = await openAdd(dialog)
+  await user.type(within(added).getByRole('textbox'), 'سيدي بشر')
+  await user.click(within(added).getByRole('button', { name: 'حفظ' }))
+  const select = await screen.findByRole('combobox', { name: 'السكن' })
+  expect(screen.getByRole('dialog', { name: 'سكن م. كريم فتحي' })).toBeInTheDocument()
+  await waitFor(() => expect(select).toHaveDisplayValue('سيدي بشر'))
+  expect(post('/residences')).toEqual([{ name_ar: 'سيدي بشر' }])
+  expect(patched()).toEqual([])
+  await user.click(within(screen.getByRole('dialog')).getByRole('button', { name: 'حفظ' }))
+  await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull())
+  expect(patched()).toEqual([['/api/v1/employees/e1', { residence_id: 'r3' }]])
+})
+
+test('without site.manage the dialog has the select and no add button', async () => {
+  addable()
+  await asHr()
+  const dialog = await openEngineerResidence()
+  expect(within(dialog).getByRole('combobox', { name: 'السكن' })).toBeInTheDocument()
+  expect(within(dialog).queryByRole('button', { name: 'إضافة محل إقامة' })).toBeNull()
+})
+
+test('a duplicate name shows inside the add dialog and leaves the selection alone', async () => {
+  addable({ 'POST /api/v1/residences': () => json(422, { error: { code: 'validation_failed', message: 'x', details: [{ field: 'name_ar', code: 'unique', message: 'الاسم ده موجود بالفعل' }] } }) })
+  await asHr(CAN_ADD)
+  const dialog = await openEngineerResidence()
+  const added = await openAdd(dialog)
+  await user.type(within(added).getByRole('textbox'), 'القاهرة')
+  await user.click(within(added).getByRole('button', { name: 'حفظ' }))
+  expect(await within(added).findByText('الاسم ده موجود بالفعل')).toBeInTheDocument()
+  expect(within(dialog).getByRole('combobox', { name: 'السكن', hidden: true })).toHaveValue('')
+  expect(patched()).toEqual([])
 })

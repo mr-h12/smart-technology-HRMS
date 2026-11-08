@@ -225,7 +225,7 @@ Status is verified against `main` at `7be93b9` (PR #3 merged) by reading the cod
 - **Forms:** the existing Word and PDF forms print as PDFs in their planned release. Releases 1–2 come first: employees and sites, attendance and leave, then payroll, fingerprint import, advances and payslips.
 - **Migration:** a full historical migration is no longer assumed. Release 2 item 8 (the historical payroll archive) and the parity re-run from migrated data wait on R29 (go-live date, opening balances, archive or not).
 - **Transport:** separate from the wage. Fares and site allowances are never part of the lateness wage basis (§0a). The fare's dependence on residence, actual site and override stays as in `calculations.md` §4.
-- **Transport fare (2026-11-05, option C, replaces option A):** HR sets every fare (the residence × site default, plus per-worker overrides) from the team transport page, per team lead, and fills a missing residence there. The team lead reads their own team's fares and never sets fares or sees wages. Engineers get a fare only by override; a day laborer with no fare gets 0. Spec: `docs/superpowers/specs/2026-11-05-team-lead-fares-design.md`.
+- **Transport fare (2026-11-05, option C, replaces option A):** HR sets every fare (the residence × site default, plus per-worker overrides) from the team transport page, per team lead, and fills a missing residence there, engineers included; with `site.manage` a residence not yet in the list is added from the same dialog (owner, 2026-11-08). The team lead reads their own team's fares and never sets fares or sees wages. Engineers get a fare only by override; a day laborer with no fare gets 0. Spec: `docs/superpowers/specs/2026-11-05-team-lead-fares-design.md`.
 
 ### Site manager's day: owner decisions of 2026-11-05 (PR #22 review)
 - **Open day:** a field day (engineer, permanent worker, day laborer) with an arrival and no departure; office never. The site manager records no later day for that person until it is completed. Past the yesterday window they may still add the departure only, until the period is locked; the arrival and the status stay. Audited, and HR can correct it.
@@ -233,6 +233,15 @@ Status is verified against `main` at `7be93b9` (PR #3 merged) by reading the cod
 - **Refused laborer:** HR's refusal ends the laborer that day (an earlier end HR already set stays) and takes them off every crew from that day and off any earlier day with nothing recorded, so the yesterday window adds no new day; one audited transaction. Days already recorded stay for HR to decide (pay a wage for those days, or cancel them); nothing is deleted automatically.
 - **Crew:** a one-day add, move or removal is approved as built; the home site stays HR's. The search takes the exact code or the full name and returns at most one laborer.
 - **Notifications:** at once for a proposed wage and for a departure entered after the window (an edit to a past day); crew changes and open days as counts in the 21:00 alert (`attendance:alert-missing`), never as separate notifications.
+
+### HR's site filter across attendance: owner decisions of 2026-11-08
+
+- **The filter** shows on the day sheet and the period grid, for every group, to a user holding all-scope attendance (`attendance.view.all`). The day sheet also offers «بدون موقع» for rows with no site.
+- **Office staff get a dated site that HR sets**, stored like a worker's home site. It only lists them at the site in this filter: no site manager reach, no pay, no fare, no site costing. Engineers cannot hold one.
+- **Where an employee is on a date** (each sheet row's `site_id`): the day's stored work site; else, for workers and office staff, their site on the date; else, for every type, their last site (office staff have none); else none. A day laborer taken off every crew for the date has no site that day, whatever their last site.
+- **All on the day sheet** lists every type, each read in its own period, for reading only: Details on each row, quick recording stays inside a single group. Its day strip is the engineers' window and shows no missing count, since a count per date across different pay periods would be wrong.
+- **All on the period grid now includes office staff.** With a site, it lists who has a stored day there in the period, plus the office staff at that site on the period's last day.
+- **A row with no site** offers «تحديد الموقع» to a holder of `employee.assign_site`, for office staff and workers. Engineers have no such button.
 
 ### Changes to the work plan
 - **Youssef:**

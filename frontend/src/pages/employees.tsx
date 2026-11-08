@@ -29,6 +29,7 @@ import { Leave } from './employee-leave'
 
 const TYPES = ['office', 'engineer', 'permanent_worker', 'day_laborer']
 const WORKERS = ['permanent_worker', 'day_laborer'] // a worker belongs to a home site; its manager follows the site
+const SITED = [...WORKERS, 'office'] // an office employee's site only lists them at it in HR's filter; they keep a manager too
 const GENDERS = ['male', 'female']
 const PAY_METHODS = ['cash', 'bank']
 const IDENTITY = ['name_ar', 'name_en', 'fingerprint_name', 'gender', 'national_id', 'insurance_no', 'phone', 'address', 'department', 'residence_id', 'pay_method', 'bank_account', 'hire_date', 'contract_end_date', 'termination_date', 'termination_reason', 'hr_notes']
@@ -349,7 +350,8 @@ function EmployeeForm({ emp, loadErr }: { emp?: Row; loadErr?: unknown }) {
     )
 
   const worker = WORKERS.includes(emp.current_type)
-  const tabs = TABS.filter(([v]) => v !== (worker ? 'manager' : 'site') && (v !== 'leave' || (can('leave.view') && emp.current_type !== 'day_laborer')) && (v !== 'documents' || can('employee_document.view')))
+  const sited = SITED.includes(emp.current_type)
+  const tabs = TABS.filter(([v]) => (v !== 'manager' || !worker) && (v !== 'site' || sited) && (v !== 'leave' || (can('leave.view') && emp.current_type !== 'day_laborer')) && (v !== 'documents' || can('employee_document.view')))
   const tab = tabs.some(([v]) => v === params.get('tab')) ? params.get('tab')! : 'profile'
   return (
     <div className="mx-auto max-w-5xl space-y-6">
@@ -369,11 +371,22 @@ function EmployeeForm({ emp, loadErr }: { emp?: Row; loadErr?: unknown }) {
           )}
         </div>
         {emp.current_type && <Badge variant="info" className="self-start sm:self-center">{t(`enum.type.${emp.current_type}`)}</Badge>}
-        <dl className="flex gap-2 text-sm">
-          <dt className="text-muted-foreground">{t(worker ? 'site.home' : 'manager.title')}</dt>
-          <dd>{worker ? emp.current_site?.name_ar ?? t('site.homeNone') : emp.current_manager?.name ?? t('manager.none')}</dd>
+        <dl className="grid gap-1 text-sm">
+          {sited && (
+            <div className="flex gap-2">
+              <dt className="text-muted-foreground">{t('site.home')}</dt>
+              <dd>{emp.current_site?.name_ar ?? t('site.homeNone')}</dd>
+            </div>
+          )}
+          {!worker && (
+            <div className="flex gap-2">
+              <dt className="text-muted-foreground">{t('manager.title')}</dt>
+              <dd>{emp.current_manager?.name ?? t('manager.none')}</dd>
+            </div>
+          )}
         </dl>
-        {worker ? can('employee.assign_site') && <MoveSiteDialog empId={emp.id} /> : can('employee.assign_manager') && <AssignManagerDialog empId={emp.id} />}
+        {sited && can('employee.assign_site') && <MoveSiteDialog empId={emp.id} />}
+        {!worker && can('employee.assign_manager') && <AssignManagerDialog empId={emp.id} />}
         {can('employee.edit') && emp.termination_date && emp.termination_date < cairoToday() && (
           // the open form drops the cleared values too, so a later Save cannot send them back
           <ReactivateDialog emp={emp} onDone={() => ['termination_date', 'termination_reason'].forEach((k) => set(k, ''))} />
@@ -506,22 +519,27 @@ function ManagerSelect(f: FormApi) {
   )
 }
 
-/** Moves a worker to a home site from a date; with a return date the API also puts them back on the site they had before. */
-function MoveSiteDialog({ empId }: { empId: string }) {
+/**
+ * Moves a worker or office employee to a home site from a date; with a return date the API also puts them back on the site they had before.
+ * With `from` it is the day sheet's «set the site» for someone with none: dated that day, with no previous site to return to.
+ */
+export function MoveSiteDialog({ empId, from, ariaLabel }: { empId: string; from?: string; ariaLabel?: string }) {
   const { t } = useTranslation()
   const send = useSave()
-  const shown = ['site_id', 'effective_from', 'returns_on']
+  const setting = from !== undefined
+  const title = t(setting ? 'site.set' : 'site.move')
+  const shown = ['site_id', 'effective_from', ...(setting ? [] : ['returns_on'])]
   return (
     <FormDialog
-      title={t('site.move')}
+      title={title}
       trigger={
-        <Button type="button" variant="outline">
+        <Button type="button" variant="outline" size={setting ? 'sm' : undefined} aria-label={ariaLabel}>
           <MapPin />
-          {t('site.move')}
+          {title}
         </Button>
       }
-      init={{ site_id: '', effective_from: '', returns_on: '' }}
-      submit={(form) => send(`/employees/${empId}/site-assignments`, { body: clean(form, shown) })}
+      init={{ site_id: '', effective_from: from ?? '', returns_on: '' }}
+      submit={(form) => send(`/employees/${empId}/site-assignments`, { body: clean(form, shown) }, ['employees', 'attendance'])}
       onDone={() => {}}
       shown={shown}
     >
@@ -529,7 +547,7 @@ function MoveSiteDialog({ empId }: { empId: string }) {
         <>
           <SiteSelect {...f} />
           <TextField name="effective_from" label={t('change.effective_from')} type="date" {...f} />
-          <TextField name="returns_on" label={t('site.returnsOn')} type="date" {...f} />
+          {!setting && <TextField name="returns_on" label={t('site.returnsOn')} type="date" {...f} />}
         </>
       )}
     </FormDialog>

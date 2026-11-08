@@ -6,6 +6,7 @@ namespace App\Modules\Attendance\Application;
 
 use App\Modules\Attendance\Domain\AttendanceRefusal;
 use App\Modules\Attendance\Domain\AttendanceRefused;
+use App\Modules\Attendance\Domain\Employment;
 use App\Modules\Attendance\Domain\Period;
 use App\Modules\Attendance\Infrastructure\Eloquent\AttendanceDay;
 use App\Modules\Attendance\Infrastructure\Eloquent\AttendanceLock;
@@ -26,8 +27,6 @@ final class AttendanceGrid
 {
     /** The last site looks this many days back from the sheet date (P31). */
     public const LAST_SITE_DAYS = 7;
-
-    private const FIELD = [EmployeeType::Engineer, EmployeeType::PermanentWorker, EmployeeType::DayLaborer];
 
     public function __construct(private readonly EmployeeRoster $roster, private readonly EffectiveDays $days, private readonly BusinessRules $rules, private readonly DayCrew $crew) {}
 
@@ -50,17 +49,21 @@ final class AttendanceGrid
     }
 
     /**
-     * $siteId keeps the employees with a live stored day at that site in the period (owner: who worked at the site in the period).
-     * A null $g is All (owner, 2026-11-05): every field type over the engineers' 26th→25th window.
+     * $siteId keeps the employees with a live stored day at that site in the period (owner: who worked at the site in the period),
+     * plus, for All and office, the office staff at that site on the period's last day (owner, 2026-11-08).
+     * A null $g is All (owner, 2026-11-08, office added to 2026-11-05's field types): every type over the engineers' 26th→25th window.
      *
      * @return array{data: list<array<string, mixed>>, pagination: array{page: int, per_page: int, total: int, total_pages: int, has_next_page: bool, has_previous_page: bool}}
      */
     public function grid(?EmployeeType $g, ?string $start, int $perPage, int $page, ?string $date = null, ?string $ownerId = null, ?string $siteId = null): array
     {
         $p = $this->periodAt($g ?? EmployeeType::Engineer, $start, $date);
-        $ids = $siteId === null ? null : AttendanceDay::where('site_id', $siteId)->whereBetween('date', [$p->start, $p->end])->distinct()->pluck('employee_id')->map(fn ($id) => (string) $id)->all();
-        $roster = $this->roster->ofType($g === null ? self::FIELD : [$g], $p->start, $p->end, $perPage, $page, $ownerId, $ids);
-        $days = $g === null ? $this->fieldDays($p, $roster['data']) : $this->days->forPeriod($p, $roster['data']);
+        $ids = $siteId === null ? null : [
+            ...AttendanceDay::where('site_id', $siteId)->whereBetween('date', [$p->start, $p->end])->distinct()->pluck('employee_id')->map(fn ($id) => (string) $id)->all(),
+            ...($g === null || $g === EmployeeType::Office ? $this->roster->officeIdsAt($siteId, $p->end) : []),
+        ];
+        $roster = $this->roster->ofType($g === null ? EmployeeType::cases() : [$g], $p->start, $p->end, $perPage, $page, $ownerId, $ids);
+        $days = $g === null ? $this->daysOfEveryType($p, $roster['data']) : $this->days->forPeriod($p, $roster['data']);
 
         return [
             'data' => array_map(fn (array $e) => [
@@ -137,8 +140,11 @@ final class AttendanceGrid
                     $totals[$kind]++;
                 }
             }
+            $site = $this->rowSite($g, $e, $day, $date, $lastSites[$e['id']] ?? null);
             $rows[] = [
-                'employee' => ['id' => $e['id'], 'code' => $e['code'], 'name_ar' => $e['name_ar'], 'name_en' => $e['name_en'], 'department' => $e['department']],
+                'employee' => ['id' => $e['id'], 'code' => $e['code'], 'name_ar' => $e['name_ar'], 'name_en' => $e['name_en'], 'department' => $e['department'], 'type' => $g->value],
+                'site_id' => $site,
+                'needs_site' => $site === null && $g !== EmployeeType::Engineer && ! Employment::offEveryCrewOn($e, $date),
                 'day' => array_intersect_key($day, array_flip(['state', 'source', 'version', 'site_id', 'leave_code', ...EffectiveDays::VALUES])),
                 'hints' => (object) $this->days->hints($g, $e, $day, $settings),
                 'last_site_id' => $lastSites[$e['id']] ?? null,
@@ -152,6 +158,49 @@ final class AttendanceGrid
             'days' => array_map(fn (string $d, int $n) => ['date' => $d, 'missing' => $n, 'off' => $off[$d]], array_keys($missing), array_values($missing)),
             'rows' => $rows,
         ];
+    }
+
+    /**
+     * Every type's sheet in one list by code (owner, 2026-11-08): each type is read in its own period, so its totals and hints stay right. The
+     * days are the engineers' window and their off days; `missing` is null because a per-date count across different pay periods would be wrong.
+     *
+     * @return array{group: string, date: string, days: list<array{date: string, missing: null, off: bool}>, rows: list<array<string, mixed>>}
+     */
+    public function sheetOfEveryType(string $date, ?string $ownerId = null): array
+    {
+        // ponytail: unpaginated, the whole company in PHP, one sheet() per type; page it in SQL if the company outgrows one response
+        $rows = [];
+        $days = [];
+        foreach (EmployeeType::cases() as $g) {
+            $sheet = $this->sheet($g, $date, $ownerId);
+            $rows = [...$rows, ...$sheet['rows']];
+            if ($g === EmployeeType::Engineer) {
+                $days = array_map(fn (array $d) => [...$d, 'missing' => null], $sheet['days']);
+            }
+        }
+        usort($rows, fn (array $a, array $b) => $a['employee']['code'] <=> $b['employee']['code']);
+
+        return ['group' => 'all', 'date' => $date, 'days' => $days, 'rows' => $rows];
+    }
+
+    /**
+     * Where the employee is on $date, the one rule for the site filter: the day's work site, else a worker's or office employee's site on the date,
+     * else the last site (office staff have none). Null when none applies, and for a day laborer taken off every crew on $date, whatever their last site.
+     *
+     * @param  array<string, mixed>  $employee  EmployeeRoster row
+     * @param  array<string, mixed>  $day
+     */
+    private function rowSite(EmployeeType $g, array $employee, array $day, string $date, ?string $lastSite): ?string
+    {
+        if ($day['state'] === 'stored' && $day['site_id'] !== null && $day['leave_code'] === null) {
+            return $day['site_id'];
+        }
+
+        return match (true) {
+            $g === EmployeeType::Engineer => $lastSite,
+            Employment::offEveryCrewOn($employee, $date) => null,
+            default => Employment::homeSiteOn($employee, $date) ?? $lastSite,
+        };
     }
 
     /**
@@ -212,16 +261,16 @@ final class AttendanceGrid
     }
 
     /**
-     * Each day of $p under the field type the employee had that day, computed in that type's own period, so a day laborer's
-     * day keeps its half-month's lock and weekly off.
+     * Each day of $p under the type the employee had that day, computed in that type's own period, so a day laborer's day
+     * keeps its half-month's lock and weekly off, and an office day its calendar month's.
      *
      * @param  list<array<string, mixed>>  $employees  EmployeeRoster rows
      * @return array<string, array<string, array<string, mixed>>> employee id → date → day
      */
-    private function fieldDays(Period $p, array $employees): array
+    private function daysOfEveryType(Period $p, array $employees): array
     {
         $days = [];
-        foreach (self::FIELD as $type) {
+        foreach (EmployeeType::cases() as $type) {
             for ($q = Period::containing($type, $p->start); $q->start <= $p->end; $q = $q->next()) {
                 foreach ($this->days->forPeriod($q, $employees) as $id => $byDate) {
                     foreach ($byDate as $date => $d) {

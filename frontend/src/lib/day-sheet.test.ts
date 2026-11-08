@@ -3,10 +3,12 @@ import { bulkRows, DAY_VALUES, type DayValue, fold, matches, parseBatch, type Sh
 
 const blank = Object.fromEntries(DAY_VALUES.map((f) => [f, null])) as Record<DayValue, null>
 const row = (code: number, o: { day?: Partial<SheetRow['day']>; last_site_id?: string | null; hints?: SheetRow['hints']; department?: string | null; name_en?: string } = {}): SheetRow => ({
-  employee: { id: `e${code}`, code, name_ar: `مهندس ${code}`, name_en: o.name_en ?? `Engineer-${code}`, department: o.department ?? null },
+  employee: { id: `e${code}`, code, name_ar: `مهندس ${code}`, name_en: o.name_en ?? `Engineer-${code}`, department: o.department ?? null, type: 'engineer' },
+  site_id: null,
   day: { ...blank, state: 'missing', source: null, version: null, site_id: null, leave_code: null, ...o.day },
   hints: o.hints ?? {},
   last_site_id: o.last_site_id ?? null,
+  needs_site: false,
   totals: { worked: 0, leave: 0, absent: 0, missing: 0 },
 })
 const sheet = Array.from({ length: 12 }, (_, i) => row(i + 1))

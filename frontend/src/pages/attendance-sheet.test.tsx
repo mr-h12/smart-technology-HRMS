@@ -28,6 +28,7 @@ const row = (code: number, name: string, day: object, extra: object = {}) => ({
   day: { ...blank, state: 'missing', ...day },
   hints: {},
   last_site_id: null,
+  needs_site: false,
   totals: { worked: 12, leave: 4, absent: 1, missing: 2 },
   ...extra,
 })
@@ -41,7 +42,10 @@ const office = [
   row(11, 'Office-2', {}),
 ]
 const days = [{ date: '2026-10-17', missing: 2, off: false }, { date: '2026-10-18', missing: 1, off: false }, { date: '2026-10-19', missing: 0, off: false }]
-const sheet = (rows: object[], group = 'engineer') => json(200, { data: { group, date: '2026-10-18', days, rows } })
+type TestRow = ReturnType<typeof row>
+/** A row of the API's shape: every row names its type; a group's rows default to that group's. */
+const typed = (group: string) => (r: object) => ({ ...r, employee: { type: group === 'office' ? 'office' : 'engineer', ...(r as TestRow).employee } })
+const sheet = (rows: object[], group = 'engineer') => json(200, { data: { group, date: '2026-10-18', days, rows: rows.map(typed(group)) } })
 const sites = [
   { id: 's1', name_ar: 'Site-1', name_en: 'Site-1', kind: 'work', leave_code: null, active: true },
   { id: 'sa', name_ar: 'غياب', name_en: 'Absent', kind: 'leave', leave_code: 'absent', active: true },
@@ -133,6 +137,19 @@ test('period totals sit in the last cell of each row and at the bottom of each c
   const cards = within(screen.getByRole('list', { name: 'الموظف' })).getAllByRole('listitem')
   expect(cards).toHaveLength(3)
   for (const c of cards) expect(c.lastElementChild).toHaveTextContent(/^إجمالي الفترة.*12.*4.*1.*2/)
+})
+
+test('a card shows its period totals as one inline line: label then number, in the tone rules', async () => {
+  const one = row(1, 'Engineer-1', {}, { totals: { worked: 3, leave: 0, absent: 0, missing: 2 } })
+  mockFetch({ ...routes, 'GET /api/v1/attendance/sheet': () => sheet([one]) })
+  open()
+  const card = within(await screen.findByRole('list', { name: 'الموظف' })).getByRole('listitem')
+  const line = card.lastElementChild as HTMLElement
+  expect(line).toHaveTextContent(/في موقع\s*3.*إجازة\s*0.*غياب\s*0.*غير مسجل\s*2/)
+  expect(within(line).getByText('إجمالي الفترة')).toHaveClass('sr-only')
+  expect(within(line).getByText('3')).toHaveClass('text-success')
+  expect(within(line).getByText('2')).toHaveClass('text-warning')
+  for (const zero of within(line).getAllByText('0')) expect(zero).toHaveClass('text-muted-foreground')
 })
 
 test('the day strip marks the date and disables future days', async () => {
@@ -1598,4 +1615,233 @@ test('a times dialog box selects on focus, so typing 3 then م over 5:00 gives 3
   await user.click(within(dialog).getByRole('button', { name: 'تطبيق' }))
   await waitFor(() => expect(bulk).toHaveBeenCalledTimes(1))
   expect(sent(bulk).rows.map((r: { out_time: string }) => r.out_time)).toEqual(['15:00', '15:00'])
+})
+
+// HR's site filter (owner, 2026-11-08)
+const twoSites = () => json(200, { data: [...sites, { id: 's2', name_ar: 'Site-2', name_en: 'Site-2', kind: 'work', leave_code: null, active: true }], meta: { pagination } })
+const placed = [
+  row(1, 'Engineer-1', {}, { last_site_id: 's1', site_id: 's1' }),
+  row(2, 'Engineer-2', { state: 'stored', source: 'entered', version: 1, site_id: 's2' }, { last_site_id: 's2', site_id: 's2' }),
+  row(3, 'Engineer-3', {}, { last_site_id: 's2', site_id: 's2' }),
+  row(4, 'Engineer-4', {}, { site_id: null }),
+]
+const placedRoutes = { ...routes, 'GET /api/v1/sites': twoSites, 'GET /api/v1/attendance/sheet': () => sheet(placed) }
+const listed = () => within(screen.getByRole('table')).getAllByRole('row').slice(1).map((r) => within(r).getByText(/^(Engineer|Office|Worker)-/).textContent)
+const siteFilter = () => screen.findByRole('combobox', { name: 'الموقع' })
+
+test('the rows, the KPI counts and the cohorts follow the chosen site', async () => {
+  mockFetch(placedRoutes)
+  open('/attendance?group=engineer&site=s2')
+  await table()
+  expect(listed()).toEqual(['Engineer-2', 'Engineer-3'])
+  expect(screen.getByRole('button', { name: /^الإجمالي/ })).toHaveTextContent('1 من 2 مسجل')
+  expect(screen.getByRole('button', { name: /^غير مسجل/ })).toHaveTextContent('1')
+  const cohorts = within(screen.getByRole('group', { name: 'حسب آخر موقع' })).getAllByRole('button')
+  expect(cohorts).toHaveLength(1)
+  expect(cohorts[0]).toHaveTextContent('Site-2')
+})
+
+test('none lists only the rows with no site', async () => {
+  mockFetch(placedRoutes)
+  open('/attendance?group=engineer&site=none')
+  await table()
+  expect(listed()).toEqual(['Engineer-4'])
+  expect(await siteFilter()).toHaveValue('none')
+})
+
+test('picking a site narrows the loaded rows without another request, and drops the selection', async () => {
+  const get = vi.fn((_url: string) => sheet(placed))
+  mockFetch({ ...placedRoutes, 'GET /api/v1/attendance/sheet': get })
+  edit()
+  await table()
+  await user.click(within(screen.getByRole('table')).getByRole('checkbox', { name: 'تحديد Engineer-1' }))
+  const filter = await siteFilter()
+  await within(filter).findByRole('option', { name: 'Site-2' })
+  await user.selectOptions(filter, 's2')
+  await waitFor(() => expect(listed()).toEqual(['Engineer-2', 'Engineer-3']))
+  expect(screen.queryByRole('toolbar', { name: 'إجراء جماعي' })).toBeNull()
+  expect(get).toHaveBeenCalledTimes(1)
+  expect(get.mock.calls[0][0]).not.toContain('site')
+})
+
+test('a site change empties undo: the bar disables, and neither it nor the toast writes the hidden rows', async () => {
+  const bulk = bulkOk()
+  mockFetch({ ...placedRoutes, 'POST /api/v1/attendance/days/bulk': bulk })
+  edit()
+  await table()
+  await user.click(within(screen.getByRole('table')).getByRole('button', { name: 'حاضر Engineer-1' }))
+  await waitFor(() => expect(undoButton()).toHaveTextContent('تراجع (1)'))
+  const toastUndo = vi.mocked(toast.success).mock.calls.at(-1)![1]!.action as unknown as { onClick: (e: { preventDefault: () => void }) => void }
+  const filter = await siteFilter()
+  await within(filter).findByRole('option', { name: 'Site-2' })
+  await user.selectOptions(filter, 's2')
+  await waitFor(() => expect(listed()).toEqual(['Engineer-2', 'Engineer-3']))
+  expect(undoButton()).toHaveTextContent('تراجع (0)')
+  expect(undoButton()).toHaveAttribute('aria-disabled', 'true')
+  expect(toast.dismiss).toHaveBeenCalledWith('attendance-sheet-applied')
+  await user.click(undoButton())
+  toastUndo.onClick({ preventDefault: () => {} })
+  await new Promise((resolve) => setTimeout(resolve))
+  expect(bulk).toHaveBeenCalledTimes(1)
+})
+
+test('marking the rest writes only the rows of the chosen site', async () => {
+  const bulk = bulkOk()
+  mockFetch({ ...placedRoutes, 'POST /api/v1/attendance/days/bulk': bulk })
+  edit('/attendance?group=engineer&site=s2')
+  await table()
+  await user.click(screen.getByRole('button', { name: 'تسجيل الباقين حاضرين (1)' }))
+  await waitFor(() => expect(bulk).toHaveBeenCalled())
+  expect(sent(bulk).rows.map((r: { employee_id: string }) => r.employee_id)).toEqual(['e3'])
+})
+
+test('a cohort sweep and the paste box see only the rows of the chosen site', async () => {
+  const bulk = bulkOk()
+  mockFetch({ ...placedRoutes, 'POST /api/v1/attendance/days/bulk': bulk })
+  edit('/attendance?group=engineer&site=s2')
+  await table()
+  await user.click(screen.getByRole('button', { name: 'لصق أرقام' }))
+  const dialog = screen.getByRole('dialog', { name: 'لصق الأرقام الوظيفية' })
+  await user.type(within(dialog).getByRole('textbox', { name: 'الأرقام الوظيفية' }), '1 3')
+  expect(names(dialog)).toEqual(['3 Engineer-3']) // 1 is at Site-1, out of view
+  await user.keyboard('{Escape}')
+  await user.click(screen.getByRole('button', { name: 'تسجيل باقي Site-2 حاضرين' }))
+  await waitFor(() => expect(bulk).toHaveBeenCalled())
+  expect(sent(bulk).rows.map((r: { employee_id: string }) => r.employee_id)).toEqual(['e3'])
+})
+
+test('the strip drops the count while a site is chosen: it is the whole group, not the filtered rows', async () => {
+  mockFetch(placedRoutes)
+  open('/attendance?group=engineer&site=s2')
+  await table()
+  const day = screen.getByRole('button', { name: '2026-10-17' })
+  expect(day).not.toHaveTextContent('2')
+})
+
+test('someone without all-scope attendance gets no filter, and a site in the URL filters nothing', async () => {
+  mockFetch(placedRoutes)
+  open('/attendance?group=engineer&site=s2', ['attendance.view.own'])
+  await table()
+  expect(listed()).toEqual(['Engineer-1', 'Engineer-2', 'Engineer-3', 'Engineer-4'])
+  expect(screen.queryByRole('combobox', { name: 'الموقع' })).toBeNull()
+})
+
+const everyType = [
+  { ...row(1, 'Engineer-1', { state: 'stored', source: 'entered', version: 1, site_id: 's1', in_time: '08:00', out_time: '16:00' }, { last_site_id: 's1', site_id: 's1' }), employee: { id: 'e1', code: 1, name_ar: 'Engineer-1', name_en: 'Engineer-1', department: null, type: 'engineer' } },
+  { ...row(2, 'Engineer-2', {}, { site_id: null }), employee: { id: 'e2', code: 2, name_ar: 'Engineer-2', name_en: 'Engineer-2', department: null, type: 'engineer' } },
+  { ...row(10, 'Office-1', { state: 'stored', source: 'entered', version: 1, in_time: '09:40' }, { hints: { late_minutes: 25 }, site_id: 's1' }), employee: { id: 'e10', code: 10, name_ar: 'Office-1', name_en: 'Office-1', department: 'Accounts', type: 'office' } },
+  { ...row(11, 'Office-2', {}, { site_id: null, needs_site: true }), employee: { id: 'e11', code: 11, name_ar: 'Office-2', name_en: 'Office-2', department: null, type: 'office' } },
+  { ...row(20, 'Worker-1', {}, { site_id: null, needs_site: true }), employee: { id: 'e20', code: 20, name_ar: 'Worker-1', name_en: 'Worker-1', department: null, type: 'permanent_worker' } },
+]
+const allSheet = (rows: object[] = everyType) => json(200, { data: { group: 'all', date: '2026-10-18', days: days.map((d) => ({ ...d, missing: null })), rows } })
+const allRoutes = { ...placedRoutes, 'GET /api/v1/attendance/sheet': () => allSheet() }
+const allPath = '/attendance?group=all'
+const SET = 'تحديد الموقع'
+const lockedHead = { ...routes, 'GET /api/v1/attendance/period': () => json(200, { data: { ...period, is_locked: true, lock: { locked_by: { name: 'HR-1' }, locked_at: '2026-10-18T08:00:00Z' } } }) }
+
+test('All is view-only: Details on every row, no quick action, no selection, no cohort panel', async () => {
+  mockFetch(allRoutes)
+  edit(allPath)
+  const tbl = await table()
+  expect(within(tbl).getAllByRole('button', { name: /^التفاصيل / })).toHaveLength(5)
+  expect(within(tbl).queryByRole('checkbox')).toBeNull()
+  expect(within(tbl).queryByRole('textbox')).toBeNull()
+  expect(within(tbl).queryByRole('button', { name: /^حاضر / })).toBeNull()
+  expect(screen.queryByRole('group', { name: 'حسب آخر موقع' })).toBeNull()
+  expect(screen.queryByRole('button', { name: /^تسجيل الباقين/ })).toBeNull()
+  expect(screen.queryByRole('button', { name: 'لصق أرقام' })).toBeNull()
+})
+
+test('All opens the day editor from Details', async () => {
+  mockFetch({ ...allRoutes, 'GET /api/v1/attendance/days/e20/2026-10-18': () => json(200, { data: { ...blank, state: 'missing', date: '2026-10-18', employee_id: 'e20', type: 'permanent_worker', fields: ['in_time'], leave_day_fields: [], hints: {}, period: { start: '2026-09-26', end: '2026-10-25', is_locked: false } } }) })
+  open(allPath)
+  await user.click(within(await table()).getByRole('button', { name: 'التفاصيل Worker-1' }))
+  expect(await screen.findByRole('dialog', { name: /Worker-1/ })).toBeInTheDocument()
+})
+
+test('All has no lock UI: the engineers\' lock says nothing about the other types', async () => {
+  mockFetch({ ...lockedHead, 'GET /api/v1/sites': twoSites, 'GET /api/v1/attendance/sheet': () => allSheet() })
+  edit(allPath)
+  await table()
+  expect(screen.queryByText('الفترة مقفلة؛ الكشف للعرض فقط.')).toBeNull()
+  expect(screen.queryByText(/قفلها/)).toBeNull()
+  expect(screen.queryByRole('button', { name: 'إعادة الفتح' })).toBeNull()
+})
+
+test('in All the strip shows no number and its label claims no count', async () => {
+  mockFetch(allRoutes)
+  open(allPath)
+  await table()
+  const day = screen.getByRole('button', { name: '2026-10-17' })
+  expect(day.getAttribute('aria-label')).not.toMatch(/\d غير مسجل|null/)
+  expect(day).not.toHaveTextContent('null')
+})
+
+test('in All each row reads by its own type: late, its times, type and site', async () => {
+  mockFetch(allRoutes)
+  open(allPath)
+  await table()
+  const off = rowOf('Office-1')
+  expect(within(off).getByText('موظف مثبت شركة')).toBeInTheDocument()
+  expect(off).toHaveTextContent('متأخر 25 د')
+  expect(within(off).getByText('Site-1')).toBeInTheDocument()
+  expect(within(off).getByText('حاضر')).toBeInTheDocument() // an office employee's worked days are "present" in their totals
+  const eng = rowOf('Engineer-1')
+  expect(within(eng).getByText('مهندس')).toBeInTheDocument()
+  expect(within(eng).getByText('في موقع')).toBeInTheDocument()
+  expect(off.querySelectorAll('td')).toHaveLength(eng.querySelectorAll('td').length)
+  expect(eng).toHaveTextContent('Site-1')
+  expect(screen.getByRole('button', { name: /^حاضر/ })).toHaveTextContent('2') // a late office employee was still there
+})
+
+test('a single office group renders as before: arrival column first, no type, no out time', async () => {
+  mockFetch({ ...routes, 'GET /api/v1/attendance/period': officePeriod, 'GET /api/v1/attendance/sheet': () => sheet(office, 'office') })
+  edit('/attendance?group=office')
+  const headers = within(await table()).getAllByRole('columnheader').map((h) => h.textContent)
+  expect(headers.slice(1, 4)).toEqual(['الموظف', 'وقت الحضور', 'الحالة'])
+  expect(screen.queryByText('موظف مثبت شركة')).toBeNull()
+})
+
+test('the set-site button shows for an office employee or worker with no site, to a holder of the permission', async () => {
+  mockFetch(allRoutes)
+  open(allPath, ['attendance.view.all', 'employee.assign_site.all'])
+  await table()
+  expect(within(rowOf('Office-2')).getByRole('button', { name: `${SET} Office-2` })).toBeInTheDocument()
+  expect(within(rowOf('Worker-1')).getByRole('button', { name: `${SET} Worker-1` })).toBeInTheDocument()
+  expect(within(rowOf('Engineer-2')).queryByRole('button', { name: new RegExp(SET) })).toBeNull() // an engineer's site comes from the recorded day
+  expect(within(rowOf('Office-1')).queryByRole('button', { name: new RegExp(SET) })).toBeNull() // has a site
+})
+
+test('the server decides who gets the set-site button: a laborer off every crew has none and reads as no site', async () => {
+  const offCrew = { ...row(21, 'Worker-2', {}, { site_id: null, needs_site: false }), employee: { id: 'e21', code: 21, name_ar: 'Worker-2', name_en: 'Worker-2', department: null, type: 'day_laborer' } }
+  mockFetch({ ...allRoutes, 'GET /api/v1/attendance/sheet': () => allSheet([offCrew]) })
+  open(allPath, ['attendance.view.all', 'employee.assign_site.all'])
+  await table()
+  expect(within(rowOf('Worker-2')).queryByRole('button', { name: new RegExp(SET) })).toBeNull()
+  expect(within(rowOf('Worker-2')).getByText('بدون موقع')).toBeInTheDocument()
+})
+
+test('no set-site button without employee.assign_site', async () => {
+  mockFetch(allRoutes)
+  open(allPath)
+  await table()
+  expect(screen.queryByRole('button', { name: new RegExp(SET) })).toBeNull()
+})
+
+test('setting a site saves from the sheet date and refreshes the sheet', async () => {
+  const get = vi.fn((_url: string) => allSheet())
+  const post = vi.fn((_url: string, _init?: RequestInit) => json(201, { data: {} }))
+  mockFetch({ ...allRoutes, 'GET /api/v1/attendance/sheet': get, 'POST /api/v1/employees/e11/site-assignments': post })
+  open(`${allPath}&site=none`, ['attendance.view.all', 'employee.assign_site.all'])
+  await table()
+  await user.click(within(rowOf('Office-2')).getByRole('button', { name: `${SET} Office-2` }))
+  const dialog = await screen.findByRole('dialog', { name: SET })
+  await within(dialog).findByRole('option', { name: 'Site-2' })
+  await user.selectOptions(within(dialog).getByLabelText('الموقع الأساسي'), 's2')
+  expect(within(dialog).queryByLabelText('يعود إلى الموقع السابق في')).toBeNull() // there is no previous site to return to
+  const calls = get.mock.calls.length
+  await user.click(within(dialog).getByRole('button', { name: 'حفظ' }))
+  await waitFor(() => expect(post).toHaveBeenCalled())
+  expect(JSON.parse(String(post.mock.calls[0][1]?.body))).toEqual({ site_id: 's2', effective_from: '2026-10-18' })
+  await waitFor(() => expect(get.mock.calls.length).toBeGreaterThan(calls))
 })

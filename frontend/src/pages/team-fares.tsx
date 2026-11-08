@@ -12,6 +12,7 @@ import { Card } from '@/components/ui/card'
 import { useAuth } from '@/lib/auth'
 import { RESIDENCES, useApi, useSave } from '@/lib/query'
 import { NotFoundPage } from './pages'
+import { ResidenceDialog as AddResidence } from './sites'
 
 export type Ref = { id: string; name: string }
 export type TeamFareRow = { employee_id: string; code: number; name: string; type: 'engineer' | 'permanent_worker' | 'day_laborer'; residence: Ref | null; site: Ref | null; amount: string | null; source: 'override' | 'default' | 'none' | 'no_residence'; default_amount: string | null; overrides: { site_id: string; amount: string }[] }
@@ -33,8 +34,9 @@ export function TeamFaresPage() {
   const fillResidence = can('employee.edit')
   const pick = can('employee.view.all')
   const allowed = edit || can('employee.view.own')
-  const [lead, setLead] = useState('')
+  const [picked, setPicked] = useState('')
   const leads = useApi<Ref[]>(allowed && pick ? '/sites/manager-candidates' : null)
+  const lead = picked || leads.data?.[0]?.id
   const path = !allowed ? null : pick ? (lead ? `/team-fares?manager_id=${lead}` : null) : '/team-fares'
   const { data, err, loading } = useApi<TeamFares>(path)
   if (!allowed) return <NotFoundPage />
@@ -44,7 +46,7 @@ export function TeamFaresPage() {
       {pick && (
         <div role="group" aria-label={t('fare.lead')} className="flex flex-wrap gap-2">
           {(leads.data ?? []).map((m) => (
-            <button key={m.id} type="button" aria-pressed={lead === m.id} onClick={() => setLead(m.id)} className={chipCls}>
+            <button key={m.id} type="button" aria-pressed={lead === m.id} onClick={() => setPicked(m.id)} className={chipCls}>
               {m.name}
             </button>
           ))}
@@ -52,7 +54,7 @@ export function TeamFaresPage() {
       )}
       <ErrorBanner err={leads.err ?? err} shown={[]} />
       {path === null ? (
-        <EmptyState icon={Users} title={t('teamFare.pickLead')} />
+        leads.loading ? <TableSkeleton /> : leads.data && <EmptyState icon={Users} title={t('teamFare.noManagers')} />
       ) : loading || !data ? (
         !err && <TableSkeleton />
       ) : !data.rows.length ? (
@@ -102,7 +104,7 @@ function TeamTable({ team, edit, fillResidence }: { team: TeamFares; edit: boole
               cell: (r) =>
                 r.residence ? (
                   r.residence.name
-                ) : fillResidence && !isEngineer(r) ? (
+                ) : fillResidence ? (
                   <Button type="button" variant="outline" size="sm" onClick={() => setHousing(r)}>
                     {t('teamFare.setResidence')}
                   </Button>
@@ -195,9 +197,10 @@ function TeamFareDialog({ row, team, ...dialog }: { row: TeamFareRow; team: Team
   )
 }
 
-/** HR records a worker's missing residence; the residence × site fare then applies. */
+/** HR records a missing residence, for an engineer too; with site.manage a residence not in the list can be added here and comes back selected. */
 function ResidenceDialog({ row, ...dialog }: { row: TeamFareRow } & Controlled) {
   const { t } = useTranslation()
+  const { can } = useAuth()
   const send = useSave()
   const { rows: residences } = useList(RESIDENCES)
   return (
@@ -208,7 +211,12 @@ function ResidenceDialog({ row, ...dialog }: { row: TeamFareRow } & Controlled) 
       submit={(form) => send(`/employees/${row.employee_id}`, { method: 'PATCH', body: { residence_id: form.residence_id } }, ['/team-fares', '/employees'])}
       shown={['residence_id']}
     >
-      {(f) => <SelectField name="residence_id" label={t('teamFare.col.residence')} blank options={residences.map((r) => [r.id, r.name_ar])} {...f} />}
+      {(f) => (
+        <>
+          <SelectField name="residence_id" label={t('teamFare.col.residence')} blank options={residences.map((r) => [r.id, r.name_ar])} {...f} />
+          {can('site.manage') && <AddResidence onDone={(saved) => f.set('residence_id', saved.id)} />}
+        </>
+      )}
     </FormDialog>
   )
 }

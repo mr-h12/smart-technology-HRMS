@@ -44,7 +44,7 @@ A place where a day of work is done, usually a client location.
 _Avoid_: location, project, place (المكان)
 
 **Home site** (الموقع الأساسي):
-The site a worker belongs to from a date until HR moves them. A worker helping at another site, even for one day, is moved there first; a day laborer's one-day move is a crew change instead (see Crew).
+The site a worker belongs to from a date until HR moves them. A worker helping at another site, even for one day, is moved there first; a day laborer's one-day move is a crew change instead (see Crew). An office employee may hold one too, set by HR, but it only lists them at that site in HR's attendance filter: it gives no site manager reach and changes no pay, fare or site costing (owner, 2026-11-08). Engineers have none: where an engineer is comes from their recorded days.
 _Avoid_: current site, assigned site
 
 **Crew** (طاقم):
@@ -113,7 +113,7 @@ A weekly off day or official holiday the system fills in until HR records the da
 _Avoid_: default day, auto row
 
 **Day sheet** (كشف اليوم):
-One group's attendance for one date, where HR marks many employees at once.
+One group's attendance for one date, where HR marks many employees at once. The group All lists every type for reading only; each row's Details opens the day editor.
 _Avoid_: roll call, check-in screen
 
 **Last site** (آخر موقع):

@@ -336,7 +336,7 @@ function SiteList({ kind }: { kind: 'work' | 'leave' }) {
 export const SitesTab = () => <SiteList kind="work" />
 export const LeaveTypesTab = () => <SiteList kind="leave" />
 
-function ResidenceDialog({ residence, ...dialog }: { residence?: Row } & Controlled) {
+export function ResidenceDialog({ residence, onDone, ...dialog }: { residence?: Row; onDone?: (saved: Row) => void } & Controlled) {
   const { t } = useTranslation()
   const send = useSave()
   return (
@@ -346,7 +346,7 @@ function ResidenceDialog({ residence, ...dialog }: { residence?: Row } & Control
       trigger={residence ? undefined : <Button type="button" variant="outline" size="sm"><Plus />{t('residence.add')}</Button>}
       init={{ name_ar: residence?.name_ar ?? '' }}
       submit={(form) => (residence ? send(`/residences/${residence.id}`, { method: 'PATCH', body: { name_ar: form.name_ar } }) : send('/residences', { body: { name_ar: form.name_ar } }))}
-      onDone={() => {}}
+      onDone={onDone}
       shown={['name_ar']}
     >
       {(f) => <TextField name="name_ar" label={t('employee.name_ar')} {...f} />}

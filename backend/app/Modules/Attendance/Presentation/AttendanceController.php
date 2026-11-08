@@ -39,7 +39,7 @@ final class AttendanceController
         return ApiEnvelope::single($request, $this->grid->period(EmployeeType::from($q['group']), $q['period_start'] ?? null, $q['date'] ?? null, RequestScope::ownerId($request)));
     }
 
-    /** `group=all` (grid only) is every field type over the engineers' window. */
+    /** `group=all` is every type over the engineers' window. */
     public function grid(Request $request): JsonResponse
     {
         $q = $request->validate([...$this->periodRules(), 'group' => ['required', Rule::in(['all', ...array_column(EmployeeType::cases(), 'value')])], 'per_page' => ['sometimes', 'integer', 'min:1'], 'page' => ['sometimes', 'integer', 'min:1'], 'site_id' => ['sometimes', 'uuid']]);
@@ -58,9 +58,10 @@ final class AttendanceController
 
     public function sheet(Request $request): JsonResponse
     {
-        $q = $request->validate(['group' => ['required', Rule::enum(EmployeeType::class)], 'date' => ['required', 'date_format:Y-m-d']]);
+        $q = $request->validate(['group' => ['required', Rule::in(['all', ...array_column(EmployeeType::cases(), 'value')])], 'date' => ['required', 'date_format:Y-m-d']]);
+        $owner = RequestScope::ownerId($request);
 
-        return ApiEnvelope::single($request, $this->grid->sheet(EmployeeType::from($q['group']), $q['date'], RequestScope::ownerId($request)));
+        return ApiEnvelope::single($request, $q['group'] === 'all' ? $this->grid->sheetOfEveryType($q['date'], $owner) : $this->grid->sheet(EmployeeType::from($q['group']), $q['date'], $owner));
     }
 
     /** The Excel grid template of one period. It shows and later writes days, so it needs view and edit, and the narrower scope wins. */

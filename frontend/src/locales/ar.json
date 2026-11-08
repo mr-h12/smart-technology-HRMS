@@ -249,6 +249,7 @@
     "home": "الموقع الأساسي",
     "homeNone": "بدون موقع أساسي",
     "move": "نقل إلى موقع",
+    "set": "تحديد الموقع",
     "returnsOn": "يعود إلى الموقع السابق في",
     "homeHistory": "سجل المواقع الأساسية",
     "workers": "العمال",
@@ -462,7 +463,7 @@
       "attendance_locks": "قفل الحضور",
       "official_holidays": "الإجازات الرسمية",
       "notifications": "الإشعارات",
-      "employee_site_assignments": "المواقع الأساسية للعمال"
+      "employee_site_assignments": "المواقع الأساسية"
     },
     "onBehalfOf": "نيابة عن {{name}}"
   },
@@ -543,6 +544,7 @@
     "subtitle": "سجل أيام كل موظف حسب فترة مجموعته.",
     "groupLabel": "المجموعة",
     "siteFilter": "الموقع",
+    "noSite": "بدون موقع",
     "allSites": "كل المواقع",
     "group": {
       "all": "الكل",
@@ -1131,7 +1133,7 @@
       "pair_many": "لكل اللي ساكنين في {{residence}} وبيشتغلوا في {{site}} ({{count}} عامل)",
       "pair_other": "لكل اللي ساكنين في {{residence}} وبيشتغلوا في {{site}} ({{count}} عامل)"
     },
-    "pickLead": "اختر مدير الموقع",
+    "noManagers": "لسه مفيش مديرين مواقع.",
     "empty": "مفيش عمال في التيم النهارده."
   },
   "logs": {

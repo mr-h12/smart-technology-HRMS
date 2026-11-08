@@ -105,6 +105,15 @@ final class EmployeeRoster
             ->orderBy('code'));
     }
 
+    /** @return list<string> the office staff whose site on $date is $siteId; that site only lists them there (owner, 2026-11-08) */
+    public function officeIdsAt(string $siteId, string $date): array
+    {
+        return array_values(Employee::query()
+            ->whereRaw(Employee::TYPE_ON.' = ?', [$date, EmployeeType::Office->value])
+            ->whereRaw(Employee::SITE_ON.' = ?', [$date, $date, $date, $siteId])
+            ->pluck('id')->map(fn ($id) => (string) $id)->all());
+    }
+
     /** @return list<array<string, mixed>> the engineers employed on $date and assigned to $managerId on $date, by code */
     public function engineersOf(string $managerId, string $date): array
     {

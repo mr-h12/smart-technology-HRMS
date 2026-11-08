@@ -250,6 +250,32 @@ test('StatRow strip: one hero with its detail over one hairline-divided strip of
   for (const tile of within(row).getAllByRole('group')) expect(tile).not.toHaveAttribute('aria-label')
 })
 
+test('StatRow compact: every figure shares one row from md, label and number on one line, and tiles stay filter toggles', async () => {
+  const pick = vi.fn()
+  render(
+    <StatRow
+      layout="compact"
+      label="ملخص"
+      hero={{ label: 'الإجمالي', value: 5, detail: '3 من 5', progress: 0.6, select: { pressed: true, onSelect: () => pick('all') } }}
+      stats={[{ label: 'حاضر', value: 3, tone: 'success', select: { pressed: false, onSelect: () => pick('present') } }]}
+    />,
+  )
+  const row = screen.getByRole('group', { name: 'ملخص' })
+  expect(row).toHaveClass('grid', 'md:grid-flow-col', 'md:auto-cols-fr')
+  expect(row.querySelector('.text-kpi')).toBeNull()
+  expect(screen.getByText('3 من 5')).toBeInTheDocument()
+  expect(row.querySelector('[style*="width: 60%"]')).not.toBeNull()
+
+  const all = screen.getByRole('button', { name: /الإجمالي/ })
+  const present = screen.getByRole('button', { name: /حاضر/ })
+  expect(all).toHaveAttribute('aria-pressed', 'true')
+  expect(all).toHaveClass('border-primary', 'min-h-tap')
+  expect(present).toHaveClass('min-h-tap')
+  expect(within(present).getByText('3')).toHaveClass('text-success')
+  await user.click(present)
+  expect(pick).toHaveBeenCalledWith('present')
+})
+
 test('StatRow tiles with select are pressed toggles', async () => {
   const pick = vi.fn()
   render(
