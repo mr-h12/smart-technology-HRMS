@@ -38,7 +38,7 @@ lateness deduction      = chargeable late minutes × wage ÷ divisor × multipli
 - The multiplier is the employee type's, never the person's or the job title's. It is already a setting per type in Settings → Rules (`lateness_multiplier_office`, `_engineer`, `_permanent_worker`, `_day_laborer`, seeded 1, 1.5, 2, 2 by `2026_10_19_000001_create_settings`), like `overtime_multiplier`. No sheet in October used another value: the earlier reading "1.5 or 2 per person" came from engineers and permanent workers using two different sheet templates.
 - The wage is the system's wage in force on the day. No EGP-per-minute amount is imported or stored.
 - Allowances, fares and transport are not part of the wage here.
-- The grace is subtracted once. Late minutes stored on a day are the **raw** minutes after the shift start (⚠️ R18: confirm; the October office sheet typed `=42-15`, minutes already net of grace, so imported office history must not be reduced again).
+- The grace is subtracted once. Late minutes stored on a day are the **raw** minutes after the shift start (R18, owner 2026-11-08). The October office sheet typed `=42-15`, minutes already net of grace, so imported office history must not be reduced again.
 - Example, 08:00 start: arrival 08:15 → 0; arrival 08:20 → 5 chargeable minutes. Day laborer on 330 with multiplier 2: 5 × 330 ÷ 480 × 2 = **6.875**. Office, salary 9,000, multiplier 1: 5 × 9,000 ÷ 14,400 × 1 = **3.125**.
 - Early leave and overtime have their own rules; they reuse neither the multiplier nor the grace.
 - No rounding inside the formula (as everywhere); ⚠️ the rounding of the payable amount is still open (question 12).

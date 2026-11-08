@@ -219,7 +219,7 @@ Status is verified against `main` at `7be93b9` (PR #3 merged) by reading the cod
 
 ### Other decisions recorded
 - **Roles:** HR administers the system, manages employee records, rates and site assignments, and reviews and corrects attendance. Site managers record attendance and absences for their site teams and never see wages. HR and the General Manager review and approve Releases 1–2.
-  - ⚠️ "HR handles accounts" conflicts with "only the Developer creates accounts and sets passwords" (`CLAUDE.md`): R22.
+  - "HR handles accounts": decided by R22 (owner, 2026-11-08). HR creates accounts and sets passwords for HR and team-lead accounts, not for the Developer or the CEO.
   - ⚠️ "General Manager" may or may not be the CEO, and the CEO's account already sees every employee's current pay: R28.
 - **Advances:** the approval is on paper; the system records the request and prints it. Approval, disbursement (the advance amount on a day, or a ledger entry) and repayment (installments) stay separate records. ⚠️ This changes Release 3 item 1, which listed "advance" as an in-app request type.
 - **Forms:** the existing Word and PDF forms print as PDFs in their planned release. Releases 1–2 come first: employees and sites, attendance and leave, then payroll, fingerprint import, advances and payslips.
