@@ -1671,7 +1671,7 @@ test('a site change empties undo: the bar disables, and neither it nor the toast
   await table()
   await user.click(within(screen.getByRole('table')).getByRole('button', { name: 'حاضر Engineer-1' }))
   await waitFor(() => expect(undoButton()).toHaveTextContent('تراجع (1)'))
-  const toastUndo = vi.mocked(toast.success).mock.calls.at(-1)![1]!.action as { onClick: (e: { preventDefault: () => void }) => void }
+  const toastUndo = vi.mocked(toast.success).mock.calls.at(-1)![1]!.action as unknown as { onClick: (e: { preventDefault: () => void }) => void }
   const filter = await siteFilter()
   await within(filter).findByRole('option', { name: 'Site-2' })
   await user.selectOptions(filter, 's2')
