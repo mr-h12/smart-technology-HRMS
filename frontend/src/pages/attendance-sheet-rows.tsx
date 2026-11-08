@@ -24,7 +24,7 @@ const LOOK: Record<Status, { cls: string; text: string; icon: LucideIcon }> = {
   leave: { cls: 'bg-info-bg border-info-border', text: 'text-info', icon: CalendarOff },
   derived: { cls: 'border-dashed bg-muted', text: 'text-muted-foreground', icon: CalendarOff },
 }
-// the quick actions: [action, label key, icon, status tone]. The bulk bar and the paste dialog show all three; a row shows Present and puts the rest in its ⋯ menu
+// the quick actions: [action, label key, icon, status tone]. The bulk bar and the paste dialog show all three; a row shows Present and Absent and puts Sick in its ⋯ menu
 export const QUICK: [SheetAction, string, LucideIcon, string][] = [
   [{ kind: 'present' }, 'attendance.sheet.action.present', Check, 'text-success hover:bg-success-bg hover:border-success-border'],
   [{ kind: 'leave', code: 'absent' }, 'attendance.sheet.action.absent', UserX, 'text-destructive hover:bg-destructive-bg hover:border-destructive-border'],
@@ -40,8 +40,10 @@ const TOTALS = [['worked', 'text-success', 'attendance.sheet.kpi.worked'], ['lea
  * One page of the day sheet: a table from xl up, cards below it (below xl the table is wider than its card, in both groups). Below 2xl
  * the table's actions are icons, and its totals always sit in two columns, so the table fits its card. Writes go back through `onApply` (the sheet's `apply()`).
  */
-export function SheetRows({ rows, group, editable, date, sites, selected, pending, leaveTypeId, onToggle, onApply, onOpenDay }: {
+export function SheetRows({ rows, allIds, group, editable, date, sites, selected, pending, leaveTypeId, onToggle, onApply, onOpenDay }: {
   rows: SheetRow[]
+  /** Every row the filter shows, on every page: what the select-all box toggles. */
+  allIds: string[]
   /** The group shown; a row's own type decides how it reads, the group only the table's columns. */
   group: string
   editable: boolean
@@ -72,35 +74,36 @@ export function SheetRows({ rows, group, editable, date, sites, selected, pendin
     const s = sites.find((x) => x.id === r.day.site_id) ?? sites.find((x) => x.kind === 'leave' && x.leave_code === code)
     return s ? localName(s, lang, t(`attendance.leaveName.${code}`, { defaultValue: s.name_ar })) : t(`attendance.leaveName.${code}`, { defaultValue: code })
   }
-  const pageIds = rows.map((r) => r.employee.id)
-  const pageAll = pageIds.every((id) => selected.has(id))
-  const pageSome = pageIds.some((id) => selected.has(id))
+  const allOn = allIds.every((id) => selected.has(id))
+  const someOn = allIds.some((id) => selected.has(id))
   const noLeave = (a: SheetAction) => a.kind === 'leave' && !leaveTypeId(a.code)
   // a field row is present at its last site; without one there is nowhere to put it (bulk paths skip such rows with a toast)
   const noSite = (a: SheetAction, r: SheetRow) => a.kind === 'present' && !isOfficeRow(r) && !r.last_site_id
   const noSiteId = useId()
-  // the select-page box: in the table header from xl, on its own line above the cards below it
-  const pageCheck = <input type="checkbox" className={cn(FOCUS, 'size-4 accent-primary')} checked={pageAll} ref={(el) => { if (el) el.indeterminate = pageSome && !pageAll }} onChange={() => onToggle(pageIds, !pageAll)} />
+  // the select-all box (every filtered row, not just this page): in the table header from xl, on its own line above the cards below it
+  const allCheck = <input type="checkbox" className={cn(FOCUS, 'size-4 accent-primary')} checked={allOn} ref={(el) => { if (el) el.indeterminate = someOn && !allOn }} onChange={() => onToggle(allIds, !allOn)} />
   const check = (r: SheetRow) => (
     <label className="flex min-h-tap min-w-tap cursor-pointer items-center justify-center">
       <input type="checkbox" className={cn(FOCUS, 'size-4 accent-primary')} checked={selected.has(r.employee.id)} onChange={(e) => onToggle([r.employee.id], e.target.checked)} />
       <span className="sr-only">{t('attendance.sheet.select', { name: name(r) })}</span>
     </label>
   )
-  // compact (the table): icon-only below 2xl, named by its tooltip; the aria-label always names the action and the employee
-  const present = (r: SheetRow, compact = false) => {
-    const [action, label, Icon, tone] = QUICK[0]
+  // Present (QUICK[0]) or Absent (QUICK[1]), pressed when the row already is. compact (the table): icon-only below 2xl, named by its
+  // tooltip; the aria-label always names the action and the employee
+  const quick = (i: 0 | 1, r: SheetRow, compact = false) => {
+    const [action, label, Icon, tone] = QUICK[i]
     const s = status(r)
     return (
-      <Button type="button" variant="outline" size="sm" className={cn('px-2.5', tone, 'aria-pressed:border-success/25 aria-pressed:bg-success/10')} aria-pressed={s === 'present' || s === 'late'}
-        disabled={pending.has(r.employee.id) || noSite(action, r)} {...(compact && { title: t(label) })} {...(noSite(action, r) && { title: t('attendance.sheet.noLastSite'), 'aria-describedby': noSiteId })}
+      <Button type="button" variant="outline" size="sm" className={cn('px-2.5', tone, i ? 'aria-pressed:border-destructive/25 aria-pressed:bg-destructive/10' : 'aria-pressed:border-success/25 aria-pressed:bg-success/10')}
+        aria-pressed={i ? s === 'absent' : s === 'present' || s === 'late'}
+        disabled={pending.has(r.employee.id) || noSite(action, r) || noLeave(action)} {...(compact && { title: t(label) })} {...(noSite(action, r) && { title: t('attendance.sheet.noLastSite'), 'aria-describedby': noSiteId })}
         aria-label={t('attendance.sheet.rowAction', { action: t(label), name: name(r) })} onClick={() => onApply(action, r, t('attendance.sheet.actionOn', { action: t(label), name: name(r) }))}>
         <Icon aria-hidden />
         <span className={cn(compact && 'hidden 2xl:inline')}>{t(label)}</span>
       </Button>
     )
   }
-  // ⋯: the other quick actions and Details. Not modal, so the day editor it opens never inherits a blocked page
+  // ⋯: Sick and Details. Not modal, so the day editor it opens never inherits a blocked page
   const more = (r: SheetRow) => (
     <DropdownMenu modal={false}>
       <DropdownMenuTrigger asChild>
@@ -110,7 +113,7 @@ export function SheetRows({ rows, group, editable, date, sites, selected, pendin
         </Button>
       </DropdownMenuTrigger>
       <DropdownMenuContent align="end">
-        {QUICK.slice(1).map(([action, label, Icon]) => (
+        {QUICK.slice(2).map(([action, label, Icon]) => (
           <DropdownMenuItem key={label} disabled={pending.has(r.employee.id) || noLeave(action)} onSelect={() => onApply(action, r, t('attendance.sheet.actionOn', { action: t(label), name: name(r) }))}>
             <Icon aria-hidden />
             {t(label)}
@@ -260,8 +263,8 @@ export function SheetRows({ rows, group, editable, date, sites, selected, pendin
               {editable && (
                 <TableHead className="w-0 px-1 first:ps-2">
                   <label className="flex min-h-tap min-w-tap cursor-pointer items-center justify-center">
-                    {pageCheck}
-                    <span className="sr-only">{t('attendance.sheet.selectPage')}</span>
+                    {allCheck}
+                    <span className="sr-only">{t('attendance.sheet.selectAll', { count: allIds.length })}</span>
                   </label>
                 </TableHead>
               )}
@@ -297,7 +300,7 @@ export function SheetRows({ rows, group, editable, date, sites, selected, pendin
                 {!office && fieldTimes(r)}
                 <TableCell>
                   <div className="flex items-center justify-end gap-1.5">
-                    {editable ? <>{present(r, true)}{more(r)}</> : details(r, true)}
+                    {editable ? <>{quick(0, r, true)}{quick(1, r, true)}{more(r)}</> : details(r, true)}
                   </div>
                 </TableCell>
                 <TableCell className={cn('border-s', !selected.has(r.employee.id) && 'bg-muted/40')}>{tableTotals(r)}</TableCell>
@@ -308,8 +311,8 @@ export function SheetRows({ rows, group, editable, date, sites, selected, pendin
       </div>
       {editable && (
         <label className={cn(LINE, 'flex min-h-tap cursor-pointer items-center gap-1.5 ps-1.5 pe-4 text-sm font-medium xl:hidden')}>
-          <span className="flex min-h-tap min-w-tap items-center justify-center">{pageCheck}</span>
-          {t('attendance.sheet.selectPage')}
+          <span className="flex min-h-tap min-w-tap items-center justify-center">{allCheck}</span>
+          {t('attendance.sheet.selectAll', { count: allIds.length })}
         </label>
       )}
       <ul aria-label={t('attendance.employee')} className="xl:hidden">
@@ -330,7 +333,7 @@ export function SheetRows({ rows, group, editable, date, sites, selected, pendin
               <div className="flex min-w-0 grow items-center gap-2 sm:grow-0">
                 <div className="min-w-0">{where(r)}</div>
                 {setSite(r)}
-                <div className="ms-auto flex gap-2">{editable ? <>{present(r)}{more(r)}</> : details(r)}</div>
+                <div className="ms-auto flex gap-2">{editable ? <>{quick(0, r)}{quick(1, r)}{more(r)}</> : details(r)}</div>
               </div>
             </div>
             {(isOfficeRow(r) || status(r) === 'present') && <div className="grid gap-x-3 gap-y-1.5 sm:grid-cols-2">{times(r, cardCell)}</div>}
