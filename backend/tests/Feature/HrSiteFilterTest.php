@@ -274,6 +274,15 @@ class HrSiteFilterTest extends TestCase
         $this->getJson("/api/v1/employees/{$office}")->assertNotFound();
     }
 
+    public function test_the_employee_list_by_site_stays_workers_only(): void
+    {
+        $worker = $this->employee('permanent_worker');
+        $this->homeSite($worker, $this->s1, '2026-10-01');
+        $this->officeAt($this->s1);
+
+        $this->getJson("/api/v1/employees?site_id={$this->s1}")->assertOk()->assertJsonCount(1, 'data')->assertJsonPath('data.0.id', $worker);
+    }
+
     public function test_a_site_does_not_put_office_staff_on_the_site_day(): void
     {
         [$office, $manager] = $this->officeOnAManagersSite();

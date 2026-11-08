@@ -52,7 +52,9 @@ final class EmployeeService
         }
 
         if (isset($filters['site_id'])) {
-            $query->whereRaw(self::CURRENT_SITE.' = ?', [self::today(), $filters['site_id']]);
+            // an office employee's site only lists them in HR's attendance filter: this list is the site's workers
+            $query->whereRaw(self::CURRENT_SITE.' = ?', [self::today(), $filters['site_id']])
+                ->whereRaw(Employee::TYPE_ON.' in (?, ?)', [self::today(), EmployeeType::PermanentWorker->value, EmployeeType::DayLaborer->value]);
         }
 
         if (isset($filters['search']) && $filters['search'] !== '') {
