@@ -103,7 +103,7 @@ function TeamTable({ team, edit, fillResidence }: { team: TeamFares; edit: boole
               cell: (r) =>
                 r.residence ? (
                   r.residence.name
-                ) : fillResidence && !isEngineer(r) ? (
+                ) : fillResidence ? (
                   <Button type="button" variant="outline" size="sm" onClick={() => setHousing(r)}>
                     {t('teamFare.setResidence')}
                   </Button>

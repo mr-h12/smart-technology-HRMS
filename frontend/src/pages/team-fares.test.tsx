@@ -160,8 +160,8 @@ const saving = (extra = {}) => mockFetch({
   ...extra,
 })
 /** HR opens the page and picks the site manager m1. */
-const asHr = async () => {
-  const view = renderWithAuth(<TeamFaresPage />, HR)
+const asHr = async (permissions = HR) => {
+  const view = renderWithAuth(<TeamFaresPage />, permissions)
   await user.click(await screen.findByRole('button', { name: 'م. أحمد سامي' }))
   return view
 }
@@ -286,14 +286,31 @@ test('a site_id 422 shows in the banner when the dialog has no site field', asyn
   expect(await within(dialog).findByRole('alert')).toHaveTextContent('الموقع مش تبعك')
 })
 
-test('an engineer with no residence gets no residence button', async () => {
-  const rows = [row('w4', 'فتحي سالم', 'day_laborer', { residence: null, source: 'no_residence' }), row('e1', 'م. كريم فتحي', 'engineer', { residence: null, site: null })]
-  saving({ 'GET /api/v1/team-fares': team(rows) })
-  await asHr()
+const NO_RESIDENCE = [row('w4', 'فتحي سالم', 'day_laborer', { residence: null, source: 'no_residence' }), row('e1', 'م. كريم فتحي', 'engineer', { residence: null, site: null })]
+const ENGINEER_ROUTES = { 'GET /api/v1/team-fares': team(NO_RESIDENCE), 'PATCH /api/v1/employees/e1': () => json(200, { data: {} }) }
+/** Only the engineer's row can be asked for by position: both rows carry the same button text. */
+const openEngineerResidence = async () => {
   await screen.findByText('م. كريم فتحي')
-  expect(within(bodyRows()[0]).getByRole('button', { name: 'سجّل السكن' })).toBeInTheDocument()
-  expect(within(bodyRows()[1]).queryByRole('button', { name: 'سجّل السكن' })).toBeNull()
-  expect(within(bodyRows()[1]).getByText('السكن مش متسجل')).toBeInTheDocument()
+  await user.click(within(bodyRows()[1]).getByRole('button', { name: 'سجّل السكن' }))
+  return screen.findByRole('dialog', { name: 'سكن م. كريم فتحي' })
+}
+
+test('an engineer with no residence gets the button, and saving patches that engineer', async () => {
+  saving(ENGINEER_ROUTES)
+  await asHr()
+  const dialog = await openEngineerResidence()
+  await user.selectOptions(within(dialog).getByRole('combobox', { name: 'السكن' }), 'r2')
+  await user.click(within(dialog).getByRole('button', { name: 'حفظ' }))
+  await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull())
+  expect(patched()).toEqual([['/api/v1/employees/e1', { residence_id: 'r2' }]])
+})
+
+test('without employee.edit a row with no residence keeps the badge and has no button', async () => {
+  saving(ENGINEER_ROUTES)
+  await asHr(['fare.manage.all', 'employee.view.all', 'site.view.all', 'site.manage.all'])
+  await screen.findByText('م. كريم فتحي')
+  expect(screen.queryByRole('button', { name: 'سجّل السكن' })).toBeNull()
+  for (const r of bodyRows()) expect(within(r).getByText('السكن مش متسجل')).toBeInTheDocument()
 })
 
 const patched = () => vi.mocked(fetch).mock.calls.filter(([, i]) => i?.method === 'PATCH').map(([u, i]) => [String(u), JSON.parse(String(i!.body))])
