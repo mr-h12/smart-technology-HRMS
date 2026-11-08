@@ -18,28 +18,31 @@ For a monthly salary `S` (basic + raise):
 
 For a day laborer, the day rate is the worker's own daily wage (section 4), not S ÷ 30.
 
-## 0a. Lateness deduction (every type) — decided 2026-11-03
-Source: the owner's decision, with multipliers read from the October Excel formulas (workbook `معاملات_خصم_التأخير_لكلود.xlsx`, reference only, not committed: it names real employees).
+The divisor is always **30**, in every month (February and 31-day months included), and the periods are: office a calendar month, engineers and permanent workers the 26th → the 25th, day laborers 1–15 and 16 → the end. Both match every October formula (R26, 2026-11-06); the few Excel cells that divide by 31 are pasted values (`excel-system-analysis.md` error #7).
+
+## 0a. Lateness deduction (every type) — decided 2026-11-03, multiplier per type 2026-11-06
+Source: the owner's decision of 2026-11-03 (grace, divisor, wage). The multiplier is fixed per type (2026-11-06, R27), checked against every lateness formula in the October workbooks (office salary sheet, engineers and permanent workers, day laborers 1–15 Oct). The workbooks are reference only and not committed, because they name real employees.
 
 ```
 chargeable late minutes = max(0, late minutes − 15)          per day, grace applied once
 lateness deduction      = chargeable late minutes × wage ÷ divisor × multiplier
 ```
 
-| Group | Multiplier | Divisor | Wage |
-|---|---|---|---|
-| Office staff | 1 | 14,400 = 30 × 8 × 60 | monthly salary after the raise, in force on the day |
-| Monthly site staff (engineers, permanent workers) | **the employee's own**: 1.5 or 2 in October | 14,400 | the monthly salary used in that employee's sheet |
-| Day laborers | 2 in every extracted formula | 480 = 8 × 60 | the daily wage in force on the day |
+| Type | Multiplier | Divisor | Wage | October Excel |
+|---|---|---|---|---|
+| Office staff | **1** | 14,400 = 30 × 8 × 60 | monthly salary after the raise, in force on the day | all 27 rows: net late min × salary ÷ 30 ÷ 8 ÷ 60 |
+| Engineers | **1.5** | 14,400 | monthly salary in force on the day | every engineer-template sheet with formulas (6; one more has pasted values) |
+| Permanent workers | **2** | 14,400 | monthly salary in force on the day | every worker-template sheet (20) |
+| Day laborers | **2** | 480 = 8 × 60 | the daily wage in force on the day | every sheet with a lateness formula (222; 7 have none) |
 
-- The multiplier is the employee's, never derived from type or job title. A blank multiplier is **unresolved, not 0**: payroll must refuse to compute that employee's lateness, not deduct nothing.
+- The multiplier is the employee type's, never the person's or the job title's. It is already a setting per type in Settings → Rules (`lateness_multiplier_office`, `_engineer`, `_permanent_worker`, `_day_laborer`, seeded 1, 1.5, 2, 2 by `2026_10_19_000001_create_settings`), like `overtime_multiplier`. No sheet in October used another value: the earlier reading "1.5 or 2 per person" came from engineers and permanent workers using two different sheet templates.
 - The wage is the system's wage in force on the day. No EGP-per-minute amount is imported or stored.
 - Allowances, fares and transport are not part of the wage here.
 - The grace is subtracted once. Late minutes stored on a day are the **raw** minutes after the shift start (⚠️ R18: confirm; the October office sheet typed `=42-15`, minutes already net of grace, so imported office history must not be reduced again).
 - Example, 08:00 start: arrival 08:15 → 0; arrival 08:20 → 5 chargeable minutes. Day laborer on 330 with multiplier 2: 5 × 330 ÷ 480 × 2 = **6.875**. Office, salary 9,000, multiplier 1: 5 × 9,000 ÷ 14,400 × 1 = **3.125**.
 - Early leave and overtime have their own rules; they reuse neither the multiplier nor the grace.
 - No rounding inside the formula (as everywhere); ⚠️ the rounding of the payable amount is still open (question 12).
-- ⚠️ Changes from the earlier spec: the multiplier was per type (office 1, engineers 1.5, permanent workers 2, day laborers 2) and field types had no grace. Both changes can move the October fixture; every difference goes in the Excel-difference report with its reason. Do not edit the fixture to make a test pass.
+- ⚠️ Changes from the Excel: field types had no grace, and the permanent-worker template charged late **hours** × hour rate × 2 from the scheduled start. Both can move the October fixture; every difference goes in the Excel-difference report with its reason. Do not edit the fixture to make a test pass. (The 2026-11-03 rule of a multiplier per employee is withdrawn: 2026-11-06, R27.)
 
 ## 1. Office staff (موظفين مثبتين شركة): calendar month
 
@@ -52,7 +55,7 @@ lateness deduction      = chargeable late minutes × wage ÷ divisor × multipli
 - Daily late minutes = max(0, check-in − shift start − **15 grace**)
 - If an approved late permission covers that day, its late minutes = 0
 - Net late minutes = Σ daily late − exemption (entered by HR)
-- Lateness deduction = net late minutes × minute rate × the employee's multiplier (§0a; 1 for every office row in October)
+- Lateness deduction = net late minutes × minute rate × **1** (the office multiplier, §0a)
 - The import flags missing punches and early leave (check-out before shift end); HR confirms or edits each flag.
 - Office lateness from in time: max(0, in − shift start − **15** grace), where shift start is **09:00** (`office_shift_start`) or the pay-row override. It is shown as a minutes hint; the fingerprint import fills the same fields in Release 2.
 
@@ -88,9 +91,9 @@ Each day records: site, arrival and departure, OT minutes, late minutes, minutes
   suggests no OT. Confirm with the owner whether OT starts at the shift end or after 8 h.
   HR confirms by entering the minutes; payroll reads only the stored minutes.
 
-- Day extra = OT min × minute rate × **1.5** − chargeable late min × minute rate × the employee's multiplier (§0a; was a flat **1.5**) + outside-Alex min × minute rate
+- Day extra = OT min × minute rate × **1.5** − chargeable late min × minute rate × **1.5** (the engineer multiplier, §0a) + outside-Alex min × minute rate
 - Day cost = day rate + day extra (used for site costing, section 8)
-- Absence = days marked غ × day rate. HR marks them for now (1c); the manager later. ⚠️ Verified only for office staff (§1); confirm for engineers before payroll (R21).
+- Absence = days marked غ × day rate. HR marks them for now (1c); the manager later. ⚠️ Verified only for office staff (§1); confirm for engineers before payroll (R21). The October Excel deducts no absence for engineers or permanent workers: the summary's غياب column is 0 for 20 of 22 people, and the other 2 link to a «خصم يوم اجازة» cell holding 0.
 - Deduction (الخصم) = penalty entered by HR with a reason
 - Net = salary + Σ day extra − absence − deduction − insurance − tax − advance installments
 
@@ -144,7 +147,7 @@ Each day records: scheduled in/out (default: the field shift, §2b), actual in/o
 
 - Hours worked = actual out − actual in. If out is earlier than in, the shift crossed midnight: add 24 h.
 - Late hours = actual in − scheduled in (if positive)
-- Lateness money = chargeable late minutes × minute rate × the employee's multiplier (§0a; was late hours × hour rate × a flat **2**, with no grace)
+- Lateness money = chargeable late minutes × minute rate × **2** (the permanent-worker multiplier, §0a; the Excel charged late hours × hour rate × 2, with no grace)
 - OT hours = max(0, hours worked − **8**)
 - OT money = OT hours × hour rate × **1.5** + outside-Alex money
 - Transport = fare (section 4 fare rule; HR sets every fare) for full, fare ÷ 2 for half. HR picks per day for now (1c), the manager later; default full, including on a missing or future work day. A leave day stores none.
@@ -164,7 +167,7 @@ Each day records a site, arrival and departure (§2 defaults and hints), OT and 
 | Allowance (بدل) | the site's allowance rule: a share of the wage (e.g. Alex Apparel = wage × 0.25, Nestlé Sharm = wage × 2) or a fixed amount. Most sites 0 |
 | Transport | fare: the worker's override for that site if set, else the residence × site fare, else 0 (no fare, or no residence). Engineers get transport only from an override, never the residence × site fare (owner default, 2026-11-05). HR sets every fare (the residence × site default, plus per-worker overrides); the team lead reads their own team's fares. ⚠️ the October Excel pays 0 transport to every day laborer: the October fixture runs with no day-laborer fares, and the difference goes in the Excel-difference report. |
 | OT money | OT min × (wage ÷ 8 ÷ 60) × **1.5** |
-| Lateness | chargeable late min × wage ÷ 480 × the worker's multiplier (§0a; 2 in October) |
+| Lateness | chargeable late min × wage ÷ 480 × **2** (the day-laborer multiplier, §0a) |
 | Day total | wage + allowance + transport + OT − lateness |
 
 ```
@@ -172,6 +175,7 @@ Net = Σ wage + Σ allowance + Σ transport + Σ OT + bonuses
       − Σ lateness − advance installments − deductions
 ```
 Day laborers have no social insurance and no leave balance.
+⚠️ A partial day (half a day, or leaving early) is open (R25). The October Excel pays the full daily wage and deducts only lateness; no sheet has an early-leave formula.
 ⚠️ Does a worker's wage itself ever change by site, or only the allowance?
 
 Example: daily wage 330 at a site with no allowance, fare 35, 60 OT minutes → 330 + 0 + 35 + (60 × 330/480 × 1.5 = 61.875) = **426.875** for that day (shown 426.88).
