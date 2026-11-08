@@ -65,7 +65,7 @@ export function DaySheet({ group, date, site, period, onDate, onOpenDay }: { gro
   const qc = useQueryClient()
   const save = useSave()
   const office = group === 'office'
-  const all = group === 'all' // view only: each row's Details opens the day editor; quick recording stays inside a single group
+  const all = group === 'all'
   const path = `/attendance/sheet?${new URLSearchParams({ group, date })}`
   const { data: sheet, err, loading } = useApi<Sheet>(path)
   const { data: sites = [] } = useApi<Row[]>(SITES)
@@ -105,8 +105,9 @@ export function DaySheet({ group, date, site, period, onDate, onOpenDay }: { gro
   const [pending, setPending] = useState<ReadonlySet<string>>(new Set())
   const daysId = useId()
   const cohortsId = useId()
-  // the header's period may still be the previous one while the next loads: write only into the period that holds this date
-  const editable = !all && !!period && period.group === group && period.start <= date && date <= period.end && !period.is_locked && can('attendance.edit')
+  // the header's period may still be the previous one while the next loads: write only into the period that holds this date.
+  // All has no one period: each row carries its own type's lock, and a locked row is never written
+  const editable = can('attendance.edit') && (all || (!!period && period.group === group && period.start <= date && date <= period.end && !period.is_locked))
   const leaveTypeId = (code: string) => sites.find((s) => s.kind === 'leave' && s.leave_code === code && s.active)?.id as string | undefined
   const workSites = sites.filter((s) => s.kind === 'work' && s.active)
 
@@ -141,14 +142,17 @@ export function DaySheet({ group, date, site, period, onDate, onOpenDay }: { gro
 
   /** The one writer: sends `action` for `chosen` (minus rows in flight or already in that state), pushes it onto the undo stack and returns it, or null when nothing was written. */
   async function apply(action: SheetAction, chosen: SheetRow[], label: string): Promise<Applied | null> {
-    const free = chosen.filter((r) => !flight.current.has(r.employee.id))
-    const { rows: out, skipped } = bulkRows(action, free, leaveTypeId, office)
+    const free = chosen.filter((r) => !r.locked && !flight.current.has(r.employee.id))
+    const locked = chosen.filter((r) => r.locked).length // only a paste reaches a locked row: the row, rest and select-all leave them out
+    const { rows: out, skipped } = bulkRows(action, free, leaveTypeId)
     if (out.length > MAX_BATCH) {
       toast.error(t('attendance.sheet.toast.tooMany', { max: MAX_BATCH }))
       return null
     }
-    if (skipped.length) toast.warning(t('attendance.sheet.toast.skippedNoSite', { count: skipped.length }))
-    else if (!out.length) toast.info(t('attendance.sheet.toast.nothingToChange'))
+    if (locked) toast.warning(t('attendance.sheet.toast.skippedLocked', { count: locked }))
+    // Set site skips only office rows (no work site); every other skip is a field row with no site to use
+    if (skipped.length) toast.warning(t(action.kind === 'site' ? 'attendance.sheet.toast.skippedOffice' : 'attendance.sheet.toast.skippedNoSite', { count: skipped.length }))
+    else if (!out.length && !locked) toast.info(t('attendance.sheet.toast.nothingToChange'))
     if (!out.length) return null
     const before = out.map((b) => free.find((r) => r.employee.id === b.employee_id)!)
     const after = await write(date, out, before, 'attendance.sheet.toast.conflict')
@@ -217,7 +221,7 @@ export function DaySheet({ group, date, site, period, onDate, onOpenDay }: { gro
   const pickCohort = (key: string) => { setCohort(key === cohort ? null : key); setPage(1); unselect() }
 
   const isMissing = (r: SheetRow) => status(r) === 'missing'
-  const rest = shown.filter(isMissing)
+  const rest = shown.filter((r) => isMissing(r) && !r.locked)
   const picked = shown.filter((r) => selected.has(r.employee.id))
   const toggle = (ids: string[], on: boolean) => setSelected((cur) => {
     const next = new Set(cur)
@@ -232,6 +236,7 @@ export function DaySheet({ group, date, site, period, onDate, onOpenDay }: { gro
       {/* a failed background refetch: the last good sheet stays under the error */}
       <ErrorBanner err={err} shown={[]} />
       {!all && period?.is_locked && <Alert tone="info" icon={Lock}>{t('attendance.sheet.locked')}</Alert>}
+      {all && rows.some((r) => r.locked) && <Alert tone="info" icon={Lock}>{t('attendance.sheet.someLocked')}</Alert>}
 
       <StatRow
         layout="compact"
@@ -344,7 +349,7 @@ export function DaySheet({ group, date, site, period, onDate, onOpenDay }: { gro
           <EmptyState icon={Users} title={t('attendance.sheet.noMatch')} />
         ) : (
           <>
-            <SheetRows rows={pageRows} allIds={shown.map((r) => r.employee.id)} group={group} editable={editable} date={date} sites={sites} selected={selected} pending={pending} leaveTypeId={leaveTypeId}
+            <SheetRows rows={pageRows} allIds={shown.flatMap((r) => (r.locked ? [] : [r.employee.id]))} group={group} editable={editable} date={date} sites={sites} selected={selected} pending={pending} leaveTypeId={leaveTypeId}
               onToggle={toggle} onApply={(action, r, label) => apply(action, [r], label)} onOpenDay={onOpenDay} />
             <Pagination page={page} pageSize={PER_PAGE} total={shown.length} onPageChange={setPage} />
           </>
@@ -391,7 +396,7 @@ export function DaySheet({ group, date, site, period, onDate, onOpenDay }: { gro
         </FormDialog>
       )}
       {editable && timing && (
-        <TimesDialog rows={picked} office={office} onOpenChange={setTiming}
+        <TimesDialog rows={picked} onOpenChange={setTiming}
           onApply={async (action, chosen, label) => { const done = await apply(action, chosen, label); if (done) unselect(); return !!done }} />
       )}
     </div>

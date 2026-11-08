@@ -675,6 +675,7 @@
       "lastSite": "Last site: {{site}}",
       "totals": "Period totals",
       "locked": "This period is locked; the sheet is read-only.",
+      "someLocked": "Some rows are in a locked period and cannot be edited.",
       "noMatch": "No employees match.",
       "dayLabel": "{{date}} — {{count}} not recorded",
       "rowAction": "{{action}}: {{name}}",
@@ -713,6 +714,8 @@
         "matches": "Employees to be marked"
       },
       "toast": {
+        "skippedLocked": "{{count}} skipped: locked period.",
+        "skippedOffice": "{{count}} skipped: office staff have no work site.",
         "applied": "{{count}} recorded",
         "skippedNoSite": "{{count}} skipped: no last site. Record them from Details.",
         "tooMany": "At most {{max}} rows can be recorded at once; narrow the choice.",

@@ -15,6 +15,8 @@ export type SheetRow = {
   hints: { late_minutes?: number; ot_minutes?: number }
   last_site_id: string | null
   totals: { worked: number; leave: number; absent: number; missing: number }
+  /** Whether the row's own type period is locked: in All each row carries its type's lock. */
+  locked: boolean
 }
 
 /** One `rows[]` item of `POST /attendance/days/bulk`. The endpoint refuses `clear: false`, so `clear` is `true` or absent. */
@@ -68,13 +70,14 @@ export function parseBatch(input: string, rows: SheetRow[]): { matches: SheetRow
 /** A stored time ("HH:MM" or "HH:MM:SS") as "HH:MM"; null stays null. */
 export const hhmm = (t: string | number | null) => (t == null ? null : String(t).slice(0, 5))
 
-/** The bulk rows for one action over the chosen rows; rows already in the target state are left out. */
-export function bulkRows(action: SheetAction, rows: SheetRow[], leaveTypeId: (code: string) => string | undefined, office: boolean): { rows: BulkRow[]; skipped: SheetRow[] } {
+/** The bulk rows for one action over the chosen rows, each read by its own type; rows already in the target state are left out. */
+export function bulkRows(action: SheetAction, rows: SheetRow[], leaveTypeId: (code: string) => string | undefined): { rows: BulkRow[]; skipped: SheetRow[] } {
   const out: BulkRow[] = []
   const skipped: SheetRow[] = []
   const leave = action.kind === 'leave' ? leaveTypeId(action.code) : undefined
   for (const r of rows) {
     const d = r.day
+    const office = isOfficeRow(r)
     const stored = d.state === 'stored'
     const base = { employee_id: r.employee.id, version: d.version }
     if (action.kind === 'present') {
@@ -85,7 +88,9 @@ export function bulkRows(action: SheetAction, rows: SheetRow[], leaveTypeId: (co
       if (!leave) skipped.push(r)
       else if (!(stored && d.site_id === leave)) out.push({ ...base, site_id: leave })
     } else if (action.kind === 'site') {
-      if (!(stored && d.site_id === action.siteId)) out.push({ ...base, site_id: action.siteId })
+      // an office day has no work site
+      if (office) skipped.push(r)
+      else if (!(stored && d.site_id === action.siteId)) out.push({ ...base, site_id: action.siteId })
     } else {
       // a time keeps the row where it is: office present has no site; a field row stays at its stored work site, and without one it is skipped
       const site = office ? null : d.site_id

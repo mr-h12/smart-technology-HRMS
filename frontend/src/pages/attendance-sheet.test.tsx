@@ -1816,17 +1816,75 @@ const allPath = '/attendance?group=all'
 const SET = 'تحديد الموقع'
 const lockedHead = { ...routes, 'GET /api/v1/attendance/period': () => json(200, { data: { ...period, is_locked: true, lock: { locked_by: { name: 'HR-1' }, locked_at: '2026-10-18T08:00:00Z' } } }) }
 
-test('All is view-only: Details on every row, no quick action, no selection, no cohort panel', async () => {
+const allType = (code: number, name: string, type: string, day: object, extra: object = {}) => ({ ...row(code, name, day, extra), employee: { id: `e${code}`, code, name_ar: name, name_en: name, department: null, type } })
+const mixed = [
+  allType(2, 'Engineer-2', 'engineer', {}, { last_site_id: 's2', site_id: 's2' }),
+  allType(11, 'Office-2', 'office', {}, { site_id: 's1' }),
+  allType(20, 'Worker-1', 'permanent_worker', {}, { last_site_id: 's1', site_id: 's1' }),
+]
+const ids = (fn: ReturnType<typeof vi.fn>, call = 0) => sent(fn, call).rows.map((r: { employee_id: string; site_id: string | null }) => [r.employee_id, r.site_id])
+
+test('All records like a group: quick actions, selection, the rest buttons and paste; still no cohort panel', async () => {
   mockFetch(allRoutes)
   edit(allPath)
   const tbl = await table()
-  expect(within(tbl).getAllByRole('button', { name: /^التفاصيل / })).toHaveLength(5)
-  expect(within(tbl).queryByRole('checkbox')).toBeNull()
-  expect(within(tbl).queryByRole('textbox')).toBeNull()
-  expect(within(tbl).queryByRole('button', { name: /^حاضر / })).toBeNull()
+  expect(within(tbl).getByRole('button', { name: 'حاضر Office-2' })).toBeInTheDocument()
+  expect(within(tbl).getByRole('checkbox', { name: 'تحديد الكل (5)' })).toBeInTheDocument()
+  expect(screen.getByRole('button', { name: 'تسجيل الباقين حاضرين (3)' })).toBeInTheDocument()
+  expect(screen.getByRole('button', { name: 'لصق أرقام' })).toBeInTheDocument()
   expect(screen.queryByRole('group', { name: 'حسب آخر موقع' })).toBeNull()
-  expect(screen.queryByRole('button', { name: /^تسجيل الباقين/ })).toBeNull()
-  expect(screen.queryByRole('button', { name: 'لصق أرقام' })).toBeNull()
+  expect(rowOf('Office-1').querySelectorAll('td')).toHaveLength(rowOf('Engineer-1').querySelectorAll('td').length)
+})
+
+test('in All a row\'s ✓ writes by its own type, and the rest goes out in one write: office with no site, field at its last site', async () => {
+  const bulk = bulkOk()
+  mockFetch({ ...allRoutes, 'GET /api/v1/attendance/sheet': () => allSheet(mixed), 'POST /api/v1/attendance/days/bulk': bulk })
+  edit(allPath)
+  await table()
+  await user.click(within(rowOf('Office-2')).getByRole('button', { name: 'حاضر Office-2' }))
+  await waitFor(() => expect(bulk).toHaveBeenCalledTimes(1))
+  expect(ids(bulk)).toEqual([['e11', null]])
+  await waitFor(() => expect(screen.getByRole('button', { name: 'تسجيل الباقين حاضرين (3)' })).toBeEnabled())
+  await user.click(screen.getByRole('button', { name: 'تسجيل الباقين حاضرين (3)' }))
+  await waitFor(() => expect(bulk).toHaveBeenCalledTimes(2))
+  expect(ids(bulk, 1)).toEqual([['e2', 's2'], ['e11', null], ['e20', 's1']])
+})
+
+test('in All the rest absent over a chosen site writes only that site\'s rows', async () => {
+  const bulk = bulkOk()
+  mockFetch({ ...allRoutes, 'GET /api/v1/attendance/sheet': () => allSheet(mixed), 'POST /api/v1/attendance/days/bulk': bulk })
+  edit(`${allPath}&site=s1`)
+  await table()
+  await user.click(screen.getByRole('button', { name: 'تسجيل الباقين غياب (2)' }))
+  await confirmAbsent()
+  await waitFor(() => expect(bulk).toHaveBeenCalled())
+  expect(ids(bulk)).toEqual([['e11', 'sa'], ['e20', 'sa']])
+})
+
+test('in All a row in a locked period is read only and left out of the rest and select-all, under one notice', async () => {
+  const bulk = bulkOk()
+  const rows = [{ ...mixed[0], locked: true }, mixed[1], mixed[2]]
+  mockFetch({ ...allRoutes, 'GET /api/v1/attendance/sheet': () => allSheet(rows), 'POST /api/v1/attendance/days/bulk': bulk })
+  edit(allPath)
+  const tbl = await table()
+  expect(screen.getByText('بعض الصفوف في فترة مقفلة ولا يمكن تعديلها.')).toBeInTheDocument()
+  const locked = rowOf('Engineer-2')
+  expect(within(locked).queryByRole('checkbox')).toBeNull()
+  expect(within(locked).queryByRole('button', { name: /^حاضر / })).toBeNull()
+  expect(within(locked).getByRole('button', { name: 'التفاصيل Engineer-2' })).toBeInTheDocument()
+  expect(locked.querySelectorAll('td')).toHaveLength(rowOf('Office-2').querySelectorAll('td').length)
+  await user.click(within(tbl).getByRole('checkbox', { name: 'تحديد الكل (2)' }))
+  expect(screen.getByRole('group', { name: 'إجراءات المحدد' })).toHaveTextContent('2 محدد')
+  await user.click(screen.getByRole('button', { name: 'تسجيل الباقين حاضرين (2)' }))
+  await waitFor(() => expect(bulk).toHaveBeenCalled())
+  expect(ids(bulk)).toEqual([['e11', null], ['e20', 's1']])
+})
+
+test('All shows no locked-rows notice while no row is locked', async () => {
+  mockFetch(allRoutes)
+  edit(allPath)
+  await table()
+  expect(screen.queryByText('بعض الصفوف في فترة مقفلة ولا يمكن تعديلها.')).toBeNull()
 })
 
 test('All opens the day editor from Details', async () => {

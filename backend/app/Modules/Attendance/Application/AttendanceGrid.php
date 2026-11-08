@@ -96,8 +96,8 @@ final class AttendanceGrid
     }
 
     /**
-     * One group's employees on one date (those employed then, by code), with the day, its hints, the last site and the period totals,
-     * plus the period's missing days per date.
+     * One group's employees on one date (those employed then, by code), with the day, its hints, the last site, the period totals and
+     * whether the period is locked (on each row, so All's merged rows keep their own type's lock), plus the period's missing days per date.
      *
      * @return array{group: string, date: string, days: list<array{date: string, missing: int, off: bool}>, rows: list<array<string, mixed>>}
      */
@@ -122,6 +122,7 @@ final class AttendanceGrid
             }
         }
         $off = $this->days->offDays($p);
+        $locked = PeriodGuard::isLocked($p);
 
         $rows = [];
         foreach ($employed as $e) {
@@ -149,6 +150,7 @@ final class AttendanceGrid
                 'hints' => (object) $this->days->hints($g, $e, $day, $settings),
                 'last_site_id' => $lastSites[$e['id']] ?? null,
                 'totals' => $totals,
+                'locked' => $locked,
             ];
         }
 
