@@ -8,6 +8,8 @@
 
 **Tech Stack:** Laravel 13 / PHP 8.4, PostgreSQL 17 (`NUMERIC(18,6)` via the `money()` macro), bcmath, PHPUnit on `hrms_test`, OpenSpout 5.12 (fixture extraction only), React 19 + Vite + react-i18next.
 
+**Status:** approved by the owner on 2026-11-09.
+
 **Spec:** `docs/superpowers/specs/2026-11-09-payroll-engines-design.md`. Formulas: `docs/calculations.md` §0–§7, §10. Read both before any task.
 
 ## Global Constraints
