@@ -41,7 +41,7 @@ lateness deduction      = chargeable late minutes × wage ÷ divisor × multipli
 - The grace is subtracted once. Late minutes stored on a day are the **raw** minutes after the shift start (⚠️ R18: confirm; the October office sheet typed `=42-15`, minutes already net of grace, so imported office history must not be reduced again).
 - Example, 08:00 start: arrival 08:15 → 0; arrival 08:20 → 5 chargeable minutes. Day laborer on 330 with multiplier 2: 5 × 330 ÷ 480 × 2 = **6.875**. Office, salary 9,000, multiplier 1: 5 × 9,000 ÷ 14,400 × 1 = **3.125**.
 - Early leave and overtime have their own rules; they reuse neither the multiplier nor the grace.
-- No rounding inside the formula (as everywhere); ⚠️ the rounding of the payable amount is still open (question 12).
+- No rounding inside the formula (as everywhere), and none on the payable amount either: the net is paid as computed, shown to 2 decimals (owner, 2026-11-09, question 12). HR may override a net with a reason.
 - ⚠️ Changes from the Excel: field types had no grace, and the permanent-worker template charged late **hours** × hour rate × 2 from the scheduled start. Both can move the October fixture; every difference goes in the Excel-difference report with its reason. Do not edit the fixture to make a test pass. (The 2026-11-03 rule of a multiplier per employee is withdrawn: 2026-11-06, R27.)
 
 ## 1. Office staff (موظفين مثبتين شركة): calendar month
@@ -83,19 +83,20 @@ Example (S = 9,000): 60 late minutes after grace → 60 × 0.625 = **37.50** ded
 Each day records: site, arrival and departure, OT minutes, late minutes, minutes worked outside Alexandria, advance taken. Weekly off **Friday**.
 
 - Arrival/departure default to the field shift on Present (§13). They suggest late = max(0, arrival − shift start) and
-  OT = max(0, hours worked − **8** h) as hints, as for permanent workers (§3); the shift is the per-employee shift, else
-  the field shift setting (`worker_shift_start`/`worker_shift_end`, §2b). The owner's field shift is **09:00–16:00**
-  (R19, 2026-11-04), which HR sets in Settings at rollout; until then the setting holds **08:00–17:00** (migration
-  `2026_11_02_000001_set_field_shift_end`), where the default day suggests 60 OT minutes (client question 20).
-  ⚠️ At 09:00–16:00 the shift is 7 h but the OT hint still starts after **8** h worked, so up to an hour after the shift end
-  suggests no OT. Confirm with the owner whether OT starts at the shift end or after 8 h.
+  OT = max(0, departure − shift end) as hints; the shift is the per-employee shift, else the field shift setting
+  (`worker_shift_start`/`worker_shift_end`, §2b). The owner's field shift is **09:00–16:00** (R19, 2026-11-04), which HR
+  sets in Settings at rollout; until then the setting holds **08:00–17:00** (migration `2026_11_02_000001_set_field_shift_end`).
+  Overtime starts at the **shift end**, not after 8 h worked (owner, 2026-11-09, client question 20): shift 09:00–16:00,
+  departure 17:30 → 90 OT minutes suggested.
   HR confirms by entering the minutes; payroll reads only the stored minutes.
 
 - Day extra = OT min × minute rate × **1.5** − chargeable late min × minute rate × **1.5** (the engineer multiplier, §0a) + outside-Alex min × minute rate
 - Day cost = day rate + day extra (used for site costing, section 8)
-- Absence = days marked غ × day rate. HR marks them for now (1c); the manager later. ⚠️ Verified only for office staff (§1); confirm for engineers before payroll (R21). The October Excel deducts no absence for engineers or permanent workers: the summary's غياب column is 0 for 20 of 22 people, and the other 2 link to a «خصم يوم اجازة» cell holding 0.
+- Absence = days marked غ × day rate, as for office staff (owner, 2026-11-09, R21). The October Excel deducts no absence for engineers or permanent workers (the summary's غياب column is 0 for 20 of 22 people, and the other 2 link to a «خصم يوم اجازة» cell holding 0), so any October غ day is a line in the Excel-difference report.
+- Early departure and half days are not deducted automatically (owner, 2026-11-09, R25), as in the Excel. Payroll shows the early-departure minutes (departure before the shift end) to HR as a flag; HR deducts by hand through the deduction field, with a reason.
 - Deduction (الخصم) = penalty entered by HR with a reason
-- Net = salary + Σ day extra − absence − deduction − insurance − tax − advance installments
+- Transport = the engineer's per-worker fare override in force for the day's site, in full, for every day worked at a work site; none on a leave day or without an override (owner, 2026-11-09). There is no half fare for engineers.
+- Net = salary + Σ day extra + Σ transport − absence − deduction − insurance − tax − advance installments
 
 Outside-Alex minutes are paid at ×1, with no multiplier, as in the Excel.
 
@@ -141,17 +142,17 @@ Worked example (shift 09:00–16:00, grace 15): arrival 09:25 → 25 late minute
 ## 3. Permanent workers (عمال مثبتين): 26th → 25th
 Each day records: scheduled in/out (default: the field shift, §2b), actual in/out, site, outside-Alex money, transport (full / half / none), advance. Weekly off **Friday**.
 
-- Scheduled in/out are stored on each day; they default to the field shift setting (`worker_shift_start`/`worker_shift_end`: **09:00–16:00** once HR sets it, §2b; seeded **08:00–17:00**) or the pay-row override. Late minutes = max(0, actual in − scheduled in); OT minutes = max(0, time worked − **8** h), as below. Both are shown as hints.
-- ⚠️ While the setting is still 08:00–17:00, every default Present stores actual in/out 08:00–17:00 (§13), and permanent workers' OT is computed from the times, so each default day pays **60 OT minutes** unless HR edits the times (client question 20). At 09:00–16:00 a default day is 7 h and pays none; see the OT question in §2.
-- ⚠️ Late minutes do not wrap around midnight: scheduled 00:00 with arrival 23:50 the day before gives 1,430 late minutes; scheduled 23:50 with arrival 00:10 gives 0. Must a scheduled start that crosses midnight wrap?
+- Scheduled in/out are stored on each day; they default to the field shift setting (`worker_shift_start`/`worker_shift_end`: **09:00–16:00** once HR sets it, §2b; seeded **08:00–17:00**) or the pay-row override. Late minutes = max(0, actual in − scheduled in); OT minutes = max(0, actual out − scheduled out), as below. Both are shown as hints.
+- Late minutes do not wrap around midnight (owner, 2026-11-09, client question 14): scheduled 00:00 with arrival 23:50 the day before gives 1,430 late minutes; scheduled 23:50 with arrival 00:10 gives 0. HR overrides the rare case with a reason.
 
 - Hours worked = actual out − actual in. If out is earlier than in, the shift crossed midnight: add 24 h.
 - Late hours = actual in − scheduled in (if positive)
 - Lateness money = chargeable late minutes × minute rate × **2** (the permanent-worker multiplier, §0a; the Excel charged late hours × hour rate × 2, with no grace)
-- OT hours = max(0, hours worked − **8**)
-- OT money = OT hours × hour rate × **1.5** + outside-Alex money
+- OT minutes = max(0, actual out − scheduled out), overtime starting at the shift end (owner, 2026-11-09, client question 20). A time earlier than the day's in time is the next day (+24 h): actual out against actual in, scheduled out against scheduled in. The Excel used max(0, hours worked − 8 h); the two agree only when the worker arrived at the scheduled time of an 8-hour shift, so every other October day is an Excel-difference line.
+- OT money = OT minutes × minute rate × **1.5** + outside-Alex money
 - Transport = fare (section 4 fare rule; HR sets every fare) for full, fare ÷ 2 for half. HR picks per day for now (1c), the manager later; default full, including on a missing or future work day. A leave day stores none.
 - Day cost = day rate + OT money (site costing)
+- Absence and early departure: as for engineers (§2; R21, R25, owner 2026-11-09).
 - Net = salary + Σ OT money + Σ transport − Σ lateness − absence − deduction − insurance − tax − advance installments
 
 The Excel worker template **adds** lateness to the net (Excel error #4) and leaves transport out. The system subtracts lateness and pays transport.
@@ -175,13 +176,13 @@ Net = Σ wage + Σ allowance + Σ transport + Σ OT + bonuses
       − Σ lateness − advance installments − deductions
 ```
 Day laborers have no social insurance and no leave balance.
-⚠️ A partial day (half a day, or leaving early) is open (R25). The October Excel pays the full daily wage and deducts only lateness; no sheet has an early-leave formula.
+A partial day (half a day, or leaving early) earns the full daily wage, and only lateness is deducted, as in the October Excel (owner, 2026-11-09, R25). Payroll flags the early-departure minutes to HR, who may deduct by hand with a reason. OT minutes are the stored minutes HR approved; the screen suggests them from the shift end (§2).
 ⚠️ Does a worker's wage itself ever change by site, or only the allowance?
 
 Example: daily wage 330 at a site with no allowance, fare 35, 60 OT minutes → 330 + 0 + 35 + (60 × 330/480 × 1.5 = 61.875) = **426.875** for that day (shown 426.88).
 
 ## 5. Social insurance and income tax
-- Employee insurance share, company insurance share and income tax are typed by HR per employee per period. Blank = 0.
+- Employee insurance share, company insurance share and income tax are typed by HR per employee per period. Blank = 0. Nothing carries over from the previous period (owner, 2026-11-09, client question 11).
 - The employee share and tax are deducted from net. The company share is a company cost (section 9).
 - Day laborers have no insurance fields.
 
