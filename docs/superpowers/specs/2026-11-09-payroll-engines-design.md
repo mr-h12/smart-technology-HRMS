@@ -1,6 +1,6 @@
 # Payroll engines (Release 2 item 2)
 
-Date: 2026-11-09. Status: draft for the owner's approval.
+Date: 2026-11-09. Status: approved by the owner on 2026-11-09.
 Formulas: `docs/calculations.md` §0–§6, §10 (the spec for every number; this document does not restate them).
 Owner decisions behind it: `docs/hrms-module-plan.md` § Payroll engines: owner decisions of 2026-11-09.
 
