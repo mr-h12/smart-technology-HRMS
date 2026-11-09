@@ -81,7 +81,7 @@ Smart Technology runs HR and payroll today on 6 hand-built Excel workbooks (anal
 1. **Fingerprint import** (office) → late minutes with grace, exemptions.
 2. **Payroll engines** for the 3 types, reproducing the Excel formulas (section 2.3 / 3.2–3.3 / 4.2 of the analysis doc).
    - The configurable multipliers above.
-   - Known Excel bugs fixed in the engine (e.g., raises included in net), and an **Excel-difference report** (employee, amount, reason) the client signs off.
+   - Known Excel bugs fixed in the engine (e.g., raises included in net), and an **Excel-difference report** (employee, amount, reason) the client signs off: one Arabic document for October 2026, generated from the regression test (owner, 2026-11-09).
    - HR override on every computed value.
 3. **Advances/loans ledger**: amount, installments, repayment, balance.
 4. **Social insurance + income tax**: manual HR fields (permanent only).
@@ -243,6 +243,17 @@ Status is verified against `main` at `7be93b9` (PR #3 merged) by reading the cod
 - **All on the period grid now includes office staff.** With a site, it lists who has a stored day there in the period, plus the office staff at that site on the period's last day.
 - **A row with no site** offers «تحديد الموقع» to a holder of `employee.assign_site`, for office staff and workers. Engineers have no such button.
 
+### Payroll engines: owner decisions of 2026-11-09
+Answers before Release 2 item 2. Formulas: `docs/calculations.md`; spec: `docs/superpowers/specs/2026-11-09-payroll-engines-design.md`.
+- **Review findings first:** M1 (dated changes accepted inside a locked period; a type change not starting at a period boundary) and M2 (a pay change drops insured basic, raise and shift override) from `docs/reviews/2026-11-08-release-1-review.md` are fixed in their own PR before any engine code, because payroll reads those records. The other findings stay debt.
+- **Insurance and tax (question 11):** typed by HR per employee per period (employee share, company share, income tax); blank = 0; nothing carries over.
+- **Rounding (question 12):** none, the net included; paid as computed, shown to 2 decimals.
+- **Excel-difference report (question 13):** one Arabic document for October 2026, generated from the October regression test; each line names the employee label, the amount and the Excel error number or decision behind it. The client signs it once before go-live. No comparison screen.
+- **Midnight (question 14):** lateness does not wrap around midnight.
+- **Overtime start (question 20):** after the shift end, not after 8 h worked. Permanent workers' OT = actual out − scheduled out; engineers' and day laborers' OT stay the minutes HR approves, with the hint from the shift end.
+- **Absence (R21):** غ days deduct days × salary ÷ 30 for every monthly type; a day laborer earns no wage that day.
+- **Early departure / half day (R25):** no automatic deduction for any field type; payroll flags the minutes and HR deducts by hand with a reason.
+
 ### Changes to the work plan
 - **Youssef:**
   - Add R19 (workday) to the attendance contracts. The shift default changes in one new migration, after R19 is answered.
@@ -250,7 +261,7 @@ Status is verified against `main` at `7be93b9` (PR #3 merged) by reading the cod
 - **Second developer:**
   - WP-B1 gains the phone check on a database copy (Q8), the server-side notes rule (Q6) and the CEO-only 0 (Q2; R23 answered 2026-11-06: 0 is the CEO's alone).
   - The account-to-employee link (Q4) is a new small PR in Employees, before the site-manager workspace.
-- **Third developer (Payroll):** builds §0a with the multiplier per type. R26 and R27 are answered (2026-11-06); it still needs R21 and R25.
+- **Third developer (Payroll):** builds §0a with the multiplier per type. R26 and R27 are answered (2026-11-06), R21 and R25 on 2026-11-09.
 
 ## Modules, ownership and parallel work
 **Status: proposal.** Owner approval needed. Developer names are the current team: **Youssef**, who built Releases 1a–1c, and **the second developer**, who joins now. A third developer may join later.
