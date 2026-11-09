@@ -95,7 +95,8 @@ Each day records: site, arrival and departure, OT minutes, late minutes, minutes
 - Absence = days marked غ × day rate, as for office staff (owner, 2026-11-09, R21). The October Excel deducts no absence for engineers or permanent workers (the summary's غياب column is 0 for 20 of 22 people, and the other 2 link to a «خصم يوم اجازة» cell holding 0), so any October غ day is a line in the Excel-difference report.
 - Early departure and half days are not deducted automatically (owner, 2026-11-09, R25), as in the Excel. Payroll shows the early-departure minutes (departure before the shift end) to HR as a flag; HR deducts by hand through the deduction field, with a reason.
 - Deduction (الخصم) = penalty entered by HR with a reason
-- Net = salary + Σ day extra − absence − deduction − insurance − tax − advance installments
+- Transport = the engineer's per-worker fare override in force for the day's site, in full, for every day worked at a work site; none on a leave day or without an override (owner, 2026-11-09). There is no half fare for engineers.
+- Net = salary + Σ day extra + Σ transport − absence − deduction − insurance − tax − advance installments
 
 Outside-Alex minutes are paid at ×1, with no multiplier, as in the Excel.
 

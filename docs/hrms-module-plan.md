@@ -253,6 +253,7 @@ Answers before Release 2 item 2. Formulas: `docs/calculations.md`; spec: `docs/s
 - **Overtime start (question 20):** after the shift end, not after 8 h worked. Permanent workers' OT = actual out − scheduled out; engineers' and day laborers' OT stay the minutes HR approves, with the hint from the shift end.
 - **Absence (R21):** غ days deduct days × salary ÷ 30 for every monthly type; a day laborer earns no wage that day.
 - **Early departure / half day (R25):** no automatic deduction for any field type; payroll flags the minutes and HR deducts by hand with a reason.
+- **Engineers' transport:** the per-worker fare override, in full, on every day worked at a work site; none without an override.
 
 ### Changes to the work plan
 - **Youssef:**
