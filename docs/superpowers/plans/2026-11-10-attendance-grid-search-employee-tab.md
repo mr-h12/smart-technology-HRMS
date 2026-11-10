@@ -14,6 +14,7 @@ Owner request, 2026-11-10: «عايز search بالاسم في جدول الفت
 - The search matches what the employees list matches: either name (Arabic or English, part of it) or the exact code. It reuses `Employee::matching()`.
 - The new tab shows to a holder of `attendance.view` (today: Developer, HR, CEO, all-scope). Site managers hold only `attendance.record.own`, so they do not get the tab; no permission is added or changed. The day carries no wage.
 - The period position in the tab is local state (as the leave tab's year), not a URL parameter.
+- The endpoint still sends `summary` and `fields`, but the calendar tab no longer reads them. They are left as they are.
 
 ## 1. Grid search
 
@@ -49,20 +50,28 @@ Backend
 Frontend
 - New `pages/employee-attendance.tsx`, tab `attendance` (label «الحضور») in the employee page's `TABS`, shown when `can('attendance.view')`.
 - Header: previous / next period arrows, the period range, the locked badge (existing `attendance.prevPeriod`, `nextPeriod`, `periodRange`, `locked` keys).
-- Summary: the five counts in a `StatRow`.
-- Table, one row per day: weekday + date; site or day type (site name, the full leave name, or the missing / future / not-employed state); then one column per entry of `fields` with the existing `attendance.day.*` labels. Office adds a late column from `hints.late_minutes`. A minutes cell shows the stored value, else the hint. Amounts show 2 decimals; `transport` shows its `attendance.transport.*` label.
-- Today's row, off days and missing days use the grid's looks (`OFF`, the warning tint).
-- A row opens `DayEditor` for that date (not for future or not-employed days). The table refreshes after a save.
-- Arabic RTL first; usable at 375 px in the project's existing table pattern.
+- Calendar (owner, 2026-11-11, after the iPhone Calendar month view): a 7-column grid of day numbers, Saturday first. One section per month, headed by the month's name, so a 26th→25th period splits where the month changes. The weekday row shows once, above the first month. A month's first day starts in its weekday column.
+- One classifier, `kind(day)`, gives each day its colour, its legend entry and its legend count:
+  - present (a stored day with no leave code): green, `success`;
+  - absent (leave code `absent`): red, `destructive`;
+  - sick (leave code `sick`): blue, `info`;
+  - leave (annual, casual, unpaid, other): amber, `warning`;
+  - missing: grey, `muted-foreground`;
+  - weekly off and official holidays (`friday`, `saturday`, `official_holiday`, `rest`): no fill;
+  - future: faded; not employed: fainter still.
+- Legend: one line above the calendar. Each of the five colours shows its label and how many of the period's days have it, counted with the same `kind`. It replaces the `StatRow`.
+- Each day is a button. Its name is the weekday, the date and what the day holds (site name, leave name or state); its `title` is what the day holds. It has a visible focus ring. Today has a primary ring and `aria-current="date"`. Future and not-employed days are disabled.
+- A click opens `DayEditor` for that date. The calendar refetches after a save.
+- Arabic RTL first. The day circles are smaller below `sm`, so the same grid serves a phone.
 
 ## i18n
 
-New keys in both `ar.json` and `en.json`, under `attendance` and `employee.tab` only (the holiday branch edits `holiday.*`): `employee.tab.attendance`, the grid search placeholder, the five summary labels, the day and late column heads if no existing key fits.
+New keys in both `ar.json` and `en.json`, under `attendance` and `employee.tab` only (the holiday branch edits `holiday.*`): `employee.tab.attendance`, and the legend's `attendance.employeeTab.legend`, `present`, `absent`, `sick`, `leave`, `missing`. The grid search reuses `attendance.sheet.search`.
 
 ## Tests
 
 - PHPUnit: grid `search` (name part, code, with `site_id`, totals, own scope still narrowed); the employee period for each type's period, a type change, a terminated employee's clamp, the summary counts, `403` without `attendance.view`, the `employee.scope` refusal.
-- Vitest: the grid sends `search` and keeps `?q=`; the employee tab shows only with `attendance.view`, renders the days, moves periods, opens the day editor; locale parity.
+- Vitest: the grid sends `search` and keeps `?q=`; the employee tab shows only with `attendance.view`; the calendar starts on Saturday and splits at a month change; each day's colour and the legend counts come from `kind`; today is marked and future or not-employed days are disabled; the arrows move periods and a locked period says so; a day opens the day editor and a save refreshes the calendar; English labels; locale parity.
 
 ## Verify
 
