@@ -114,7 +114,7 @@ export function EmployeeAttendance({ emp }: { emp: Row }) {
                         <button type="button" disabled={d.state === 'future' || d.state === 'not_employed'} onClick={() => setOpen(d.date)}
                           aria-label={`${t(`weekday.${weekdayOf(d.date)}`)} ${d.date}: ${text}`} title={text} aria-current={isToday ? 'date' : undefined}
                           className={cn('flex min-h-tap w-full items-center justify-center rounded-md outline-none enabled:hover:bg-muted disabled:cursor-not-allowed', FOCUS)}>
-                          <span className={cn('flex size-9 items-center justify-center rounded-full text-base font-semibold sm:size-11 sm:text-lg', LOOK[kind(d)], isToday && 'ring-2 ring-primary ring-offset-2 ring-offset-card')}>
+                          <span className={cn('flex size-9 items-center justify-center rounded-full text-base font-semibold sm:size-10 sm:text-lg', LOOK[kind(d)], isToday && 'ring-2 ring-primary ring-offset-2 ring-offset-card')}>
                             {Number(d.date.slice(8))}
                           </span>
                         </button>
