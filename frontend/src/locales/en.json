@@ -800,6 +800,12 @@
     "add": "Add holiday",
     "edit": "Edit holiday",
     "date": "Date",
+    "from": "From",
+    "to": "To",
+    "range": "{{from}} – {{to}}",
+    "duration": "Duration",
+    "days_one": "{{count}} day",
+    "days_other": "{{count}} days",
     "name": "Holiday name",
     "delete": "Delete",
     "deleteConfirm": "Delete the official holiday \"{{name}}\"?"

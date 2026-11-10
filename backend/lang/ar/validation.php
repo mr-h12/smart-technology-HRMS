@@ -159,6 +159,7 @@ return [
     'url' => 'صيغة رابط حقل :attribute غير صحيحة.',
     'uuid' => 'حقل :attribute يجب أن يكون بصيغة UUID سليمة.',
     'custom' => [
+        'end_date' => ['after_or_equal' => 'يجب أن يكون «إلى تاريخ» في نفس يوم «من تاريخ» أو بعده.'],
         'phone' => ['regex' => 'يجب أن يكون رقم الهاتف رقم موبايل مصري من 11 رقمًا يبدأ بـ 010 أو 011 أو 012 أو 015.'],
     ],
     // Field labels; equal to the frontend's ar.json wording.
@@ -200,6 +201,7 @@ return [
         'site_id' => 'الموقع',
         'amount' => 'قيمة المواصلات',
         'date' => 'التاريخ',
+        'end_date' => 'إلى تاريخ',
         'email' => 'البريد الإلكتروني',
         'password' => 'كلمة المرور',
         'role_id' => 'الدور',

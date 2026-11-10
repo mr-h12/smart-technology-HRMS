@@ -405,28 +405,42 @@ const lockedPeriod = () => json(423, { error: { code: 'period_locked', message: 
 test('holidays tab lists, adds and shows a locked-period refusal', async () => {
   let n = 0
   const post = vi.fn(() => (n++ === 0 ? json(201, { data: {} }) : lockedPeriod()))
-  mockFetch({ 'GET /api/v1/attendance/holidays': list([{ id: 'h1', date: '2026-10-06', name: 'Holiday-1' }]), 'POST /api/v1/attendance/holidays': post })
+  mockFetch({ 'GET /api/v1/attendance/holidays': list([{ id: 'h1', date: '2026-10-06', end_date: '2026-10-06', name: 'Holiday-1' }]), 'POST /api/v1/attendance/holidays': post })
   renderWithAuth(<SettingsPage />, HOLIDAYS, { path: '/settings?tab=holidays' })
-  expect(await screen.findByRole('row', { name: /2026-10-06.*Holiday-1/ })).toBeInTheDocument()
+  expect(await screen.findByRole('row', { name: /^2026-10-06 يوم واحد.*Holiday-1/ })).toBeInTheDocument() // one day: no range
   expect(screen.getByText('2026-10-06')).toHaveAttribute('dir', 'ltr')
   expect(urlWith('/attendance/holidays')).toContain('per_page=100')
   const add = async (date: string, name: string) => {
     await user.click(screen.getByRole('button', { name: 'إضافة إجازة رسمية' }))
-    await user.type(screen.getByLabelText('التاريخ'), date)
+    await user.type(screen.getByLabelText('من تاريخ'), date)
     await user.type(screen.getByLabelText('اسم الإجازة'), name)
     await user.click(screen.getByRole('button', { name: 'حفظ' }))
   }
   await add('2026-10-20', 'Holiday-2')
   await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull())
-  expect(body(post)).toEqual({ date: '2026-10-20', name: 'Holiday-2' })
+  expect(body(post)).toEqual({ date: '2026-10-20', end_date: '2026-10-20', name: 'Holiday-2' }) // a blank «إلى تاريخ» is the one day
   await add('2026-10-21', 'Holiday-3')
   expect(await within(screen.getByRole('dialog')).findByRole('alert')).toHaveTextContent('فترة الحضور مقفلة ولا يمكن تعديلها.')
+})
+
+test('a period row shows its range and day count, and add sends both dates', async () => {
+  const post = vi.fn(() => json(201, { data: {} }))
+  mockFetch({ 'GET /api/v1/attendance/holidays': list([{ id: 'h1', date: '2026-06-15', end_date: '2026-06-18', name: 'عيد الأضحى' }]), 'POST /api/v1/attendance/holidays': post })
+  renderWithAuth(<SettingsPage />, HOLIDAYS, { path: '/settings?tab=holidays' })
+  expect(await screen.findByRole('row', { name: /2026-06-15 – 2026-06-18.*4 أيام.*عيد الأضحى/ })).toBeInTheDocument()
+  await user.click(screen.getByRole('button', { name: 'إضافة إجازة رسمية' }))
+  await user.type(screen.getByLabelText('من تاريخ'), '2026-03-30')
+  await user.type(screen.getByLabelText('إلى تاريخ'), '2026-04-01')
+  await user.type(screen.getByLabelText('اسم الإجازة'), 'عيد الفطر')
+  await user.click(screen.getByRole('button', { name: 'حفظ' }))
+  await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull())
+  expect(body(post)).toEqual({ date: '2026-03-30', end_date: '2026-04-01', name: 'عيد الفطر' })
 })
 
 test('a holiday is edited and deleted from its row menu', async () => {
   const patch = vi.fn(() => json(200, { data: {} }))
   const del = vi.fn(() => new Response(null, { status: 204 }))
-  mockFetch({ 'GET /api/v1/attendance/holidays': list([{ id: 'h1', date: '2026-10-06', name: 'Holiday-1' }]), 'PATCH /api/v1/attendance/holidays/h1': patch, 'DELETE /api/v1/attendance/holidays/h1': del })
+  mockFetch({ 'GET /api/v1/attendance/holidays': list([{ id: 'h1', date: '2026-10-06', end_date: '2026-10-06', name: 'Holiday-1' }]), 'PATCH /api/v1/attendance/holidays/h1': patch, 'DELETE /api/v1/attendance/holidays/h1': del })
   renderWithAuth(<SettingsPage />, HOLIDAYS, { path: '/settings?tab=holidays' })
   await rowMenu('Holiday-1')
   await user.click(await screen.findByRole('menuitem', { name: 'تعديل' }))
@@ -434,7 +448,7 @@ test('a holiday is edited and deleted from its row menu', async () => {
   await user.clear(screen.getByLabelText('اسم الإجازة'))
   await user.type(screen.getByLabelText('اسم الإجازة'), 'Holiday-9')
   await user.click(screen.getByRole('button', { name: 'حفظ' }))
-  expect(body(patch)).toEqual({ date: '2026-10-06', name: 'Holiday-9' })
+  expect(body(patch)).toEqual({ date: '2026-10-06', end_date: '2026-10-06', name: 'Holiday-9' })
   await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull())
   await rowMenu('Holiday-1')
   await user.click(await screen.findByRole('menuitem', { name: 'حذف' }))
@@ -445,7 +459,7 @@ test('a holiday is edited and deleted from its row menu', async () => {
 })
 
 test('holiday controls need holiday.manage', async () => {
-  mockFetch({ 'GET /api/v1/attendance/holidays': list([{ id: 'h1', date: '2026-10-06', name: 'Holiday-1' }]) })
+  mockFetch({ 'GET /api/v1/attendance/holidays': list([{ id: 'h1', date: '2026-10-06', end_date: '2026-10-06', name: 'Holiday-1' }]) })
   renderWithAuth(<SettingsPage />, ['attendance.view.all'], { path: '/settings?tab=holidays' })
   expect(await screen.findByText('Holiday-1')).toBeInTheDocument()
   expect(screen.queryByRole('button', { name: 'إضافة إجازة رسمية' })).toBeNull()

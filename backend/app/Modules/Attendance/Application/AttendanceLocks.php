@@ -41,16 +41,14 @@ final class AttendanceLocks
             }
 
             $employees = $this->roster->allOfType($p->group, $p->start, $p->end);
-            $holidays = OfficialHoliday::whereBetween('date', [$p->start, $p->end])->orderBy('date');
-            $holidayDates = (clone $holidays)->pluck('date')->map(fn ($d) => (string) $d)->all();
+            $holidayDates = OfficialHoliday::datesBetween($p->start, $p->end);
             $lock = AttendanceLock::firstOrNew(['employee_type' => $p->group->value, 'period_start' => $p->start]);
             $since = $lock->exists ? $lock->locked_at : null;
             $removed = $since === null ? [] : AttendanceDay::onlyTrashed()->whereIn('employee_id', array_column($employees, 'id'))->whereBetween('date', [$p->start, $p->end])
                 ->where('source', 'derived')->where('deleted_at', '>', $since)->whereNotIn('date', $holidayDates)
                 ->whereIn('site_id', Site::withTrashed()->where(['kind' => SiteKind::Leave->value, 'leave_code' => LeaveCode::OfficialHoliday->value])->select('id'))
                 ->distinct()->orderBy('date')->pluck('date')->map(fn ($d) => substr((string) $d, 0, 10))->all();
-            $added = $since === null ? [] : $holidays->where(fn ($q) => $q->where('created_at', '>', $since)->orWhere('updated_at', '>', $since))
-                ->pluck('date')->map(fn ($d) => (string) $d)->all();
+            $added = $since === null ? [] : OfficialHoliday::datesBetween($p->start, $p->end, $since);
             $names = array_column($employees, null, 'id');
             $leaveCodes = array_map(fn (LeaveCode $c) => $c->value, [LeaveCode::Annual, LeaveCode::Casual, LeaveCode::Sick, LeaveCode::Unpaid]);
 
