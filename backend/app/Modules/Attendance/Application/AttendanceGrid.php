@@ -52,17 +52,18 @@ final class AttendanceGrid
      * $siteId keeps the employees with a live stored day at that site in the period (owner: who worked at the site in the period),
      * plus, for All and office, the office staff at that site on the period's last day (owner, 2026-11-08).
      * A null $g is All (owner, 2026-11-08, office added to 2026-11-05's field types): every type over the engineers' 26th→25th window.
+     * $search keeps the employees whose name contains it or whose code is it, as the employees list does (owner, 2026-11-10).
      *
      * @return array{data: list<array<string, mixed>>, pagination: array{page: int, per_page: int, total: int, total_pages: int, has_next_page: bool, has_previous_page: bool}}
      */
-    public function grid(?EmployeeType $g, ?string $start, int $perPage, int $page, ?string $date = null, ?string $ownerId = null, ?string $siteId = null): array
+    public function grid(?EmployeeType $g, ?string $start, int $perPage, int $page, ?string $date = null, ?string $ownerId = null, ?string $siteId = null, ?string $search = null): array
     {
         $p = $this->periodAt($g ?? EmployeeType::Engineer, $start, $date);
         $ids = $siteId === null ? null : [
             ...AttendanceDay::where('site_id', $siteId)->whereBetween('date', [$p->start, $p->end])->distinct()->pluck('employee_id')->map(fn ($id) => (string) $id)->all(),
             ...($g === null || $g === EmployeeType::Office ? $this->roster->officeIdsAt($siteId, $p->end) : []),
         ];
-        $roster = $this->roster->ofType($g === null ? EmployeeType::cases() : [$g], $p->start, $p->end, $perPage, $page, $ownerId, $ids);
+        $roster = $this->roster->ofType($g === null ? EmployeeType::cases() : [$g], $p->start, $p->end, $perPage, $page, $ownerId, $ids, $search);
         $days = $g === null ? $this->daysOfEveryType($p, $roster['data']) : $this->days->forPeriod($p, $roster['data']);
 
         return [

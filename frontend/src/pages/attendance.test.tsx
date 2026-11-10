@@ -410,6 +410,36 @@ test('the grid filters by work site: the pick goes out as site_id from page 1, a
   expect(screen.getByRole('combobox', { name: 'الموقع' })).toHaveValue('')
 })
 
+test('the grid searches by name or code: typing asks from page 1 after a pause, ?q= seeds the box, and a group change keeps it', async () => {
+  const grid = vi.fn((_url: string) => json(200, { data: rows, meta: { pagination } }))
+  mockFetch({ ...routes, 'GET /api/v1/attendance/grid': grid })
+  const { unmount } = renderWithAuth(<AttendancePage />, ['attendance.view.all'], { path: '/attendance?group=engineer&tab=grid&period=2026-09-26' })
+  const box = await screen.findByRole('textbox', { name: 'ابحث بالاسم أو الرقم الوظيفي' })
+  await user.type(box, 'سامي')
+  expect(box).toHaveValue('سامي') // the box is instant
+  await waitFor(() => expect(grid.mock.calls.at(-1)?.[0]).toContain(`search=${encodeURIComponent('سامي')}`))
+  expect(grid.mock.calls.filter(([u]) => u.includes('search=')).length).toBe(1) // one request after the pause, not one per letter
+  expect(grid.mock.calls.at(-1)?.[0]).toContain('page=1')
+  unmount()
+
+  grid.mockClear()
+  renderWithAuth(<AttendancePage />, ['attendance.view.all'], { path: '/attendance?group=engineer&tab=grid&q=7' })
+  expect(await screen.findByRole('textbox', { name: 'ابحث بالاسم أو الرقم الوظيفي' })).toHaveValue('7')
+  await waitFor(() => expect(grid.mock.calls.at(-1)?.[0]).toContain('search=7'))
+  await user.selectOptions(screen.getByRole('combobox', { name: 'المجموعة' }), 'office')
+  await waitFor(() => expect(grid.mock.calls.at(-1)?.[0]).toContain('group=office'))
+  expect(grid.mock.calls.at(-1)?.[0]).toContain('search=7')
+})
+
+test('a grid search with no match says so, and the search box is on the grid tab only', async () => {
+  mockFetch({ ...routes, 'GET /api/v1/attendance/grid': () => json(200, { data: [], meta: { pagination: { ...pagination, total: 0 } } }), 'GET /api/v1/attendance/sheet': () => new Promise<Response>(() => {}) as unknown as Response })
+  renderWithAuth(<AttendancePage />, ['attendance.view.all'], { path: '/attendance?group=engineer&tab=grid&q=nobody' })
+  expect(await screen.findByText('لا يوجد موظفون مطابقون.')).toBeInTheDocument()
+  await user.click(screen.getByRole('tab', { name: 'كشف اليوم' }))
+  await screen.findByRole('tab', { name: 'كشف اليوم', selected: true })
+  expect(screen.queryByRole('textbox', { name: 'ابحث بالاسم أو الرقم الوظيفي' })).toBeNull()
+})
+
 test.each([
   ['grid', 'office'], ['grid', 'engineer'], ['grid', 'all'],
   ['sheet', 'office'], ['sheet', 'engineer'], ['sheet', 'all'],

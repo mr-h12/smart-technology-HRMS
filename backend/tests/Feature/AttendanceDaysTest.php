@@ -243,6 +243,52 @@ class AttendanceDaysTest extends TestCase
         $this->getJson('/api/v1/attendance/grid?group=engineer&site_id=nope')->assertStatus(422)->assertJsonPath('error.details.0.field', 'site_id');
     }
 
+    public function test_grid_search_matches_a_name_part_in_either_language_or_the_exact_code(): void
+    {
+        $a = $this->employee('engineer', '2026-01-01', ['name_ar' => 'محمود سامي', 'name_en' => 'Mahmoud Sami']);
+        $b = $this->employee('engineer');
+        $this->employee('office', '2026-01-01', ['name_ar' => 'سامي علي']);   // another group
+        $code = (int) DB::table('employees')->where('id', $b)->value('code');
+        $ids = fn (string $search) => array_column($this->getJson('/api/v1/attendance/grid?group=engineer&period_start=2026-09-26&search='.urlencode($search))->assertOk()
+            ->json('data.*.employee'), 'id');
+
+        $this->assertSame([$a], $ids('سامي'));
+        $this->assertSame([$a], $ids('SAMI'));
+        $this->assertSame([$b], $ids((string) $code));
+        $this->assertSame([$a, $b], $ids(''));                                                        // blank is no filter
+        $this->getJson('/api/v1/attendance/grid?group=engineer&search=nobody')->assertOk()->assertJsonPath('meta.pagination.total', 0);
+        $this->getJson('/api/v1/attendance/grid?group=engineer&search='.str_repeat('x', 101))->assertStatus(422)->assertJsonPath('error.details.0.field', 'search');
+    }
+
+    public function test_grid_search_combines_with_the_site_and_counts_only_the_matches(): void
+    {
+        $a = $this->employee('engineer');
+        $this->employee('engineer');
+        $c = $this->employee('engineer', '2026-01-01', ['name_ar' => 'Engineer-Site']);
+        $this->employee('engineer', '2026-01-01', ['name_ar' => 'Engineer-Away']);
+        $this->putDay($a, '2026-10-01', ['site_id' => $this->site]);
+        $this->putDay($c, '2026-10-01', ['site_id' => $this->site]);
+        $this->getJson("/api/v1/attendance/grid?group=engineer&period_start=2026-09-26&site_id={$this->site}&search=site")->assertOk()
+            ->assertJsonPath('meta.pagination.total', 1)->assertJsonCount(1, 'data')->assertJsonPath('data.0.employee.id', $c);
+        $this->getJson('/api/v1/attendance/grid?group=all&period_start=2026-09-26&per_page=1&search=engineer-')->assertOk()
+            ->assertJsonPath('meta.pagination.total', 4)->assertJsonPath('meta.pagination.total_pages', 4);
+    }
+
+    public function test_grid_search_stays_inside_an_own_scope_readers_reach(): void
+    {
+        $s2 = $this->workSite('Site-3');
+        $lead = $this->userWith('own', null);
+        DB::table('manager_sites')->insert(['manager_id' => $lead->id, 'site_id' => $this->site]);
+        $mine = $this->employee('permanent_worker');
+        $this->homeSite($mine, $this->site, '2026-09-01');
+        $this->homeSite($this->employee('permanent_worker', '2026-01-01', ['name_ar' => 'Other']), $this->site, '2026-09-01');   // reached, no match
+        $this->homeSite($this->employee('permanent_worker'), $s2, '2026-09-01');                                                 // a match out of reach
+
+        $this->actingAs($lead, 'api');
+        $this->getJson('/api/v1/attendance/grid?group=permanent_worker&period_start=2026-09-26&search=worker')->assertOk()
+            ->assertJsonPath('meta.pagination.total', 1)->assertJsonPath('data.0.employee.id', $mine);
+    }
+
     public function test_grid_all_with_a_site_lists_every_field_type_that_worked_there_in_the_engineer_window(): void
     {
         $eng = $this->employee('engineer');
