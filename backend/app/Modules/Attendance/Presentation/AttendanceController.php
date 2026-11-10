@@ -64,6 +64,14 @@ final class AttendanceController
         return ApiEnvelope::single($request, $q['group'] === 'all' ? $this->grid->sheetOfEveryType($q['date'], $owner) : $this->grid->sheet(EmployeeType::from($q['group']), $q['date'], $owner));
     }
 
+    /** One employee's period table: `date` (default today in Cairo) picks the period of the employee's own type then. */
+    public function employeePeriod(Request $request, string $employee): JsonResponse
+    {
+        $q = $request->validate(['date' => ['sometimes', 'date_format:Y-m-d']]);
+
+        return ApiEnvelope::single($request, $this->grid->employeePeriod($employee, $q['date'] ?? null));
+    }
+
     /** The Excel grid template of one period. It shows and later writes days, so it needs view and edit, and the narrower scope wins. */
     public function template(Request $request): BinaryFileResponse
     {

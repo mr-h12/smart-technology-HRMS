@@ -114,6 +114,7 @@ Route::middleware('auth')->group(function (): void {
             Route::get('days/{employee}/{date}', 'show')->middleware(['permission:attendance.view', 'employee.scope'])->where('date', $date);
             Route::put('days/{employee}/{date}', 'update')->middleware(['permission:attendance.edit', 'employee.scope'])->where('date', $date);
             Route::delete('days/{employee}/{date}', 'destroy')->middleware(['permission:attendance.edit', 'employee.scope'])->where('date', $date);
+            Route::get('employees/{employee}/period', 'employeePeriod')->middleware(['permission:attendance.view', 'employee.scope']);
         });
     });
 

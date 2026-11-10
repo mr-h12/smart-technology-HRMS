@@ -6,6 +6,7 @@ namespace App\Modules\Attendance\Application;
 
 use App\Modules\Attendance\Domain\AttendanceRefusal;
 use App\Modules\Attendance\Domain\AttendanceRefused;
+use App\Modules\Attendance\Domain\DayRules;
 use App\Modules\Attendance\Domain\Employment;
 use App\Modules\Attendance\Domain\Period;
 use App\Modules\Attendance\Infrastructure\Eloquent\AttendanceDay;
@@ -16,6 +17,8 @@ use App\Modules\Employees\Application\EmployeeRoster;
 use App\Modules\Employees\Domain\EmployeeType;
 use App\Modules\Identity\Infrastructure\Eloquent\User;
 use App\Modules\Settings\Application\BusinessRules;
+use App\Modules\Sites\Domain\LeaveCode;
+use Illuminate\Database\Eloquent\ModelNotFoundException;
 use Illuminate\Pagination\Paginator;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\DB;
@@ -93,6 +96,60 @@ final class AttendanceGrid
                 'page' => $page, 'per_page' => $perPage, 'total' => $total, 'total_pages' => $pages,
                 'has_next_page' => $page < $pages, 'has_previous_page' => $page > 1,
             ],
+        ];
+    }
+
+    /**
+     * One employee's days in their own payroll period (owner, 2026-11-10): the type on $date (default today in Cairo), $date first clamped
+     * to the employment (hire date and first type, termination date). `prev_date` / `next_date` are the days just outside the period's employed
+     * days, so the arrows cross a type change without skipping a day; null outside the employment, and `next_date` after today (the grid header's
+     * rule). `summary` counts the days up to today; future and not-employed days count nowhere. Day counts only, never minutes or money.
+     *
+     * @return array{period: array{group: string, start: string, end: string, prev_date: ?string, next_date: ?string, is_locked: bool}, fields: list<string>, days: list<array<string, mixed>>, summary: array{worked: int, absent: int, leave: int, off: int, missing: int}}
+     */
+    public function employeePeriod(string $employeeId, ?string $date = null): array
+    {
+        $e = $this->roster->find($employeeId) ?? throw new ModelNotFoundException;
+        $d = $date ?? EffectiveDays::today();
+        $d = max(min($d, $e['termination_date'] ?? $d), $e['hire_date'] ?? '', $e['types'][0]['effective_from'] ?? '');
+        $type = Employment::typeOn($e, $d) ?? throw new ModelNotFoundException;   // no type at all, or terminated before the first one
+        $p = Period::containing($type, $d);
+        $days = $this->days->forPeriod($p, [$e])[$employeeId];
+        $employed = array_keys(array_filter($days, fn (array $x) => $x['state'] !== 'not_employed'));
+        $before = Carbon::parse($employed[0])->subDay()->toDateString();
+        $after = Carbon::parse($employed[count($employed) - 1])->addDay()->toDateString();
+        $today = EffectiveDays::today();
+        $settings = $this->rules->all();
+
+        $summary = ['worked' => 0, 'absent' => 0, 'leave' => 0, 'off' => 0, 'missing' => 0];
+        foreach ($days as $x) {
+            $code = LeaveCode::tryFrom((string) $x['leave_code']);
+            $kind = match (true) {
+                $x['state'] === 'not_employed' || $x['date'] > $today => null,
+                $x['state'] === 'missing' => 'missing',
+                $code === null => $x['state'] === 'stored' ? 'worked' : null,
+                $code === LeaveCode::Absent => 'absent',
+                in_array($code, [LeaveCode::Friday, LeaveCode::Saturday, LeaveCode::OfficialHoliday, LeaveCode::Rest], true) => 'off',
+                default => 'leave',   // sick, annual, casual, unpaid, other
+            };
+            if ($kind !== null) {
+                $summary[$kind]++;
+            }
+        }
+
+        return [
+            'period' => [
+                'group' => $type->value, 'start' => $p->start, 'end' => $p->end,
+                'prev_date' => Employment::typeOn($e, $before) === null ? null : $before,
+                'next_date' => $after > $today || Employment::typeOn($e, $after) === null ? null : $after,
+                'is_locked' => PeriodGuard::isLocked($p),
+            ],
+            'fields' => DayRules::FIELDS[$type->value],
+            'days' => array_values(array_map(fn (array $x) => [
+                ...array_intersect_key($x, array_flip(['date', 'state', 'source', 'version', 'site_id', 'leave_code', ...EffectiveDays::VALUES])),
+                'hints' => (object) $this->days->hints($type, $e, $x, $settings),
+            ], $days)),
+            'summary' => $summary,
         ];
     }
 
