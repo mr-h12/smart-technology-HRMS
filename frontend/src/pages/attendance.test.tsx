@@ -415,6 +415,7 @@ test('the grid searches by name or code: typing asks from page 1 after a pause, 
   mockFetch({ ...routes, 'GET /api/v1/attendance/grid': grid })
   const { unmount } = renderWithAuth(<AttendancePage />, ['attendance.view.all'], { path: '/attendance?group=engineer&tab=grid&period=2026-09-26' })
   const box = await screen.findByRole('textbox', { name: 'ابحث بالاسم أو الرقم الوظيفي' })
+  expect(box).toHaveAttribute('maxlength', '100') // the API refuses a longer search
   await user.type(box, 'سامي')
   expect(box).toHaveValue('سامي') // the box is instant
   await waitFor(() => expect(grid.mock.calls.at(-1)?.[0]).toContain(`search=${encodeURIComponent('سامي')}`))

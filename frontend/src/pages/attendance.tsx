@@ -110,7 +110,7 @@ export function AttendancePage() {
         {siteFilter && (
           <FilterSelect value={site} onChange={(v) => set({ site: v || null })} label={t('attendance.siteFilter')} allLabel={t('attendance.allSites')} options={[...(tab === 'sheet' ? [[NO_SITE, t('attendance.noSite')] as [string, string]] : []), ...(workSites ?? []).map((s): [string, string] => [s.id, localName(s, i18n.language)])]} />
         )}
-        {tab === 'grid' && <SearchInput value={q} onChange={(v) => { setQ(v); set({ q: v || null }) }} placeholder={t('attendance.sheet.search')} />}
+        {tab === 'grid' && <SearchInput value={q} onChange={(v) => { setQ(v); set({ q: v || null }) }} placeholder={t('attendance.sheet.search')} maxLength={100} />}
         <div className="flex flex-wrap items-center gap-1">
           <Button variant="outline" size="icon" disabled={!period} onClick={() => period && move(period.prev_start)} aria-label={t('attendance.prevPeriod')}>
             <ChevronLeft className="rtl:-scale-x-100" aria-hidden />

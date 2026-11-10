@@ -27,6 +27,10 @@ const TIMES = ['in_time', 'out_time', 'scheduled_in', 'scheduled_out']
 const MINUTES = ['late_minutes', 'ot_minutes', 'outside_minutes']
 const AMOUNTS = ['outside_amount', 'advance_amount']
 const COUNTS = ['absent', 'leave', 'off', 'missing'] as const
+/** The pinned day cell must stay opaque over the cells scrolling under it: the row's OFF tint mixed into the card colour. */
+const OFF_PINNED = 'bg-[color-mix(in_srgb,var(--muted-foreground)_10%,var(--card))]'
+/** An absent day's chip, the missing chip's look in the danger colour. */
+const ABSENT = 'bg-destructive/15 text-destructive ring-1 ring-destructive/40 hover:bg-destructive/25'
 
 /**
  * The employee's days in their own payroll period (owner, 2026-11-10): one row per day, the arrows step to the server's neighbouring dates,
@@ -52,8 +56,10 @@ export function EmployeeAttendance({ emp }: { emp: Row }) {
     const site = d.site_id && sites?.find((s) => s.id === d.site_id)
     return site ? localName(site, i18n.language) : d.site_id ? '—' : t('attendance.present')
   }
-  // a minutes cell shows the stored value, else the computed hint, quieter; amounts with 2 decimals (never through a float)
+  // only a stored day has values: a missing, future or derived day carries the server's defaults (shift, transport), which nobody recorded.
+  // A minutes cell shows the stored value, else the computed hint, quieter; amounts with 2 decimals (never through a float)
   const value = (d: Day, f: string) => {
+    if (d.state !== 'stored') return '—'
     const v = d[f as DayValue] ?? null
     if (TIMES.includes(f)) return formatTime(v, i18n.language)
     if (MINUTES.includes(f)) return v ?? (d.hints[f] != null ? <span className="text-muted-foreground">{d.hints[f]}</span> : '—')
@@ -108,11 +114,12 @@ export function EmployeeAttendance({ emp }: { emp: Row }) {
                   const text = label(d)
                   const closed = d.state === 'future' || d.state === 'not_employed'
                   const isToday = d.date === today
+                  const off = d.state === 'derived' || d.source === 'derived'
                   return (
                     // the row opens the day; its first cell's button is the keyboard and screen-reader control, and its click bubbles here
                     <TableRow key={d.date} aria-current={isToday ? 'date' : undefined} onClick={() => !closed && setOpen(d.date)}
-                      className={cn(!closed && 'cursor-pointer', (d.state === 'derived' || d.source === 'derived') && OFF, isToday && 'bg-accent hover:bg-accent')}>
-                      <TableCell className={cn('sticky start-0 z-10 border-b py-2', isToday ? 'bg-accent' : 'bg-card')}>
+                      className={cn(!closed && 'cursor-pointer', off && OFF, isToday && 'bg-accent hover:bg-accent')}>
+                      <TableCell className={cn('sticky start-0 z-10 border-b py-2', isToday ? 'bg-accent' : off ? OFF_PINNED : 'bg-card')}>
                         <button type="button" disabled={closed} aria-label={`${t(`weekday.${weekdayOf(d.date)}`)} ${d.date}: ${text}`}
                           className="rounded-md text-start outline-none focus-visible:outline-2 focus-visible:outline-solid focus-visible:outline-offset-2 focus-visible:outline-ring disabled:cursor-not-allowed">
                           <span className="block text-xs text-muted-foreground">{t(`weekdayShort.${weekdayOf(d.date)}`)}</span>
@@ -120,7 +127,7 @@ export function EmployeeAttendance({ emp }: { emp: Row }) {
                         </button>
                       </TableCell>
                       <TableCell className="border-b py-2">
-                        <span className={cn('inline-block rounded-md px-1.5 py-0.5 text-xs', LOOK[d.state])}>{text}</span>
+                        <span className={cn('inline-block rounded-md px-1.5 py-0.5 text-xs', LOOK[d.state], d.leave_code === 'absent' && ABSENT)}>{text}</span>
                       </TableCell>
                       {cols.map((f) => (
                         <TableCell key={f} className={cn('border-b py-2', numeric(f) && 'text-end')}>{value(d, f)}</TableCell>

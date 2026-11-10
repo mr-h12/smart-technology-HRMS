@@ -63,6 +63,38 @@ test('the table lists every day with its site or day type and the type’s value
   expect(within(worked).getByText('2026-10-01')).toHaveAttribute('dir', 'ltr')
 })
 
+test('a day that is not stored shows no values, not even the defaults the server fills in', async () => {
+  const worker = { ...engineer, period: { ...engineer.period, group: 'permanent_worker' }, fields: ['scheduled_in', 'scheduled_out', 'in_time', 'out_time', 'outside_amount', 'transport', 'advance_amount', 'note'],
+    days: [
+      day('2026-10-01', 'stored', { site_id: 's1', scheduled_in: '08:00', scheduled_out: '17:00', transport: 'full' }),
+      day('2026-10-02', 'derived', { leave_code: 'friday', site_id: 'l1', transport: 'none' }),
+      day('2026-10-03', 'missing', { scheduled_in: '08:00', scheduled_out: '17:00', transport: 'full' }),
+      day('2026-10-21', 'future', { scheduled_in: '08:00', scheduled_out: '17:00', transport: 'full' }),
+    ] }
+  mockFetch(routes(worker))
+  renderWithAuth(<EmployeeAttendance emp={{ ...emp, current_type: 'permanent_worker' }} />, ['attendance.view.all'], { router: false })
+  const cells = async (name: string) => within((await screen.findByRole('button', { name })).closest('tr')!).getAllByRole('cell').slice(2)
+  const stored = await cells('الخميس 2026-10-01: Site-1')
+  expect(stored[0]).toHaveTextContent(/8:00/)
+  expect(stored[5]).toHaveTextContent('كاملة')
+  for (const name of ['الجمعة 2026-10-02: إجازة الجمعة', 'السبت 2026-10-03: غير مسجل', 'الأربعاء 2026-10-21: لم يأتِ بعد'])
+    expect((await cells(name)).map((c) => c.textContent)).toEqual(Array(8).fill('—'))
+})
+
+test('the pinned day cell carries its row’s background, opaque, and an absent day reads as danger', async () => {
+  mockFetch(routes({ ...engineer, days: [...engineer.days, day('2026-10-04', 'stored', { leave_code: 'absent', site_id: 'l3' })] }))
+  renderWithAuth(<EmployeeAttendance emp={emp} />, ['attendance.view.all'], { router: false })
+  const pinned = async (name: string) => (await screen.findByRole('button', { name })).closest('td')!
+  expect(await pinned('الخميس 2026-10-01: Site-1')).toHaveClass('bg-card')
+  const off = await pinned('الجمعة 2026-10-02: إجازة الجمعة')
+  expect(off).toHaveClass('bg-[color-mix(in_srgb,var(--muted-foreground)_10%,var(--card))]') // the row's OFF tint over the card colour
+  expect(off).not.toHaveClass('bg-card')
+  expect(await pinned('الثلاثاء 2026-10-20: إجازة مرضية')).toHaveClass('bg-accent')
+  const chip = (name: string, text: string) => within(screen.getByRole('button', { name }).closest('tr')!).getByText(text)
+  expect(chip('الأحد 2026-10-04: غياب', 'غياب')).toHaveClass('bg-destructive/15', 'text-destructive', 'ring-destructive/40')
+  expect(chip('الثلاثاء 2026-10-20: إجازة مرضية', 'إجازة مرضية')).not.toHaveClass('bg-destructive/15')
+})
+
 test('the summary shows the five day counts the server computed', async () => {
   mockFetch(routes({ ...engineer, summary: { worked: 18, absent: 1, leave: 2, off: 4, missing: 3 } }))
   renderWithAuth(<EmployeeAttendance emp={emp} />, ['attendance.view.all'], { router: false })
