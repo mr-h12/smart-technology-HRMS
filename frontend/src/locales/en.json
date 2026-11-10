@@ -100,7 +100,8 @@
       "history": "History",
       "documents": "Documents",
       "site": "Site",
-      "leave": "Leave"
+      "leave": "Leave",
+      "attendance": "Attendance"
     },
     "subtitle": "Every employee and worker, of every type.",
     "stat": {
@@ -606,6 +607,15 @@
     },
     "legend": "Legend",
     "empty": "No employees in this group during this period.",
+    "employeeTab": {
+      "summary": "Period summary",
+      "worked": "Days worked",
+      "absent": "Absent",
+      "leave": "Leave",
+      "off": "Days off",
+      "missing": "Missing",
+      "day": "Day"
+    },
     "tab": {
       "grid": "Period grid",
       "sheet": "Day sheet",

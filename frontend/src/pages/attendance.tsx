@@ -36,11 +36,12 @@ const TABS = ['sheet', 'grid', 'import'] // import only with attendance.edit
 type Period = { group: string; start: string; end: string; prev_start: string; next_start: string | null; is_locked: boolean; lock: { locked_by: { name: string } | null; locked_at: string | null } | null; missing: number }
 /** `POST /attendance/locks`: the period header plus what a re-lock changed and the leave days on a holiday. */
 type Locked = Period & { holidays_removed: string[]; holidays_added: string[]; leave_on_holidays: (Row & { date: string; leave_code: string })[] }
-type Day = { date: string; state: 'not_employed' | 'stored' | 'derived' | 'future' | 'missing'; source?: string | null; site_id: string | null; leave_code: string | null }
+export type Day = { date: string; state: 'not_employed' | 'stored' | 'derived' | 'future' | 'missing'; source?: string | null; site_id: string | null; leave_code: string | null }
 type GridRow = { employee: Row; days: Day[] }
 
-const STATE_KEY: Partial<Record<Day['state'], string>> = { missing: 'attendance.state.missing', future: 'attendance.state.future', not_employed: 'attendance.state.notEmployed' }
-const LOOK: Record<Day['state'], string> = {
+/** A day's state label and look, shared with the employee's attendance tab. */
+export const STATE_KEY: Partial<Record<Day['state'], string>> = { missing: 'attendance.state.missing', future: 'attendance.state.future', not_employed: 'attendance.state.notEmployed' }
+export const LOOK: Record<Day['state'], string> = {
   stored: 'hover:bg-muted',
   derived: 'border border-dashed border-muted-foreground/60 text-muted-foreground hover:bg-muted',
   missing: 'bg-warning/15 text-warning ring-1 ring-warning/40 hover:bg-warning/25',
