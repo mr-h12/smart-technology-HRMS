@@ -1,6 +1,7 @@
 import { Bus, Users } from 'lucide-react'
 import { useState } from 'react'
 import { useTranslation } from 'react-i18next'
+import { useSearchParams } from 'react-router-dom'
 import { DataList } from '@/components/common/DataList'
 import { EmptyState } from '@/components/common/EmptyState'
 import { PageHeader } from '@/components/common/PageHeader'
@@ -34,7 +35,9 @@ export function TeamFaresPage() {
   const fillResidence = can('employee.edit')
   const pick = can('employee.view.all')
   const allowed = edit || can('employee.view.own')
-  const [picked, setPicked] = useState('')
+  // the picked site manager and the chip live in the URL, so going back from an employee shows the same team
+  const [params, setParams] = useSearchParams()
+  const picked = params.get('manager') ?? ''
   const leads = useApi<Ref[]>(allowed && pick ? '/sites/manager-candidates' : null)
   const lead = picked || leads.data?.[0]?.id
   const path = !allowed ? null : pick ? (lead ? `/team-fares?manager_id=${lead}` : null) : '/team-fares'
@@ -46,7 +49,8 @@ export function TeamFaresPage() {
       {pick && (
         <div role="group" aria-label={t('fare.lead')} className="flex flex-wrap gap-2">
           {(leads.data ?? []).map((m) => (
-            <button key={m.id} type="button" aria-pressed={lead === m.id} onClick={() => setPicked(m.id)} className={chipCls}>
+            // another team starts on all its rows (its sites differ): the chip goes with the old one
+            <button key={m.id} type="button" aria-pressed={lead === m.id} onClick={() => lead !== m.id && setParams({ manager: m.id }, { replace: true })} className={chipCls}>
               {m.name}
             </button>
           ))}
@@ -69,12 +73,14 @@ export function TeamFaresPage() {
 function TeamTable({ team, edit, fillResidence }: { team: TeamFares; edit: boolean; fillResidence: boolean }) {
   const { t } = useTranslation()
   const money = useMoney()
-  const [chip, setChip] = useState('all')
+  const [params, setParams] = useSearchParams()
+  const setChip = (v: string) => setParams((p) => (v === 'all' ? p.delete('chip') : p.set('chip', v), p), { replace: true })
   const [editing, setEditing] = useState<TeamFareRow>()
   const [housing, setHousing] = useState<TeamFareRow>()
   const siteName = (id: string) => team.sites.find((s) => s.id === id)?.name ?? ''
-  const shown = team.rows.filter((r) => chip === 'all' || (chip === 'missing' ? missing(r) : r.site?.id === chip || r.overrides.some((o) => o.site_id === chip)))
   const chips: [string, string][] = [['all', t('teamFare.all', { count: team.rows.length })], ...team.sites.map((s): [string, string] => [s.id, s.name]), ['missing', t('teamFare.missing', { count: team.rows.filter(missing).length })]]
+  const chip = chips.find(([v]) => v === params.get('chip'))?.[0] ?? 'all' // a site no longer the team's falls back to all
+  const shown = team.rows.filter((r) => chip === 'all' || (chip === 'missing' ? missing(r) : r.site?.id === chip || r.overrides.some((o) => o.site_id === chip)))
   return (
     <>
       <div className="flex flex-wrap gap-2">
@@ -89,6 +95,9 @@ function TeamTable({ team, edit, fillResidence }: { team: TeamFares; edit: boole
           label={t('teamFare.title')}
           rows={shown}
           rowKey={(r) => r.employee_id}
+          to={(r) => `/employees/${r.employee_id}`}
+          // the team is not paged, so the employee screen steps through the rows the chip shows, by id
+          state={(_, i) => ({ ids: shown.map((r) => r.employee_id), pos: i, total: shown.length })}
           title={{
             header: t('teamFare.col.worker'),
             cell: (r) => (
@@ -105,7 +114,8 @@ function TeamTable({ team, edit, fillResidence }: { team: TeamFares; edit: boole
                 r.residence ? (
                   r.residence.name
                 ) : fillResidence ? (
-                  <Button type="button" variant="outline" size="sm" onClick={() => setHousing(r)}>
+                  // relative: above the row's stretched link, so a tap here does not open the employee
+                  <Button type="button" variant="outline" size="sm" className="relative" onClick={() => setHousing(r)}>
                     {t('teamFare.setResidence')}
                   </Button>
                 ) : (
