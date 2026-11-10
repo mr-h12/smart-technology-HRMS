@@ -41,7 +41,7 @@ type GridRow = { employee: Row; days: Day[] }
 
 /** A day's state label and look, shared with the employee's attendance tab. */
 export const STATE_KEY: Partial<Record<Day['state'], string>> = { missing: 'attendance.state.missing', future: 'attendance.state.future', not_employed: 'attendance.state.notEmployed' }
-export const LOOK: Record<Day['state'], string> = {
+const LOOK: Record<Day['state'], string> = {
   stored: 'hover:bg-muted',
   derived: 'border border-dashed border-muted-foreground/60 text-muted-foreground hover:bg-muted',
   missing: 'bg-warning/15 text-warning ring-1 ring-warning/40 hover:bg-warning/25',
