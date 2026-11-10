@@ -37,6 +37,7 @@ Smart Technology runs HR and payroll today on 6 hand-built Excel workbooks (anal
 | Attendance dates | HR enters or edits any day of an open period up to today (Cairo time). No future dates |
 | Attendance periods | Per group: office the calendar month, engineers and permanent workers the 26th → 25th, day laborers 1–15 and 16–end. The attendance lock is per (group, period) |
 | Attendance lock | HR locks one group's period in one action, after confirming the missing days; nobody edits until HR reopens with a reason. Weekly off days and official holidays are derived on read while the period is open and stored at lock. ⚠️ (owner) HR may lock a period before it ends. Reopening keeps the stored derived days. Deleting or moving a holiday removes its stored days on the old date; weekly-off days are not refreshed; the re-lock lists the holiday changes and the leave days on a holiday (owner, 2026-11-04) |
+| Official holidays | A holiday is a named period of consecutive days (from, to; at most 31), not only one date. Existing holidays became one-day periods; holidays never overlap, and a weekly off inside one is the holiday. Adding, editing or deleting needs every group's periods on all its old and new days open (owner, 2026-11-10; `docs/calculations.md` §2a) |
 | Attendance concurrency | Each day carries a `version`; a write with a stale version returns `409 concurrency_conflict`, never an overwrite. Days are never hard-deleted; clearing a day is an audited update |
 
 ## Modules by release
