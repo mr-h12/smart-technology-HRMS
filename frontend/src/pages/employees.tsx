@@ -271,17 +271,20 @@ function Pager() {
   const swipe = useEffectEvent((dx: number) => (dx > 0 === (i18n.dir() === 'rtl') ? go(next, pos + 1) : go(prev, pos - 1)))
   useEffect(() => {
     if (!ctx) return
-    // not a swipe when the touch belongs to something else: a dialog, a form field (moving the caret), a box that scrolls sideways
+    // not a swipe when the touch belongs to something else: the focused field (moving the caret; on a phone most swipes start on an
+    // unfocused field, which stays a swipe) or a box that scrolls sideways
     const owned = (n: EventTarget | null) => {
       for (let el = n instanceof Element ? n : null; el; el = el.parentElement)
-        if (el.matches('[role="dialog"], input, textarea, select') || (el.scrollWidth > el.clientWidth && /auto|scroll/.test(getComputedStyle(el).overflowX))) return true
+        if (el.matches('input:focus, textarea:focus, select:focus') || (el.scrollWidth > el.clientWidth && /auto|scroll/.test(getComputedStyle(el).overflowX))) return true
       return false
     }
     let start: { x: number; y: number } | undefined
     const down = (e: TouchEvent) => {
       const f = e.touches[0]
-      // one finger (a pinch is not a swipe), away from the screen edges where Safari's back gesture starts
-      start = e.touches.length === 1 && f.clientX >= 24 && f.clientX <= window.innerWidth - 24 && !owned(e.target) ? { x: f.clientX, y: f.clientY } : undefined
+      // one finger (a pinch is not a swipe), away from the screen edges where Safari's back gesture starts, and none while a dialog,
+      // sheet or menu is open: a swipe on its backdrop would leave what it holds (and what was typed in it) behind
+      const open = document.querySelector('[role="dialog"], [role="alertdialog"], [role="menu"]')
+      start = e.touches.length === 1 && f.clientX >= 24 && f.clientX <= window.innerWidth - 24 && !open && !owned(e.target) ? { x: f.clientX, y: f.clientY } : undefined
     }
     const up = (e: TouchEvent) => {
       const f = e.changedTouches[0]

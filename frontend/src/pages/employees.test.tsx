@@ -331,18 +331,29 @@ test('the list takes its filters from the URL and an opened row knows its place 
   await waitFor(() => expect(list.mock.calls.map(([u]) => u)).toContain('/api/v1/employees?type=engineer&page=12&per_page=1'))
 })
 
-test('a horizontal swipe moves to the next employee; a mostly vertical one does not', async () => {
+test('a horizontal swipe moves to the next employee; not a mostly vertical one, one on a focused field or one while a dialog is open', async () => {
   stepRoutes()
   openA()
-  const swipe = (dx: number, dy: number) =>
+  const swipe = (dx: number, dy: number, on: EventTarget = window) =>
     act(() => {
-      window.dispatchEvent(Object.assign(new Event('touchstart'), { touches: [{ clientX: 300, clientY: 300 }] }))
+      on.dispatchEvent(Object.assign(new Event('touchstart', { bubbles: true }), { touches: [{ clientX: 300, clientY: 300 }] }))
       window.dispatchEvent(Object.assign(new Event('touchend'), { changedTouches: [{ clientX: 300 + dx, clientY: 300 + dy }] }))
     })
   await waitFor(() => expect(screen.getByRole('button', { name: 'الموظف التالي' })).toBeEnabled())
+  const name = screen.getByLabelText('الاسم بالعربية')
   swipe(100, 80)
+  expect(name).toHaveValue('أحمد')
+  const dialog = document.createElement('div') // e.g. the phone nav sheet, whose backdrop is outside it
+  dialog.setAttribute('role', 'dialog')
+  document.body.append(dialog)
+  swipe(100, 10)
   expect(screen.getByLabelText('الاسم بالعربية')).toHaveValue('أحمد')
-  swipe(100, 10) // to the right: in Arabic the next employee comes in from the left
+  dialog.remove()
+  act(() => name.focus()) // dragging the caret
+  swipe(100, 10, name)
+  expect(screen.getByLabelText('الاسم بالعربية')).toHaveValue('أحمد')
+  act(() => name.blur())
+  swipe(100, 10, name) // to the right: in Arabic the next employee comes in from the left; on a phone most swipes start on a field
   await waitFor(() => expect(screen.getByLabelText('الاسم بالعربية')).toHaveValue('بسمة'))
 })
 
