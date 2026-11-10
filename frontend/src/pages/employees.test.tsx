@@ -280,6 +280,83 @@ test('clicking a row opens the employee', async () => {
   expect(await screen.findByText('صفحة الموظف')).toBeInTheDocument()
 })
 
+// A and B are the two engineers of the list; each neighbour is one row of the same list request.
+const stepRoutes = () =>
+  mockFetch({
+    'GET /api/v1/residences': residences,
+    'GET /api/v1/employees/A': () => json(200, { data: { ...emp, id: 'A', name_ar: 'أحمد' } }),
+    'GET /api/v1/employees/B': () => json(200, { data: { ...emp, id: 'B', name_ar: 'بسمة' } }),
+    'GET /api/v1/employees': (url) => json(200, { data: url.endsWith('type=engineer&page=1&per_page=1') ? [{ id: 'A' }] : url.endsWith('type=engineer&page=2&per_page=1') ? [{ id: 'B' }] : [], meta: { pagination } }),
+  })
+const openA = () =>
+  renderWithAuth(
+    <MemoryRouter initialEntries={[{ pathname: '/employees/A', state: { list: 'type=engineer', pos: 0, total: 2 } }]}>
+      <Routes><Route path="employees/:id" element={<EmployeeRoute />} /></Routes>
+    </MemoryRouter>,
+    ALL,
+    { router: false },
+  )
+
+test('the arrows step to the next employee of the list it was opened from', async () => {
+  stepRoutes()
+  openA()
+  expect(await screen.findByLabelText('الاسم بالعربية')).toHaveValue('أحمد')
+  expect(screen.getByText('1 من 2')).toBeInTheDocument()
+  expect(screen.getByRole('button', { name: 'الموظف السابق' })).toBeDisabled()
+  await waitFor(() => expect(screen.getByRole('button', { name: 'الموظف التالي' })).toBeEnabled())
+  await user.click(screen.getByRole('button', { name: 'الموظف التالي' }))
+  await waitFor(() => expect(screen.getByLabelText('الاسم بالعربية')).toHaveValue('بسمة'))
+  expect(screen.getByText('2 من 2')).toBeInTheDocument()
+  expect(screen.getByRole('button', { name: 'الموظف التالي' })).toBeDisabled()
+  await waitFor(() => expect(screen.getByRole('button', { name: 'الموظف السابق' })).toBeEnabled())
+  await user.click(screen.getByRole('tab', { name: 'السجل' })) // a tab writes the URL: the list context must survive it
+  expect(await screen.findByText('2 من 2')).toBeInTheDocument()
+})
+
+test('the list takes its filters from the URL and an opened row knows its place in the whole list', async () => {
+  const list = vi.fn((_url: string) => json(200, { data: [row1], meta: { pagination: { ...pagination, total: 13 } } }))
+  mockFetch({ 'GET /api/v1/employees': list, 'GET /api/v1/employees/e1': () => json(200, { data: emp }), 'GET /api/v1/residences': residences })
+  renderWithAuth(
+    <Routes>
+      <Route path="employees" element={<EmployeesPage />} />
+      <Route path="employees/:id" element={<EmployeeRoute />} />
+    </Routes>,
+    ALL,
+    { path: '/employees?type=engineer&page=2' },
+  )
+  expect(await screen.findByRole('combobox', { name: 'نوع الموظف' })).toHaveValue('engineer')
+  expect(list.mock.calls.map(([u]) => u)).toContain('/api/v1/employees?page=2&per_page=12&type=engineer')
+  await user.click(await screen.findByText('المبيعات'))
+  expect(await screen.findByText('13 من 13')).toBeInTheDocument() // the first row of page 2
+  await waitFor(() => expect(list.mock.calls.map(([u]) => u)).toContain('/api/v1/employees?type=engineer&page=12&per_page=1'))
+})
+
+test('a horizontal swipe moves to the next employee; not a mostly vertical one, one on a focused field or one while a dialog is open', async () => {
+  stepRoutes()
+  openA()
+  const swipe = (dx: number, dy: number, on: EventTarget = window) =>
+    act(() => {
+      on.dispatchEvent(Object.assign(new Event('touchstart', { bubbles: true }), { touches: [{ clientX: 300, clientY: 300 }] }))
+      window.dispatchEvent(Object.assign(new Event('touchend'), { changedTouches: [{ clientX: 300 + dx, clientY: 300 + dy }] }))
+    })
+  await waitFor(() => expect(screen.getByRole('button', { name: 'الموظف التالي' })).toBeEnabled())
+  const name = screen.getByLabelText('الاسم بالعربية')
+  swipe(100, 80)
+  expect(name).toHaveValue('أحمد')
+  const dialog = document.createElement('div') // e.g. the phone nav sheet, whose backdrop is outside it
+  dialog.setAttribute('role', 'dialog')
+  document.body.append(dialog)
+  swipe(100, 10)
+  expect(screen.getByLabelText('الاسم بالعربية')).toHaveValue('أحمد')
+  dialog.remove()
+  act(() => name.focus()) // dragging the caret
+  swipe(100, 10, name)
+  expect(screen.getByLabelText('الاسم بالعربية')).toHaveValue('أحمد')
+  act(() => name.blur())
+  swipe(100, 10, name) // to the right: in Arabic the next employee comes in from the left; on a phone most swipes start on a field
+  await waitFor(() => expect(screen.getByLabelText('الاسم بالعربية')).toHaveValue('بسمة'))
+})
+
 test('create form shows a server field error under its field', async () => {
   mockFetch({
     'GET /api/v1/residences': residences,
