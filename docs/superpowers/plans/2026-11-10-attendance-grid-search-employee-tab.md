@@ -31,9 +31,9 @@ Frontend (`pages/attendance.tsx`)
 
 Backend
 - `GET /attendance/employees/{employee}/period?date=YYYY-MM-DD` (`date` optional, default today in Cairo), middleware `permission:attendance.view` + `employee.scope`, `whereUuid('employee')`.
-- The type is the employee's type on `date`; a date outside the employment is clamped to the hire / termination date (the roster's rule). The period is `Period::containing(type, date)`.
+- The type is the employee's type on `date`; a date outside the employment is clamped to the hire date, the first type's start, or the termination date. The period is `Period::containing(type, date)`.
 - Answer (one envelope `single`):
-  - `period`: `group, start, end, prev_start, next_start, is_locked` (`next_start` null when the next period starts after today, as the grid's header).
+  - `period`: `group, start, end, prev_date, next_date, is_locked`. `prev_date` / `next_date` are the days just outside the period's employed days, passed back as `?date=`: a period start would skip days across a type change (a laborer who becomes an engineer on the 26th has 1st→25th days no engineer period start reaches). `prev_date` is null before the employment; `next_date` is null after today or after termination.
   - `fields`: `DayRules::FIELDS[group]`.
   - `days`: one per date from `EffectiveDays::forPeriod()` (state, source, version, site_id, leave_code and the day values), each with its `hints`.
   - `summary`: counts over the period's days, computed on the server:
