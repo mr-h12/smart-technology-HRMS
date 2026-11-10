@@ -608,13 +608,12 @@
     "legend": "Legend",
     "empty": "No employees in this group during this period.",
     "employeeTab": {
-      "summary": "Period summary",
-      "worked": "Days worked",
+      "legend": "Colour key",
+      "present": "Present",
       "absent": "Absent",
+      "sick": "Sick",
       "leave": "Leave",
-      "off": "Days off",
-      "missing": "Missing",
-      "day": "Day"
+      "missing": "Missing"
     },
     "tab": {
       "grid": "Period grid",

@@ -21,105 +21,111 @@ afterEach(() => {
 const emp = { id: 'e1', code: 7, name_ar: 'أحمد', name_en: 'Ahmed', current_type: 'engineer', type_changes: [], pay_changes: [], documents: [], current_manager: null, manager_assignments: [] }
 const VALUES = { in_time: null, out_time: null, scheduled_in: null, scheduled_out: null, late_minutes: null, ot_minutes: null, outside_minutes: null, outside_amount: null, transport: null, advance_amount: null, note: null }
 const day = (date: string, state: string, extra = {}) => ({ date, state, source: state === 'stored' ? 'entered' : null, version: state === 'stored' ? 1 : null, site_id: null, leave_code: null, ...VALUES, hints: {}, ...extra })
+const dates = (start: string, n: number) => Array.from({ length: n }, (_, i) => new Date(Date.parse(`${start}T00:00:00Z`) + i * 864e5).toISOString().slice(0, 10))
+/** Hired on 28 Sep; today is Tue 20 Oct: 15 present, 1 absent, 1 sick, 1 annual leave, 2 missing, the Fridays off, the rest future. */
+const SPECIAL: Record<string, [string, object?]> = {
+  '2026-09-26': ['not_employed'],
+  '2026-09-27': ['not_employed'],
+  '2026-10-03': ['missing'],
+  '2026-10-04': ['stored', { leave_code: 'absent', site_id: 'l3' }],
+  '2026-10-05': ['stored', { leave_code: 'annual', site_id: 'l4' }],
+  '2026-10-06': ['missing'],
+  '2026-10-20': ['stored', { leave_code: 'sick', site_id: 'l2' }],
+}
+const fill = (d: string) =>
+  SPECIAL[d] ? day(d, ...SPECIAL[d])
+  : new Date(`${d}T00:00:00Z`).getUTCDay() === 5 ? day(d, 'derived', { leave_code: 'friday', site_id: 'l1' })
+  : d > '2026-10-20' ? day(d, 'future')
+  : day(d, 'stored', { site_id: 's1', in_time: '08:45' })
 const engineer = {
   period: { group: 'engineer', start: '2026-09-26', end: '2026-10-25', prev_date: '2026-09-25', next_date: null, is_locked: false },
   fields: ['in_time', 'out_time', 'late_minutes', 'ot_minutes', 'outside_minutes', 'advance_amount', 'note'],
-  days: [
-    day('2026-10-01', 'stored', { site_id: 's1', in_time: '08:45', out_time: '18:30', late_minutes: 5, advance_amount: '500.000000', hints: { late_minutes: 45, ot_minutes: 105 } }),
-    day('2026-10-02', 'derived', { leave_code: 'friday', site_id: 'l1' }),
-    day('2026-10-03', 'missing'),
-    day('2026-10-20', 'stored', { leave_code: 'sick', site_id: 'l2' }),
-    day('2026-10-21', 'future'),
-  ],
-  summary: { worked: 1, absent: 0, leave: 1, off: 1, missing: 1 },
+  days: dates('2026-09-26', 30).map(fill),
+  summary: { worked: 15, absent: 1, leave: 2, off: 3, missing: 2 },
 }
 const sites = [
   { id: 's1', name_ar: 'Site-1', name_en: 'Site-1', kind: 'work', outside_alexandria: false, active: true },
   { id: 'l1', name_ar: 'إجازة الجمعة', name_en: null, kind: 'leave', leave_code: 'friday', active: true },
   { id: 'l2', name_ar: 'إجازة مرضية', name_en: null, kind: 'leave', leave_code: 'sick', active: true },
+  { id: 'l3', name_ar: 'غياب', name_en: null, kind: 'leave', leave_code: 'absent', active: true },
+  { id: 'l4', name_ar: 'إجازة اعتيادية', name_en: null, kind: 'leave', leave_code: 'annual', active: true },
 ]
 const PERIOD = 'GET /api/v1/attendance/employees/e1/period'
 const routes = (data: object = engineer) => ({
   [PERIOD]: vi.fn((_url: string) => json(200, { data })),
   'GET /api/v1/sites': () => json(200, { data: sites, meta: { pagination } }),
 })
+const show = () => renderWithAuth(<EmployeeAttendance emp={emp} />, ['attendance.view.all'], { router: false })
+/** The filled shape holding a day's number. */
+const circle = async (name: string) => within(await screen.findByRole('button', { name })).getByText(/^\d+$/)
 
-test('the table lists every day with its site or day type and the type’s values', async () => {
+test('the calendar starts on Saturday, splits at a month change and leaves the days outside the period blank', async () => {
   mockFetch(routes())
-  renderWithAuth(<EmployeeAttendance emp={emp} />, ['attendance.view.all'], { router: false })
-  const worked = (await screen.findByRole('button', { name: 'الخميس 2026-10-01: Site-1' })).closest('tr')!
-  const heads = screen.getAllByRole('columnheader').map((h) => h.textContent)
-  expect(heads).toEqual(['اليوم', 'الموقع أو نوع اليوم', 'وقت الحضور', 'وقت الانصراف', 'دقائق التأخير', 'دقائق الوقت الإضافي', 'دقائق العمل خارج الإسكندرية', 'السلفة', 'ملاحظات'])
-  const cells = within(worked).getAllByRole('cell')
-  expect(cells[2]).toHaveTextContent(/8:45/)
-  expect(cells[4]).toHaveTextContent('5') // the stored minutes win over the hint
-  expect(cells[5]).toHaveTextContent('105') // no stored overtime: the hint, quieter
-  expect(within(cells[5]).getByText('105')).toHaveClass('text-muted-foreground')
-  expect(cells[7]).toHaveTextContent('500.00')
-  expect(screen.getByRole('button', { name: 'الجمعة 2026-10-02: إجازة الجمعة' }).closest('tr')).toHaveClass('bg-muted-foreground/10')
-  expect(within(screen.getByRole('button', { name: 'السبت 2026-10-03: غير مسجل' }).closest('tr')!).getByText('غير مسجل')).toHaveClass('bg-warning/15')
-  expect(screen.getByRole('button', { name: 'الثلاثاء 2026-10-20: إجازة مرضية' }).closest('tr')).toHaveAttribute('aria-current', 'date')
+  show()
+  const first = await screen.findByRole('button', { name: 'السبت 2026-09-26: خارج فترة العمل' })
+  expect(screen.queryByRole('table')).toBeNull()
+  expect([...screen.getByText('سبت').parentElement!.children].map((c) => c.textContent)).toEqual(['سبت', 'أحد', 'إثنين', 'ثلاثاء', 'أربعاء', 'خميس', 'جمعة'])
+  expect(screen.getAllByRole('heading').map((h) => h.textContent)).toEqual(['سبتمبر 2026', 'أكتوبر 2026'])
+  const sep = first.closest('ol')!
+  const oct = screen.getByRole('button', { name: 'الخميس 2026-10-01: Site-1' }).closest('ol')!
+  expect(sep).toHaveClass('grid-cols-7')
+  expect(oct).toHaveClass('grid-cols-7')
+  expect(within(sep).getAllByRole('button').map((b) => b.textContent)).toEqual(['26', '27', '28', '29', '30'])
+  expect(within(oct).getAllByRole('button')).toHaveLength(25)
+  // each month's first day sits in its own weekday column (Saturday is the first); the rest flow after it
+  expect(first.closest('li')).toHaveStyle({ gridColumnStart: '1' })
+  expect(within(oct).getAllByRole('listitem')[0]).toHaveStyle({ gridColumnStart: '6' })
+  expect(within(oct).getAllByRole('listitem')[1].style.gridColumnStart).toBe('')
+  expect(screen.queryByRole('button', { name: /2026-09-25|2026-10-26/ })).toBeNull()
+})
+
+test('a day laborer’s half month is one section, and a stored day with no site reads present', async () => {
+  const half = { ...engineer, period: { ...engineer.period, group: 'day_laborer', start: '2026-10-16', end: '2026-10-31' }, fields: ['in_time', 'out_time'],
+    days: dates('2026-10-16', 16).map((d) => (d === '2026-10-17' ? day(d, 'stored') : fill(d))) }
+  mockFetch(routes(half))
+  renderWithAuth(<EmployeeAttendance emp={{ ...emp, current_type: 'day_laborer' }} />, ['attendance.view.all'], { router: false })
+  const friday = await screen.findByRole('button', { name: 'الجمعة 2026-10-16: إجازة الجمعة' })
+  expect(screen.getAllByRole('heading').map((h) => h.textContent)).toEqual(['أكتوبر 2026'])
+  expect(friday.closest('li')).toHaveStyle({ gridColumnStart: '7' })
+  expect(screen.getByRole('button', { name: 'السبت 2026-10-17: حاضر' })).toBeInTheDocument()
+})
+
+test('each day’s colour comes from what it is, and the legend counts the same days', async () => {
+  mockFetch(routes())
+  show()
+  expect(await circle('الخميس 2026-10-01: Site-1')).toHaveClass('bg-success/20', 'text-success')
+  expect(await circle('الأحد 2026-10-04: غياب')).toHaveClass('bg-destructive/20', 'text-destructive')
+  expect(await circle('الثلاثاء 2026-10-20: إجازة مرضية')).toHaveClass('bg-info/20', 'text-info')
+  expect(await circle('الاثنين 2026-10-05: إجازة اعتيادية')).toHaveClass('bg-warning/20', 'text-warning')
+  expect(await circle('السبت 2026-10-03: غير مسجل')).toHaveClass('bg-muted-foreground/20', 'text-muted-foreground')
+  const off = await circle('الجمعة 2026-10-02: إجازة الجمعة')
+  expect(off).toHaveClass('text-muted-foreground')
+  expect(off.className).not.toMatch(/\bbg-/)
+  expect(await circle('الأربعاء 2026-10-21: لم يأتِ بعد')).toHaveClass('opacity-50')
+  expect(await circle('السبت 2026-09-26: خارج فترة العمل')).toHaveClass('opacity-30')
+  expect(screen.getByRole('button', { name: 'الخميس 2026-10-01: Site-1' })).toHaveAttribute('title', 'Site-1')
+  const items = within(screen.getByRole('list', { name: 'دليل الألوان' })).getAllByRole('listitem')
+  expect(items.map((li) => li.textContent)).toEqual(['حاضر 15', 'غائب 1', 'مرضي 1', 'إجازة 1', 'غير مسجل 2'])
+  expect(items[0].firstChild).toHaveClass('bg-success/20')
+  expect(items[1].firstChild).toHaveClass('bg-destructive/20')
+})
+
+test('today is marked, and a day that cannot be edited is disabled', async () => {
+  mockFetch(routes())
+  show()
+  const today = await screen.findByRole('button', { name: 'الثلاثاء 2026-10-20: إجازة مرضية' })
+  expect(today).toHaveAttribute('aria-current', 'date')
+  expect(within(today).getByText('20')).toHaveClass('ring-2', 'ring-primary')
+  expect(screen.getAllByRole('button').filter((b) => b.hasAttribute('aria-current'))).toEqual([today])
   expect(screen.getByRole('button', { name: 'الأربعاء 2026-10-21: لم يأتِ بعد' })).toBeDisabled()
-  expect(within(worked).getByText('2026-10-01')).toHaveAttribute('dir', 'ltr')
-})
-
-test('a day that is not stored shows no values, not even the defaults the server fills in', async () => {
-  const worker = { ...engineer, period: { ...engineer.period, group: 'permanent_worker' }, fields: ['scheduled_in', 'scheduled_out', 'in_time', 'out_time', 'outside_amount', 'transport', 'advance_amount', 'note'],
-    days: [
-      day('2026-10-01', 'stored', { site_id: 's1', scheduled_in: '08:00', scheduled_out: '17:00', transport: 'full' }),
-      day('2026-10-02', 'derived', { leave_code: 'friday', site_id: 'l1', transport: 'none' }),
-      day('2026-10-03', 'missing', { scheduled_in: '08:00', scheduled_out: '17:00', transport: 'full' }),
-      day('2026-10-21', 'future', { scheduled_in: '08:00', scheduled_out: '17:00', transport: 'full' }),
-    ] }
-  mockFetch(routes(worker))
-  renderWithAuth(<EmployeeAttendance emp={{ ...emp, current_type: 'permanent_worker' }} />, ['attendance.view.all'], { router: false })
-  const cells = async (name: string) => within((await screen.findByRole('button', { name })).closest('tr')!).getAllByRole('cell').slice(2)
-  const stored = await cells('الخميس 2026-10-01: Site-1')
-  expect(stored[0]).toHaveTextContent(/8:00/)
-  expect(stored[5]).toHaveTextContent('كاملة')
-  for (const name of ['الجمعة 2026-10-02: إجازة الجمعة', 'السبت 2026-10-03: غير مسجل', 'الأربعاء 2026-10-21: لم يأتِ بعد'])
-    expect((await cells(name)).map((c) => c.textContent)).toEqual(Array(8).fill('—'))
-})
-
-test('the pinned day cell carries its row’s background, opaque, and an absent day reads as danger', async () => {
-  mockFetch(routes({ ...engineer, days: [...engineer.days, day('2026-10-04', 'stored', { leave_code: 'absent', site_id: 'l3' })] }))
-  renderWithAuth(<EmployeeAttendance emp={emp} />, ['attendance.view.all'], { router: false })
-  const pinned = async (name: string) => (await screen.findByRole('button', { name })).closest('td')!
-  expect(await pinned('الخميس 2026-10-01: Site-1')).toHaveClass('bg-card')
-  const off = await pinned('الجمعة 2026-10-02: إجازة الجمعة')
-  expect(off).toHaveClass('bg-[color-mix(in_srgb,var(--muted-foreground)_10%,var(--card))]') // the row's OFF tint over the card colour
-  expect(off).not.toHaveClass('bg-card')
-  expect(await pinned('الثلاثاء 2026-10-20: إجازة مرضية')).toHaveClass('bg-accent')
-  const chip = (name: string, text: string) => within(screen.getByRole('button', { name }).closest('tr')!).getByText(text)
-  expect(chip('الأحد 2026-10-04: غياب', 'غياب')).toHaveClass('bg-destructive/15', 'text-destructive', 'ring-destructive/40')
-  expect(chip('الثلاثاء 2026-10-20: إجازة مرضية', 'إجازة مرضية')).not.toHaveClass('bg-destructive/15')
-})
-
-test('the summary shows the five day counts the server computed', async () => {
-  mockFetch(routes({ ...engineer, summary: { worked: 18, absent: 1, leave: 2, off: 4, missing: 3 } }))
-  renderWithAuth(<EmployeeAttendance emp={emp} />, ['attendance.view.all'], { router: false })
-  const tile = async (label: string) => (await screen.findByText(label)).closest('[role="group"]')
-  expect(await tile('أيام العمل')).toHaveTextContent('18')
-  expect(await tile('الغياب')).toHaveTextContent('1')
-  expect(await tile('الإجازات')).toHaveTextContent('2')
-  expect(await tile('الراحة والعطلات')).toHaveTextContent('4')
-  expect(await tile('غير مسجلة')).toHaveTextContent('3')
-})
-
-test('office adds the computed lateness after its times', async () => {
-  const office = { ...engineer, period: { ...engineer.period, group: 'office', start: '2026-10-01', end: '2026-10-31' }, fields: ['in_time', 'out_time'],
-    days: [day('2026-10-01', 'stored', { in_time: '09:40', out_time: '17:00', hints: { late_minutes: 25 } })] }
-  mockFetch(routes(office))
-  renderWithAuth(<EmployeeAttendance emp={{ ...emp, current_type: 'office' }} />, ['attendance.view.all'], { router: false })
-  const row = (await screen.findByRole('button', { name: 'الخميس 2026-10-01: حاضر' })).closest('tr')!
-  expect(screen.getAllByRole('columnheader').map((h) => h.textContent)).toEqual(['اليوم', 'الموقع أو نوع اليوم', 'وقت الحضور', 'وقت الانصراف', 'دقائق التأخير'])
-  expect(within(row).getAllByRole('cell')[4]).toHaveTextContent('25')
+  expect(screen.getByRole('button', { name: 'السبت 2026-09-26: خارج فترة العمل' })).toBeDisabled()
+  expect(screen.getByRole('button', { name: 'الجمعة 2026-10-02: إجازة الجمعة' })).toBeEnabled()
 })
 
 test('the arrows move to the neighbouring period by its date, and a locked period says so', async () => {
   const r = routes({ ...engineer, period: { ...engineer.period, is_locked: true } })
   mockFetch(r)
-  renderWithAuth(<EmployeeAttendance emp={emp} />, ['attendance.view.all'], { router: false })
+  show()
   expect(await screen.findByText('مقفلة')).toBeInTheDocument()
   const range = screen.getByRole('button', { name: 'الفترة السابقة' }).nextElementSibling!
   expect(range).toHaveTextContent('من 2026-09-26 إلى 2026-10-25')
@@ -129,7 +135,7 @@ test('the arrows move to the neighbouring period by its date, and a locked perio
   await waitFor(() => expect(r[PERIOD].mock.calls.at(-1)?.[0]).toBe('/api/v1/attendance/employees/e1/period?date=2026-09-25'))
 })
 
-test('a day opens the day editor, and a save there refreshes the table', async () => {
+test('a day opens the day editor, and a save there refreshes the calendar', async () => {
   const r = routes()
   const put = vi.fn(() => json(200, { data: {} }))
   mockFetch({ ...r, 'PUT /api/v1/attendance/days/e1/2026-10-03': put,
@@ -164,11 +170,14 @@ test('the employee screen has the attendance tab only with attendance.view', asy
   expect(await screen.findByRole('button', { name: 'الخميس 2026-10-01: Site-1' })).toBeInTheDocument()
 })
 
-test('in English the labels and the site name are English', async () => {
+test('in English the labels, the month and the site name are English', async () => {
   await i18n.changeLanguage('en')
   mockFetch(routes())
-  renderWithAuth(<EmployeeAttendance emp={emp} />, ['attendance.view.all'], { router: false })
+  show()
   expect(await screen.findByRole('button', { name: 'Thursday 2026-10-01: Site-1' })).toBeInTheDocument()
   expect(screen.getByRole('button', { name: 'Friday 2026-10-02: Friday' })).toBeInTheDocument()
-  expect(screen.getByText('Days worked')).toBeInTheDocument()
+  expect(screen.getAllByRole('heading').map((h) => h.textContent)).toEqual(['September 2026', 'October 2026'])
+  expect(screen.getByText('Sat').parentElement!.firstChild).toHaveTextContent('Sat')
+  const items = within(screen.getByRole('list', { name: 'Colour key' })).getAllByRole('listitem')
+  expect(items.map((li) => li.textContent)).toEqual(['Present 15', 'Absent 1', 'Sick 1', 'Leave 1', 'Missing 2'])
 })
