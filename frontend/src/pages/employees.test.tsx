@@ -281,16 +281,17 @@ test('clicking a row opens the employee', async () => {
 })
 
 // A and B are the two engineers of the list; each neighbour is one row of the same list request.
-const stepRoutes = () =>
+const stepRoutes = (extra = {}) =>
   mockFetch({
     'GET /api/v1/residences': residences,
     'GET /api/v1/employees/A': () => json(200, { data: { ...emp, id: 'A', name_ar: 'أحمد' } }),
     'GET /api/v1/employees/B': () => json(200, { data: { ...emp, id: 'B', name_ar: 'بسمة' } }),
     'GET /api/v1/employees': (url) => json(200, { data: url.endsWith('type=engineer&page=1&per_page=1') ? [{ id: 'A' }] : url.endsWith('type=engineer&page=2&per_page=1') ? [{ id: 'B' }] : [], meta: { pagination } }),
+    ...extra,
   })
-const openA = () =>
+const openA = (state: object = { list: '/employees?type=engineer', pos: 0, total: 2 }) =>
   renderWithAuth(
-    <MemoryRouter initialEntries={[{ pathname: '/employees/A', state: { list: 'type=engineer', pos: 0, total: 2 } }]}>
+    <MemoryRouter initialEntries={[{ pathname: '/employees/A', state }]}>
       <Routes><Route path="employees/:id" element={<EmployeeRoute />} /></Routes>
     </MemoryRouter>,
     ALL,
@@ -311,6 +312,30 @@ test('the arrows step to the next employee of the list it was opened from', asyn
   await waitFor(() => expect(screen.getByRole('button', { name: 'الموظف السابق' })).toBeEnabled())
   await user.click(screen.getByRole('tab', { name: 'السجل' })) // a tab writes the URL: the list context must survive it
   expect(await screen.findByText('2 من 2')).toBeInTheDocument()
+})
+
+test.each([
+  ['/leave/balances?year=2026&type=office', '/api/v1/leave/balances?year=2026&type=office&page=2&per_page=1'],
+  ['/employees', '/api/v1/employees?page=2&per_page=1'], // a list with no filter at all
+])('the arrows step through the list of the screen it was opened from: %s', async (list, request) => {
+  const rows = vi.fn((url: string) => json(200, { data: url === request ? [{ id: 'B' }] : [], meta: { pagination } }))
+  stepRoutes({ [`GET /api/v1${list.split('?')[0]}`]: rows })
+  openA({ list, pos: 0, total: 2 })
+  await waitFor(() => expect(screen.getByRole('button', { name: 'الموظف التالي' })).toBeEnabled())
+  await user.click(screen.getByRole('button', { name: 'الموظف التالي' }))
+  await waitFor(() => expect(screen.getByLabelText('الاسم بالعربية')).toHaveValue('بسمة'))
+  expect(screen.getByText('2 من 2')).toBeInTheDocument()
+})
+
+test('the arrows step through the ids of a list the server does not page, with no list request', async () => {
+  stepRoutes()
+  openA({ ids: ['A', 'B'], pos: 0, total: 2 })
+  expect(await screen.findByLabelText('الاسم بالعربية')).toHaveValue('أحمد') // the arrows are live at once; click the form's, not the skeleton's
+  await user.click(screen.getByRole('button', { name: 'الموظف التالي' }))
+  await waitFor(() => expect(screen.getByLabelText('الاسم بالعربية')).toHaveValue('بسمة'))
+  expect(screen.getByText('2 من 2')).toBeInTheDocument()
+  expect(screen.getByRole('button', { name: 'الموظف السابق' })).toBeEnabled()
+  expect(vi.mocked(fetch).mock.calls.map(([u]) => String(u)).filter((u) => /per_page=1(&|$)/.test(u))).toEqual([])
 })
 
 test('the list takes its filters from the URL and an opened row knows its place in the whole list', async () => {

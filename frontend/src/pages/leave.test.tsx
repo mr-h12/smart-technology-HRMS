@@ -1,8 +1,9 @@
 import { screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
-import { Link, Route, Routes, useLocation } from 'react-router-dom'
+import { Link, Route, Routes, useLocation, useNavigate } from 'react-router-dom'
 import { afterEach, beforeEach, expect, test, vi } from 'vitest'
 import { json, mockFetch, pagination, renderWithAuth } from '@/test-utils'
+import { EmployeeRoute } from './employees'
 import { LeavePage } from './leave'
 
 beforeEach(() => {
@@ -99,6 +100,45 @@ test('the row link keeps the selected year', async () => {
   await screen.findByText('سامي فؤاد')
   await user.click(screen.getByRole('button', { name: '2025' }))
   await waitFor(() => expect(screen.getByRole('link', { name: 'سامي فؤاد' })).toHaveAttribute('href', '/employees/e1?tab=leave&year=2025'))
+})
+
+function Back() {
+  const navigate = useNavigate()
+  return <button type="button" onClick={() => navigate(-1)}>back</button>
+}
+const many = () => json(200, { data: [row], meta: { pagination: { ...pagination, total: 45 } } })
+
+test('the balances filters and page live in the URL, so Back from an employee shows the same list', async () => {
+  mockFetch({ [BALANCES]: many })
+  const user = userEvent.setup()
+  renderWithAuth(<Routes><Route path="leave" element={<LeavePage />} /><Route path="employees/:id" element={<Back />} /></Routes>, ['leave.view.all'], { path: '/leave?tab=balances' })
+  await screen.findByText('سامي فؤاد')
+  await user.selectOptions(screen.getByRole('combobox', { name: 'نوع الموظف' }), 'engineer')
+  await user.click(screen.getByRole('button', { name: '2025' }))
+  await user.type(screen.getByRole('textbox'), 'سامي')
+  await waitFor(() => expect(lastQuery().get('q')).toBe('سامي'))
+  await user.click(screen.getByRole('button', { name: 'التالي' }))
+  await waitFor(() => expect(lastQuery().get('page')).toBe('2'))
+  await user.click(screen.getByRole('link', { name: 'سامي فؤاد' }))
+  await user.click(await screen.findByRole('button', { name: 'back' }))
+  expect(await screen.findByRole('combobox', { name: 'نوع الموظف' })).toHaveValue('engineer')
+  expect(screen.getByRole('textbox')).toHaveValue('سامي')
+  expect(screen.getByRole('button', { name: '2025' })).toHaveAttribute('aria-pressed', 'true')
+  expect(await screen.findByRole('button', { name: 'السابق' })).toBeEnabled()
+  expect(Object.fromEntries(lastQuery())).toEqual({ year: '2025', type: 'engineer', q: 'سامي', page: '2', per_page: '20' })
+})
+
+test('an opened balance row steps through the balances list it was opened from', async () => {
+  const list = vi.fn((_url: string) => many())
+  mockFetch({
+    [BALANCES]: list,
+    'GET /api/v1/employees/e1': () => json(200, { data: { id: 'e1', name_ar: 'سامي فؤاد', current_type: 'engineer', type_changes: [], pay_changes: [], documents: [], current_manager: null, manager_assignments: [] } }),
+  })
+  const user = userEvent.setup()
+  renderWithAuth(<Routes><Route path="leave" element={<LeavePage />} /><Route path="employees/:id" element={<EmployeeRoute />} /></Routes>, ['leave.view.all', 'employee.view.all'], { path: '/leave?tab=balances&type=engineer&page=2' })
+  await user.click(await screen.findByRole('link', { name: 'سامي فؤاد' }))
+  expect(await screen.findByText('21 من 45')).toBeInTheDocument() // the first row of page 2
+  await waitFor(() => expect(list.mock.calls.map(([u]) => u)).toContain('/api/v1/leave/balances?year=2026&type=engineer&page=22&per_page=1'))
 })
 
 test('a leaver is marked with the termination date', async () => {

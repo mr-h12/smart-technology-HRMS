@@ -97,8 +97,8 @@ export function EmployeesPage() {
     filter({ q: '', type: '' })
   }
   const today = cairoToday()
-  // the employee screen steps through this same filtered list: its filters without the paging, the row's place in the whole result, its size
-  const open = (id: string, i: number) => navigate(`/employees/${id}`, { state: { list: String(new URLSearchParams(filters)), pos: (page - 1) * PAGE + i, total } })
+  // the employee screen steps through this same filtered list: its request without the paging, the row's place in the whole result, its size
+  const open = (id: string, i: number) => navigate(`/employees/${id}`, { state: { list: `/employees?${new URLSearchParams(filters)}`, pos: (page - 1) * PAGE + i, total } })
   const notes = rows.some((r) => 'hr_notes' in r) // the server sends notes only to the viewers allowed to read them
   const office = can('employee.view.all') // a site manager never reaches office staff
   const types = TYPES.filter((v) => office || v !== 'office')
@@ -253,20 +253,24 @@ export function EmployeeFormPage() {
 }
 
 /**
- * Previous / next employee of the filtered list this one was opened from (the router state `open` puts there), by the arrows or
- * a horizontal swipe; nothing when opened from anywhere else. Each neighbour is one row of the same list request, so it keeps the
- * list's order and permission scope. A move replaces the history entry, so Back returns straight to the list.
+ * Previous / next employee of the filtered list this one was opened from, by the arrows or a horizontal swipe; nothing when opened
+ * from anywhere else. The opening screen puts `{ list, pos, total }` in the router state: `list` is its list request with its filters
+ * and no paging (`/employees?type=engineer`, `/leave/balances?year=2026`), `pos` the row's place in the whole result, `total` its size.
+ * Each neighbour is one row of that same request, so it keeps the screen's order and permission scope. A list the server does not page
+ * passes `ids` (its shown rows, in order) instead of `list`. A move replaces the history entry, so Back returns straight to the list.
  */
 function Pager() {
   const { t, i18n } = useTranslation()
   const navigate = useNavigate()
   const { state, search } = useLocation()
-  const ctx: { list: string; pos: number; total: number } | null = typeof state?.list === 'string' && Number.isInteger(state.pos) && Number.isInteger(state.total) ? state : null
-  const { list, pos, total } = ctx ?? { list: '', pos: 0, total: 0 }
-  const at = (p: number) => (ctx && p >= 0 && p < total ? `/employees?${new URLSearchParams(`${list}&page=${p + 1}&per_page=1`)}` : null)
-  const prev: string | undefined = useApi<Row[]>(at(pos - 1)).data?.[0]?.id
-  const next: string | undefined = useApi<Row[]>(at(pos + 1)).data?.[0]?.id
-  const go = (id: string | undefined, p: number) => id && navigate(`/employees/${id}${search}`, { replace: true, state: { list, pos: p, total } }) // `search` keeps the tab
+  const ctx: { list?: string; ids?: string[]; pos: number; total: number } | null =
+    (typeof state?.list === 'string' || Array.isArray(state?.ids)) && Number.isInteger(state.pos) && Number.isInteger(state.total) ? state : null
+  const { list, ids, pos, total } = ctx ?? { pos: 0, total: 0 }
+  const [path, query = ''] = list?.split('?') ?? []
+  const at = (p: number) => (list && p >= 0 && p < total ? `${path}?${new URLSearchParams(`${query}&page=${p + 1}&per_page=1`)}` : null)
+  const prev: string | undefined = useApi<Row[]>(at(pos - 1)).data?.[0]?.id ?? ids?.[pos - 1]
+  const next: string | undefined = useApi<Row[]>(at(pos + 1)).data?.[0]?.id ?? ids?.[pos + 1]
+  const go = (id: string | undefined, p: number) => id && navigate(`/employees/${id}${search}`, { replace: true, state: { ...ctx, pos: p } }) // `search` keeps the tab
   // content follows the finger: in Arabic the next employee comes in from the left, so a swipe to the right brings it
   const swipe = useEffectEvent((dx: number) => (dx > 0 === (i18n.dir() === 'rtl') ? go(next, pos + 1) : go(prev, pos - 1)))
   useEffect(() => {

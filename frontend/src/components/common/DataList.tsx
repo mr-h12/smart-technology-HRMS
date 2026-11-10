@@ -43,6 +43,8 @@ export type DataListProps<T> = DataColumns<T> & {
   empty?: { icon: LucideIcon; title: string; description?: string; action?: ReactNode }
   /** Each title becomes a link there, stretched over its row or card, so the whole row opens it and it can open in a new tab. */
   to?: (row: T) => string
+  /** Router state the link carries, from the row and its index on this page (the list the employee screen steps through); a new tab opens without it. */
+  state?: (row: T, i: number) => unknown
   /** Pagination shows only when total > pageSize. */
   page?: { page: number; pageSize: number; total: number; onPageChange: (p: number) => void }
   /** The row a link pointed at (aria-current, accent background). */
@@ -62,7 +64,7 @@ const CARD = 'max-sm:grid max-sm:grid-cols-[minmax(0,1fr)_auto] max-sm:items-cen
  * States in order: loading → skeleton, error → Alert, no rows → EmptyState, else rows + Pagination.
  * No selection or sorting; `to` is the only row click; `current` only marks a row. Matrices and the day sheet use ui/table directly.
  */
-export function DataList<T>({ label, rows, rowKey, title, fields = [], status, actions, hero, to, loading, error, empty, page, current }: DataListProps<T>) {
+export function DataList<T>({ label, rows, rowKey, title, fields = [], status, actions, hero, to, state, loading, error, empty, page, current }: DataListProps<T>) {
   const { t } = useTranslation()
   if (loading) return <TableSkeleton rows={8} />
   return (
@@ -92,11 +94,11 @@ export function DataList<T>({ label, rows, rowKey, title, fields = [], status, a
             </TableRow>
           </TableHeader>
           <TableBody role="rowgroup" className="max-sm:block">
-            {rows.map((r) => (
+            {rows.map((r, i) => (
               <TableRow role="row" key={rowKey(r)} aria-current={current?.(r) || undefined} className={cn(CARD, to && 'relative', current?.(r) && 'bg-accent hover:bg-accent')}>
                 <td role="cell" className={cn(CELL, 'sm:whitespace-normal max-sm:col-start-1 max-sm:row-start-1 max-sm:font-medium')}>
                   {to ? (
-                    <Link to={to(r)} className="outline-none after:absolute after:inset-0 hover:underline focus-visible:after:outline-2 focus-visible:after:-outline-offset-2 focus-visible:after:outline-ring">
+                    <Link to={to(r)} state={state?.(r, i)} className="outline-none after:absolute after:inset-0 hover:underline focus-visible:after:outline-2 focus-visible:after:-outline-offset-2 focus-visible:after:outline-ring">
                       {title.cell(r)}
                     </Link>
                   ) : (
