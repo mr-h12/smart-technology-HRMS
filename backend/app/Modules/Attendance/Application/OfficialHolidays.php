@@ -14,13 +14,14 @@ use App\Modules\Sites\Domain\SiteKind;
 use App\Modules\Sites\Infrastructure\Eloquent\Site;
 use App\Support\Http\Paginates;
 use Closure;
-use Illuminate\Database\UniqueConstraintViolationException;
+use Illuminate\Database\QueryException;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\ValidationException;
 
 /**
- * The official-holiday list. A holiday derives a day for every group, so a write needs each group's period on that date open. Deleting or
- * moving one clears the holiday days a lock stored on its old date (a reopened period), so they are derived again or missing.
+ * The official-holiday list: named periods of one or more days that never overlap. A holiday derives every day of it for every group, so a
+ * write needs each group's periods on its old and new days open. Deleting, moving or shortening one clears the holiday days a lock stored
+ * on the dates it no longer covers (a reopened period), so they are derived again or missing.
  */
 final class OfficialHolidays
 {
@@ -31,44 +32,44 @@ final class OfficialHolidays
     {
         $query = OfficialHoliday::query()->orderBy('date');
         if ($year !== null) {
-            $query->whereBetween('date', ["{$year}-01-01", "{$year}-12-31"]);
+            $query->where('date', '<=', "{$year}-12-31")->where('end_date', '>=', "{$year}-01-01");
         }
 
         return $this->page($query, $perPage);
     }
 
     /**
-     * @param  array{date: string, name: string}  $data
+     * @param  array{date: string, end_date?: ?string, name: string}  $data  no end_date: the one day
      * @return array<string, mixed>
      */
     public function create(array $data): array
     {
+        $data['end_date'] ??= $data['date'];
+
         return $this->write(function () use ($data): OfficialHoliday {
-            $this->assertOpen($data['date']);
-            $this->assertFree($data['date']);
+            $this->assertOpen($data['date'], $data['end_date']);
+            $this->assertFree($data['date'], $data['end_date']);
 
             return OfficialHoliday::create($data);
         });
     }
 
     /**
-     * @param  array{date?: string, name?: string}  $data
+     * @param  array{date?: string, end_date?: string, name?: string}  $data  date and end_date come together
      * @return array<string, mixed>
      */
     public function update(string $id, array $data): array
     {
         return $this->write(function () use ($id, $data): OfficialHoliday {
             $holiday = OfficialHoliday::lockForUpdate()->findOrFail($id);
-            $this->assertOpen((string) $holiday->date);
-            if (isset($data['date']) && $data['date'] !== $holiday->date) {
-                $this->assertOpen($data['date']);
-                $this->assertFree($data['date']);
+            [$from, $to] = [(string) $holiday->date, (string) $holiday->end_date];
+            $this->assertOpen($from, $to);
+            if (isset($data['date'], $data['end_date'])) {
+                $this->assertOpen($data['date'], $data['end_date']);
+                $this->assertFree($data['date'], $data['end_date'], $id);
             }
-            $old = (string) $holiday->date;
             $holiday->update($data);
-            if ($holiday->date !== $old) {
-                $this->clearStored($old);
-            }
+            $this->clearStored($from, $to, [(string) $holiday->date, (string) $holiday->end_date]);
 
             return $holiday;
         });
@@ -78,17 +79,26 @@ final class OfficialHolidays
     {
         DB::transaction(function () use ($id): void {
             $holiday = OfficialHoliday::lockForUpdate()->findOrFail($id);
-            $this->assertOpen((string) $holiday->date);
+            $this->assertOpen((string) $holiday->date, (string) $holiday->end_date);
             $holiday->delete();
-            $this->clearStored((string) $holiday->date);
+            $this->clearStored((string) $holiday->date, (string) $holiday->end_date);
         });
     }
 
-    /** Soft-deletes the lock's stored holiday days on $date, as a clear does (version+1, audited); HR's, imported and leave days stay. */
-    private function clearStored(string $date): void
+    /**
+     * Soft-deletes the lock's stored holiday days from $from to $to, outside $keep, as a clear does (version+1, audited); HR's, imported and
+     * leave days stay.
+     *
+     * @param  list<string>  $keep  the holiday's new first and last day, whose days stay; [] for none
+     */
+    private function clearStored(string $from, string $to, array $keep = []): void
     {
         $types = Site::withTrashed()->where(['kind' => SiteKind::Leave->value, 'leave_code' => LeaveCode::OfficialHoliday->value])->select('id');
-        foreach (AttendanceDay::where(['date' => $date, 'source' => 'derived'])->whereIn('site_id', $types)->lockForUpdate()->get() as $row) {
+        $rows = AttendanceDay::where('source', 'derived')->whereBetween('date', [$from, $to])->whereIn('site_id', $types);
+        if ($keep !== []) {
+            $rows->whereNotBetween('date', $keep);
+        }
+        foreach ($rows->lockForUpdate()->get() as $row) {
             $row->version = $row->version + 1;
             $row->save();
             $row->delete();
@@ -103,23 +113,34 @@ final class OfficialHolidays
     {
         try {
             return $this->row(DB::transaction($write));
-        } catch (UniqueConstraintViolationException) {
-            // A racing write of the same date won.
-            throw ValidationException::withMessages(['date' => __('errors.duplicate_date')]);
+        } catch (QueryException $e) {
+            if ($e->getCode() !== '23P01') {
+                throw $e;
+            }
+            // official_holidays_no_overlap: a racing write of overlapping dates won.
+            throw ValidationException::withMessages(['date' => __('errors.holiday_overlap')]);
         }
     }
 
-    private function assertOpen(string $date): void
+    /** Every group's every period from $from to $to. */
+    private function assertOpen(string $from, string $to): void
     {
         foreach (EmployeeType::cases() as $type) {
-            PeriodGuard::assertOpen(Period::containing($type, $date));
+            for ($p = Period::containing($type, $from); $p->start <= $to; $p = $p->next()) {
+                PeriodGuard::assertOpen($p);
+            }
         }
     }
 
-    private function assertFree(string $date): void
+    /** No other live holiday shares a date with $from to $to. */
+    private function assertFree(string $from, string $to, ?string $except = null): void
     {
-        if (OfficialHoliday::where('date', $date)->exists()) {
-            throw ValidationException::withMessages(['date' => __('errors.duplicate_date')]);
+        $other = OfficialHoliday::where('date', '<=', $to)->where('end_date', '>=', $from);
+        if ($except !== null) {
+            $other->whereKeyNot($except);
+        }
+        if ($other->exists()) {
+            throw ValidationException::withMessages(['date' => __('errors.holiday_overlap')]);
         }
     }
 }

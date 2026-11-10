@@ -5,6 +5,7 @@ declare(strict_types=1);
 // The field labels and the custom messages: Laravel merges this over the framework's English messages.
 return [
     'custom' => [
+        'end_date' => ['after_or_equal' => 'The To date must be on or after the From date.'],
         'phone' => ['regex' => 'The phone must be an Egyptian mobile number: 11 digits starting with 010, 011, 012 or 015.'],
     ],
     'attributes' => [
@@ -45,6 +46,7 @@ return [
         'site_id' => 'Site',
         'amount' => 'Fare',
         'date' => 'Date',
+        'end_date' => 'To date',
         'email' => 'Email address',
         'password' => 'Password',
         'role_id' => 'Role',

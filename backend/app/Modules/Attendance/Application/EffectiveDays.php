@@ -47,7 +47,7 @@ final class EffectiveDays
         foreach ($rows as $row) {
             $stored[$row->employee_id][$row->date] = $row;
         }
-        $holidays = $locked ? [] : array_flip(OfficialHoliday::whereBetween('date', [$p->start, $p->end])->pluck('date')->all());
+        $holidays = $locked ? [] : array_flip(OfficialHoliday::datesBetween($p->start, $p->end));
         // A stored day may point at a since-deactivated or deleted leave type; a derived day only at the active one.
         $leaveTypes = Site::withTrashed()->where('kind', 'leave')->get(['id', 'leave_code', 'active', 'deleted_at']);
         $codeOf = $leaveTypes->pluck('leave_code', 'id')->all();
@@ -191,7 +191,7 @@ final class EffectiveDays
     public function offDays(Period $p): array
     {
         $weeklyOff = $this->weeklyOff($p->group, $this->rules->all());
-        $holidays = array_flip(OfficialHoliday::whereBetween('date', [$p->start, $p->end])->pluck('date')->all());
+        $holidays = array_flip(OfficialHoliday::datesBetween($p->start, $p->end));
 
         return array_combine($p->days(), array_map(fn (string $d) => OffDays::leaveCodeFor($d, $weeklyOff, isset($holidays[$d])) !== null, $p->days()));
     }
