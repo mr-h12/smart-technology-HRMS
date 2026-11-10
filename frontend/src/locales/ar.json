@@ -113,6 +113,9 @@
     "status": "الحالة",
     "employee": "الموظف",
     "leavesOn": "ينتهي في {{date}}",
+    "prev": "الموظف السابق",
+    "next": "الموظف التالي",
+    "position": "{{pos}} من {{total}}",
     "archive": {
       "view": "عرض الموظفين",
       "active": "النشطون",

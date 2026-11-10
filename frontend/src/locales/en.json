@@ -113,6 +113,9 @@
     "status": "Status",
     "employee": "Employee",
     "leavesOn": "Leaves on {{date}}",
+    "prev": "Previous employee",
+    "next": "Next employee",
+    "position": "{{pos}} of {{total}}",
     "archive": {
       "view": "Show employees",
       "active": "Active",
