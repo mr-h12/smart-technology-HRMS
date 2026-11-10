@@ -91,6 +91,14 @@ class LeaveRequestsTest extends TestCase
         $this->assertSame(['2026-11-03', '2026-11-05'], $this->dates($e, '2026-11-03', '2026-11-05'));
     }
 
+    public function test_no_day_of_a_holiday_period_is_counted(): void
+    {
+        $e = $this->employee('engineer', '2020-01-01');
+        $this->holiday('2026-11-03', 'Holiday-1', '2026-11-05');
+        $this->assertSame(['2026-11-02', '2026-11-07', '2026-11-08'], $this->dates($e, '2026-11-02', '2026-11-08'));   // 11-06 is the Friday
+        $this->submit($e, '2026-11-02', '2026-11-08')->assertCreated()->assertJsonPath('data.days', 3);
+    }
+
     public function test_dates_after_termination_are_not_counted(): void
     {
         $e = $this->employee('engineer', '2020-01-01', ['termination_date' => '2026-11-04']);

@@ -105,7 +105,7 @@ HR's freeze of one group's period; nobody edits until HR reopens with a reason.
 _Avoid_: close (that is the Release 2 payroll period close)
 
 **Official holiday** (إجازة رسمية):
-A dated day off for everyone, kept in Settings.
+A named day or period of consecutive days off for everyone (such as Eid), kept in Settings; holidays never overlap.
 _Avoid_: public holiday, vacation
 
 **Derived day** (يوم تلقائي):

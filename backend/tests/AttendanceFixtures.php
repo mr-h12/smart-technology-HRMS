@@ -70,9 +70,10 @@ trait AttendanceFixtures
         app(EmployeeService::class)->assignSite($employeeId, ['site_id' => $siteId, 'effective_from' => $from]);
     }
 
-    protected function holiday(string $date, string $name = 'Holiday-1'): string
+    /** A holiday from $date to $end (default: that one day). */
+    protected function holiday(string $date, string $name = 'Holiday-1', ?string $end = null): string
     {
-        return (string) OfficialHoliday::create(['date' => $date, 'name' => $name])->getKey();
+        return (string) OfficialHoliday::create(['date' => $date, 'end_date' => $end ?? $date, 'name' => $name])->getKey();
     }
 
     /** A user whose role holds attendance.view and attendance.edit at these scopes; null = not held. */

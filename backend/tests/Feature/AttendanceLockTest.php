@@ -2,6 +2,7 @@
 
 namespace Tests\Feature;
 
+use App\Modules\Attendance\Application\AttendanceDays;
 use App\Modules\Attendance\Domain\Period;
 use App\Modules\Attendance\Infrastructure\Eloquent\AttendanceDay;
 use App\Modules\Employees\Domain\EmployeeType;
@@ -213,9 +214,48 @@ class AttendanceLockTest extends TestCase
         $this->lock(['confirm_missing' => true])->assertCreated();
         $this->reopen();
 
-        $this->patchJson("/api/v1/attendance/holidays/{$this->holidayId}", ['date' => '2026-10-07'])->assertOk();
+        $this->patchJson("/api/v1/attendance/holidays/{$this->holidayId}", ['date' => '2026-10-07', 'end_date' => '2026-10-07'])->assertOk();
         $this->getJson("/api/v1/attendance/days/{$this->eng}/2026-10-06")->assertJsonPath('data.state', 'missing');
         $this->getJson("/api/v1/attendance/days/{$this->eng}/2026-10-07")->assertJsonPath('data.state', 'derived')->assertJsonPath('data.leave_code', 'official_holiday');
+    }
+
+    /** 2026-10-12..15 is Monday to Thursday. */
+    public function test_shortening_a_holiday_clears_the_stored_days_of_the_dropped_dates_only(): void
+    {
+        $other = $this->employee('engineer');
+        $id = $this->holiday('2026-10-12', 'Holiday-2', '2026-10-15');
+        $this->lock(['confirm_missing' => true])->assertCreated();
+        $this->reopen();
+        $this->putDay($this->eng, '2026-10-14', ['version' => 1, 'site_id' => $this->site])->assertOk();
+        app(AttendanceDays::class)->save($this->eng, '2026-10-15', ['version' => 1, 'site_id' => $this->site], null, 'imported');
+        app(AttendanceDays::class)->writeLeaveDay($other, '2026-10-15', $this->leave['annual']);
+        $span = fn (string $e) => array_filter($this->leaveDays($e), fn (string $d) => $d >= '2026-10-12' && $d <= '2026-10-15', ARRAY_FILTER_USE_KEY);
+        $kept = fn () => AttendanceDay::where('employee_id', $this->eng)->whereIn('date', ['2026-10-14', '2026-10-15'])->orderBy('date')->pluck('source')->all();
+
+        $this->patchJson("/api/v1/attendance/holidays/{$id}", ['date' => '2026-10-12', 'end_date' => '2026-10-13'])->assertOk();
+        $this->assertSame(['2026-10-12' => 'official_holiday/derived', '2026-10-13' => 'official_holiday/derived', '2026-10-15' => 'annual/leave'], $span($other));
+        $this->assertSame(['2026-10-12' => 'official_holiday/derived', '2026-10-13' => 'official_holiday/derived'], $span($this->eng));
+        $this->assertSame(['entered', 'imported'], $kept());
+
+        $this->deleteJson("/api/v1/attendance/holidays/{$id}")->assertNoContent();
+        $this->assertSame(['2026-10-15' => 'annual/leave'], $span($other));
+        $this->assertSame([], $span($this->eng));
+        $this->assertSame(['entered', 'imported'], $kept());
+    }
+
+    public function test_relock_lists_every_day_of_a_holiday_added_since_and_the_leave_inside_it(): void
+    {
+        $this->lock(['confirm_missing' => true])->assertCreated();
+        $this->reopen();
+        $this->cairo('2026-10-27 13:00');
+        $this->putDay($this->eng, '2026-10-13', ['site_id' => $this->leave['casual']])->assertOk();
+        $this->postJson('/api/v1/attendance/holidays', ['date' => '2026-10-12', 'end_date' => '2026-10-14', 'name' => 'Holiday-2'])->assertCreated();
+        $this->postJson('/api/v1/attendance/holidays', ['date' => '2026-10-24', 'end_date' => '2026-10-27', 'name' => 'Holiday-3'])->assertCreated();
+
+        $this->lock(['confirm_missing' => true])->assertCreated()   // only the days inside the locked period, which ends on the 25th
+            ->assertJsonPath('data.holidays_added', ['2026-10-12', '2026-10-13', '2026-10-14', '2026-10-24', '2026-10-25'])
+            ->assertJsonCount(1, 'data.leave_on_holidays')->assertJsonPath('data.leave_on_holidays.0.date', '2026-10-13')
+            ->assertJsonPath('data.leave_on_holidays.0.leave_code', 'casual');
     }
 
     public function test_relock_lists_removed_and_added_holidays(): void
@@ -223,7 +263,7 @@ class AttendanceLockTest extends TestCase
         $this->lock(['confirm_missing' => true])->assertCreated();
         $this->reopen();
         $this->cairo('2026-10-27 13:00');
-        $this->patchJson("/api/v1/attendance/holidays/{$this->holidayId}", ['date' => '2026-10-07'])->assertOk();
+        $this->patchJson("/api/v1/attendance/holidays/{$this->holidayId}", ['date' => '2026-10-07', 'end_date' => '2026-10-07'])->assertOk();
 
         $this->lock()->assertStatus(422)->assertJsonPath('error.code', 'missing_days_unconfirmed');
         $this->lock(['confirm_missing' => true])->assertCreated()->assertJsonPath('data.is_locked', true)

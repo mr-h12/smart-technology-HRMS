@@ -11,6 +11,8 @@ return [
     'pay_field_required' => ':field is required for :type.',
     'no_type_on_date' => 'The employee has no type in force on this date.',
     'duplicate_date' => 'A record already exists on this date.',
+    'holiday_overlap' => 'These dates overlap another official holiday.',
+    'holiday_too_long' => 'An official holiday lasts at most :max days.',
     'concurrency_conflict' => 'Someone else changed this record. Load the latest version and try again.',
     'no_leave_balance' => 'Day laborers have no leave balance.',
     'home_site_not_allowed' => 'Only workers and office staff have a home site; this employee is neither on this date.',

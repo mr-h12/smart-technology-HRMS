@@ -105,14 +105,14 @@ On the site manager's screen (§2b): an engineer's stored late minutes are the r
 ## 2a. Derived off days
 - Weekly off per type: **Friday + Saturday** for office staff, **Friday** for the field types.
 - Each weekly off weekday is derived as the leave day-type with the same code: Friday → «اجازة الجمعة», Saturday → «اجازة السبت».
-- Official holidays come from the holiday list. When a weekly off day is also a holiday, the holiday wins.
+- Official holidays come from the holiday list. A holiday is a named period of one or more consecutive days (from, to; decided 2026-11-10), and every day in it is an official holiday. Two holidays never overlap; they may touch. A period may cross a payroll period boundary or a year end, and each day counts in its own period. When a weekly off day is also a holiday, the holiday wins.
 - A derived day is a leave day: no scheduled times, and a permanent worker's transport is none.
 - Derived on read while the period is open; stored at lock. HR can record the day instead (a site, if the person worked).
-- Reopening keeps the stored days. A holiday can only be added, moved or deleted while every period on its date is open (decided 2026-11-04):
-  - deleting or moving a holiday removes the days stored as that official holiday by a lock (source `derived`) on the old date. The date then derives again (a weekly off) or is missing, which the lock's confirm-missing step lists;
-  - a new holiday date with no stored day derives and is stored at the next lock, as before;
+- Reopening keeps the stored days. A holiday can only be added, moved, shortened or deleted while every period of every group on each day of its old and new period is open (decided 2026-11-04, per day of a period 2026-11-10):
+  - deleting, moving or shortening a holiday removes the days stored as that official holiday by a lock (source `derived`) on the dates it no longer covers. Those dates then derive again (a weekly off) or are missing, which the lock's confirm-missing step lists;
+  - a new holiday day with no stored day derives and is stored at the next lock, as before;
   - stored weekly-off days are never refreshed, because the weekly-off setting has no effective date; days HR or the leave workflow wrote (source `entered`, `imported`, `leave`) are never touched;
-  - a re-lock lists the holiday days removed and the holidays added or changed since the last lock, and separately the leave days (annual, casual, sick, unpaid) that now fall on a holiday. It does not change those leave days; HR reviews them.
+  - a re-lock lists the holiday days removed and every day, inside the locked period, of the holidays added or changed since the last lock, and separately the leave days (annual, casual, sick, unpaid) that now fall on a holiday. It does not change those leave days; HR reviews them.
 - A derived day is never an absence.
 
 ## 2b. Field shift and the site manager's day — decided 2026-11-04
