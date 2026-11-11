@@ -52,6 +52,23 @@ class DayLaborerEngineTest extends TestCase
         $this->assertSame('0.000000', $this->component($line, Component::Net));
     }
 
+    public function test_a_not_employed_day_earns_nothing_but_keeps_its_advance(): void
+    {
+        $line = $this->compute([$this->day(state: 'not_employed', otMinutes: 60, fare: '35', advance: '40')]);
+
+        $this->assertSame('0.000000', $line->days[0]->dayCost);
+        $this->assertSame('40.000000', $line->days[0]->parts[Component::Advances->value]);
+        $this->assertSame('-40.000000', $this->component($line, Component::Net));
+    }
+
+    public function test_negative_net_is_flagged_not_clipped(): void
+    {
+        $line = $this->compute([$this->day()], ['deduction' => '500']);
+
+        $this->assertSame('-170.000000', $this->component($line, Component::Net));
+        $this->assertSame(['negative_net'], $line->flags);
+    }
+
     public function test_missing_and_open_days_are_flagged(): void
     {
         $line = $this->compute([

@@ -85,7 +85,7 @@ final class DayRules
     }
 
     /** The end in minutes after the start's midnight: an end before the start is the next day (+24 h). */
-    private static function endMinutes(string $start, string $end): int
+    public static function endMinutes(string $start, string $end): int
     {
         return self::minutes($end) + (self::minutes($end) < self::minutes($start) ? 1440 : 0);
     }

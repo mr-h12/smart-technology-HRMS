@@ -17,4 +17,12 @@ final readonly class Line
         public array $days,
         public array $flags,
     ) {}
+
+    /** This line, flagged `negative_net` when its net is below 0, for every type: the net is shown as computed, never clipped. */
+    public function withNegativeNetFlag(): self
+    {
+        return bccomp($this->components[Component::Net->value], '0', 6) < 0
+            ? new self($this->components, $this->days, [...$this->flags, 'negative_net'])
+            : $this;
+    }
 }

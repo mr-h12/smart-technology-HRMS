@@ -11,9 +11,9 @@ namespace App\Modules\Payroll\Domain;
 final readonly class DayInput
 {
     /**
-     * @param  string  $state  work|leave|missing|not_employed|open|future
+     * @param  'work'|'leave'|'missing'|'not_employed'|'open'|'future'  $state
      * @param  numeric-string|null  $outsideAmount
-     * @param  string  $transport  full|half|none
+     * @param  'full'|'half'|'none'  $transport  the stored transport portion (attendance_days_transport_check)
      * @param  numeric-string|null  $advance
      * @param  numeric-string|null  $wage  monthly salary + raise, or the daily wage, in force that day; null when no pay row is
      * @param  numeric-string  $allowance  the site allowance for the day, from the site's rule

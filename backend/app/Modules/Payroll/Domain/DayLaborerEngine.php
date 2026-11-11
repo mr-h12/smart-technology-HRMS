@@ -46,7 +46,7 @@ final class DayLaborerEngine
         ];
         $flagNames = array_map(fn (string $f) => explode(':', $f)[0], array_merge(...array_column($dayLines, 'flags')));
 
-        return new Line(array_map(Money::round6(...), $components), $dayLines, array_values(array_unique($flagNames)));
+        return (new Line(array_map(Money::round6(...), $components), $dayLines, array_values(array_unique($flagNames))))->withNegativeNetFlag();
     }
 
     /**
