@@ -57,9 +57,9 @@ Frontend
   - sick (leave code `sick`): blue, `info`;
   - leave (annual, casual, unpaid, other): amber, `warning`;
   - missing: grey, `muted-foreground`;
-  - weekly off and official holidays (`friday`, `saturday`, `official_holiday`, `rest`): no fill;
-  - future: faded; not employed: fainter still.
-- Legend: one line above the calendar. Each of the five colours shows its label and how many of the period's days have it, counted with the same `kind`. It replaces the `StatRow`.
+  - weekly off and official holidays (`friday`, `saturday`, `official_holiday`, `rest`): no fill, a grey number in normal weight;
+  - future: faded; not employed: fainter still. A derived day after today (a coming Friday or holiday) is future too; a stored one keeps its kind and opens.
+- Legend: one line above the calendar. Each of the five colours shows a solid dot, its label and how many of the period's days have it, counted with the same `kind`. It replaces the `StatRow`.
 - Each day is a button. Its name is the weekday, the date and what the day holds (site name, leave name or state); its `title` is what the day holds. It has a visible focus ring. Today has a primary ring and `aria-current="date"`. Future and not-employed days are disabled.
 - A click opens `DayEditor` for that date. The calendar refetches after a save.
 - Arabic RTL first. The day circles are smaller below `sm`, so the same grid serves a phone.
@@ -71,7 +71,7 @@ New keys in both `ar.json` and `en.json`, under `attendance` and `employee.tab` 
 ## Tests
 
 - PHPUnit: grid `search` (name part, code, with `site_id`, totals, own scope still narrowed); the employee period for each type's period, a type change, a terminated employee's clamp, the summary counts, `403` without `attendance.view`, the `employee.scope` refusal.
-- Vitest: the grid sends `search` and keeps `?q=`; the employee tab shows only with `attendance.view`; the calendar starts on Saturday and splits at a month change; each day's colour and the legend counts come from `kind`; today is marked and future or not-employed days are disabled; the arrows move periods and a locked period says so; a day opens the day editor and a save refreshes the calendar; English labels; locale parity.
+- Vitest: the grid sends `search` and keeps `?q=`; the employee tab shows only with `attendance.view`; the calendar starts on Saturday and splits at a month change; each day's colour and the legend counts come from `kind`; today is marked and future or not-employed days are disabled; a coming weekly off is future unless it was stored; the arrows move periods and a locked period says so; a day opens the day editor and a save refreshes the calendar; English labels; locale parity.
 
 ## Verify
 
