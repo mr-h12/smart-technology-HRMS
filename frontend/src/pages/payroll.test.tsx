@@ -1,6 +1,6 @@
-import { screen, waitFor, within } from '@testing-library/react'
+import { act, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
-import { afterEach, beforeEach, expect, test, vi } from 'vitest'
+import { afterEach, beforeEach, expect, onTestFinished, test, vi } from 'vitest'
 import i18n from '@/i18n'
 import { json, me, mockFetch, pagination, renderApp, renderWithAuth } from '@/test-utils'
 import { PayrollPage } from './payroll'
@@ -57,6 +57,7 @@ const open = (perms = HR, path = '/payroll?group=engineer') => renderWithAuth(<P
 const table = () => screen.findByRole('table')
 const sent = (fn: ReturnType<typeof vi.fn>, call = 0) => JSON.parse(String((fn.mock.calls[call][1] as RequestInit).body))
 const rowOf = (name: string) => within(screen.getByRole('table')).getByText(name).closest('tr')!
+const reasonRequired = () => json(422, { error: { code: 'validation_failed', message: 'The given data was invalid.', details: [{ field: 'deduction_reason', code: 'invalid', message: 'حقل سبب الخصم مطلوب.' }] } })
 
 test('renders a row per line and a totals row, with the columns of the type, the flags and the not-locked banner', async () => {
   mockFetch(routes)
@@ -120,6 +121,47 @@ test('an input amount shows formatted like the computed cells, and the stored va
   await user.tab()
   expect(deduction).toHaveValue('100.00')
   expect(screen.getByRole('textbox', { name: 'سبب الخصم - Engineer-1' })).toHaveValue('Late report')
+})
+
+// A keyboard focus selects the field's text, and typing replaces it. user-event's Tab selects after React has re-rendered the cell
+// (formatted → value to edit), so it cannot show the bug; the other two replay a browser selecting the text in its own order.
+test.each([
+  ['Shift+Tab', async (el: HTMLInputElement) => {
+    await user.click(screen.getByRole('textbox', { name: 'سبب الخصم - Engineer-1' }))
+    await user.tab({ shift: true })
+    expect(el).toHaveFocus()
+  }],
+  ['a browser selecting after the focus handlers, before React re-renders (Chromium, Safari)', (el: HTMLInputElement) => act(() => { el.focus(); el.select() })],
+  ['a browser selecting before the focus handlers (Firefox)', (el: HTMLInputElement) => act(() => { el.select(); el.focus() })],
+])('a stored amount reached by keyboard (%s) is replaced by what HR types', async (_, reach) => {
+  const put = vi.fn((_url: string, _init?: RequestInit) => json(200, { data: { ...lines[0], days } }))
+  mockFetch({ ...routes, [`PUT ${BASE}/employees/e1/entry`]: put })
+  open()
+  await table()
+  const deduction = screen.getByRole<HTMLInputElement>('textbox', { name: 'الخصم - Engineer-1' })
+  await reach(deduction)
+  await user.keyboard('2000')
+  expect(deduction).toHaveValue('2000')
+  await user.click(document.body)
+  await waitFor(() => expect(put).toHaveBeenCalledOnce())
+  expect(sent(put)).toMatchObject({ version: 3, deduction: '2000', deduction_reason: 'Late report' })
+})
+
+// jsdom has no layout: this proves the call; the scroll padding it honours keeps the control clear of the pinned columns in a browser
+test('a control reached by keyboard is brought into view, and a press does not move the table', async () => {
+  const reveal = vi.spyOn(Element.prototype, 'scrollIntoView')
+  onTestFinished(() => reveal.mockRestore())
+  mockFetch(routes)
+  open()
+  await table()
+  await user.click(screen.getByRole('textbox', { name: 'الخصم - Engineer-2' })) // the click would land on another cell
+  expect(reveal).not.toHaveBeenCalled()
+  await user.tab({ shift: true }) // the computed cell Shift+Tab could leave under the employee column
+  const overtime = within(rowOf('Engineer-2')).getByRole('button', { name: /^الوقت الإضافي - Engineer-2/ })
+  expect(overtime).toHaveFocus()
+  expect(reveal).toHaveBeenCalledOnce()
+  expect(reveal.mock.contexts[0]).toBe(overtime)
+  expect(reveal).toHaveBeenCalledWith({ block: 'nearest', inline: 'nearest' })
 })
 
 test.each([
@@ -223,7 +265,7 @@ test('a 409 shows the reload message, reloads the sheet and overwrites nothing',
   await waitFor(() => expect(deduction).toHaveValue('100')) // the server's value: the draft is dropped, nothing retried
 })
 
-test('a refused field shows its message on its cell and keeps what HR typed', async () => {
+test('a refused field shows its message on its cell, takes the focus from the field HR saved from, and keeps what HR typed', async () => {
   const put = vi.fn(() => json(422, { error: { code: 'validation_failed', message: 'The given data was invalid.', details: [{ field: 'deduction_reason', code: 'invalid', message: 'حقل سبب الخصم مطلوب.' }] } }))
   mockFetch({ ...routes, [`PUT ${BASE}/employees/e2/entry`]: put })
   open()
@@ -232,9 +274,43 @@ test('a refused field shows its message on its cell and keeps what HR typed', as
   await user.type(deduction, '75{Enter}')
   const reason = screen.getByRole('textbox', { name: 'سبب الخصم - Engineer-2' })
   await waitFor(() => expect(reason).toHaveAccessibleDescription('حقل سبب الخصم مطلوب.'))
+  expect(reason).toHaveFocus() // under a pinned column or past the edge, it would go unseen; focus brings it in and reads its message
   expect(reason).toHaveAttribute('aria-invalid', 'true')
   expect(deduction).toHaveValue('75')
   expect(toast.error).not.toHaveBeenCalled()
+})
+
+test('a refusal takes the focus from the page, never from a control HR has moved to', async () => {
+  const put = vi.fn(reasonRequired)
+  mockFetch({ ...routes, [`PUT ${BASE}/employees/e2/entry`]: put })
+  open()
+  await table()
+  const reason = screen.getByRole('textbox', { name: 'سبب الخصم - Engineer-2' })
+  await user.type(screen.getByRole('textbox', { name: 'الخصم - Engineer-2' }), '75')
+  await user.click(document.body) // leaving the row for no control saves it
+  await waitFor(() => expect(reason).toHaveFocus())
+  const elsewhere = screen.getByRole('textbox', { name: 'الخصم - Engineer-1' })
+  await user.click(elsewhere) // leaving it for another row's cell saves it again
+  await waitFor(() => expect(put).toHaveBeenCalledTimes(2))
+  await waitFor(() => expect(reason).not.toHaveAttribute('readonly')) // the second refusal has landed
+  expect(reason).toHaveAttribute('aria-invalid', 'true')
+  expect(elsewhere).toHaveFocus()
+})
+
+test('a refusal\'s message goes once the typing it refused is undone and the row is left', async () => {
+  const put = vi.fn(reasonRequired)
+  mockFetch({ ...routes, [`PUT ${BASE}/employees/e2/entry`]: put })
+  open()
+  await table()
+  const deduction = screen.getByRole('textbox', { name: 'الخصم - Engineer-2' })
+  const reason = screen.getByRole('textbox', { name: 'سبب الخصم - Engineer-2' })
+  await user.type(deduction, '75{Enter}')
+  await waitFor(() => expect(reason).toHaveAttribute('aria-invalid', 'true'))
+  await user.clear(deduction)
+  await user.click(document.body)
+  expect(reason).not.toHaveAttribute('aria-invalid')
+  expect(screen.queryByText('حقل سبب الخصم مطلوب.')).toBeNull()
+  expect(put).toHaveBeenCalledOnce() // typed back to what it was: nothing to send
 })
 
 test('the override dialog requires a reason, then posts the component, the amount and the reason', async () => {

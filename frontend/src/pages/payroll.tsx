@@ -2,6 +2,7 @@ import { useQueryClient } from '@tanstack/react-query'
 import type { TFunction } from 'i18next'
 import { CircleDot, PenLine, TriangleAlert, Users } from 'lucide-react'
 import { useEffect, useId, useRef, useState } from 'react'
+import { flushSync } from 'react-dom'
 import { useTranslation } from 'react-i18next'
 import { useSearchParams } from 'react-router-dom'
 import { toast } from 'sonner'
@@ -96,6 +97,7 @@ export function PayrollPage() {
   const { data: sheet, err } = useApi<Sheet>(path)
   const [panel, setPanel] = useState<Row>()
   const [overriding, setOverriding] = useState<{ id: string; component: string }>()
+  const pressed = useRef(false)
   // read from the sheet, not kept from the click: a row saved on the way to the dialog refetches the line it shows
   const overridden = overriding && sheet?.lines.find((l) => l.employee.id === overriding.id)
   const editable = can('payroll.manage')
@@ -120,9 +122,9 @@ export function PayrollPage() {
         ) : (
           // each cell owns its row line, as the attendance grid: collapsed borders leave a band under a sticky cell. Head and
           // totals sit on `secondary`, which equals `muted` in light mode and stands out from the card in dark mode.
-          // The scroll padding keeps a focused cell clear of the sticky columns (their widths: the name button's max, the widest net
-          // cell, an override with both icons, about 140 px).
-          <Table scroller="scroll-ps-36 sm:scroll-ps-60 md:scroll-pe-40" className="border-separate border-spacing-0 [&_td]:border-b [&_th]:border-b [&_th]:tracking-normal [&_th]:normal-case">
+          // The scroll padding keeps a focused cell clear of the sticky columns (their widths: the name button's max plus the column's
+          // 1 px edge line, 145 / 241 px; the widest net cell, an override with both icons, about 140 px).
+          <Table scroller="scroll-ps-36.25 sm:scroll-ps-60.25 md:scroll-pe-40" className="border-separate border-spacing-0 [&_td]:border-b [&_th]:border-b [&_th]:tracking-normal [&_th]:normal-case">
             <TableHeader className="bg-secondary">
               <TableRow className="hover:bg-transparent">
                 <TableHead className={cn(PIN_START, 'bg-secondary')}>{t('attendance.employee')}</TableHead>
@@ -130,7 +132,18 @@ export function PayrollPage() {
                 {cols.map((col) => <TableHead key={col.join(':')} className={cn('min-w-24 whitespace-normal', !TEXTS.includes(col[1]) && 'text-end', col[1] === 'net' && cn(PIN_END, 'bg-secondary'))}>{colLabel(t, col)}</TableHead>)}
               </TableRow>
             </TableHeader>
-            <TableBody>
+            {/* Keyboard (or script) focus, either direction: a field's text is selected whole once its cell shows the value to edit
+                (the input's onFocus runs first), so typing replaces a stored amount whatever order the browser selects in; and the
+                control is brought inside the scroll padding, clear of the pinned columns and the box edges, instantly, before the
+                browser's own focus scroll, which leaves a control already inside the box where it is, even under a pinned column.
+                A mouse or touch press focuses within its own mousedown, so `pressed` lasts that long: the caret goes where HR pressed,
+                and the table does not move under the pointer. */}
+            <TableBody onMouseDown={() => { pressed.current = true; setTimeout(() => { pressed.current = false }) }}
+              onFocus={(e) => {
+                if (pressed.current) return
+                if (e.target instanceof HTMLInputElement) e.target.select()
+                e.target.scrollIntoView({ block: 'nearest', inline: 'nearest' })
+              }}>
               {sheet.lines.map((line) => (
                 <LineRow key={`${path}|${line.employee.id}`} line={line} cols={cols} group={group} path={path!} editable={editable}
                   onOpen={() => setPanel(line.employee)} onOverride={(component) => setOverriding({ id: line.employee.id, component })} />
@@ -172,6 +185,7 @@ function LineRow({ line, cols, group, path, editable, onOpen, onOverride }: { li
   const [focused, setFocused] = useState<string>()
   const flight = useRef(false)
   const alive = useRef(true)
+  const row = useRef<HTMLTableRowElement>(null)
   useEffect(() => {
     alive.current = true
     return () => { alive.current = false }
@@ -196,7 +210,12 @@ function LineRow({ line, cols, group, path, editable, onOpen, onOverride }: { li
 
   async function commit() {
     if (!edit || flight.current) return
-    if (Object.entries(edit.drafts).every(([f, v]) => v === asText(f, edit.base[f]))) return setEdit(undefined) // typed back to what it was
+    if (Object.entries(edit.drafts).every(([f, v]) => v === asText(f, edit.base[f]))) {
+      // typed back to what it was: nothing to send, and a refusal of the typing goes with it
+      setEdit(undefined)
+      setErrs({})
+      return
+    }
     flight.current = true
     setBusy(true)
     let done = false
@@ -208,7 +227,13 @@ function LineRow({ line, cols, group, path, editable, onOpen, onOverride }: { li
       if (e instanceof ApiError && e.status === 409) {
         toast.error(t('payroll.conflict', { name }))
         done = true
-      } else if (alive.current && e instanceof ApiError && e.details.some((d) => d.field && fields.includes(d.field))) setErrs(toErrs(e))
+      } else if (alive.current && e instanceof ApiError && e.details.some((d) => d.field && fields.includes(d.field))) {
+        flushSync(() => setErrs(toErrs(e)))
+        // the first refused field may sit under a pinned column or past the edge: when HR is still on this row (or on no control),
+        // it takes the focus, which brings it into view and reads its message; a control HR has moved to keeps the focus
+        const at = document.activeElement
+        if (at === document.body || row.current?.contains(at)) row.current?.querySelector<HTMLElement>('[aria-invalid="true"]')?.focus()
+      }
       // the row is gone (another group or period, another page) or no cell of it is named: the refusal as a toast, naming the employee
       else toast.error(t('payroll.notSaved', { name, message: e instanceof ApiError && e.details.length ? e.details.map((d) => d.message).join(' ') : e instanceof Error ? e.message : String(e) }))
     } finally {
@@ -238,7 +263,8 @@ function LineRow({ line, cols, group, path, editable, onOpen, onOverride }: { li
           <Input aria-label={label} value={display(key)} readOnly={busy} dir={text ? 'auto' : 'ltr'} inputMode={text ? undefined : COUNTS.includes(key) ? 'numeric' : 'decimal'} maxLength={text ? 500 : undefined}
             aria-invalid={!!errs[key] || undefined} aria-describedby={[errs[key] && errId, typed(key) && unsavedId].filter(Boolean).join(' ') || undefined}
             className={cn(text ? 'w-44' : 'w-28 text-end', typed(key) && 'border-primary')}
-            onChange={(e) => change(key, e.target.value)} onFocus={() => setFocused(key)} onBlur={() => setFocused(undefined)} onKeyDown={(e) => e.key === 'Enter' && void commit()} />
+            // the cell swaps to the value to edit now, not after the event: a browser's select-all on keyboard focus must land on it
+            onChange={(e) => change(key, e.target.value)} onFocus={() => flushSync(() => setFocused(key))} onBlur={() => setFocused(undefined)} onKeyDown={(e) => e.key === 'Enter' && void commit()} />
           {errs[key] && <p id={errId} className="mt-1 max-w-44 text-xs whitespace-normal text-destructive">{errs[key]}</p>}
         </TableCell>
       )
@@ -272,7 +298,7 @@ function LineRow({ line, cols, group, path, editable, onOpen, onOverride }: { li
 
   return (
     // the row's own focus-out: leaving it from an input or a button (the panel, a cell's dialog) saves it first
-    <TableRow className="group hover:bg-muted" onBlur={(e) => !e.currentTarget.contains(e.relatedTarget as Node | null) && void commit()}>
+    <TableRow ref={row} className="group hover:bg-muted" onBlur={(e) => !e.currentTarget.contains(e.relatedTarget as Node | null) && void commit()}>
       <TableCell className={cn(PIN_START, 'bg-card p-0 group-hover:bg-muted first:ps-0')}>
         <button type="button" title={name} aria-label={t('payroll.openDays', { name })} onClick={onOpen}
           className={cn(FOCUS, 'flex min-h-tap w-full max-w-36 items-center gap-2 px-3 text-start sm:max-w-60')}>
