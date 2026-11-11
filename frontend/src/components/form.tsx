@@ -1,4 +1,4 @@
-import { useId, useRef, useState } from 'react'
+import { useEffect, useId, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { Link } from 'react-router-dom'
 import { Alert } from '@/components/common/Alert'
@@ -17,8 +17,15 @@ export const selectCls =
 
 export const toErrs = (e: unknown): Errs =>
   e instanceof ApiError ? Object.fromEntries(e.details.filter((d) => d.field).map((d) => [d.field!, d.message])) : {}
-/** Shows every error message that no rendered field displays (non-422s, or fields hidden for this type). */
+/**
+ * Shows every error message that no rendered field displays (non-422s, or fields hidden for this type). Each new error scrolls the
+ * banner into view if it is out of sight (a Save at the foot of a long form would otherwise refuse unseen); instantly for reduced motion.
+ */
 export function ErrorBanner({ err, shown }: { err: unknown; shown: string[] }) {
+  const ref = useRef<HTMLDivElement>(null)
+  useEffect(() => {
+    if (err) ref.current?.scrollIntoView({ block: 'nearest', behavior: window.matchMedia?.('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth' })
+  }, [err])
   if (!err) return null
   const msgs =
     err instanceof ApiError && err.details.length
@@ -27,7 +34,7 @@ export function ErrorBanner({ err, shown }: { err: unknown; shown: string[] }) {
   const dates = err instanceof ApiError ? err.dates : []
   const items = err instanceof ApiError ? err.items : []
   return msgs.length ? (
-    <Alert tone="danger">
+    <Alert tone="danger" ref={ref}>
       {msgs.map((m, i) => (
         <p key={i}>{m}</p>
       ))}

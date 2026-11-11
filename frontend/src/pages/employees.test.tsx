@@ -729,6 +729,22 @@ test('saving a termination date with open items shows the refusal and links to e
   expect(within(alert).getByRole('link', { name: 'يومية مقترحة بانتظار القرار' })).toHaveAttribute('href', '/wage-proposals?proposal=p1')
 })
 
+test('a refused save brings its alert into view, without motion for those who ask for less', async () => {
+  const scroll = vi.spyOn(Element.prototype, 'scrollIntoView')
+  vi.stubGlobal('matchMedia', (q: string) => ({ matches: q === '(prefers-reduced-motion: reduce)' }))
+  mockFetch({ 'GET /api/v1/residences': residences, 'GET /api/v1/employees/e1': () => json(200, { data: emp }),
+    'PATCH /api/v1/employees/e1': () => json(409, { error: { code: 'employee_has_open_items', message: 'M', items: [{ kind: 'wage_proposal', id: 'p1' }] } }) })
+  renderWithAuth(<EmployeeDetailRoute id="e1" />, ALL, { router: false })
+  await user.type(await screen.findByLabelText('تاريخ إنهاء الخدمة'), '2026-11-15')
+  expect(scroll).not.toHaveBeenCalled()
+  await user.click(screen.getByRole('button', { name: 'حفظ' }))
+  const alert = await screen.findByRole('alert')
+  await waitFor(() => expect(scroll).toHaveBeenCalledOnce())
+  expect(scroll.mock.contexts[0]).toBe(alert)
+  expect(scroll).toHaveBeenCalledWith({ block: 'nearest', behavior: 'auto' })
+  scroll.mockRestore()
+})
+
 const codeRoutes = (patch: (url: string, init?: RequestInit) => Response) =>
   mockFetch({ 'GET /api/v1/residences': residences, 'GET /api/v1/employees/e1': () => json(200, { data: { ...emp, code: 7 } }), 'PATCH /api/v1/employees/e1/code': patch })
 const codeBody = (patch: ReturnType<typeof vi.fn>, i: number) => JSON.parse((patch.mock.calls[i] as unknown as [string, RequestInit])[1].body as string)
