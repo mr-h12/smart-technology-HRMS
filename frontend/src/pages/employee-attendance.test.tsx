@@ -107,8 +107,10 @@ test('each day’s colour comes from what it is, and the legend counts the same 
   expect(screen.getByRole('button', { name: 'الخميس 2026-10-01: Site-1' })).toHaveAttribute('title', 'Site-1')
   const items = within(screen.getByRole('list', { name: 'دليل الألوان' })).getAllByRole('listitem')
   expect(items.map((li) => li.textContent)).toEqual(['حاضر 15', 'غائب 1', 'مرضي 1', 'إجازة 1', 'غير مسجل 2'])
-  expect(items[0].firstChild).toHaveClass('bg-success/20')
-  expect(items[1].firstChild).toHaveClass('bg-destructive/20')
+  // a legend dot is solid in its kind's colour: a 20% tint is too faint at its size
+  expect(items[0].firstChild).toHaveClass('bg-current', 'text-success')
+  expect(items[0].firstChild).not.toHaveClass('bg-success/20')
+  expect(items[1].firstChild).toHaveClass('bg-current', 'text-destructive')
 })
 
 test('today is marked, and a day that cannot be edited is disabled', async () => {

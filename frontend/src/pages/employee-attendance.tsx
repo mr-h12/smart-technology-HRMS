@@ -94,7 +94,7 @@ export function EmployeeAttendance({ emp }: { emp: Row }) {
             <ul aria-label={t('attendance.employeeTab.legend')} className="flex flex-wrap gap-x-4 gap-y-2 text-sm">
               {LEGEND.map((k) => (
                 <li key={k} className="flex items-center gap-1.5">
-                  <span aria-hidden className={cn('size-3 rounded-full', LOOK[k])} />
+                  <span aria-hidden className={cn('size-3 rounded-full', LOOK[k], 'bg-current')} />
                   {t(`attendance.employeeTab.${k}`)} <span className="font-semibold">{data.days.filter((d) => kind(d, today) === k).length}</span>
                 </li>
               ))}
