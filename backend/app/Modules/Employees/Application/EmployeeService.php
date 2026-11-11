@@ -88,18 +88,15 @@ final class EmployeeService
     }
 
     /**
-     * The archive is the employees whose termination date has passed; the termination day itself is still worked (Attendance\Domain\Employment).
+     * The archive is the employees whose termination date has passed (Employee::isArchived).
      *
      * @return Builder<Employee> live employees, active or archived, or only those a manager reaches today
      */
     private function visibleTo(?string $ownerId, bool $archived = false): Builder
     {
-        $today = self::today();
-        $query = Employee::query()->where(fn (Builder $q) => $archived
-            ? $q->where('termination_date', '<', $today)
-            : $q->whereNull('termination_date')->orWhere('termination_date', '>=', $today));
+        $query = Employee::query()->archived($archived);
 
-        return $ownerId === null ? $query : EmployeeReach::apply($query, $ownerId, $today);
+        return $ownerId === null ? $query : EmployeeReach::apply($query, $ownerId, self::today());
     }
 
     /**
@@ -157,6 +154,7 @@ final class EmployeeService
 
         return [
             ...$this->summary($e, $full),
+            'archived' => Employee::isArchived($e->termination_date),
             'current_type' => EffectiveDated::at($types, $today)['type'] ?? null,
             ...($full ? ['current_pay' => EffectiveDated::at($pays, $today), 'pay_changes' => $pays] : []),
             'type_changes' => $types,
