@@ -120,8 +120,9 @@ export function PayrollPage() {
         ) : (
           // each cell owns its row line, as the attendance grid: collapsed borders leave a band under a sticky cell. Head and
           // totals sit on `secondary`, which equals `muted` in light mode and stands out from the card in dark mode.
-          // The scroll padding keeps a focused cell clear of the sticky columns (their widths: the name button's max, the net's room).
-          <Table scroller="scroll-ps-36 sm:scroll-ps-60 md:scroll-pe-32" className="border-separate border-spacing-0 [&_td]:border-b [&_th]:border-b [&_th]:tracking-normal [&_th]:normal-case">
+          // The scroll padding keeps a focused cell clear of the sticky columns (their widths: the name button's max, the widest net
+          // cell, an override with both icons, about 140 px).
+          <Table scroller="scroll-ps-36 sm:scroll-ps-60 md:scroll-pe-40" className="border-separate border-spacing-0 [&_td]:border-b [&_th]:border-b [&_th]:tracking-normal [&_th]:normal-case">
             <TableHeader className="bg-secondary">
               <TableRow className="hover:bg-transparent">
                 <TableHead className={cn(PIN_START, 'bg-secondary')}>{t('attendance.employee')}</TableHead>
@@ -131,7 +132,7 @@ export function PayrollPage() {
             </TableHeader>
             <TableBody>
               {sheet.lines.map((line) => (
-                <LineRow key={line.employee.id} line={line} cols={cols} group={group} path={path!} editable={editable}
+                <LineRow key={`${path}|${line.employee.id}`} line={line} cols={cols} group={group} path={path!} editable={editable}
                   onOpen={() => setPanel(line.employee)} onOverride={(component) => setOverriding({ id: line.employee.id, component })} />
               ))}
             </TableBody>

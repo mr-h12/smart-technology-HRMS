@@ -155,6 +155,44 @@ test('changing the period saves the row first, and a refusal that arrives after 
   await waitFor(() => expect(toast.error).toHaveBeenCalledWith('لم تُحفظ مدخلات Engineer-2: حقل سبب الخصم مطلوب.'))
 })
 
+test('leaving for a cached period that has the same employee drops the typing: a refusal is a toast, and nothing of it reaches that period', async () => {
+  let answer = () => {}
+  const refused = new Promise<void>((resolve) => { answer = resolve })
+  const putSeptember = vi.fn(() => refused.then(() => json(422, { error: { code: 'validation_failed', message: 'The given data was invalid.', details: [{ field: 'deduction_reason', code: 'invalid', message: 'حقل سبب الخصم مطلوب.' }] } })))
+  const AUGUST = '/api/v1/payroll/engineer/2026-08-26'
+  const august = line(2, { salary: c('9000.000000'), deduction: c('40.000000'), net: c('8960.000000') }, { entry: { ...blank, version: 7, deduction: '40.000000', deduction_reason: 'August reason' } })
+  const putAugust = vi.fn((_url: string, _init?: RequestInit) => json(200, { data: { ...august, days } }))
+  mockFetch({
+    ...routes,
+    'GET /api/v1/attendance/period': (url: string) => json(200, { data: url.includes('period_start=2026-08-26') ? { ...period, start: '2026-08-26', end: '2026-09-25', prev_start: '2026-07-26', next_start: '2026-09-26' } : period }),
+    [`GET ${AUGUST}`]: () => json(200, { data: { lines: [august], totals: { salary: '9000.000000', deduction: '40.000000', net: '8960.000000' }, locked: true } }),
+    [`PUT ${BASE}/employees/e2/entry`]: putSeptember as unknown as () => Response,
+    [`PUT ${AUGUST}/employees/e2/entry`]: putAugust,
+  })
+  open()
+  await table()
+  const previous = screen.getByRole('button', { name: 'الفترة السابقة' })
+  await user.click(previous)
+  await screen.findByDisplayValue('August reason')
+  await user.click(screen.getByRole('button', { name: 'الفترة التالية' })) // back to September, from the cache
+  await waitFor(() => expect(previous).toBeEnabled())
+  expect(rowOf('Engineer-1')).toBeInTheDocument()
+  await user.type(screen.getByRole('textbox', { name: 'الخصم - Engineer-2' }), '75')
+  await user.click(previous) // saves September's row first; August is cached, so its sheet shows at once
+  expect(putSeptember).toHaveBeenCalledOnce()
+  expect(screen.getByRole('textbox', { name: 'الخصم - Engineer-2' })).toHaveValue('40.00') // August's own values, no carried draft
+  expect(screen.getByRole('textbox', { name: 'سبب الخصم - Engineer-2' })).toHaveValue('August reason')
+  answer()
+  await waitFor(() => expect(toast.error).toHaveBeenCalledWith('لم تُحفظ مدخلات Engineer-2: حقل سبب الخصم مطلوب.'))
+  expect(screen.getByRole('textbox', { name: 'سبب الخصم - Engineer-2' })).not.toHaveAttribute('aria-invalid')
+  // an edit on August's row writes August's entry: its version and its values, nothing typed in September
+  await user.type(screen.getByRole('textbox', { name: 'سبب الخصم - Engineer-2' }), '!')
+  await user.click(document.body)
+  await waitFor(() => expect(putAugust).toHaveBeenCalledOnce())
+  expect(sent(putAugust)).toMatchObject({ version: 7, deduction: '40', deduction_reason: 'August reason!' })
+  expect(putSeptember).toHaveBeenCalledOnce()
+})
+
 test('a typed but unsaved cell says so beyond its colour, and leaving the page warns', async () => {
   mockFetch(routes)
   open()
