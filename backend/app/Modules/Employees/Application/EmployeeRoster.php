@@ -40,15 +40,18 @@ final class EmployeeRoster
         and t.effective_from <= greatest(employees.hire_date, least(?::date, employees.termination_date)) order by t.effective_from desc limit 1)';
 
     /**
-     * The employees employed as any of $types within [from, to]. $ids, when set, narrows to those employees (an empty list gives none).
+     * The employees employed as any of $types within [from, to]. $ids, when set, narrows to those employees (an empty list gives none);
+     * $search, when not blank, to either name containing it or the exact code (Employee::matching).
      *
      * @param  non-empty-list<EmployeeType>  $types
      * @param  array<string>|null  $ids
      * @return array{data: list<array<string, mixed>>, pagination: array{page: int, per_page: int, total: int, total_pages: int, has_next_page: bool, has_previous_page: bool}}
      */
-    public function ofType(array $types, string $from, string $to, int $perPage, int $page, ?string $managedBy = null, ?array $ids = null): array
+    public function ofType(array $types, string $from, string $to, int $perPage, int $page, ?string $managedBy = null, ?array $ids = null, ?string $search = null): array
     {
-        return $this->page($this->employedAs($types, $from, $to, $managedBy)->when($ids !== null, fn (Builder $q) => $q->whereIn('id', (array) $ids)), $perPage, $page);
+        return $this->page($this->employedAs($types, $from, $to, $managedBy)
+            ->when($ids !== null, fn (Builder $q) => $q->whereIn('id', (array) $ids))
+            ->when($search !== null && $search !== '', fn (Builder $q) => $q->matching((string) $search)), $perPage, $page);
     }
 
     /**

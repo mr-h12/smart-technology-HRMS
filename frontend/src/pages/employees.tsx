@@ -1,4 +1,4 @@
-import { Briefcase, CalendarDays, ChevronLeft, ChevronRight, FileText, HardHat, History as HistoryIcon, IdCard, type LucideIcon, MapPin, RotateCcw, UserCog, UserPlus, Users, Wrench } from 'lucide-react'
+import { Briefcase, CalendarCheck, CalendarDays, ChevronLeft, ChevronRight, FileText, HardHat, History as HistoryIcon, IdCard, type LucideIcon, MapPin, RotateCcw, UserCog, UserPlus, Users, Wrench } from 'lucide-react'
 import { useEffect, useEffectEvent, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { Link, useLocation, useNavigate, useParams, useSearchParams } from 'react-router-dom'
@@ -24,6 +24,7 @@ import { ApiError } from '@/lib/api'
 import { useAuth } from '@/lib/auth'
 import { cn } from '@/lib/utils'
 import { RESIDENCES, USERS, useApi, useList, useSave, WORK_SITES } from '@/lib/query'
+import { EmployeeAttendance } from './employee-attendance'
 import { Documents } from './employee-documents'
 import { Leave } from './employee-leave'
 
@@ -233,6 +234,7 @@ const TABS: [string, LucideIcon][] = [
   ['history', HistoryIcon],
   ['documents', FileText],
   ['leave', CalendarDays],
+  ['attendance', CalendarCheck],
 ]
 
 /** One element for `employees/new` and `employees/:id`: keyed by the id so opening another employee starts a fresh form. */
@@ -427,7 +429,7 @@ function EmployeeForm({ emp, loadErr }: { emp?: Row; loadErr?: unknown }) {
 
   const worker = WORKERS.includes(emp.current_type)
   const sited = SITED.includes(emp.current_type)
-  const tabs = TABS.filter(([v]) => (v !== 'manager' || !worker) && (v !== 'site' || sited) && (v !== 'leave' || (can('leave.view') && emp.current_type !== 'day_laborer')) && (v !== 'documents' || can('employee_document.view')))
+  const tabs = TABS.filter(([v]) => (v !== 'manager' || !worker) && (v !== 'site' || sited) && (v !== 'leave' || (can('leave.view') && emp.current_type !== 'day_laborer')) && (v !== 'documents' || can('employee_document.view')) && (v !== 'attendance' || can('attendance.view')))
   const tab = tabs.some(([v]) => v === params.get('tab')) ? params.get('tab')! : 'profile'
   return (
     <div className="mx-auto max-w-5xl space-y-6">
@@ -487,6 +489,7 @@ function EmployeeForm({ emp, loadErr }: { emp?: Row; loadErr?: unknown }) {
             history: <History emp={emp} />,
             documents: <Documents emp={emp} />,
             leave: <Leave emp={emp} initialYear={params.get('year')} />,
+            attendance: <EmployeeAttendance emp={emp} />,
           }[tab]}
         </TabsContent>
       </Tabs>

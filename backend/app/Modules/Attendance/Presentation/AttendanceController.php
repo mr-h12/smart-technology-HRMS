@@ -42,8 +42,8 @@ final class AttendanceController
     /** `group=all` is every type over the engineers' window. */
     public function grid(Request $request): JsonResponse
     {
-        $q = $request->validate([...$this->periodRules(), 'group' => ['required', Rule::in(['all', ...array_column(EmployeeType::cases(), 'value')])], 'per_page' => ['sometimes', 'integer', 'min:1'], 'page' => ['sometimes', 'integer', 'min:1'], 'site_id' => ['sometimes', 'uuid']]);
-        $r = $this->grid->grid($q['group'] === 'all' ? null : EmployeeType::from($q['group']), $q['period_start'] ?? null, (int) ($q['per_page'] ?? 20), (int) ($q['page'] ?? 1), $q['date'] ?? null, RequestScope::ownerId($request), $q['site_id'] ?? null);
+        $q = $request->validate([...$this->periodRules(), 'group' => ['required', Rule::in(['all', ...array_column(EmployeeType::cases(), 'value')])], 'per_page' => ['sometimes', 'integer', 'min:1'], 'page' => ['sometimes', 'integer', 'min:1'], 'site_id' => ['sometimes', 'uuid'], 'search' => ['sometimes', 'nullable', 'string', 'max:100']]);
+        $r = $this->grid->grid($q['group'] === 'all' ? null : EmployeeType::from($q['group']), $q['period_start'] ?? null, (int) ($q['per_page'] ?? 20), (int) ($q['page'] ?? 1), $q['date'] ?? null, RequestScope::ownerId($request), $q['site_id'] ?? null, $q['search'] ?? null);
 
         return ApiEnvelope::collection($request, $r['data'], $r['pagination']);
     }
@@ -62,6 +62,14 @@ final class AttendanceController
         $owner = RequestScope::ownerId($request);
 
         return ApiEnvelope::single($request, $q['group'] === 'all' ? $this->grid->sheetOfEveryType($q['date'], $owner) : $this->grid->sheet(EmployeeType::from($q['group']), $q['date'], $owner));
+    }
+
+    /** One employee's period table: `date` (default today in Cairo) picks the period of the employee's own type then. */
+    public function employeePeriod(Request $request, string $employee): JsonResponse
+    {
+        $q = $request->validate(['date' => ['sometimes', 'date_format:Y-m-d']]);
+
+        return ApiEnvelope::single($request, $this->grid->employeePeriod($employee, $q['date'] ?? null));
     }
 
     /** The Excel grid template of one period. It shows and later writes days, so it needs view and edit, and the narrower scope wins. */

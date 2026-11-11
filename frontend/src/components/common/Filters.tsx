@@ -4,12 +4,12 @@ import { selectCls } from '@/components/form'
 import { Input } from '@/components/ui/input'
 import { cn } from '@/lib/utils'
 
-export function SearchInput({ value, onChange, placeholder, className }: { value: string; onChange: (v: string) => void; placeholder: string; className?: string }) {
+export function SearchInput({ value, onChange, placeholder, className, maxLength }: { value: string; onChange: (v: string) => void; placeholder: string; className?: string; maxLength?: number }) {
   const { t } = useTranslation()
   return (
     <div className={cn('relative w-full sm:w-72', className)}>
       <Search className="pointer-events-none absolute top-1/2 start-3 size-4 -translate-y-1/2 text-muted-foreground" />
-      <Input value={value} onChange={(e) => onChange(e.target.value)} placeholder={placeholder} enterKeyHint="search" className="pe-[calc(var(--tap)+0.5rem)] ps-9" aria-label={placeholder} />
+      <Input value={value} onChange={(e) => onChange(e.target.value)} placeholder={placeholder} enterKeyHint="search" maxLength={maxLength} className="pe-[calc(var(--tap)+0.5rem)] ps-9" aria-label={placeholder} />
       {value && (
         <button type="button" onClick={() => onChange('')} className="absolute top-1/2 end-2 -translate-y-1/2 grid min-h-tap min-w-tap place-items-center rounded text-muted-foreground hover:bg-muted" aria-label={t('common.clearSearch')}>
           <X className="size-3.5" />
