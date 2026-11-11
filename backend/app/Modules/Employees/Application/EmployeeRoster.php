@@ -69,13 +69,12 @@ final class EmployeeRoster
     {
         $today = now('Africa/Cairo')->toDateString();
         $values = array_map(fn (EmployeeType $t) => $t->value, $types);
-        $query = Employee::with(self::RELATIONS)
+        $query = $this->employees()->with(self::RELATIONS)
             ->where(fn (Builder $q) => $q->whereNull('hire_date')->orWhere('hire_date', '<=', "{$year}-12-31"))
             ->where(fn (Builder $q) => $q->whereNull('termination_date')->orWhere('termination_date', '>=', "{$year}-01-01"))
             ->whereRaw(self::TYPE_IN_YEAR.' in ('.implode(',', array_fill(0, count($values), '?')).')', [min("{$year}-12-31", $today), ...$values])
             ->when($search !== null && $search !== '', fn (Builder $q) => $q->matching((string) $search))
             ->when($managedBy !== null, fn (Builder $q) => EmployeeReach::apply($q, (string) $managedBy, $today))
-            ->when(! $this->includeArchived, fn (Builder $q) => $q->archived(false))
             ->orderBy('code');
 
         return $this->page($query, $perPage, $page);
@@ -115,21 +114,19 @@ final class EmployeeRoster
     /** @return list<array<string, mixed>> the workers employed on $date whose site on $date (that day's crew change, else the home site) is $siteId, by code */
     public function onSite(string $siteId, string $date): array
     {
-        return $this->rows(Employee::with(self::RELATIONS)
+        return $this->rows($this->employees()->with(self::RELATIONS)
             ->where(fn (Builder $q) => $q->whereRaw(self::EMPLOYED_AS, [EmployeeType::PermanentWorker->value, $date, $date])
                 ->orWhereRaw(self::EMPLOYED_AS, [EmployeeType::DayLaborer->value, $date, $date]))
             ->whereRaw(Employee::SITE_ON.' = ?', [$date, $date, $date, $siteId])
-            ->when(! $this->includeArchived, fn (Builder $q) => $q->archived(false))
             ->orderBy('code'));
     }
 
     /** @return list<string> the office staff whose site on $date is $siteId; that site only lists them there (owner, 2026-11-08) */
     public function officeIdsAt(string $siteId, string $date): array
     {
-        return array_values(Employee::query()
+        return array_values($this->employees()
             ->whereRaw(Employee::TYPE_ON.' = ?', [$date, EmployeeType::Office->value])
             ->whereRaw(Employee::SITE_ON.' = ?', [$date, $date, $date, $siteId])
-            ->when(! $this->includeArchived, fn (Builder $q) => $q->archived(false))
             ->pluck('id')->map(fn ($id) => (string) $id)->all());
     }
 
@@ -203,15 +200,20 @@ final class EmployeeRoster
      */
     private function employedAs(array $types, string $from, string $to, ?string $managedBy): Builder
     {
-        return Employee::with(self::RELATIONS)
+        return $this->employees()->with(self::RELATIONS)
             ->where(function (Builder $q) use ($types, $from, $to) {
                 foreach ($types as $t) {
                     $q->orWhereRaw(self::EMPLOYED_AS, [$t->value, $from, $to]);
                 }
             })
             ->when($managedBy !== null, fn (Builder $q) => EmployeeReach::apply($q, (string) $managedBy, min($to, now('Africa/Cairo')->toDateString())))
-            ->when(! $this->includeArchived, fn (Builder $q) => $q->archived(false))
             ->orderBy('code');
+    }
+
+    /** @return Builder<Employee> where every set-returning query starts, so none can forget to leave archived employees out unless withArchived() */
+    private function employees(): Builder
+    {
+        return Employee::query()->when(! $this->includeArchived, fn (Builder $q) => $q->archived(false));
     }
 
     /**
