@@ -238,16 +238,17 @@ class EmployeesApiTest extends TestCase
         $this->getJson('/api/v1/employees/summary')->assertJsonPath('data.total', 2)->assertJsonPath('data.office', 2);
     }
 
-    public function test_a_manager_sees_the_archive_of_their_own_employees_only(): void
+    public function test_a_manager_sees_no_archived_employee_not_even_their_own(): void
     {
         $this->travelTo('2026-10-20 10:00:00');
         $manager = $this->makeUser('manager');
-        $mine = $this->make(['type' => 'engineer', 'termination_date' => '2026-10-01']);
+        $mine = $this->make(['type' => 'engineer']);
         $this->make(['type' => 'engineer', 'termination_date' => '2026-10-01']);
         $this->postJson("/api/v1/employees/$mine/manager-assignments", ['manager_id' => $manager->id, 'effective_from' => '2026-01-01'])->assertCreated();
+        $this->patchJson("/api/v1/employees/$mine", ['termination_date' => '2026-10-01'])->assertOk();
 
         $this->actingAs($manager, 'api');
-        $this->assertSame([$mine], $this->listed('?archived=true'));
+        $this->assertSame([], $this->listed('?archived=true'));
         $this->assertSame([], $this->listed());
         $this->getJson('/api/v1/employees/summary')->assertJsonPath('data.total', 0);
     }
