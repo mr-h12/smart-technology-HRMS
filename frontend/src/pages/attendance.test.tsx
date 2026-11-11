@@ -22,6 +22,7 @@ const routes = {
   'GET /api/v1/attendance/period': () => json(200, { data: period }),
   'GET /api/v1/attendance/grid': () => json(200, { data: rows, meta: { pagination } }),
   'GET /api/v1/sites': () => json(200, { data: sites, meta: { pagination } }),
+  'GET /api/v1/attendance/missing': () => json(200, { data: [], meta: { pagination: { ...pagination, total: 0 } } }), // the lock dialog always reads it
 }
 
 test('the grid shows each employee per day with missing and derived days marked', async () => {
@@ -149,6 +150,47 @@ test('locking with missing days lists them and needs the confirm checkbox', asyn
   await waitFor(() => expect(lock).toHaveBeenCalled())
   expect(JSON.parse(String(lock.mock.calls[0][1]?.body))).toEqual({ group: 'engineer', period_start: '2026-09-26', confirm_missing: true })
   await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument())
+})
+
+test('the lock dialog lists the missing days from the missing list even when the header counts none, and marks those who left', async () => {
+  const lock = vi.fn((_url: string, _init?: RequestInit) => json(201, { data: lockReply() }))
+  mockFetch({
+    ...routes,
+    'GET /api/v1/attendance/period': () => json(200, { data: { ...period, missing: 0 } }), // the header leaves leavers out
+    'GET /api/v1/attendance/missing': () => json(200, { data: [{ employee_id: 'e9', code: 9, name_ar: 'Engineer-9', name_en: 'Engineer-9', archived: true, date: '2026-10-03' }], meta: { pagination } }),
+    'POST /api/v1/attendance/locks': lock,
+  })
+  renderWithAuth(<AttendancePage />, lockPerms, { path: '/attendance?group=engineer&tab=grid' })
+  await user.click(await screen.findByRole('button', { name: 'قفل الفترة' }))
+  const dialog = await screen.findByRole('dialog', { name: 'قفل حضور الفترة' })
+  const row = await within(dialog).findByRole('listitem')
+  expect(row).toHaveTextContent('Engineer-9')
+  expect(within(row).getByText('ترك العمل')).toBeInTheDocument()
+  const submit = within(dialog).getByRole('button', { name: 'قفل الفترة' })
+  expect(submit).toBeDisabled()
+  await user.click(within(dialog).getByRole('checkbox', { name: 'أؤكد القفل رغم وجود أيام غير مسجلة' }))
+  await user.click(submit)
+  await waitFor(() => expect(lock).toHaveBeenCalled())
+  expect(JSON.parse(String(lock.mock.calls[0][1]?.body))).toEqual({ group: 'engineer', period_start: '2026-09-26', confirm_missing: true })
+})
+
+test('while the missing list loads, and when it fails, the lock dialog offers no confirmation and Lock waits', async () => {
+  let answer: ((r: Response) => void) | undefined
+  mockFetch({
+    ...routes,
+    'GET /api/v1/attendance/period': () => json(200, { data: { ...period, missing: 0 } }),
+    'GET /api/v1/attendance/missing': () => new Promise<Response>((r) => { answer = r }) as unknown as Response,
+  })
+  renderWithAuth(<AttendancePage />, lockPerms, { path: '/attendance?group=engineer&tab=grid' })
+  await user.click(await screen.findByRole('button', { name: 'قفل الفترة' }))
+  const dialog = await screen.findByRole('dialog', { name: 'قفل حضور الفترة' })
+  await waitFor(() => expect(answer).not.toBe(undefined))
+  expect(within(dialog).getByRole('button', { name: 'قفل الفترة' })).toBeDisabled()
+  expect(within(dialog).queryByRole('checkbox')).toBeNull()
+  answer!(json(403, { error: { code: 'forbidden', message: 'List refused.' } }))
+  expect(await within(dialog).findByText('List refused.')).toBeInTheDocument()
+  expect(within(dialog).getByRole('button', { name: 'قفل الفترة' })).toBeDisabled() // what the lock would confirm is unknown
+  expect(within(dialog).queryByRole('checkbox')).toBeNull()
 })
 
 test('a re-lock that changed holidays keeps the dialog open with the changes and only a Close button', async () => {

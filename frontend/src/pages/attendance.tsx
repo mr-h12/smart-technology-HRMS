@@ -317,6 +317,8 @@ function Grid({ group, start, site, search, withArchived, onOpenDay }: { group: 
 
 /**
  * Locks the period; with missing days it lists them and needs an explicit confirmation (HR may lock before the period ends).
+ * It decides from the missing list, not the header count: the list holds those who left, as the lock does (owner, 2026-11-11).
+ * Lock waits while the list loads, and stays off if it fails, since what the lock would confirm is then unknown.
  * A lock that changed holidays, or found leave on one, stays open on those lists so HR reviews them.
  */
 function LockDialog({ period, onClose }: { period: Period; onClose: () => void }) {
@@ -326,7 +328,8 @@ function LockDialog({ period, onClose }: { period: Period; onClose: () => void }
   const [err, setErr] = useState<unknown>()
   const [busy, setBusy] = useState(false)
   const [done, setDone] = useState<Locked>()
-  const missing = period.missing > 0
+  const list = useList(`/attendance/missing?${new URLSearchParams({ group: period.group, period_start: period.start, per_page: '100' })}`)
+  const missing = list.total > 0
   function lock() {
     setBusy(true)
     setErr(undefined)
@@ -382,18 +385,16 @@ function LockDialog({ period, onClose }: { period: Period; onClose: () => void }
         <DialogBody className="grid gap-4">
           <ErrorBanner err={err} shown={[]} />
           <DialogDescription className="text-sm text-foreground">{t('attendance.lockBody')}</DialogDescription>
+          <MissingDays {...list} />
           {missing && (
-            <>
-              <MissingDays group={period.group} start={period.start} />
-              <label className="flex min-h-tap items-center gap-3 text-sm font-medium">
-                <input type="checkbox" required className="size-4" checked={confirmed} onChange={(e) => setConfirmed(e.target.checked)} />
-                {t('attendance.lockConfirmMissing')}
-              </label>
-            </>
+            <label className="flex min-h-tap items-center gap-3 text-sm font-medium">
+              <input type="checkbox" required className="size-4" checked={confirmed} onChange={(e) => setConfirmed(e.target.checked)} />
+              {t('attendance.lockConfirmMissing')}
+            </label>
           )}
         </DialogBody>
         <DialogFooter>
-          <Button type="button" disabled={busy || (missing && !confirmed)} onClick={lock}>
+          <Button type="button" disabled={busy || list.loading || !!list.err || (missing && !confirmed)} onClick={lock}>
             {t('attendance.lock')}
           </Button>
         </DialogFooter>
@@ -402,30 +403,31 @@ function LockDialog({ period, onClose }: { period: Period; onClose: () => void }
   )
 }
 
-function MissingDays({ group, start }: { group: string; start: string }) {
+/** The lock dialog's missing days (`GET /attendance/missing`): nothing when there are none; a leaver's row carries the «ترك العمل» mark. */
+function MissingDays({ rows, total, err, loading }: { rows: Row[]; total: number; err: unknown; loading: boolean }) {
   const { t, i18n } = useTranslation()
-  const { rows, total, err, loading } = useList(`/attendance/missing?${new URLSearchParams({ group, period_start: start, per_page: '100' })}`)
   const id = useId()
+  if (loading) return <TableSkeleton rows={3} />
+  if (err) return <ErrorBanner err={err} shown={[]} />
+  if (!total) return null
   return (
     <div className="grid gap-2">
       <p id={id} className="text-sm font-medium">{t('attendance.lockMissing')}</p>
-      <ErrorBanner err={err} shown={[]} />
-      {loading ? (
-        <TableSkeleton rows={3} />
-      ) : (
-        // its own scroll region, so the confirm checkbox and the Lock button stay in view
-        <div role="region" aria-labelledby={id} tabIndex={0} className="max-h-64 overflow-y-auto rounded-md border outline-none focus-visible:outline-2 focus-visible:outline-solid focus-visible:outline-offset-2 focus-visible:outline-ring">
-          <ul className="divide-y text-sm">
-            {rows.map((d) => (
-              <li key={`${d.employee_id}/${d.date}`} className="flex gap-3 px-3 py-2">
-                <span className="text-muted-foreground">{d.code}</span>
-                <span className="flex-1">{localName(d, i18n.language)}</span>
-                <span>{ltrDates(d.date)}</span>
-              </li>
-            ))}
-          </ul>
-        </div>
-      )}
+      {/* its own scroll region, so the confirm checkbox and the Lock button stay in view */}
+      <div role="region" aria-labelledby={id} tabIndex={0} className="max-h-64 overflow-y-auto rounded-md border outline-none focus-visible:outline-2 focus-visible:outline-solid focus-visible:outline-offset-2 focus-visible:outline-ring">
+        <ul className="divide-y text-sm">
+          {rows.map((d) => (
+            <li key={`${d.employee_id}/${d.date}`} className="flex gap-3 px-3 py-2">
+              <span className="text-muted-foreground">{d.code}</span>
+              <span className="flex flex-1 flex-wrap items-center gap-x-2">
+                {localName(d, i18n.language)}
+                {d.archived === true && <StatusBadge variant="neutral" dot={false} label={t('attendance.leftMark')} />}
+              </span>
+              <span>{ltrDates(d.date)}</span>
+            </li>
+          ))}
+        </ul>
+      </div>
       {total > rows.length && <Alert tone="warning">{t('common.tooMany')}</Alert>}
     </div>
   )
