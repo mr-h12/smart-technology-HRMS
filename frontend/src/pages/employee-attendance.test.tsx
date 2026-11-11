@@ -99,7 +99,8 @@ test('each day’s colour comes from what it is, and the legend counts the same 
   expect(await circle('الاثنين 2026-10-05: إجازة اعتيادية')).toHaveClass('bg-warning/20', 'text-warning')
   expect(await circle('السبت 2026-10-03: غير مسجل')).toHaveClass('bg-muted-foreground/20', 'text-muted-foreground')
   const off = await circle('الجمعة 2026-10-02: إجازة الجمعة')
-  expect(off).toHaveClass('text-muted-foreground')
+  expect(off).toHaveClass('text-muted-foreground', 'font-normal') // dimmed, not the bold of a recorded day
+  expect(off).not.toHaveClass('font-semibold')
   expect(off.className).not.toMatch(/\bbg-/)
   expect(await circle('الأربعاء 2026-10-21: لم يأتِ بعد')).toHaveClass('opacity-50')
   expect(await circle('السبت 2026-09-26: خارج فترة العمل')).toHaveClass('opacity-30')

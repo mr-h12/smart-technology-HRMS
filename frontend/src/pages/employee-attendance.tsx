@@ -40,7 +40,7 @@ const LOOK: Record<Kind, string> = {
   sick: 'bg-info/20 text-info ring-1 ring-info/40',
   leave: 'bg-warning/20 text-warning ring-1 ring-warning/40',
   missing: 'bg-muted-foreground/20 text-muted-foreground ring-1 ring-muted-foreground/40',
-  off: 'text-muted-foreground',
+  off: 'font-normal text-muted-foreground', // dimmed by weight, not opacity, to keep AA contrast
   future: 'text-muted-foreground opacity-50',
   not_employed: 'text-muted-foreground opacity-30',
 }
