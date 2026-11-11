@@ -82,6 +82,8 @@ test('an overridden cell is highlighted and shows its reason on hover and to ass
   const cell = within(rowOf('Engineer-1')).getByRole('button', { name: /^الوقت الإضافي - Engineer-1/ })
   expect(cell).toHaveTextContent('100.00')
   expect(cell).toHaveClass('bg-info-bg')
+  expect(cell.querySelector('svg.lucide-pen-line')).not.toBeNull() // not by colour alone
+  expect(cell.querySelector('svg.lucide-triangle-alert')).not.toBeNull()
   expect(cell).toHaveAttribute('title', expect.stringContaining('Approved by HR'))
   expect(cell).toHaveAccessibleName(/Approved by HR/)
   expect(cell).toHaveAccessibleName(/تغيّرت المدخلات بعد تعديلك/)
@@ -94,7 +96,6 @@ test('editing an input cell sends PUT …/entry with the version, and a row save
   open()
   await table()
   const deduction = screen.getByRole('textbox', { name: 'الخصم - Engineer-1' })
-  expect(deduction).toHaveValue('100')
   await user.clear(deduction)
   await user.type(deduction, '150{Enter}')
   await waitFor(() => expect(put1).toHaveBeenCalledOnce())
@@ -106,6 +107,67 @@ test('editing an input cell sends PUT …/entry with the version, and a row save
   await user.click(document.body)
   await waitFor(() => expect(put2).toHaveBeenCalledOnce())
   expect(sent(put2)).toMatchObject({ version: null, insurance_employee: '250', deduction: null })
+})
+
+test('an input amount shows formatted like the computed cells, and the stored value while it is edited', async () => {
+  mockFetch(routes)
+  open()
+  await table()
+  const deduction = screen.getByRole('textbox', { name: 'الخصم - Engineer-1' })
+  expect(deduction).toHaveValue('100.00')
+  await user.click(deduction)
+  expect(deduction).toHaveValue('100')
+  await user.tab()
+  expect(deduction).toHaveValue('100.00')
+  expect(screen.getByRole('textbox', { name: 'سبب الخصم - Engineer-1' })).toHaveValue('Late report')
+})
+
+test.each([
+  ['its name button (the side panel)', 'أيام Engineer-1'],
+  ['a computed cell (the override dialog)', /^صافي المرتب - Engineer-1/],
+])('typing then opening %s from the same row saves the row first', async (_, target) => {
+  const put = vi.fn((_url: string, _init?: RequestInit) => json(200, { data: { ...lines[0], days } }))
+  mockFetch({ ...routes, [`PUT ${BASE}/employees/e1/entry`]: put })
+  open()
+  await table()
+  const deduction = screen.getByRole('textbox', { name: 'الخصم - Engineer-1' })
+  await user.clear(deduction)
+  await user.type(deduction, '150')
+  await user.click(screen.getByRole('button', { name: target }))
+  await screen.findByRole('dialog')
+  await waitFor(() => expect(put).toHaveBeenCalledOnce())
+  expect(sent(put)).toMatchObject({ version: 3, deduction: '150' })
+})
+
+test('changing the period saves the row first, and a refusal that arrives after the row is gone still shows', async () => {
+  let answer = () => {}
+  const refused = new Promise<void>((resolve) => { answer = resolve })
+  const put = vi.fn(() => refused.then(() => json(422, { error: { code: 'validation_failed', message: 'The given data was invalid.', details: [{ field: 'deduction_reason', code: 'invalid', message: 'حقل سبب الخصم مطلوب.' }] } })))
+  const earlier = () => json(200, { data: { lines: [], totals: {}, locked: true } })
+  mockFetch({ ...routes, [`PUT ${BASE}/employees/e2/entry`]: put as unknown as () => Response, 'GET /api/v1/payroll/engineer/2026-08-26': earlier })
+  open()
+  await table()
+  await user.type(screen.getByRole('textbox', { name: 'الخصم - Engineer-2' }), '75')
+  await user.click(screen.getByRole('button', { name: 'الفترة السابقة' }))
+  expect(await screen.findByText('لا يوجد موظفون من هذه المجموعة خلال الفترة.')).toBeInTheDocument()
+  expect(put).toHaveBeenCalledOnce() // sent before the row went
+  answer()
+  await waitFor(() => expect(toast.error).toHaveBeenCalledWith('لم تُحفظ مدخلات Engineer-2: حقل سبب الخصم مطلوب.'))
+})
+
+test('a typed but unsaved cell says so beyond its colour, and leaving the page warns', async () => {
+  mockFetch(routes)
+  open()
+  await table()
+  const insurance = screen.getByRole('textbox', { name: 'التأمينات (حصة الموظف) - Engineer-2' })
+  const unsaved = 'لم يُحفظ بعد؛ يُحفظ عند مغادرة الصف أو الضغط على زر الإدخال.'
+  expect(within(rowOf('Engineer-2')).queryByTitle(unsaved)).toBeNull()
+  await user.type(insurance, '250')
+  expect(insurance).toHaveAccessibleDescription(unsaved)
+  expect(within(rowOf('Engineer-2')).getByTitle(unsaved)).toBeInTheDocument() // an icon beside the name
+  const leaving = new Event('beforeunload', { cancelable: true })
+  window.dispatchEvent(leaving)
+  expect(leaving.defaultPrevented).toBe(true)
 })
 
 test('a 409 shows the reload message, reloads the sheet and overwrites nothing', async () => {

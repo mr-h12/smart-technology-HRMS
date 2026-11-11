@@ -1,7 +1,7 @@
 import { useQueryClient } from '@tanstack/react-query'
 import type { TFunction } from 'i18next'
-import { PenLine, TriangleAlert, Users } from 'lucide-react'
-import { type FocusEvent, useId, useRef, useState } from 'react'
+import { CircleDot, PenLine, TriangleAlert, Users } from 'lucide-react'
+import { useEffect, useId, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { useSearchParams } from 'react-router-dom'
 import { toast } from 'sonner'
@@ -33,6 +33,10 @@ const COUNTS = ['lateness_exemption_minutes', 'travel_days', 'tower_days', 'ot_m
 const TEXTS = ['deduction_reason', 'note']
 /** An office count has no column of its own: it sits just before the component it feeds. */
 const COUNT_OF: Record<string, string> = { travel: 'travel_days', tower: 'tower_days', overtime: 'ot_minutes', lateness: 'lateness_exemption_minutes' }
+// The pinned columns (each cell adds its opaque background): the employee always, the net from md up (on a phone it would leave no
+// room). An edge line and a short fade on the scrolling side show that the columns between them slide under.
+const PIN_START = 'sticky start-0 z-10 border-e after:pointer-events-none after:absolute after:inset-y-0 after:start-full after:w-2 after:bg-linear-to-r after:from-muted-foreground/15 rtl:after:bg-linear-to-l'
+const PIN_END = 'md:sticky md:end-0 md:z-10 md:border-s md:after:pointer-events-none md:after:absolute md:after:inset-y-0 md:after:end-full md:after:w-2 md:after:bg-linear-to-l md:after:from-muted-foreground/15 md:rtl:after:bg-linear-to-r'
 
 type Override = { id: string; amount: string; reason: string; inputs_changed: boolean }
 type Amount = { computed: string; override: Override | null; final: string }
@@ -91,7 +95,9 @@ export function PayrollPage() {
   const path = start ? `/payroll/${group}/${start}` : null
   const { data: sheet, err } = useApi<Sheet>(path)
   const [panel, setPanel] = useState<Row>()
-  const [overriding, setOverriding] = useState<{ line: Line; component: string }>()
+  const [overriding, setOverriding] = useState<{ id: string; component: string }>()
+  // read from the sheet, not kept from the click: a row saved on the way to the dialog refetches the line it shows
+  const overridden = overriding && sheet?.lines.find((l) => l.employee.id === overriding.id)
   const editable = can('payroll.manage')
   const cols = sheet?.lines.length ? columns(group, Object.keys(sheet.lines[0].components)) : []
 
@@ -112,41 +118,45 @@ export function PayrollPage() {
         ) : !sheet.lines.length ? (
           <EmptyState icon={Users} title={t('payroll.empty')} />
         ) : (
-          // each cell owns its row line, as the attendance grid: collapsed borders leave a band under a sticky cell
-          <Table className="border-separate border-spacing-0 [&_td]:border-b [&_th]:border-b">
-            <TableHeader>
-              <TableRow>
-                <TableHead className="sticky start-0 z-10 bg-muted">{t('attendance.employee')}</TableHead>
+          // each cell owns its row line, as the attendance grid: collapsed borders leave a band under a sticky cell. Head and
+          // totals sit on `secondary`, which equals `muted` in light mode and stands out from the card in dark mode.
+          // The scroll padding keeps a focused cell clear of the sticky columns (their widths: the name button's max, the net's room).
+          <Table scroller="scroll-ps-36 sm:scroll-ps-60 md:scroll-pe-32" className="border-separate border-spacing-0 [&_td]:border-b [&_th]:border-b [&_th]:tracking-normal [&_th]:normal-case">
+            <TableHeader className="bg-secondary">
+              <TableRow className="hover:bg-transparent">
+                <TableHead className={cn(PIN_START, 'bg-secondary')}>{t('attendance.employee')}</TableHead>
                 <TableHead>{t('payroll.flags')}</TableHead>
-                {cols.map((col) => <TableHead key={col.join(':')} className={cn('min-w-24 whitespace-normal normal-case tracking-normal', !TEXTS.includes(col[1]) && 'text-end')}>{colLabel(t, col)}</TableHead>)}
+                {cols.map((col) => <TableHead key={col.join(':')} className={cn('min-w-24 whitespace-normal', !TEXTS.includes(col[1]) && 'text-end', col[1] === 'net' && cn(PIN_END, 'bg-secondary'))}>{colLabel(t, col)}</TableHead>)}
               </TableRow>
             </TableHeader>
             <TableBody>
               {sheet.lines.map((line) => (
                 <LineRow key={line.employee.id} line={line} cols={cols} group={group} path={path!} editable={editable}
-                  onOpen={() => setPanel(line.employee)} onOverride={(component) => setOverriding({ line, component })} />
+                  onOpen={() => setPanel(line.employee)} onOverride={(component) => setOverriding({ id: line.employee.id, component })} />
               ))}
             </TableBody>
-            <tfoot className="bg-muted font-semibold">
+            <tfoot className="bg-secondary font-semibold">
               <tr>
-                <TableCell className="sticky start-0 z-10 bg-muted">{t('payroll.total')}</TableCell>
+                <TableCell className={cn(PIN_START, 'bg-secondary')}>{t('payroll.total')}</TableCell>
                 <TableCell />
-                {cols.map(([kind, key]) => <TableCell key={`${kind}:${key}`} className="text-end">{kind === 'component' && money(sheet.totals[key])}</TableCell>)}
+                {cols.map(([kind, key]) => <TableCell key={`${kind}:${key}`} className={cn('text-end', key === 'net' && cn(PIN_END, 'bg-secondary'))}>{kind === 'component' && money(sheet.totals[key])}</TableCell>)}
               </tr>
             </tfoot>
           </Table>
         )}
       </Card>
       {panel && path && <DaysPanel employee={panel} path={path} onClose={() => setPanel(undefined)} />}
-      {overriding && path && <OverrideDialog {...overriding} path={path} onClose={() => setOverriding(undefined)} />}
+      {overriding && overridden && path && <OverrideDialog line={overridden} component={overriding.component} path={path} onClose={() => setOverriding(undefined)} />}
     </div>
   )
 }
 
 /**
- * One employee's line. HR's typed values stay on the row until it is written: the row saves when the focus leaves it or on Enter,
- * so a deduction and its reason go in one `PUT …/entry` (PUT semantics: every field of the type, from the entry the typing started
- * on, with that entry's version, so a refetch meanwhile cannot turn the write into an overwrite). A 409 drops the typing and reloads.
+ * One employee's line. HR's typed values stay on the row until it is written: the row saves when the focus leaves it, from any of its
+ * controls (so opening the panel or a dialog, or a group, period or nav change, saves first), or on Enter. A deduction and its reason
+ * thus go in one `PUT …/entry` (PUT semantics: every field of the type, from the entry the typing started on, with that entry's
+ * version, so a refetch meanwhile cannot turn the write into an overwrite). A 409 drops the typing and reloads. A refusal that
+ * arrives once the row is gone is a toast naming the employee; closing the tab with typing on a row asks first.
  */
 function LineRow({ line, cols, group, path, editable, onOpen, onOverride }: { line: Line; cols: Col[]; group: string; path: string; editable: boolean; onOpen: () => void; onOverride: (component: string) => void }) {
   const { t, i18n } = useTranslation()
@@ -158,10 +168,30 @@ function LineRow({ line, cols, group, path, editable, onOpen, onOverride }: { li
   const [edit, setEdit] = useState<{ base: Entry; drafts: Record<string, string> }>()
   const [errs, setErrs] = useState<Errs>({})
   const [busy, setBusy] = useState(false)
+  const [focused, setFocused] = useState<string>()
   const flight = useRef(false)
+  const alive = useRef(true)
+  useEffect(() => {
+    alive.current = true
+    return () => { alive.current = false }
+  }, [])
+  const dirty = !!edit
+  useEffect(() => {
+    if (!dirty) return
+    const warn = (e: BeforeUnloadEvent) => e.preventDefault()
+    window.addEventListener('beforeunload', warn)
+    return () => window.removeEventListener('beforeunload', warn)
+  }, [dirty])
   const fields = [...FIELDS[group], 'note']
   const value = (f: string) => edit?.drafts[f] ?? asText(f, (edit?.base ?? line.entry)[f])
+  const typed = (f: string) => !!edit && f in edit.drafts
+  /** What a cell shows: an untouched amount reads like the computed cells (the stored decimal string, formatted); focused or typed, the value to edit. */
+  const display = (f: string) => {
+    const stored = (edit?.base ?? line.entry)[f]
+    return stored != null && f !== focused && !typed(f) && !COUNTS.includes(f) && !TEXTS.includes(f) ? money(String(stored)) : value(f)
+  }
   const change = (f: string, v: string) => setEdit((e) => ({ base: e?.base ?? line.entry, drafts: { ...e?.drafts, [f]: TEXTS.includes(f) ? v : asciiDigits(v) } }))
+  const unsavedId = `${ids}-unsaved`
 
   async function commit() {
     if (!edit || flight.current) return
@@ -177,8 +207,9 @@ function LineRow({ line, cols, group, path, editable, onOpen, onOverride }: { li
       if (e instanceof ApiError && e.status === 409) {
         toast.error(t('payroll.conflict', { name }))
         done = true
-      } else if (e instanceof ApiError && e.details.some((d) => d.field && fields.includes(d.field))) setErrs(toErrs(e))
-      else toast.error(e instanceof Error ? e.message : String(e))
+      } else if (alive.current && e instanceof ApiError && e.details.some((d) => d.field && fields.includes(d.field))) setErrs(toErrs(e))
+      // the row is gone (another group or period, another page) or no cell of it is named: the refusal as a toast, naming the employee
+      else toast.error(t('payroll.notSaved', { name, message: e instanceof ApiError && e.details.length ? e.details.map((d) => d.message).join(' ') : e instanceof Error ? e.message : String(e) }))
     } finally {
       // useSave has started the refetch; the typing stays on screen until it lands, so the row never flashes the old values
       await qc.invalidateQueries({ queryKey: queryKey(path) }, { cancelRefetch: false })
@@ -190,7 +221,6 @@ function LineRow({ line, cols, group, path, editable, onOpen, onOverride }: { li
       setBusy(false)
     }
   }
-  const leave = (e: FocusEvent<HTMLInputElement>) => !e.currentTarget.closest('tr')?.contains(e.relatedTarget as Node | null) && void commit()
 
   function cell(col: Col) {
     const [kind, key] = col
@@ -203,10 +233,11 @@ function LineRow({ line, cols, group, path, editable, onOpen, onOverride }: { li
       }
       const errId = `${ids}-${key}`
       return (
-        <TableCell key={key} className="px-1.5 py-1.5 align-top first:ps-1.5 last:pe-1.5">
-          <Input aria-label={label} value={value(key)} readOnly={busy} dir={text ? undefined : 'ltr'} inputMode={text ? undefined : COUNTS.includes(key) ? 'numeric' : 'decimal'} maxLength={text ? 500 : undefined}
-            aria-invalid={!!errs[key] || undefined} aria-describedby={errs[key] ? errId : undefined} className={cn(text ? 'w-44' : 'w-28 text-end', edit && key in edit.drafts && 'border-primary')}
-            onChange={(e) => change(key, e.target.value)} onBlur={leave} onKeyDown={(e) => e.key === 'Enter' && void commit()} />
+        <TableCell key={key} className="px-1.5 py-1.5 first:ps-1.5 last:pe-1.5">
+          <Input aria-label={label} value={display(key)} readOnly={busy} dir={text ? 'auto' : 'ltr'} inputMode={text ? undefined : COUNTS.includes(key) ? 'numeric' : 'decimal'} maxLength={text ? 500 : undefined}
+            aria-invalid={!!errs[key] || undefined} aria-describedby={[errs[key] && errId, typed(key) && unsavedId].filter(Boolean).join(' ') || undefined}
+            className={cn(text ? 'w-44' : 'w-28 text-end', typed(key) && 'border-primary')}
+            onChange={(e) => change(key, e.target.value)} onFocus={() => setFocused(key)} onBlur={() => setFocused(undefined)} onKeyDown={(e) => e.key === 'Enter' && void commit()} />
           {errs[key] && <p id={errId} className="mt-1 max-w-44 text-xs whitespace-normal text-destructive">{errs[key]}</p>}
         </TableCell>
       )
@@ -225,7 +256,7 @@ function LineRow({ line, cols, group, path, editable, onOpen, onOverride }: { li
       </>
     )
     return (
-      <TableCell key={key} className="px-2 py-1 text-end">
+      <TableCell key={key} className={cn('px-2 py-1 text-end', key === 'net' && cn(PIN_END, 'bg-card group-hover:bg-muted'))}>
         {editable || o ? (
           <button type="button" className={cn(FOCUS, look, 'hover:bg-muted')} title={note || undefined} aria-label={`${label}: ${shown}${note ? ` — ${note}` : ''}`}
             onClick={() => (editable ? onOverride(key) : onOpen())}>
@@ -239,12 +270,20 @@ function LineRow({ line, cols, group, path, editable, onOpen, onOverride }: { li
   }
 
   return (
-    <TableRow>
-      <TableCell className="sticky start-0 z-10 bg-card p-0 first:ps-0">
+    // the row's own focus-out: leaving it from an input or a button (the panel, a cell's dialog) saves it first
+    <TableRow className="group hover:bg-muted" onBlur={(e) => !e.currentTarget.contains(e.relatedTarget as Node | null) && void commit()}>
+      <TableCell className={cn(PIN_START, 'bg-card p-0 group-hover:bg-muted first:ps-0')}>
         <button type="button" title={name} aria-label={t('payroll.openDays', { name })} onClick={onOpen}
           className={cn(FOCUS, 'flex min-h-tap w-full max-w-36 items-center gap-2 px-3 text-start sm:max-w-60')}>
           <span className="text-muted-foreground">{line.employee.code}</span>
           <bdi className="truncate font-medium text-primary underline-offset-4 hover:underline">{name}</bdi>
+          {/* typed and not saved yet: an icon, not only the cells' border colour; the typed cells are described by its text */}
+          {dirty && (
+            <span id={unsavedId} title={t('payroll.unsaved')} className="shrink-0 text-primary">
+              <CircleDot aria-hidden className="size-3.5" />
+              <span className="sr-only">{t('payroll.unsaved')}</span>
+            </span>
+          )}
         </button>
       </TableCell>
       <TableCell className="min-w-32 whitespace-normal"><Flags flags={line.flags} /></TableCell>
