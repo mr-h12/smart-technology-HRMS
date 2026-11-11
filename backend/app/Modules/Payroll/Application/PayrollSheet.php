@@ -124,7 +124,7 @@ final class PayrollSheet
     public function addOverride(Period $p, string $employeeId, string $component, string $amount, string $reason): array
     {
         $computed = $this->employee($p, $employeeId)['components'][$component]['computed']
-            ?? throw ValidationException::withMessages(['component' => __('validation.in', ['attribute' => 'component'])]);
+            ?? throw ValidationException::withMessages(['component' => __('validation.in', ['attribute' => __('validation.attributes.component')])]);
         try {
             PayrollOverride::create([
                 'employee_id' => $employeeId, 'employee_type' => $p->group->value, 'period_start' => $p->start,
