@@ -62,9 +62,8 @@ final class MonthlyFieldEngine
             Component::Incentives->value => Money::sub($salary, $insuredBasic),         // the payslip's split of the salary (§1)
             Component::Net->value => $net,
         ];
-        $flagNames = array_map(fn (string $f) => explode(':', $f)[0], array_merge(...array_column($dayLines, 'flags')));
 
-        return (new Line(array_map(Money::round6(...), $components), $dayLines, array_values(array_unique($flagNames))))->withNegativeNetFlag();
+        return Line::computed($components, $dayLines);
     }
 
     /**

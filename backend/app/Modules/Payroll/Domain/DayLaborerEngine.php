@@ -44,9 +44,8 @@ final class DayLaborerEngine
             Component::Deduction->value => $deduction,
             Component::Net->value => $net,
         ];
-        $flagNames = array_map(fn (string $f) => explode(':', $f)[0], array_merge(...array_column($dayLines, 'flags')));
 
-        return (new Line(array_map(Money::round6(...), $components), $dayLines, array_values(array_unique($flagNames))))->withNegativeNetFlag();
+        return Line::computed($components, $dayLines);
     }
 
     /**

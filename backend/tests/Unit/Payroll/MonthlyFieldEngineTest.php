@@ -125,6 +125,21 @@ class MonthlyFieldEngineTest extends TestCase
         $this->assertSame($floored['salary'], $floored['not_employed']);
     }
 
+    public function test_a_not_employed_day_ignores_its_own_wage(): void
+    {
+        // Hired on day 11 at 9000, 12000 from day 21; the not-employed days carry another type's daily wage, which never counts.
+        $days = array_map(fn (int $i) => $this->day(
+            date: $this->date('2026-09-26', $i),
+            state: $i < 10 ? 'not_employed' : 'work',
+            wage: $i < 10 ? '330' : ($i < 20 ? '9000' : '12000'),
+        ), range(0, 29));
+        $line = $this->engineer($days);
+
+        $this->assertSame('10000.000000', $this->component($line, Component::Salary));       // 20 × 300 + 10 × 400
+        $this->assertSame('3000.000000', $this->component($line, Component::NotEmployed));   // 10 × 300: salary part 7000
+        $this->assertSame('7000.000000', $this->component($line, Component::Net));
+    }
+
     public function test_insured_basic_split(): void
     {
         $days = [$this->day(otMinutes: 60)];
