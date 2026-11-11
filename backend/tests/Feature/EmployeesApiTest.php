@@ -141,8 +141,14 @@ class EmployeesApiTest extends TestCase
     public function test_pay_change_is_validated_against_type_in_force(): void
     {
         $id = $this->make();
-        $this->postJson("/api/v1/employees/$id/pay-changes", ['effective_from' => '2026-05-01', 'daily_wage' => '200'])->assertStatus(422);
+        // No pay row is in force before 2026-01-01, so nothing is kept and an office employee needs a salary.
+        $this->postJson("/api/v1/employees/$id/type-changes", ['type' => 'office', 'effective_from' => '2025-12-01'])->assertCreated();
+        $this->postJson("/api/v1/employees/$id/pay-changes", ['effective_from' => '2025-12-15', 'daily_wage' => '200'])
+            ->assertStatus(422)->assertJsonPath('error.details.0.field', 'salary');
+        // The office row in force on 05-01 has no daily wage, and a day laborer needs one.
         $this->postJson("/api/v1/employees/$id/type-changes", ['type' => 'day_laborer', 'effective_from' => '2026-04-01'])->assertCreated();
+        $this->postJson("/api/v1/employees/$id/pay-changes", ['effective_from' => '2026-05-01', 'salary' => '9500'])
+            ->assertStatus(422)->assertJsonPath('error.details.0.field', 'daily_wage');
         $this->postJson("/api/v1/employees/$id/pay-changes", ['effective_from' => '2026-05-01', 'daily_wage' => '200'])->assertCreated();
     }
 
@@ -163,6 +169,22 @@ class EmployeesApiTest extends TestCase
         $this->postJson("/api/v1/employees/$id/pay-changes", ['effective_from' => '2026-03-01', 'salary' => '5', 'raise' => ''])->assertCreated();
         $this->postJson("/api/v1/employees/$id/pay-changes", ['effective_from' => '2026-04-01', 'salary' => '5', 'raise' => null])->assertCreated();
         $this->assertSame('0.000000', $this->getJson("/api/v1/employees/$id")->json('data.pay_changes.0.raise'));
+    }
+
+    public function test_pay_change_keeps_unsent_fields(): void
+    {
+        $id = $this->make(['salary' => '9000', 'raise' => '500', 'insured_basic' => '5000', 'shift_start' => '10:00', 'shift_end' => '18:00']);
+        $this->postJson("/api/v1/employees/$id/pay-changes", ['effective_from' => '2026-11-01', 'salary' => '9500'])->assertCreated()
+            ->assertJsonPath('data.pay_changes.1.salary', '9500.000000')
+            ->assertJsonPath('data.pay_changes.1.raise', '500.000000')
+            ->assertJsonPath('data.pay_changes.1.insured_basic', '5000.000000')
+            ->assertJsonPath('data.pay_changes.1.shift_start', '10:00:00')
+            ->assertJsonPath('data.pay_changes.1.shift_end', '18:00:00');
+        // An explicit blank is sent: the raise goes to 0, as today.
+        $this->postJson("/api/v1/employees/$id/pay-changes", ['effective_from' => '2026-12-01', 'raise' => ''])->assertCreated()
+            ->assertJsonPath('data.pay_changes.2.raise', '0.000000')
+            ->assertJsonPath('data.pay_changes.2.salary', '9500.000000')
+            ->assertJsonPath('data.pay_changes.2.insured_basic', '5000.000000');
     }
 
     public function test_money_with_trailing_newline_is_rejected(): void

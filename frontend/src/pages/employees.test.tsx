@@ -512,6 +512,27 @@ test('pay dialog shapes its fields by the type in force on the chosen date', asy
   expect(screen.getByLabelText('الأجر اليومي')).toBeInTheDocument()
 })
 
+test('pay dialog opens with the current pay', async () => {
+  const post = vi.fn(() => json(201, { data: {} }))
+  const current_pay = { id: 'p1', effective_from: '2026-01-01', salary: '9000.000000', raise: '500.000000', insured_basic: '5000.000000', daily_wage: null, shift_start: '10:00:00', shift_end: '18:00:00' }
+  mockFetch({ 'GET /api/v1/residences': residences, 'POST /api/v1/employees/e1/pay-changes': post,
+    'GET /api/v1/employees/e1': () => json(200, { data: { ...emp, current_pay, pay_changes: [current_pay] } }) })
+  renderWithAuth(<EmployeeDetailRoute id="e1" tab="history" />, ALL, { router: false })
+  await user.click((await screen.findAllByRole('button', { name: 'إضافة تغيير' }))[1])
+  expect(screen.getByLabelText('المرتب')).toHaveValue('9000')
+  expect(screen.getByLabelText('العلاوة')).toHaveValue('500')
+  expect(screen.getByLabelText('الأساسي التأميني')).toHaveValue('5000')
+  expect(screen.getByLabelText('بداية الوردية')).toHaveValue('10:00')
+  expect(screen.getByLabelText('انتهاء الوردية')).toHaveValue('6:00')
+  // a cleared field goes out blank, so the server clears it instead of keeping the pay in force
+  await user.clear(screen.getByLabelText('الأساسي التأميني'))
+  await user.type(screen.getByLabelText('ساري اعتبارًا من'), '2026-11-01')
+  await user.click(within(screen.getByRole('dialog')).getByRole('button', { name: 'حفظ' }))
+  await waitFor(() => expect(post).toHaveBeenCalledTimes(1))
+  expect(JSON.parse((post.mock.calls[0] as unknown as [string, RequestInit])[1].body as string))
+    .toEqual({ effective_from: '2026-11-01', salary: '9000', raise: '500', insured_basic: '', shift_start: '10:00', shift_end: '18:00' })
+})
+
 test('type-change dialog rejects the type already in force on that date', async () => {
   openEmp(history)
   const user = userEvent.setup()

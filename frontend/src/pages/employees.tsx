@@ -23,11 +23,13 @@ import { cairoToday, ErrorBanner, Field, type Errs, FormDialog, type FormApi, fo
 import { useDebounced } from '@/hooks/useDebounced'
 import { ApiError } from '@/lib/api'
 import { useAuth } from '@/lib/auth'
+import { hhmm } from '@/lib/day-sheet'
 import { cn } from '@/lib/utils'
 import { RESIDENCES, USERS, useApi, useList, useSave, WORK_SITES } from '@/lib/query'
 import { EmployeeAttendance } from './employee-attendance'
 import { Documents } from './employee-documents'
 import { Leave } from './employee-leave'
+import { plainAmount } from './wage-proposals'
 
 const TYPES = ['office', 'engineer', 'permanent_worker', 'day_laborer']
 const WORKERS = ['permanent_worker', 'day_laborer'] // a worker belongs to a home site; its manager follows the site
@@ -824,7 +826,14 @@ const typeOn = (emp: Row, date: string): string => {
   return (date && cs.filter((c) => c.effective_from <= date).at(-1)?.type) || cs[0]?.type || emp.current_type || ''
 }
 
-/** "Add change" dialog: a type change, or a pay change shaped by the type in force on the chosen date. */
+/** The pay in force today as HR would type it ("9000.000000" → "9000", "10:00:00" → "10:00"), blank where there is none. */
+const payToday = (emp: Row): Row => Object.fromEntries(PAY.map((k) => {
+  const v = emp.current_pay?.[k]
+  return [k, v == null ? '' : k.startsWith('shift') ? hhmm(v) : plainAmount(v)]
+}))
+
+/** "Add change" dialog: a type change, or a pay change shaped by the type in force on the chosen date. A pay change opens from the pay in force today
+ * and sends every field shown, a cleared one blank: the server keeps only the fields not sent (M2). */
 function ChangeDialog({ kind, emp }: { kind: 'type' | 'pay'; emp: Row }) {
   const { t } = useTranslation()
   const send = useSave()
@@ -842,9 +851,8 @@ function ChangeDialog({ kind, emp }: { kind: 'type' | 'pay'; emp: Row }) {
     setErr(undefined)
     if (kind === 'type' && form.type === inForce) return setSameType(true)
     try {
-      await send(`/employees/${emp.id}/${kind}-changes`, { body: clean(form, shown) })
+      await send(`/employees/${emp.id}/${kind}-changes`, { body: Object.fromEntries(shown.map((k) => [k, form[k] ?? ''])) })
       setOpen(false)
-      setForm({})
     } catch (e) {
       setErr(e)
     }
@@ -852,7 +860,7 @@ function ChangeDialog({ kind, emp }: { kind: 'type' | 'pay'; emp: Row }) {
 
   return (
     <Dialog open={open} onOpenChange={setOpen}>
-      <Button type="button" variant="outline" size="sm" onClick={() => setOpen(true)}>
+      <Button type="button" variant="outline" size="sm" onClick={() => { setForm(kind === 'pay' ? payToday(emp) : {}); setOpen(true) }}>
         {t('change.add')}
       </Button>
       <DialogContent aria-describedby={undefined}>

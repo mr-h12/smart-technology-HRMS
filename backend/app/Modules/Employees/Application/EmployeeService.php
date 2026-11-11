@@ -307,7 +307,9 @@ final class EmployeeService
         if ($type === null) {
             throw ValidationException::withMessages(['effective_from' => __('errors.no_type_on_date')]);
         }
-        $pay = $this->payRow($data);
+        // M2: a row is a full snapshot, so it starts from the row in force on its date and takes only the fields sent (a blank sent clears).
+        $inForce = EffectiveDated::at($employee->payChanges->map(fn ($p) => $this->row($p))->all(), $data['effective_from']) ?? [];
+        $pay = $this->payRow([...$inForce, ...$data]);
         $this->assertPay(EmployeeType::from($type['type']), $pay);
 
         DB::transaction(function () use ($employee, $data, $pay): void {
