@@ -1,12 +1,13 @@
 import { useId, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
+import { Link } from 'react-router-dom'
 import { Alert } from '@/components/common/Alert'
 import { Button } from '@/components/ui/button'
 import { Dialog, DialogBody, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
-import { ApiError } from '@/lib/api'
-import { cn } from '@/lib/utils'
+import { ApiError, type OpenItem } from '@/lib/api'
+import { cn, FOCUS } from '@/lib/utils'
 
 export type Row = Record<string, any> // eslint-disable-line @typescript-eslint/no-explicit-any
 export type Errs = Record<string, string>
@@ -24,14 +25,36 @@ export function ErrorBanner({ err, shown }: { err: unknown; shown: string[] }) {
       ? err.details.filter((d) => !d.field || !shown.includes(d.field)).map((d) => d.message)
       : [err instanceof Error ? err.message : String(err)]
   const dates = err instanceof ApiError ? err.dates : []
+  const items = err instanceof ApiError ? err.items : []
   return msgs.length ? (
     <Alert tone="danger">
       {msgs.map((m, i) => (
         <p key={i}>{m}</p>
       ))}
       {!!dates.length && <Dates dates={dates} />}
+      {!!items.length && <OpenItems items={items} />}
     </Alert>
   ) : null
+}
+
+/** The open items a refusal names, each a link to the screen where it is decided. */
+function OpenItems({ items }: { items: OpenItem[] }) {
+  const { t } = useTranslation()
+  return (
+    <ul>
+      {items.map((it) => (
+        <li key={`${it.kind}-${it.id}`}>
+          <Link to={it.kind === 'leave_request' ? `/leave?request=${it.id}` : `/wage-proposals?proposal=${it.id}`} className={cn('inline-flex min-h-tap items-center font-medium text-primary underline underline-offset-4', FOCUS)}>
+            <span>
+              {it.kind === 'leave_request'
+                ? ltrDates(t('employee.openItems.leave_request', { from: it.from_date, to: it.to_date, status: t(`leave.status.${it.status}`) }))
+                : t('employee.openItems.wage_proposal')}
+            </span>
+          </Link>
+        </li>
+      ))}
+    </ul>
+  )
 }
 
 /** ISO dates as a wrapping list, each in an LTR isolate. */

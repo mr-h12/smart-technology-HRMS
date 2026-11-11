@@ -125,6 +125,10 @@
       "reason": "السبب: {{reason}}",
       "correct": "تصحيح بيانات الترك"
     },
+    "openItems": {
+      "leave_request": "طلب إجازة {{from}} – {{to}} ({{status}})",
+      "wage_proposal": "يومية مقترحة بانتظار القرار"
+    },
     "reactivate": {
       "button": "إعادة التفعيل",
       "title": "إعادة تفعيل الموظف",

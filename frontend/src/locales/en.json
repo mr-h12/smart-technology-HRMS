@@ -125,6 +125,10 @@
       "reason": "Reason: {{reason}}",
       "correct": "Correct leaving details"
     },
+    "openItems": {
+      "leave_request": "Leave request {{from}} – {{to}} ({{status}})",
+      "wage_proposal": "Proposed daily wage awaiting a decision"
+    },
     "reactivate": {
       "button": "Reactivate",
       "title": "Reactivate employee",
