@@ -94,7 +94,11 @@ const VIEWS: { [K in Notification['type']]: (n: Extract<Notification, { type: K 
     }],
   }),
 }
-const view = (n: Notification, ctx: Ctx) => (VIEWS[n.type] as (n: Notification, ctx: Ctx) => View)(n, ctx)
+const view = (n: Notification, ctx: Ctx): View => {
+  const v = (VIEWS[n.type] as (n: Notification, ctx: Ctx) => View)(n, ctx)
+  // about an employee the reader cannot name (deleted, archived, out of reach): their page or request would be a 404, so the line only marks it read
+  return 'employee' in n && n.employee === null && 'employee_id' in n.data ? { ...v, lines: v.lines.map((l) => ({ ...l, to: null })) } : v
+}
 
 const PATH = '/notifications?per_page=10'
 
