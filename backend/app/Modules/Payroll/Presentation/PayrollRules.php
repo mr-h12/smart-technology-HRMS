@@ -8,6 +8,7 @@ use App\Modules\Employees\Application\EmployeeRules;
 use App\Modules\Employees\Domain\EmployeeType;
 use App\Modules\Payroll\Application\PayrollSheet;
 use App\Modules\Payroll\Domain\Component;
+use Closure;
 use Illuminate\Validation\Rule;
 
 /** The payroll API's body rules: HR's entry per type and the override. Format only; PayrollSheet checks the rest. */
@@ -24,9 +25,6 @@ final class PayrollRules
         'day_laborer' => ['bonus', 'deduction', 'deduction_reason'],
     ];
 
-    /** The net alone may be negative: every other component is a magnitude its sign adds or deducts (Component::sign). */
-    private const SIGNED_MONEY = 'regex:/^-?\d{1,12}(\.\d{1,6})?$/D';
-
     private const TEXT = ['nullable', 'string', 'max:500'];
 
     private const REASON = ['required', 'string', 'max:500'];
@@ -34,14 +32,16 @@ final class PayrollRules
     public const REVERT = ['reason' => self::REASON];
 
     /**
-     * The entry body of a type and the message for a field it does not use. Blank is cleared; a non-zero deduction needs a reason.
+     * The entry body of a type. Blank is cleared; a non-zero deduction needs a reason.
      *
      * @param  array<array-key, mixed>  $input  the request body, so that an unknown key is refused too
-     * @return array{array<array-key, array<mixed>>, array<string, string>} rules, messages
+     * @return array<array-key, array<mixed>>
      */
     public static function entry(EmployeeType $group, array $input): array
     {
-        $rules = array_fill_keys(array_keys($input), ['prohibited']);
+        // A field the type does not use, or an unknown key, takes null only (`prohibited` would also let [] through).
+        $notUsed = fn (string $attribute, mixed $value, Closure $fail) => $fail(__('errors.payroll_field_not_used', ['type' => __('errors.employee_type.'.$group->value)]));
+        $rules = array_fill_keys(array_keys($input), ['nullable', $notUsed]);
         $rules['version'] = ['nullable', 'integer', 'min:1'];
         foreach ([...self::ENTRY_FIELDS[$group->value], 'note'] as $field) {
             $rules[$field] = match (true) {
@@ -51,12 +51,12 @@ final class PayrollRules
                 default => self::TEXT,
             };
         }
-        if (isset($rules['deduction_reason'])) {
+        if (in_array('deduction_reason', self::ENTRY_FIELDS[$group->value], true)) {
             $deduction = $input['deduction'] ?? null;
             $rules['deduction_reason'][] = Rule::requiredIf(is_string($deduction) && preg_match('/[1-9]/', $deduction) === 1);
         }
 
-        return [$rules, ['prohibited' => __('errors.payroll_field_not_used', ['type' => __('errors.employee_type.'.$group->value)])]];
+        return $rules;
     }
 
     /**
@@ -68,7 +68,8 @@ final class PayrollRules
     {
         return [
             'component' => ['required', Rule::enum(Component::class)],
-            'amount' => ['required', 'string', $component === Component::Net->value ? self::SIGNED_MONEY : EmployeeRules::MONEY],
+            // The net alone may be negative: every other component is a magnitude its sign adds or deducts (Component::sign).
+            'amount' => ['required', 'string', $component === Component::Net->value ? EmployeeRules::SIGNED_MONEY : EmployeeRules::MONEY],
             'reason' => self::REASON,
         ];
     }

@@ -5,6 +5,7 @@ namespace Tests\Feature;
 use App\Modules\Payroll\Application\PayrollSheet;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Testing\TestResponse;
+use stdClass;
 use Tests\AttendanceFixtures;
 use Tests\TestCase;
 
@@ -155,6 +156,12 @@ class PayrollApiTest extends TestCase
             foreach (array_diff(PayrollSheet::FIELDS, $used, ['note']) as $field) {
                 $this->refused($this->putJson($url, ['version' => 1, $field => self::VALUES[$field]]), $field);
             }
+            // An array or an object is no value of any field, used or not: a 422, never a write that fails.
+            foreach (['version', ...PayrollSheet::FIELDS] as $field) {
+                foreach ([[], new stdClass] as $shape) {
+                    $this->refused($this->putJson($url, ['version' => 1, $field => $shape]), $field);
+                }
+            }
             // Blank is cleared: null for a field the type does not use is no value, so it passes.
             $this->putJson($url, ['version' => 1, ...array_fill_keys(PayrollSheet::FIELDS, null)])->assertOk()->assertJsonPath('data.entry.version', 2);
         }
@@ -165,6 +172,7 @@ class PayrollApiTest extends TestCase
         $id = $this->employee('engineer');
 
         $this->refused($this->putJson(self::PERIOD['engineer']."/employees/{$id}/entry", ['salary' => '1', 'note' => 'x']), 'salary');
+        $this->refused($this->putJson(self::PERIOD['engineer']."/employees/{$id}/entry", ['salary' => [], 'note' => 'x']), 'salary');
     }
 
     public function test_a_deduction_needs_a_reason(): void
@@ -175,6 +183,10 @@ class PayrollApiTest extends TestCase
         $this->refused($this->putJson($url, ['deduction' => '0.5']), 'deduction_reason');
         $this->refused($this->putJson($url, ['deduction' => '100', 'deduction_reason' => '   ']), 'deduction_reason');
         $this->putJson($url, ['deduction' => '0.000'])->assertOk()->assertJsonPath('data.entry.deduction', '0.000000');   // a zero deduction needs none
+
+        // Office takes no deduction: only the deduction is refused, the reason is not asked for.
+        $office = self::PERIOD['office'].'/employees/'.$this->employee('office').'/entry';
+        $this->refused($this->putJson($office, ['deduction' => '5', 'deduction_reason' => null]), 'deduction');
     }
 
     public function test_entry_amounts_are_decimal_strings_and_counts_whole_numbers(): void
