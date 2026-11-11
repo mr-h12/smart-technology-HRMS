@@ -29,19 +29,19 @@ const asText = (f: string, v: unknown) => (v == null ? '' : AMOUNTS.includes(f) 
 /** Blank → null; minutes as integers (anything else goes as typed, so the server names the field). */
 const toBody = (f: string, v: string) => (v === '' ? null : MINUTES.includes(f) && /^\d+$/.test(v) ? Number.parseInt(v, 10) : v)
 
-/** One employee's day in a sheet. "Load latest" remounts the body, which refetches the day before the form starts again. */
-export function DayEditor({ employee, date, onOpenChange }: { employee: Row; date: string; onOpenChange: (open: boolean) => void }) {
+/** One employee's day in a sheet. "Load latest" remounts the body, which refetches the day before the form starts again. An archived employee's day is view only. */
+export function DayEditor({ employee, date, onOpenChange, archived = false }: { employee: Row; date: string; onOpenChange: (open: boolean) => void; archived?: boolean }) {
   const [gen, setGen] = useState(0)
   return (
     <Sheet open onOpenChange={onOpenChange}>
       <SheetContent side="right" aria-describedby={undefined}>
-        <DayBody key={gen} employee={employee} date={date} onDone={() => onOpenChange(false)} onReload={() => setGen((g) => g + 1)} />
+        <DayBody key={gen} employee={employee} date={date} archived={archived} onDone={() => onOpenChange(false)} onReload={() => setGen((g) => g + 1)} />
       </SheetContent>
     </Sheet>
   )
 }
 
-function DayBody({ employee, date, onDone, onReload }: { employee: Row; date: string; onDone: () => void; onReload: () => void }) {
+function DayBody({ employee, date, archived, onDone, onReload }: { employee: Row; date: string; archived: boolean; onDone: () => void; onReload: () => void }) {
   const { t, i18n } = useTranslation()
   const path = `/attendance/days/${employee.id}/${date}`
   const day = useApi<Day>(path, { fresh: true })
@@ -55,7 +55,7 @@ function DayBody({ employee, date, onDone, onReload }: { employee: Row; date: st
         {ready && day.data?.source && <StatusBadge variant="neutral" label={t(`attendance.source.${day.data.source}`)} />}
       </SheetHeader>
       {ready ? (
-        <DayForm day={day.data!} sites={sites.data!} path={path} loadErr={err} onDone={onDone} onReload={onReload} />
+        <DayForm day={day.data!} sites={sites.data!} path={path} archived={archived} loadErr={err} onDone={onDone} onReload={onReload} />
       ) : (
         <div className="grid gap-4 p-5">
           <ErrorBanner err={err} shown={[]} />
@@ -67,7 +67,7 @@ function DayBody({ employee, date, onDone, onReload }: { employee: Row; date: st
 }
 
 /** Starts from the day as the server sent it (its defaults included) and sends only the fields the chosen site allows. */
-function DayForm({ day, sites, path, loadErr, onDone, onReload }: { day: Day; sites: Row[]; path: string; loadErr?: unknown; onDone: () => void; onReload: () => void }) {
+function DayForm({ day, sites, path, archived, loadErr, onDone, onReload }: { day: Day; sites: Row[]; path: string; archived: boolean; loadErr?: unknown; onDone: () => void; onReload: () => void }) {
   const { t, i18n } = useTranslation()
   const { can } = useAuth()
   const send = useSave()
@@ -76,7 +76,7 @@ function DayForm({ day, sites, path, loadErr, onDone, onReload }: { day: Day; si
   const [busy, setBusy] = useState(false)
   const [version] = useState(day.version) // the version the form started from; only "Load latest" (a remount) moves it, so a refetch after a 409 cannot turn the next Save into an overwrite
   const locked = !!day.period?.is_locked
-  const readOnly = locked || !can('attendance.edit')
+  const readOnly = locked || archived || !can('attendance.edit')
   const site = sites.find((s) => s.id === form.site_id)
   const shown = (site?.kind === 'leave' ? day.leave_day_fields : day.fields).filter((f) => !OUTSIDE.includes(f) || site?.outside_alexandria)
   const errs = toErrs(err)
@@ -126,7 +126,7 @@ function DayForm({ day, sites, path, loadErr, onDone, onReload }: { day: Day; si
       {/* read-only: the controls' own disabled:opacity-50 would wash out the muted fill and the values */}
       <div className={`grid flex-1 content-start gap-4 overflow-y-auto overscroll-contain p-5 [&_input:disabled]:bg-muted [&_textarea:disabled]:bg-muted [&_select:disabled]:bg-muted ${readOnly ? '[&_:disabled]:opacity-100' : ''}`}>
         {locked && <Alert tone="neutral">{t('attendance.day.lockedNote')}</Alert>}
-        {readOnly && !locked && <Alert tone="neutral">{t('attendance.day.readOnlyNote')}</Alert>}
+        {readOnly && !locked && <Alert tone="neutral">{t(archived ? 'attendance.day.archivedNote' : 'attendance.day.readOnlyNote')}</Alert>}
         {day.state === 'derived' && <Alert tone="neutral">{t('attendance.day.derivedNote', { type: leaveName })}</Alert>}
         {day.state === 'missing' && <Alert tone="neutral">{t('attendance.day.missingNote')}</Alert>}
         <ErrorBanner err={loadErr} shown={[]} />

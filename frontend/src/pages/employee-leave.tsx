@@ -22,8 +22,11 @@ type Balance = { entitlement: number | null; casual_cap: number | null; used: nu
 type Adjustment = { entitlement: number | null; opening_used: number; opening_casual_used: number; reason: string | null; version: number }
 type EmployeeLeave = { balance: Balance | null; adjustment: Adjustment | null }
 
-/** The year's leave balance and requests; the year selector offers the current Cairo year and one either side, and starts on `initialYear` when it is one of them. */
-export function Leave({ emp, initialYear }: { emp: Row; initialYear?: string | null }) {
+/**
+ * The year's leave balance and requests; the year selector offers the current Cairo year and one either side, and starts on `initialYear`
+ * when it is one of them. `readOnly` (archived): no request and no adjustment.
+ */
+export function Leave({ emp, initialYear, readOnly = false }: { emp: Row; initialYear?: string | null; readOnly?: boolean }) {
   const { t } = useTranslation()
   const { can } = useAuth()
   const thisYear = Number(cairoToday().slice(0, 4))
@@ -46,7 +49,7 @@ export function Leave({ emp, initialYear }: { emp: Row; initialYear?: string | n
               onChange={(y) => setYear(Number(y))}
               options={years.map((y) => ({ value: y, label: y, content: <span aria-hidden className="px-1.5">{y}</span> }))}
             />
-            {can('leave.adjust') && ready && b && <AdjustDialog empId={emp.id} year={year} path={path} adjustment={data.adjustment} />}
+            {can('leave.adjust') && !readOnly && ready && b && <AdjustDialog empId={emp.id} year={year} path={path} adjustment={data.adjustment} />}
           </div>
         </CardHeader>
         <CardContent className="space-y-4">
@@ -79,13 +82,13 @@ export function Leave({ emp, initialYear }: { emp: Row; initialYear?: string | n
           )}
         </CardContent>
       </Card>
-      <Requests emp={emp} year={year} />
+      <Requests emp={emp} year={year} readOnly={readOnly} />
     </div>
   )
 }
 
 /** `GET /leave/requests?employee_id=&year=`: one employee's requests of the year, and «طلب إجازة» for this employee. */
-function Requests({ emp, year }: { emp: Row; year: number }) {
+function Requests({ emp, year, readOnly }: { emp: Row; year: number; readOnly: boolean }) {
   const { t } = useTranslation()
   const { can } = useAuth()
   const [asking, setAsking] = useState(false)
@@ -96,7 +99,7 @@ function Requests({ emp, year }: { emp: Row; year: number }) {
     <Card className="overflow-hidden">
       <CardHeader className="flex-wrap items-center">
         <CardTitle>{t('leave.requests.list')}</CardTitle>
-        {can('leave.request') && (
+        {can('leave.request') && !readOnly && (
           <Button type="button" variant="outline" onClick={() => setAsking(true)}>
             <CalendarPlus aria-hidden /> {t('leave.request.open')}
           </Button>

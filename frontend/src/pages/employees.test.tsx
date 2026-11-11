@@ -619,11 +619,11 @@ test('an active employee with a future termination date shows when they leave; t
   expect(within(screen.getByRole('row', { name: /سعيد/ })).getByText(/ينتهي في/)).toBeInTheDocument()
 })
 
-const archived = { ...emp, code: 7, termination_date: '2026-01-31', termination_reason: 'استقالة' }
+const archived = { ...emp, code: 7, termination_date: '2026-01-31', termination_reason: 'استقالة', archived: true }
 
 test('an archived employee is reactivated after confirming, and the cleared dates show', async () => {
   let current: Record<string, unknown> = archived
-  const patch = vi.fn(() => { current = { ...archived, termination_date: null, termination_reason: null }; return json(200, { data: current }) })
+  const patch = vi.fn(() => { current = { ...archived, termination_date: null, termination_reason: null, archived: false }; return json(200, { data: current }) })
   mockFetch({ 'GET /api/v1/residences': residences, 'GET /api/v1/employees/e1': () => json(200, { data: current }), 'PATCH /api/v1/employees/e1': patch })
   renderWithAuth(<EmployeeDetailRoute id="e1" />, ALL, { router: false })
   expect(await screen.findByLabelText('تاريخ إنهاء الخدمة')).toHaveValue('2026-01-31')
@@ -654,7 +654,7 @@ test('a form dialog without a description has no aria-describedby', async () => 
 
 test('Reactivate shows only for an archived employee and with employee.edit', async () => {
   const today = cairoToday()
-  mockFetch({ 'GET /api/v1/residences': residences, 'GET /api/v1/employees/e1': () => json(200, { data: { ...archived, termination_date: today } }) })
+  mockFetch({ 'GET /api/v1/residences': residences, 'GET /api/v1/employees/e1': () => json(200, { data: { ...archived, termination_date: today, archived: false } }) })
   const first = renderWithAuth(<EmployeeDetailRoute id="e1" />, ALL, { router: false })
   await screen.findByLabelText('تاريخ إنهاء الخدمة')
   expect(screen.queryByRole('button', { name: 'إعادة التفعيل' })).toBeNull() // terminated today: still active
@@ -663,6 +663,30 @@ test('Reactivate shows only for an archived employee and with employee.edit', as
   renderWithAuth(<EmployeeDetailRoute id="e1" />, ['employee.view.all'], { router: false })
   await screen.findByLabelText('تاريخ إنهاء الخدمة')
   expect(screen.queryByRole('button', { name: 'إعادة التفعيل' })).toBeNull()
+})
+
+test('an archived employee’s page shows the banner with the date and reason and changes nothing but its termination', async () => {
+  mockFetch({ 'GET /api/v1/residences': residences, 'GET /api/v1/employees/e1': () => json(200, { data: archived }) })
+  const perms = [...ALL, 'employee.edit_code.all', 'employee.assign_manager.all', 'employee.assign_site.all']
+  const first = renderWithAuth(<EmployeeDetailRoute id="e1" />, perms, { router: false })
+  const banner = await screen.findByRole('status')
+  expect(banner).toHaveTextContent('مؤرشف — ترك العمل في 2026-01-31')
+  expect(within(banner).getByText('2026-01-31')).toHaveAttribute('dir', 'ltr')
+  expect(banner).toHaveTextContent('السبب: استقالة')
+  expect(screen.getByLabelText('الاسم بالعربية')).toBeDisabled()
+  for (const name of ['حفظ', 'تغيير الرقم الوظيفي', 'تعيين مدير', 'نقل إلى موقع']) expect(screen.queryByRole('button', { name })).toBeNull()
+  expect(screen.getByRole('button', { name: 'إعادة التفعيل' })).toBeInTheDocument()
+  first.unmount()
+  renderWithAuth(<EmployeeDetailRoute id="e1" tab="history" />, perms, { router: false })
+  expect(await screen.findByText('سجل تغييرات نوع الموظف')).toBeInTheDocument()
+  expect(screen.queryByRole('button', { name: 'إضافة تغيير' })).toBeNull()
+})
+
+test('an active employee’s page has no archive banner', async () => {
+  mockFetch({ 'GET /api/v1/residences': residences, 'GET /api/v1/employees/e1': () => json(200, { data: { ...archived, termination_date: cairoToday(), archived: false } }) })
+  renderWithAuth(<EmployeeDetailRoute id="e1" />, ALL, { router: false })
+  expect(await screen.findByLabelText('الاسم بالعربية')).toBeEnabled()
+  expect(screen.queryByRole('status')).toBeNull()
 })
 
 const codeRoutes = (patch: (url: string, init?: RequestInit) => Response) =>

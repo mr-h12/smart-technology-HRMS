@@ -49,9 +49,10 @@ const LEGEND = ['present', 'absent', 'sick', 'leave', 'missing'] as const
 /**
  * The employee's days in their own payroll period as a month calendar (owner, 2026-11-11, after the iPhone Calendar): Saturday first,
  * one section per month so a 26th→25th period splits its week where the month changes. The arrows step to the server's neighbouring
- * dates. A day opens the day editor; its save marks every attendance query stale (useSave), so the calendar refetches.
+ * dates. A day opens the day editor; its save marks every attendance query stale (useSave), so the calendar refetches. `readOnly`
+ * (archived): the editor opens view only.
  */
-export function EmployeeAttendance({ emp }: { emp: Row }) {
+export function EmployeeAttendance({ emp, readOnly = false }: { emp: Row; readOnly?: boolean }) {
   const { t, i18n } = useTranslation()
   const [date, setDate] = useState<string>() // none: the period holding today
   const [open, setOpen] = useState<string>()
@@ -132,7 +133,7 @@ export function EmployeeAttendance({ emp }: { emp: Row }) {
           </div>
         )}
       </Card>
-      {open && <DayEditor employee={emp} date={open} onOpenChange={(o) => !o && setOpen(undefined)} />}
+      {open && <DayEditor employee={emp} date={open} onOpenChange={(o) => !o && setOpen(undefined)} archived={readOnly} />}
     </>
   )
 }

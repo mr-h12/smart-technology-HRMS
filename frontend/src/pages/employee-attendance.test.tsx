@@ -166,6 +166,20 @@ test('a day opens the day editor, and a save there refreshes the calendar', asyn
   await waitFor(() => expect(r[PERIOD].mock.calls.length).toBeGreaterThan(reads))
 })
 
+test('an archived employee’s day opens view only', async () => {
+  mockFetch({ ...routes(),
+    'GET /api/v1/attendance/days/e1/2026-10-03': () => json(200, { data: { ...day('2026-10-03', 'missing'), employee_id: 'e1', type: 'engineer',
+      fields: ['in_time', 'out_time', 'note'], leave_day_fields: [], hints: {}, period: { start: '2026-09-26', end: '2026-10-25', is_locked: false } } }) })
+  renderWithAuth(<EmployeeAttendance emp={emp} readOnly />, ['attendance.view.all', 'attendance.edit.all'], { router: false })
+  await user.click(await screen.findByRole('button', { name: 'السبت 2026-10-03: غير مسجل' }))
+  const editor = await screen.findByRole('dialog', { name: 'يوم 2026-10-03 — أحمد' })
+  expect(await within(editor).findByText('للعرض فقط: الموظف ترك العمل.')).toBeInTheDocument()
+  const controls = [...editor.querySelectorAll('input, select, textarea')]
+  expect(controls).toHaveLength(4) // the site and the three fields
+  for (const c of controls) expect(c).toBeDisabled()
+  expect(within(editor).queryByRole('button', { name: 'حفظ' })).toBeNull()
+})
+
 function EmployeeDetailRoute({ tab }: { tab: string }) {
   return (
     <MemoryRouter initialEntries={[`/employees/e1?tab=${tab}`]}>
