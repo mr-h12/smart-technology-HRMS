@@ -1,5 +1,5 @@
 import { Archive, Briefcase, CalendarCheck, CalendarDays, ChevronLeft, ChevronRight, FileText, HardHat, History as HistoryIcon, IdCard, type LucideIcon, MapPin, PencilLine, RotateCcw, UserCog, UserPlus, Users, Wrench } from 'lucide-react'
-import { useEffect, useEffectEvent, useState } from 'react'
+import { useEffect, useEffectEvent, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { Link, useLocation, useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import { MiniStat, type Tone } from '@/components/cards/StatCard'
@@ -836,7 +836,8 @@ const payForm = (pay: Row | undefined): Row => Object.fromEntries(PAY.map((k) =>
 }))
 
 /** "Add change" dialog: a type change, or a pay change shaped by the type in force on the chosen date. A pay change shows the pay in force on
- * that date (today's until one is picked; picking a date refills it) and sends every field shown, a cleared one blank: what HR sees is stored (M2). */
+ * that date (today's until one is picked; picking a date refills the fields HR has not typed in) and sends every field shown, a cleared one
+ * blank: what HR sees is stored (M2). */
 function ChangeDialog({ kind, emp }: { kind: 'type' | 'pay'; emp: Row }) {
   const { t } = useTranslation()
   const send = useSave()
@@ -844,8 +845,18 @@ function ChangeDialog({ kind, emp }: { kind: 'type' | 'pay'; emp: Row }) {
   const { form, set, setForm } = useForm({})
   const [err, setErr] = useState<unknown>()
   const [sameType, setSameType] = useState(false)
+  // the fields HR typed in since the dialog opened: a date change keeps them (a value comparison breaks on a date passing through year 0002)
+  const typed = useRef(new Set<string>())
   const errs = { ...toErrs(err), ...(sameType ? { type: t('change.sameType') } : {}) }
-  const f = { values: form, set: (k: string, v: string) => { setSameType(false); if (kind === 'pay' && k === 'effective_from') setForm(payForm(payOn(emp, v))); set(k, v) }, errs }
+  const f = { values: form, set: (k: string, v: string) => {
+    setSameType(false)
+    if (k !== 'effective_from') typed.current.add(k)
+    else if (kind === 'pay') {
+      const keep = [...typed.current] // read here: an updater runs during render, where a ref is not read
+      setForm((cur) => ({ ...payForm(payOn(emp, v)), ...Object.fromEntries(keep.map((p) => [p, cur[p]])) }))
+    }
+    set(k, v)
+  }, errs }
   const inForce = typeOn(emp, form.effective_from ?? '')
   const shown = ['effective_from', ...(kind === 'type' ? ['type'] : payFields(inForce))]
 
@@ -863,7 +874,7 @@ function ChangeDialog({ kind, emp }: { kind: 'type' | 'pay'; emp: Row }) {
 
   return (
     <Dialog open={open} onOpenChange={setOpen}>
-      <Button type="button" variant="outline" size="sm" onClick={() => { setForm(kind === 'pay' ? payForm(payOn(emp, '')) : {}); setErr(undefined); setSameType(false); setOpen(true) }}>
+      <Button type="button" variant="outline" size="sm" onClick={() => { setForm(kind === 'pay' ? payForm(payOn(emp, '')) : {}); typed.current.clear(); setErr(undefined); setSameType(false); setOpen(true) }}>
         {t('change.add')}
       </Button>
       <DialogContent aria-describedby={undefined}>

@@ -1956,6 +1956,14 @@ test('the server decides who gets the set-site button: a laborer off every crew 
   expect(within(rowOf('Worker-2')).getByText('بدون موقع')).toBeInTheDocument()
 })
 
+test('no set-site button on a row in a locked period: the API refuses that date, so it reads as no site', async () => {
+  mockFetch({ ...allRoutes, 'GET /api/v1/attendance/sheet': () => allSheet([{ ...everyType[3], locked: true }]) })
+  open(allPath, ['attendance.view.all', 'employee.assign_site.all'])
+  await table()
+  expect(within(rowOf('Office-2')).queryByRole('button', { name: new RegExp(SET) })).toBeNull()
+  expect(within(rowOf('Office-2')).getByText('بدون موقع')).toBeInTheDocument()
+})
+
 test('no set-site button without employee.assign_site', async () => {
   mockFetch(allRoutes)
   open(allPath)

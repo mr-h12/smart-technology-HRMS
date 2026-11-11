@@ -533,10 +533,11 @@ test('pay dialog opens with the current pay', async () => {
     .toEqual({ effective_from: '2026-11-01', salary: '9000', raise: '500', insured_basic: '', shift_start: '10:00', shift_end: '18:00' })
 })
 
+const now = { id: 'p1', effective_from: '2026-01-01', salary: '9000.000000', raise: '500.000000', insured_basic: '5000.000000', daily_wage: null, shift_start: '10:00:00', shift_end: '18:00:00' }
+const ahead = { id: 'p2', effective_from: '2026-12-01', salary: '10000.000000', raise: '600.000000', insured_basic: '5500.000000', daily_wage: null, shift_start: '08:00:00', shift_end: '16:00:00' }
+
 test('pay dialog fills from the pay in force on the chosen date', async () => {
   const post = vi.fn(() => json(201, { data: {} }))
-  const now = { id: 'p1', effective_from: '2026-01-01', salary: '9000.000000', raise: '500.000000', insured_basic: '5000.000000', daily_wage: null, shift_start: '10:00:00', shift_end: '18:00:00' }
-  const ahead = { id: 'p2', effective_from: '2026-12-01', salary: '10000.000000', raise: '600.000000', insured_basic: '5500.000000', daily_wage: null, shift_start: '08:00:00', shift_end: '16:00:00' }
   mockFetch({ 'GET /api/v1/residences': residences, 'POST /api/v1/employees/e1/pay-changes': post,
     'GET /api/v1/employees/e1': () => json(200, { data: { ...emp, current_pay: now, pay_changes: [now, ahead] } }) })
   renderWithAuth(<EmployeeDetailRoute id="e1" tab="history" />, ALL, { router: false })
@@ -552,6 +553,23 @@ test('pay dialog fills from the pay in force on the chosen date', async () => {
   await waitFor(() => expect(post).toHaveBeenCalledTimes(1))
   expect(JSON.parse((post.mock.calls[0] as unknown as [string, RequestInit])[1].body as string))
     .toEqual({ effective_from: '2027-01-01', salary: '10000', raise: '600', insured_basic: '5500', shift_start: '08:00', shift_end: '16:00' })
+})
+
+test('a date change keeps the pay HR typed and refills only the untouched fields', async () => {
+  const post = vi.fn(() => json(201, { data: {} }))
+  mockFetch({ 'GET /api/v1/residences': residences, 'POST /api/v1/employees/e1/pay-changes': post,
+    'GET /api/v1/employees/e1': () => json(200, { data: { ...emp, current_pay: now, pay_changes: [now, ahead] } }) })
+  renderWithAuth(<EmployeeDetailRoute id="e1" tab="history" />, ALL, { router: false })
+  await user.click((await screen.findAllByRole('button', { name: 'إضافة تغيير' }))[1])
+  await user.clear(screen.getByLabelText('المرتب'))
+  await user.type(screen.getByLabelText('المرتب'), '9500') // typed over today's 9000, before the date
+  await user.type(screen.getByLabelText('ساري اعتبارًا من'), '2027-01-01') // the December row is in force then
+  expect(screen.getByLabelText('المرتب')).toHaveValue('9500')
+  expect(screen.getByLabelText('العلاوة')).toHaveValue('600')
+  await user.click(within(screen.getByRole('dialog')).getByRole('button', { name: 'حفظ' }))
+  await waitFor(() => expect(post).toHaveBeenCalledTimes(1))
+  expect(JSON.parse((post.mock.calls[0] as unknown as [string, RequestInit])[1].body as string))
+    .toEqual({ effective_from: '2027-01-01', salary: '9500', raise: '600', insured_basic: '5500', shift_start: '08:00', shift_end: '16:00' })
 })
 
 test('a reopened pay dialog drops the last error', async () => {

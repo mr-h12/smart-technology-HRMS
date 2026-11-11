@@ -197,7 +197,7 @@ export function SheetRows({ rows, allIds, group, editable, date, sites, selected
       </DropdownMenu>
     )
   }
-  const canSetSite = (r: SheetRow) => r.needs_site && can('employee.assign_site')
+  const canSetSite = (r: SheetRow) => r.needs_site && !r.locked && can('employee.assign_site') // a locked day's date is always refused
   const setSite = (r: SheetRow) => canSetSite(r) && <MoveSiteDialog empId={r.employee.id} from={date} ariaLabel={t('attendance.sheet.rowAction', { action: t('site.set'), name: name(r) })} />
   const where = (r: SheetRow) => {
     if (all) return r.site_id ? <span className="rounded-md border bg-card px-2 py-0.5 text-xs">{siteName(r.site_id)}</span> : !canSetSite(r) && <span className="text-xs text-muted-foreground">{t('attendance.noSite')}</span>
