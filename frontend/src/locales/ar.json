@@ -568,6 +568,8 @@
     "nextPeriod": "الفترة التالية",
     "periodRange": "من {{start}} إلى {{end}}",
     "employee": "الموظف",
+    "withArchived": "إظهار من تركوا العمل",
+    "leftMark": "ترك العمل",
     "periodLine": "الفترة من {{start}} إلى {{end}} · أيام غير مسجلة: {{missing}}",
     "locked": "مقفلة",
     "lock": "قفل الفترة",

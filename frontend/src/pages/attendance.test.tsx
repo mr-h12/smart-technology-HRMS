@@ -441,6 +441,57 @@ test('a grid search with no match says so, and the search box is on the grid tab
   expect(screen.queryByRole('textbox', { name: 'ابحث بالاسم أو الرقم الوظيفي' })).toBeNull()
 })
 
+test('HR’s switch asks the grid and the header for with_archived=1, keeps it in the URL, and marks the rows of those who left', async () => {
+  const left = { employee: { id: 'e9', code: 9, name_ar: 'Engineer-9', name_en: 'Engineer-9', archived: true }, days: [cell('2026-10-01', 'stored', { site_id: 's1' })] }
+  const grid = vi.fn((url: string) => json(200, { data: url.includes('with_archived=1') ? [...rows, left] : rows, meta: { pagination } }))
+  const head = vi.fn((_url: string) => json(200, { data: period }))
+  mockFetch({ ...routes, 'GET /api/v1/attendance/grid': grid, 'GET /api/v1/attendance/period': head,
+    'GET /api/v1/attendance/days/e9/2026-10-01': () => new Promise<Response>(() => {}) as unknown as Response })
+  const { unmount } = renderWithAuth(<AttendancePage />, lockPerms, { path: '/attendance?group=engineer&tab=grid' })
+  const box = await screen.findByRole('checkbox', { name: 'إظهار من تركوا العمل' })
+  expect(box).not.toBeChecked()
+  await screen.findByRole('button', { name: 'Engineer-1 2026-10-01: Site-1' })
+  expect([...grid.mock.calls, ...head.mock.calls].some(([u]) => u.includes('with_archived'))).toBe(false)
+  await user.click(box)
+  await waitFor(() => expect(grid.mock.calls.at(-1)?.[0]).toContain('with_archived=1'))
+  expect(head.mock.calls.at(-1)?.[0]).toContain('with_archived=1') // the header's missing count follows the grid
+  const name = (await screen.findByText('Engineer-9')).closest('td')!
+  expect(within(name).getByText('ترك العمل')).toBeInTheDocument()
+  expect(within(screen.getByText('Engineer-1').closest('td')!).queryByText('ترك العمل')).toBeNull()
+  await user.click(screen.getByRole('button', { name: 'Engineer-9 2026-10-01: Site-1' })) // a leaver's day opens as usual
+  expect(await screen.findByRole('dialog', { name: 'يوم 2026-10-01 — Engineer-9' })).toBeInTheDocument()
+  await user.keyboard('{Escape}')
+  await user.selectOptions(screen.getByRole('combobox', { name: 'المجموعة' }), 'office')
+  await waitFor(() => expect(grid.mock.calls.at(-1)?.[0]).toContain('group=office'))
+  expect(grid.mock.calls.at(-1)?.[0]).toContain('with_archived=1')
+  await user.click(screen.getByRole('checkbox', { name: 'إظهار من تركوا العمل' }))
+  await waitFor(() => expect(grid.mock.calls.at(-1)?.[0]).not.toContain('with_archived'))
+  expect(head.mock.calls.at(-1)?.[0]).not.toContain('with_archived')
+  unmount()
+
+  grid.mockClear()
+  head.mockClear()
+  renderWithAuth(<AttendancePage />, lockPerms, { path: '/attendance?group=permanent_worker&tab=grid&with_archived=1' }) // a group not cached above
+  expect(await screen.findByRole('checkbox', { name: 'إظهار من تركوا العمل' })).toBeChecked()
+  await waitFor(() => expect(grid.mock.calls.at(-1)?.[0]).toContain('with_archived=1'))
+  expect(head.mock.calls.length).toBeGreaterThan(0)
+  expect(head.mock.calls.every(([u]) => u.includes('with_archived=1'))).toBe(true)
+})
+
+test('the switch needs attendance.edit.all and stays on the grid tab', async () => {
+  mockFetch({ ...routes, 'GET /api/v1/attendance/sheet': () => new Promise<Response>(() => {}) as unknown as Response })
+  for (const perms of [['attendance.view.all'], ['attendance.view.own', 'attendance.edit.own']]) {
+    const { unmount } = renderWithAuth(<AttendancePage />, perms, { path: '/attendance?group=engineer&tab=grid&with_archived=1' })
+    await screen.findByRole('button', { name: 'Engineer-1 2026-10-01: Site-1' })
+    expect(screen.queryByRole('checkbox', { name: 'إظهار من تركوا العمل' })).toBeNull()
+    unmount()
+  }
+  renderWithAuth(<AttendancePage />, lockPerms, { path: '/attendance?group=engineer&tab=sheet&with_archived=1&date=2026-10-01' })
+  await screen.findAllByText('2026-09-26')
+  expect(screen.queryByRole('checkbox', { name: 'إظهار من تركوا العمل' })).toBeNull()
+  expect(vi.mocked(fetch).mock.calls.map(([u]) => String(u)).filter((u) => u.includes('with_archived'))).toEqual([])
+})
+
 test.each([
   ['grid', 'office'], ['grid', 'engineer'], ['grid', 'all'],
   ['sheet', 'office'], ['sheet', 'engineer'], ['sheet', 'all'],

@@ -564,6 +564,8 @@
     "nextPeriod": "Next period",
     "periodRange": "{{start}} to {{end}}",
     "employee": "Employee",
+    "withArchived": "Show those who left",
+    "leftMark": "Left",
     "periodLine": "Period {{start}} to {{end}} · Missing days: {{missing}}",
     "locked": "Locked",
     "lock": "Lock period",
