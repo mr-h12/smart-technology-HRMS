@@ -23,13 +23,12 @@ import { cairoToday, ErrorBanner, Field, type Errs, FormDialog, type FormApi, fo
 import { useDebounced } from '@/hooks/useDebounced'
 import { ApiError } from '@/lib/api'
 import { useAuth } from '@/lib/auth'
-import { hhmm } from '@/lib/day-sheet'
+import { hhmm, plainAmount } from '@/lib/day-sheet'
 import { cn } from '@/lib/utils'
 import { RESIDENCES, USERS, useApi, useList, useSave, WORK_SITES } from '@/lib/query'
 import { EmployeeAttendance } from './employee-attendance'
 import { Documents } from './employee-documents'
 import { Leave } from './employee-leave'
-import { plainAmount } from './wage-proposals'
 
 const TYPES = ['office', 'engineer', 'permanent_worker', 'day_laborer']
 const WORKERS = ['permanent_worker', 'day_laborer'] // a worker belongs to a home site; its manager follows the site
@@ -826,14 +825,18 @@ const typeOn = (emp: Row, date: string): string => {
   return (date && cs.filter((c) => c.effective_from <= date).at(-1)?.type) || cs[0]?.type || emp.current_type || ''
 }
 
-/** The pay in force today as HR would type it ("9000.000000" → "9000", "10:00:00" → "10:00"), blank where there is none. */
-const payToday = (emp: Row): Row => Object.fromEntries(PAY.map((k) => {
-  const v = emp.current_pay?.[k]
+/** Pay row in force on a date: greatest effective_from <= date, none before the first; today's pay while no date is picked. */
+const payOn = (emp: Row, date: string): Row | undefined =>
+  date ? (emp.pay_changes ?? []).filter((c: Row) => c.effective_from <= date).sort((x: Row, y: Row) => x.effective_from.localeCompare(y.effective_from)).at(-1) : emp.current_pay
+
+/** The pay fields of a row as HR would type them ("9000.000000" → "9000", "10:00:00" → "10:00"), blank where there is none. */
+const payForm = (pay: Row | undefined): Row => Object.fromEntries(PAY.map((k) => {
+  const v = pay?.[k]
   return [k, v == null ? '' : k.startsWith('shift') ? hhmm(v) : plainAmount(v)]
 }))
 
-/** "Add change" dialog: a type change, or a pay change shaped by the type in force on the chosen date. A pay change opens from the pay in force today
- * and sends every field shown, a cleared one blank: the server keeps only the fields not sent (M2). */
+/** "Add change" dialog: a type change, or a pay change shaped by the type in force on the chosen date. A pay change shows the pay in force on
+ * that date (today's until one is picked; picking a date refills it) and sends every field shown, a cleared one blank: what HR sees is stored (M2). */
 function ChangeDialog({ kind, emp }: { kind: 'type' | 'pay'; emp: Row }) {
   const { t } = useTranslation()
   const send = useSave()
@@ -842,7 +845,7 @@ function ChangeDialog({ kind, emp }: { kind: 'type' | 'pay'; emp: Row }) {
   const [err, setErr] = useState<unknown>()
   const [sameType, setSameType] = useState(false)
   const errs = { ...toErrs(err), ...(sameType ? { type: t('change.sameType') } : {}) }
-  const f = { values: form, set: (k: string, v: string) => { setSameType(false); set(k, v) }, errs }
+  const f = { values: form, set: (k: string, v: string) => { setSameType(false); if (kind === 'pay' && k === 'effective_from') setForm(payForm(payOn(emp, v))); set(k, v) }, errs }
   const inForce = typeOn(emp, form.effective_from ?? '')
   const shown = ['effective_from', ...(kind === 'type' ? ['type'] : payFields(inForce))]
 
@@ -860,7 +863,7 @@ function ChangeDialog({ kind, emp }: { kind: 'type' | 'pay'; emp: Row }) {
 
   return (
     <Dialog open={open} onOpenChange={setOpen}>
-      <Button type="button" variant="outline" size="sm" onClick={() => { setForm(kind === 'pay' ? payToday(emp) : {}); setOpen(true) }}>
+      <Button type="button" variant="outline" size="sm" onClick={() => { setForm(kind === 'pay' ? payForm(payOn(emp, '')) : {}); setErr(undefined); setSameType(false); setOpen(true) }}>
         {t('change.add')}
       </Button>
       <DialogContent aria-describedby={undefined}>

@@ -185,6 +185,31 @@ class EmployeesApiTest extends TestCase
             ->assertJsonPath('data.pay_changes.2.raise', '0.000000')
             ->assertJsonPath('data.pay_changes.2.salary', '9500.000000')
             ->assertJsonPath('data.pay_changes.2.insured_basic', '5000.000000');
+        // Dated between two rows, it starts from the row in force on its date (01-01), not the latest (12-01).
+        $this->postJson("/api/v1/employees/$id/pay-changes", ['effective_from' => '2026-06-01', 'insured_basic' => '6000'])->assertCreated()
+            ->assertJsonPath('data.pay_changes.1.effective_from', '2026-06-01')
+            ->assertJsonPath('data.pay_changes.1.salary', '9000.000000')
+            ->assertJsonPath('data.pay_changes.1.raise', '500.000000')
+            ->assertJsonPath('data.pay_changes.1.insured_basic', '6000.000000');
+    }
+
+    public function test_pay_change_after_a_type_change_keeps_only_that_types_fields(): void
+    {
+        $id = $this->make(['salary' => '9000', 'raise' => '500', 'insured_basic' => '5000', 'shift_start' => '10:00', 'shift_end' => '18:00']);
+        $this->postJson("/api/v1/employees/$id/type-changes", ['type' => 'day_laborer', 'effective_from' => '2026-04-01'])->assertCreated();
+        $this->postJson("/api/v1/employees/$id/pay-changes", ['effective_from' => '2026-04-01', 'daily_wage' => '200'])->assertCreated()
+            ->assertJsonPath('data.pay_changes.1.daily_wage', '200.000000')
+            ->assertJsonPath('data.pay_changes.1.salary', null)
+            ->assertJsonPath('data.pay_changes.1.raise', '0.000000')
+            ->assertJsonPath('data.pay_changes.1.insured_basic', null)
+            ->assertJsonPath('data.pay_changes.1.shift_start', '10:00:00')
+            ->assertJsonPath('data.pay_changes.1.shift_end', '18:00:00');
+        // And back: a monthly row does not keep the daily wage.
+        $this->postJson("/api/v1/employees/$id/type-changes", ['type' => 'office', 'effective_from' => '2026-06-01'])->assertCreated();
+        $this->postJson("/api/v1/employees/$id/pay-changes", ['effective_from' => '2026-06-01', 'salary' => '9500'])->assertCreated()
+            ->assertJsonPath('data.pay_changes.2.salary', '9500.000000')
+            ->assertJsonPath('data.pay_changes.2.daily_wage', null)
+            ->assertJsonPath('data.pay_changes.2.shift_start', '10:00:00');
     }
 
     public function test_money_with_trailing_newline_is_rejected(): void

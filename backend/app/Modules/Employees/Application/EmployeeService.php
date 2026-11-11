@@ -308,7 +308,9 @@ final class EmployeeService
             throw ValidationException::withMessages(['effective_from' => __('errors.no_type_on_date')]);
         }
         // M2: a row is a full snapshot, so it starts from the row in force on its date and takes only the fields sent (a blank sent clears).
-        $inForce = EffectiveDated::at($employee->payChanges->map(fn ($p) => $this->row($p))->all(), $data['effective_from']) ?? [];
+        // Only the pay fields of the type in force are kept: a row after a type change does not inherit the other type's wage.
+        $kept = [...($type['type'] === EmployeeType::DayLaborer->value ? ['daily_wage'] : ['salary', 'raise', 'insured_basic']), 'shift_start', 'shift_end'];
+        $inForce = Arr::only(EffectiveDated::at($employee->payChanges->map(fn ($p) => $this->row($p))->all(), $data['effective_from']) ?? [], $kept);
         $pay = $this->payRow([...$inForce, ...$data]);
         $this->assertPay(EmployeeType::from($type['type']), $pay);
 
