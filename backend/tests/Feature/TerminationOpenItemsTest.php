@@ -97,4 +97,20 @@ class TerminationOpenItemsTest extends TestCase
 
         $this->patchJson("/api/v1/employees/{$e}", ['name_ar' => 'Engineer-X'])->assertOk()->assertJsonPath('data.name_ar', 'Engineer-X');
     }
+
+    public function test_the_profile_forms_full_body_saves_while_items_are_open_when_a_future_termination_date_is_unchanged(): void
+    {
+        $e = $this->employee('engineer', '2026-01-01', ['termination_date' => '2026-11-30']);
+        $this->request($e);
+        // The profile form sends every identity field on each save, the termination date included (frontend/src/pages/employees.tsx, IDENTITY).
+        $shown = $this->getJson("/api/v1/employees/{$e}")->json('data');
+        $body = [];
+        foreach (['name_ar', 'name_en', 'fingerprint_name', 'gender', 'national_id', 'insurance_no', 'phone', 'address', 'department', 'residence_id',
+            'pay_method', 'bank_account', 'hire_date', 'contract_end_date', 'termination_date', 'termination_reason', 'hr_notes'] as $k) {
+            $body[$k] = $shown[$k] ?? null;
+        }
+
+        $this->patchJson("/api/v1/employees/{$e}", [...$body, 'name_ar' => 'Engineer-X'])->assertOk()
+            ->assertJsonPath('data.name_ar', 'Engineer-X')->assertJsonPath('data.termination_date', '2026-11-30');
+    }
 }

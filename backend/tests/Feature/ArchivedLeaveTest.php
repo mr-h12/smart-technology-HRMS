@@ -61,4 +61,16 @@ class ArchivedLeaveTest extends TestCase
         $this->approve($b)->assertOk();
         $this->assertSame([], $this->listed());
     }
+
+    public function test_hr_can_cancel_an_approved_request_of_an_archived_employee(): void
+    {
+        $e = $this->employee('engineer', '2026-01-01', ['termination_date' => '2026-10-25']);
+        $id = $this->submit($e, '2026-10-21', '2026-10-22')->assertCreated()->json('data.id');
+        $this->approve($id)->assertOk();
+        $this->cairo('2026-10-26 12:00');                                                           // now archived
+
+        $this->postJson("/api/v1/leave/requests/{$id}/cancel", ['version' => DB::table('leave_requests')->where('id', $id)->value('version'), 'reason' => 'Reason-1'])
+            ->assertOk()->assertJsonPath('data.status', 'cancelled');
+        $this->assertSame(0, DB::table('attendance_days')->where('employee_id', $e)->whereNull('deleted_at')->count());   // the leave days it wrote are cleared
+    }
 }
