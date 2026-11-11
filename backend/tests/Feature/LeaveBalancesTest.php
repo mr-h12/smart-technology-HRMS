@@ -358,7 +358,7 @@ class LeaveBalancesTest extends TestCase
     {
         $becameMonthly = $this->employee('day_laborer', '2020-01-01');
         $service = app(EmployeeService::class);
-        $service->addTypeChange($becameMonthly, ['type' => 'engineer', 'effective_from' => '2025-07-01']);
+        $service->addTypeChange($becameMonthly, ['type' => 'engineer', 'effective_from' => '2025-06-26']);
         $service->addTypeChange($becameMonthly, ['type' => 'day_laborer', 'effective_from' => '2026-03-01']);
         $becameDaily = $this->employee('office', '2020-01-01');
         $service->addTypeChange($becameDaily, ['type' => 'day_laborer', 'effective_from' => '2025-07-01']);

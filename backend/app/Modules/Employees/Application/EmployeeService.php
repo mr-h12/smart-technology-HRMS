@@ -4,6 +4,8 @@ declare(strict_types=1);
 
 namespace App\Modules\Employees\Application;
 
+use App\Modules\Attendance\Domain\Period;
+use App\Modules\Attendance\Infrastructure\PeriodGuard;
 use App\Modules\Employees\Domain\DocumentKind;
 use App\Modules\Employees\Domain\EffectiveDated;
 use App\Modules\Employees\Domain\EmployeeArchived;
@@ -193,6 +195,12 @@ final class EmployeeService
             if ($employee->isDirty('termination_date') && $employee->termination_date !== null && ($items = $this->openItems($id)) !== []) {
                 throw new EmployeeHasOpenItems($items);
             }
+            if ($employee->isDirty('termination_date')) {
+                // The days after the earlier of the old and new dates switch between employed and not.
+                $old = $employee->getOriginal('termination_date');
+                $new = $employee->termination_date;
+                $this->assertUnlocked($employee, (string) min($old ?? $new, $new ?? $old), 'termination_date');
+            }
             $this->assertBank($employee->only(['pay_method', 'bank_account']));
             $employee->save();
         });
@@ -271,7 +279,15 @@ final class EmployeeService
     {
         $employee = Employee::findOrFail($id);
         $this->assertFreeDate($employee->typeChanges(), $data['effective_from']);
-        $employee->typeChanges()->create($data);
+        // The new type's period start; the old type's last period ends the day before (spec 2026-11-09, open point default).
+        $new = EmployeeType::from($data['type']);
+        if (Period::containing($new, $data['effective_from'])->start !== $data['effective_from']) {
+            throw ValidationException::withMessages(['effective_from' => __('errors.type_change_not_period_start')]);
+        }
+        DB::transaction(function () use ($employee, $data, $new): void {
+            $this->assertUnlocked($employee, $data['effective_from'], new: $new);
+            $employee->typeChanges()->create($data);
+        });
 
         return $this->show($id);
     }
@@ -293,7 +309,10 @@ final class EmployeeService
         $pay = $this->payRow($data);
         $this->assertPay(EmployeeType::from($type['type']), $pay);
 
-        $employee->payChanges()->create($pay);
+        DB::transaction(function () use ($employee, $data, $pay): void {
+            $this->assertUnlocked($employee, $data['effective_from']);
+            $employee->payChanges()->create($pay);
+        });
 
         return $this->show($id);
     }
@@ -330,7 +349,10 @@ final class EmployeeService
     {
         $employee = Employee::findOrFail($id);
         $this->assertFreeDate($employee->managerAssignments(), $data['effective_from']);
-        $employee->managerAssignments()->create($data);
+        DB::transaction(function () use ($employee, $data): void {
+            $this->assertUnlocked($employee, $data['effective_from']);
+            $employee->managerAssignments()->create($data);
+        });
 
         return $this->show($id);
     }
@@ -351,6 +373,7 @@ final class EmployeeService
                 throw ValidationException::withMessages(['effective_from' => __('errors.home_site_not_allowed')]);
             }
             $this->assertFreeDate($employee->siteAssignments(), $from);
+            $this->assertUnlocked($employee, $from);
 
             $rows = [['site_id' => $data['site_id'], 'effective_from' => $from]];
             $returnsOn = $data['returns_on'] ?? null;
@@ -408,6 +431,19 @@ final class EmployeeService
                 'field' => __('validation.attributes.'.$need),
                 'type' => __('errors.employee_type.'.$type->value),
             ])]);
+        }
+    }
+
+    /**
+     * M1: a dated row governs the days from its date on, so a lock ending on or after the date, of the type in force there (every type when
+     * none is) or of the $new type, refuses it, as FareService does. Call inside the write's transaction (PeriodGuard::lockedFrom).
+     */
+    private function assertUnlocked(Employee $employee, string $date, string $field = 'effective_from', ?EmployeeType $new = null): void
+    {
+        $old = EffectiveDated::at($employee->typeChanges->map(fn ($t) => $this->row($t))->all(), $date)['type'] ?? null;
+        $types = $old === null ? EmployeeType::cases() : array_filter([EmployeeType::from($old), $new]);
+        if (PeriodGuard::lockedFrom($date, ...$types)) {
+            throw ValidationException::withMessages([$field => __('errors.dated_change_period_locked')]);
         }
     }
 
