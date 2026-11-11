@@ -139,6 +139,12 @@ final class EmployeeRoster
         return $this->rows(EmployeeReach::apply($this->employedAs([EmployeeType::Engineer], $date, $date, null), $managerId, $date));
     }
 
+    /** @return Builder<Employee> the ids of the archived employees, as a whereIn subquery */
+    public function archivedIds(): Builder
+    {
+        return Employee::query()->select('employees.id')->archived();
+    }
+
     /** @return array<string, mixed>|null with $withTrashed, a deleted employee too */
     public function find(string $id, bool $withTrashed = false): ?array
     {
