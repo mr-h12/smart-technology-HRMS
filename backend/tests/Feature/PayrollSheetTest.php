@@ -13,6 +13,8 @@ use App\Modules\Sites\Infrastructure\Eloquent\Fare;
 use App\Modules\Sites\Infrastructure\Eloquent\Residence;
 use App\Modules\Sites\Infrastructure\Eloquent\Site;
 use App\Support\Database\ConcurrencyConflict;
+use Illuminate\Database\Eloquent\ModelNotFoundException;
+use Illuminate\Database\QueryException;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\ValidationException;
@@ -241,6 +243,18 @@ class PayrollSheetTest extends TestCase
         $line = $this->sheet()->saveEntry($p, $id, ['deduction' => '200', 'deduction_reason' => 'Late report'], 1);
         $this->assertSame(2, $line['entry']['version']);
         $this->assertSame('8800.000000', $line['components']['net']['final']);
+        // Each write is audited with its before and after values.
+        $audit = DB::table('audit_log')->where('entity_type', 'payroll_entries')->get()->keyBy('event');
+        $values = function (mixed $json): array {
+            $values = json_decode((string) $json, true);
+            ksort($values);
+
+            return $values;
+        };
+        $this->assertSame(['CREATED', 'UPDATED'], $audit->keys()->sort()->values()->all());
+        $this->assertSame(['deduction' => '100', 'deduction_reason' => 'Late report', 'version' => 1], array_intersect_key($values($audit['CREATED']->new_values), ['deduction' => 0, 'deduction_reason' => 0, 'version' => 0]));
+        $this->assertSame(['deduction' => '100.000000', 'version' => 1], $values($audit['UPDATED']->old_values));
+        $this->assertSame(['deduction' => '200', 'version' => 2], $values($audit['UPDATED']->new_values));
 
         try {
             $this->sheet()->saveEntry($p, $id, ['deduction' => '300'], 1);
@@ -264,8 +278,66 @@ class PayrollSheetTest extends TestCase
         } catch (ConcurrencyConflict) {
             $this->assertSame('100.000000', $this->sheet()->employee($p, $id)['components']['overtime']['final']);
         }
+        try {
+            DB::transaction(fn () => DB::table('payroll_overrides')->update(['deleted_at' => now()]));   // a revert with no reason at all
+            $this->fail('A reverted override must carry its reason.');
+        } catch (QueryException $e) {
+            $this->assertStringContainsString('payroll_overrides_revert_reason_check', $e->getMessage());
+        }
         $this->expectException(ValidationException::class);
         $this->sheet()->addOverride($p, $id, 'travel', '100', 'Office only');   // an engineer's line has no travel
+    }
+
+    public function test_reverting_an_override_of_someone_off_the_sheet_writes_nothing(): void
+    {
+        $id = $this->employee('engineer');
+        $p = $this->engineers();
+        $override = $this->sheet()->addOverride($p, $id, 'overtime', '100', 'Approved by HR')['components']['overtime']['override']['id'];
+        DB::table('employee_type_changes')->where('employee_id', $id)->update(['type' => 'office']);   // the type history edited since
+
+        try {
+            $this->sheet()->revertOverride($p, $id, $override, 'Typed in error');
+            $this->fail('Someone off the sheet is not found.');
+        } catch (ModelNotFoundException) {
+            // Refused before the write, so the answer (404) and the data agree: the override is still live and unchanged.
+            $this->assertDatabaseHas('payroll_overrides', ['id' => $override, 'deleted_at' => null, 'revert_reason' => null, 'version' => 1]);
+            $this->assertSame(0, DB::table('audit_log')->where(['entity_id' => $override])->whereIn('event', ['UPDATED', 'DELETED'])->count());
+        }
+    }
+
+    public function test_a_sheet_costs_the_same_queries_whatever_its_employees_and_days(): void
+    {
+        // Fares and allowances are read once per period through the Sites read services, never per employee or day.
+        $residence = $this->residenceWithFare('40');
+        Fare::create(['residence_id' => $residence, 'site_id' => $this->site, 'effective_from' => '2026-10-05', 'amount' => '50']);
+        Site::findOrFail($this->site)->allowanceRules()->create(['effective_from' => '2026-01-01', 'mode' => 'share_of_wage', 'value' => '0.25']);
+        $p = Period::startingAt(EmployeeType::DayLaborer, '2026-10-01');
+        $queries = function () use ($p): int {
+            $this->sheet()->sheet($p);   // warms the settings cache
+            DB::flushQueryLog();
+            DB::enableQueryLog();
+            $this->sheet()->sheet($p);
+            DB::disableQueryLog();
+
+            return count(DB::getQueryLog());
+        };
+        $first = $this->employee('day_laborer', '2026-01-01', ['residence_id' => $residence]);
+        $this->day($first, '2026-10-01');
+        $small = $queries();
+
+        $this->day($first, '2026-10-03');
+        $this->day($first, '2026-10-05');   // the residence × site fare changed that day
+        foreach (['2026-10-01', '2026-10-01', '2026-10-04'] as $from) {
+            $id = $this->employee('day_laborer', '2026-01-01', ['residence_id' => $residence]);
+            EmployeeFareOverride::create(['employee_id' => $id, 'site_id' => $this->site, 'effective_from' => $from, 'amount' => '25']);
+            foreach (['2026-10-03', '2026-10-04', '2026-10-05'] as $date) {
+                $this->day($id, $date);
+            }
+        }
+
+        $this->assertSame($small, $queries());
+        // Each day still takes the fare in force that day: 40 + 40 + 50, 3 × 25 twice, then 40 before the override and 2 × 25.
+        $this->assertSame(['130.000000', '75.000000', '75.000000', '90.000000'], array_map(fn (array $l) => $l['components']['transport']['final'], $this->sheet()->sheet($p)['lines']));
     }
 
     private function sheet(): PayrollSheet

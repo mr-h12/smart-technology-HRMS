@@ -49,7 +49,7 @@ return new class extends Migration
         });
         DB::statement('create unique index payroll_overrides_live_unique on payroll_overrides (employee_id, employee_type, period_start, component) where deleted_at is null');
         DB::statement("alter table payroll_overrides add constraint payroll_overrides_reason_check check (btrim(reason) <> '')");
-        DB::statement("alter table payroll_overrides add constraint payroll_overrides_revert_reason_check check (deleted_at is null or btrim(revert_reason) <> '')");
+        DB::statement("alter table payroll_overrides add constraint payroll_overrides_revert_reason_check check (deleted_at is null or coalesce(btrim(revert_reason), '') <> '')");
 
         foreach (['payroll_entries', 'payroll_overrides'] as $table) {
             DB::statement("alter table {$table} add constraint {$table}_employee_type_check check (employee_type in ('office', 'engineer', 'permanent_worker', 'day_laborer'))");

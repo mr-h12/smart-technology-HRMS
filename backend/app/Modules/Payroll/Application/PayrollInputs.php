@@ -70,6 +70,7 @@ final class PayrollInputs
             unset($siteIds['']);
             $rules = $this->allowances->inForce(array_map('strval', array_keys($siteIds)), $p->start, $p->end);
         }
+        $fares = $this->fares->inForce(array_map(fn (array $e) => (string) $e['id'], $employees), $p->start, $p->end);
 
         $inputs = [];
         foreach ($employees as $e) {
@@ -82,7 +83,7 @@ final class PayrollInputs
                     $input['insured_basic'] = self::amount($pay['insured_basic'] ?? null);
                 }
                 $wage = self::wage($p->group, $pay);
-                [$fare, $fareFound] = $this->fare($p->group, $id, $state, $day);
+                [$fare, $fareFound] = self::fare($fares, $p->group, $id, $state, $day);
                 if (! $fareFound) {
                     $input['flags'] = ['no_fare'];
                 }
@@ -159,22 +160,21 @@ final class PayrollInputs
     /**
      * The fare of a worked (or open) day at its site, and whether one was found. Engineers: the per-worker override in force only, 0
      * without one, never the residence × site fare (R2; calculations §2). Day laborers and permanent workers on a day that pays
-     * transport: the override, else the residence × site fare (§4); none found is reported. Other days need no fare.
+     * transport: the override, else the residence × site fare (§4); none found is reported. Other days need no fare. The day's type is
+     * the group's on a worked day.
      *
-     * ponytail: up to 3 queries per worked day (FareLookup reads one employee, site and date), about 100 × 26 × 3 ≈ 7,800 for a large
-     * permanent-worker sheet; add a period-wide fare read in Sites when a sheet gets slow.
-     *
+     * @param  array{residences: array<string, ?string>, overrides: array<string, array<string, list<array{effective_from: string, amount: string}>>>, fares: array<string, array<string, list<array{effective_from: string, amount: string}>>>}  $fares  FareLookup::inForce for the period
      * @param  array<string, mixed>  $day
      * @return array{numeric-string, bool}
      */
-    private function fare(EmployeeType $group, string $employeeId, string $state, array $day): array
+    private static function fare(array $fares, EmployeeType $group, string $employeeId, string $state, array $day): array
     {
         $paysFare = $group === EmployeeType::Engineer || $group === EmployeeType::DayLaborer
             || ($group === EmployeeType::PermanentWorker && $day['transport'] !== 'none');
         if (($state !== 'work' && $state !== 'open') || ! $paysFare) {
             return ['0', true];
         }
-        $found = $day['site_id'] === null ? null : $this->fares->describe($employeeId, (string) $day['site_id'], (string) $day['date']);
+        $found = $day['site_id'] === null ? null : FareLookup::forDay($fares, $employeeId, $group, (string) $day['site_id'], (string) $day['date']);
         if ($group === EmployeeType::Engineer) {
             return [$found !== null && $found['source'] === 'override' ? Decimal::of($found['amount'], 'fare') : '0', true];
         }

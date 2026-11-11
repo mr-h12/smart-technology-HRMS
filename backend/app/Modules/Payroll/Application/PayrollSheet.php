@@ -142,10 +142,12 @@ final class PayrollSheet
      *
      * @return array<string, mixed> employee() after the write
      *
-     * @throws ModelNotFoundException when the employee has no such live override in the period
+     * @throws ModelNotFoundException when the employee is off the sheet (checked before the write, so a 404 reverts nothing) or has no
+     *                                such live override in the period
      */
     public function revertOverride(Period $p, string $employeeId, string $overrideId, string $reason): array
     {
+        $this->employeeOn($p, $employeeId);
         DB::transaction(function () use ($p, $employeeId, $overrideId, $reason): void {
             $override = PayrollOverride::where(['id' => $overrideId, 'employee_id' => $employeeId, 'employee_type' => $p->group->value, 'period_start' => $p->start])
                 ->lockForUpdate()->firstOrFail();
