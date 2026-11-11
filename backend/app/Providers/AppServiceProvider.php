@@ -2,6 +2,7 @@
 
 namespace App\Providers;
 
+use App\Modules\Employees\Application\EmployeeOpenItems;
 use App\Modules\Employees\Infrastructure\Eloquent\Employee;
 use App\Modules\Identity\Infrastructure\BearerSessionResolver;
 use App\Modules\Identity\Infrastructure\RolePermissions;
@@ -41,6 +42,9 @@ class AppServiceProvider extends ServiceProvider
 
         // Leave vetoes an employee delete, so Employees never depends on Leave (D4).
         Employee::deleting(fn (Employee $e) => app(LeaveRequests::class)->assertNoOpenRequests((string) $e->getKey()));
+
+        // Leave's open requests hold back a termination date, the same way (owner, 2026-11-11).
+        Event::listen(EmployeeOpenItems::class, fn (EmployeeOpenItems $e) => app(LeaveRequests::class)->openRequests($e->employeeId));
 
         Auth::viaRequest('hrms-bearer-session', fn (Request $r) => app(BearerSessionResolver::class)->forRequest($r));
 

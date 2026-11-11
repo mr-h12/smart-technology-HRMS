@@ -10,6 +10,7 @@ use App\Modules\Audit\Infrastructure\SystemLog;
 use App\Modules\Audit\Presentation\PruneLogsCommand;
 use App\Modules\Employees\Domain\EmployeeArchived;
 use App\Modules\Employees\Domain\EmployeeCodeTaken;
+use App\Modules\Employees\Domain\EmployeeHasOpenItems;
 use App\Modules\Employees\Presentation\EnsureEmployeeInScope;
 use App\Modules\Employees\Presentation\ImportMasterDataCommand;
 use App\Modules\Identity\Domain\Authentication\AuthenticationRefused;
@@ -111,7 +112,11 @@ return Application::configure(basePath: dirname(__DIR__))
             $request, $e->reason->status(), $e->reason->value, __('leave.refusal.'.$e->reason->value, $e->params), extra: $e->dates === [] ? [] : ['dates' => $e->dates],
         ));
 
-        $exceptions->dontReport([EmployeeCodeTaken::class, EmployeeArchived::class]);
+        $exceptions->dontReport([EmployeeCodeTaken::class, EmployeeArchived::class, EmployeeHasOpenItems::class]);
+
+        $exceptions->render(fn (EmployeeHasOpenItems $e, Request $request) => ApiEnvelope::error(
+            $request, 409, 'employee_has_open_items', __('errors.employee_has_open_items', ['count' => (string) count($e->items)]), extra: ['items' => $e->items],
+        ));
 
         $exceptions->render(fn (EmployeeArchived $e, Request $request) => ApiEnvelope::error(
             $request, 409, 'employee_archived', __('errors.employee_archived'),

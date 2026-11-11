@@ -244,11 +244,26 @@ final class LeaveRequests
     /** Deleting an employee with a pending or escalated request is refused (D4, 2026-11-04); call inside the delete's transaction. */
     public function assertNoOpenRequests(string $employeeId): void
     {
-        LeaveRequestLock::forEmployee($employeeId);
-        $open = LeaveRequest::where('employee_id', $employeeId)->whereIn('status', [LeaveStatus::Pending->value, LeaveStatus::Escalated->value])->count();
+        $open = count($this->openRequests($employeeId));
         if ($open > 0) {
             throw new LeaveRefused(LeaveRefusal::EmployeeHasOpenRequests, ['count' => (string) $open]);
         }
+    }
+
+    /**
+     * The employee's pending and escalated requests by from_date, under the lock submit takes: call inside the caller's transaction, so a
+     * request filed at the same moment waits for it (a termination date's open items, owner 2026-11-11).
+     *
+     * @return list<array{kind: string, id: string, status: string, from_date: string, to_date: string}>
+     */
+    public function openRequests(string $employeeId): array
+    {
+        LeaveRequestLock::forEmployee($employeeId);
+
+        return array_values(LeaveRequest::where('employee_id', $employeeId)->whereIn('status', [LeaveStatus::Pending->value, LeaveStatus::Escalated->value])
+            ->orderBy('from_date')->orderBy('id')->get()
+            ->map(fn (LeaveRequest $r) => ['kind' => 'leave_request', 'id' => (string) $r->id, 'status' => (string) $r->status, 'from_date' => (string) $r->from_date, 'to_date' => (string) $r->to_date])
+            ->all());
     }
 
     /**
