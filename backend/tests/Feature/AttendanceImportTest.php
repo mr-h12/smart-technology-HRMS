@@ -302,6 +302,17 @@ class AttendanceImportTest extends TestCase
         $this->assertSame($this->site, AttendanceDay::where(['employee_id' => $late, 'date' => '2026-10-01'])->value('site_id'));
     }
 
+    public function test_the_import_still_takes_an_archived_employees_row_up_to_the_termination_date(): void
+    {
+        $left = $this->employee('engineer', '2026-01-01', ['termination_date' => '2026-10-12']);
+        $template = $this->download();                                          // an archived employee is not a row of it
+        $file = $this->edit($template, [], [[$this->code($left), ['2026-10-05' => 'Site-1', '2026-10-15' => 'Site-1']]]);
+
+        $r = $this->upload('confirm', $file)->assertOk()->assertJsonPath('data.applied', 1);
+        $this->assertSame([['employee_not_active', '2026-10-15']], array_map(fn (array $e) => [$e['error'], $e['date']], $r->json('data.errors')));
+        $this->assertSame($this->site, AttendanceDay::where(['employee_id' => $left, 'date' => '2026-10-05'])->value('site_id'));
+    }
+
     public function test_the_name_check_reads_the_hidden_versions_sheet_normalised(): void
     {
         $file = $this->edit($this->download(), [$this->code($this->eng) => ['2026-10-01' => 'Site-1']]);

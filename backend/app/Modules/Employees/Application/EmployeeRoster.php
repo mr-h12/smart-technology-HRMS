@@ -17,14 +17,18 @@ use Illuminate\Database\Eloquent\Model;
 
 /**
  * Read model of live employees with their dated types and shifts, so other modules never query Employees' tables.
- * A row is {id: string, code: int, name_ar: string, name_en: ?string, department: ?string, hire_date: ?string, termination_date: ?string,
+ * A row is {id: string, code: int, name_ar: string, name_en: ?string, department: ?string, hire_date: ?string, termination_date: ?string, archived: bool,
  * types: list<{type, effective_from}>, shifts: list<{effective_from, shift_start: ?HH:MM, shift_end: ?HH:MM}>, sites: list<{site_id, effective_from}>, crew: list<{date, site_id: ?string}>}.
+ * Every method returning a set of employees leaves archived ones out (owner, 2026-11-11) unless the caller asks with withArchived();
+ * the by-id reads (find, findMany, names) and hiredBetween are unchanged.
  */
 final class EmployeeRoster
 {
     use Paginates;
 
     private const RELATIONS = ['typeChanges', 'payChanges', 'siteAssignments', 'crewChanges'];
+
+    private bool $includeArchived = false;
 
     /**
      * Some type row of $type overlaps [from, to] and the employment window; greatest/least skip a null hire date, termination date or next change.
@@ -71,9 +75,19 @@ final class EmployeeRoster
             ->whereRaw(self::TYPE_IN_YEAR.' in ('.implode(',', array_fill(0, count($values), '?')).')', [min("{$year}-12-31", $today), ...$values])
             ->when($search !== null && $search !== '', fn (Builder $q) => $q->matching((string) $search))
             ->when($managedBy !== null, fn (Builder $q) => EmployeeReach::apply($q, (string) $managedBy, $today))
+            ->when(! $this->includeArchived, fn (Builder $q) => $q->archived(false))
             ->orderBy('code');
 
         return $this->page($query, $perPage, $page);
+    }
+
+    /** A copy whose set-returning methods also return archived employees: the lock, the import and HR's grid switch. */
+    public function withArchived(bool $include = true): self
+    {
+        $copy = clone $this;
+        $copy->includeArchived = $include;
+
+        return $copy;
     }
 
     /**
@@ -105,6 +119,7 @@ final class EmployeeRoster
             ->where(fn (Builder $q) => $q->whereRaw(self::EMPLOYED_AS, [EmployeeType::PermanentWorker->value, $date, $date])
                 ->orWhereRaw(self::EMPLOYED_AS, [EmployeeType::DayLaborer->value, $date, $date]))
             ->whereRaw(Employee::SITE_ON.' = ?', [$date, $date, $date, $siteId])
+            ->when(! $this->includeArchived, fn (Builder $q) => $q->archived(false))
             ->orderBy('code'));
     }
 
@@ -114,6 +129,7 @@ final class EmployeeRoster
         return array_values(Employee::query()
             ->whereRaw(Employee::TYPE_ON.' = ?', [$date, EmployeeType::Office->value])
             ->whereRaw(Employee::SITE_ON.' = ?', [$date, $date, $date, $siteId])
+            ->when(! $this->includeArchived, fn (Builder $q) => $q->archived(false))
             ->pluck('id')->map(fn ($id) => (string) $id)->all());
     }
 
@@ -188,6 +204,7 @@ final class EmployeeRoster
                 }
             })
             ->when($managedBy !== null, fn (Builder $q) => EmployeeReach::apply($q, (string) $managedBy, min($to, now('Africa/Cairo')->toDateString())))
+            ->when(! $this->includeArchived, fn (Builder $q) => $q->archived(false))
             ->orderBy('code');
     }
 
@@ -214,6 +231,7 @@ final class EmployeeRoster
             'department' => $e->department,
             'hire_date' => $e->hire_date,
             'termination_date' => $e->termination_date,
+            'archived' => Employee::isArchived($e->termination_date),
             'types' => array_values($e->typeChanges->sortBy('effective_from')->map(fn (EmployeeTypeChange $t) => [
                 'type' => (string) $t->type, 'effective_from' => (string) $t->effective_from,
             ])->all()),
