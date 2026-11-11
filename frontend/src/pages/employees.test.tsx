@@ -599,6 +599,16 @@ test('the archive switch asks for archived employees from page 1 and shows the t
   expect(await within(screen.getByRole('row', { name: /أحمد علي/ })).findByText('2026-01-31')).toBeInTheDocument()
 })
 
+test('the archive switch shows only with employee.view.all, and ?view=archived without it lists the active employees', async () => {
+  const list = vi.fn((_url: string) => json(200, { data: [row1], meta: { pagination } }))
+  mockFetch({ 'GET /api/v1/employees': list })
+  renderWithAuth(<EmployeesPage />, ['employee.view.own'], { path: '/employees?view=archived' })
+  await screen.findByRole('row', { name: /أحمد علي/ })
+  expect(screen.queryByRole('group', { name: 'عرض الموظفين' })).toBeNull()
+  expect(list.mock.calls.map(([u]) => String(u)).filter((u) => u.includes('per_page=12')).every((u) => !u.includes('archived'))).toBe(true)
+  expect(screen.getByRole('columnheader', { name: 'الحالة' })).toBeInTheDocument()
+})
+
 test('an active employee with a future termination date shows when they leave; the others show Active', async () => {
   const today = cairoToday()
   const later = new Date(Date.parse(`${today}T00:00:00Z`) + 864e5).toISOString().slice(0, 10)

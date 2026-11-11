@@ -84,7 +84,8 @@ export function EmployeesPage() {
   const [q, setQ] = useState(params.get('q') ?? '') // the router writes the URL in a transition, which would lag a box bound to it
   const type = params.get('type') ?? ''
   const page = Number(params.get('page')) || 1
-  const view = params.get('view') === 'archived' ? 'archived' : 'active'
+  const office = can('employee.view.all') // a site manager never reaches office staff, nor the archive
+  const view = office && params.get('view') === 'archived' ? 'archived' : 'active'
   const archive = view === 'archived'
   const search = useDebounced(q, 250) // the box stays instant; the request waits for a pause in typing
   const filters = { ...(search && { search }), ...(type && { type }), ...(archive && { archived: 'true' }) }
@@ -101,7 +102,6 @@ export function EmployeesPage() {
   // the employee screen steps through this same filtered list: its request without the paging, the row's place in the whole result, its size
   const open = (id: string, i: number) => navigate(`/employees/${id}`, { state: { list: `/employees?${new URLSearchParams(filters)}`, pos: (page - 1) * PAGE + i, total } })
   const notes = rows.some((r) => 'hr_notes' in r) // the server sends notes only to the viewers allowed to read them
-  const office = can('employee.view.all') // a site manager never reaches office staff
   const types = TYPES.filter((v) => office || v !== 'office')
   const stats = STATS.filter(([k]) => office || k !== 'office')
 
@@ -133,14 +133,16 @@ export function EmployeesPage() {
           <div className="flex flex-col gap-3 xl:flex-row xl:items-center">
             <SearchInput value={q} onChange={(v) => { setQ(v); filter({ q: v }) }} placeholder={t('employee.search')} className="sm:w-full sm:max-w-md" />
             <FilterSelect value={type} onChange={(v) => filter({ type: v })} label={t('employee.type')} allLabel={t('employee.allTypes')} options={types.map((v) => [v, t(`enum.type.${v}`)])} />
-            <SegmentedControl
-              label={t('employee.archive.view')}
-              value={view}
-              onChange={(v) => filter({ view: v === 'archived' ? v : '' })}
-              className="w-max"
-              // the visible text is aria-hidden: the option's sr-only label already names it
-              options={(['active', 'archived'] as const).map((v) => ({ value: v, label: t(`employee.archive.${v}`), content: <span aria-hidden className="px-1.5 whitespace-nowrap">{t(`employee.archive.${v}`)}</span> }))}
-            />
+            {office && (
+              <SegmentedControl
+                label={t('employee.archive.view')}
+                value={view}
+                onChange={(v) => filter({ view: v === 'archived' ? v : '' })}
+                className="w-max"
+                // the visible text is aria-hidden: the option's sr-only label already names it
+                options={(['active', 'archived'] as const).map((v) => ({ value: v, label: t(`employee.archive.${v}`), content: <span aria-hidden className="px-1.5 whitespace-nowrap">{t(`employee.archive.${v}`)}</span> }))}
+              />
+            )}
             {(q || type) && (
               <Button variant="ghost" size="sm" onClick={clear} className="xl:ms-auto">
                 {t('common.clearFilters')}
