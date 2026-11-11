@@ -15,9 +15,12 @@ use App\Modules\Attendance\Infrastructure\PeriodGuard;
 use App\Modules\Employees\Application\DayCrew;
 use App\Modules\Employees\Application\EmployeeRoster;
 use App\Modules\Employees\Domain\EmployeeType;
+use App\Modules\Identity\Application\Rbac\AuthorizeAction;
+use App\Modules\Identity\Domain\Rbac\Scope;
 use App\Modules\Identity\Infrastructure\Eloquent\User;
 use App\Modules\Settings\Application\BusinessRules;
 use App\Modules\Sites\Domain\LeaveCode;
+use Illuminate\Contracts\Auth\Authenticatable;
 use Illuminate\Database\Eloquent\ModelNotFoundException;
 use Illuminate\Pagination\Paginator;
 use Illuminate\Support\Carbon;
@@ -31,14 +34,14 @@ final class AttendanceGrid
     /** The last site looks this many days back from the sheet date (P31). */
     public const LAST_SITE_DAYS = 7;
 
-    public function __construct(private readonly EmployeeRoster $roster, private readonly EffectiveDays $days, private readonly BusinessRules $rules, private readonly DayCrew $crew) {}
+    public function __construct(private readonly EmployeeRoster $roster, private readonly EffectiveDays $days, private readonly BusinessRules $rules, private readonly DayCrew $crew, private readonly AuthorizeAction $authorize) {}
 
     /**
-     * `missing` follows the grid: archived employees count only with $withArchived (HR's switch, owner 2026-11-11).
+     * `missing` follows the grid: archived employees count only when $withArchived, asked by $by, is honoured (honoursWithArchived).
      *
      * @return array{group: string, start: string, end: string, prev_start: string, next_start: ?string, is_locked: bool, lock: ?array<string, mixed>, missing: int}
      */
-    public function period(EmployeeType $g, ?string $start, ?string $date = null, ?string $ownerId = null, bool $withArchived = false): array
+    public function period(EmployeeType $g, ?string $start, ?string $date = null, ?string $ownerId = null, bool $withArchived = false, ?Authenticatable $by = null): array
     {
         $p = $this->periodAt($g, $start, $date);
         $next = $p->next();
@@ -51,7 +54,7 @@ final class AttendanceGrid
             'next_start' => $next->start > EffectiveDays::today() ? null : $next->start,
             'is_locked' => PeriodGuard::isLocked($p),
             'lock' => $this->lock($p),
-            'missing' => count($this->missingDays($p, $ownerId, $withArchived)),
+            'missing' => count($this->missingDays($p, $ownerId, $this->honoursWithArchived($withArchived, $by))),
         ];
     }
 
@@ -60,14 +63,14 @@ final class AttendanceGrid
      * plus, for All and office, the office staff at that site on the period's last day (owner, 2026-11-08).
      * A null $g is All (owner, 2026-11-08, office added to 2026-11-05's field types): every type over the engineers' 26th→25th window.
      * $search keeps the employees whose name contains it or whose code is it, as the employees list does (owner, 2026-11-10).
-     * $withArchived (HR's switch, owner 2026-11-11) brings archived employees back as rows, each flagged `archived`.
+     * $withArchived, asked by $by and honoured as honoursWithArchived says, brings archived employees back as rows, each flagged `archived`.
      *
      * @return array{data: list<array<string, mixed>>, pagination: array{page: int, per_page: int, total: int, total_pages: int, has_next_page: bool, has_previous_page: bool}}
      */
-    public function grid(?EmployeeType $g, ?string $start, int $perPage, int $page, ?string $date = null, ?string $ownerId = null, ?string $siteId = null, ?string $search = null, bool $withArchived = false): array
+    public function grid(?EmployeeType $g, ?string $start, int $perPage, int $page, ?string $date = null, ?string $ownerId = null, ?string $siteId = null, ?string $search = null, bool $withArchived = false, ?Authenticatable $by = null): array
     {
         $p = $this->periodAt($g ?? EmployeeType::Engineer, $start, $date);
-        $employees = $this->roster->withArchived($withArchived);
+        $employees = $this->roster->withArchived($this->honoursWithArchived($withArchived, $by));
         $ids = $siteId === null ? null : [
             ...AttendanceDay::where('site_id', $siteId)->whereBetween('date', [$p->start, $p->end])->distinct()->pluck('employee_id')->map(fn ($id) => (string) $id)->all(),
             ...($g === null || $g === EmployeeType::Office ? $employees->officeIdsAt($siteId, $p->end) : []),
@@ -354,6 +357,12 @@ final class AttendanceGrid
         }
 
         return $days;
+    }
+
+    /** HR's «إظهار من تركوا العمل» (owner, 2026-11-11): honoured only for a holder of attendance.edit at `all`, otherwise ignored, never an error. */
+    private function honoursWithArchived(bool $asked, ?Authenticatable $by): bool
+    {
+        return $asked && $by !== null && $this->authorize->decide($by, 'attendance.edit')->allows(Scope::All);
     }
 
     /**

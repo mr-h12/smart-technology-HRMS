@@ -11,8 +11,6 @@ use App\Modules\Attendance\Application\AttendanceTemplate;
 use App\Modules\Attendance\Application\EffectiveDays;
 use App\Modules\Employees\Application\EmployeeService;
 use App\Modules\Employees\Domain\EmployeeType;
-use App\Modules\Identity\Application\Rbac\AuthorizeAction;
-use App\Modules\Identity\Domain\Rbac\Scope;
 use App\Modules\Identity\Presentation\RequestScope;
 use App\Support\Http\ApiEnvelope;
 use Illuminate\Database\Eloquent\ModelNotFoundException;
@@ -32,21 +30,20 @@ final class AttendanceController
         private readonly EmployeeService $employees,
         private readonly AttendanceTemplate $template,
         private readonly AttendanceImport $import,
-        private readonly AuthorizeAction $authorize,
     ) {}
 
     public function period(Request $request): JsonResponse
     {
         $q = $request->validate([...$this->periodRules(), 'with_archived' => ['sometimes', 'boolean']]);
 
-        return ApiEnvelope::single($request, $this->grid->period(EmployeeType::from($q['group']), $q['period_start'] ?? null, $q['date'] ?? null, RequestScope::ownerId($request), $this->withArchived($request)));
+        return ApiEnvelope::single($request, $this->grid->period(EmployeeType::from($q['group']), $q['period_start'] ?? null, $q['date'] ?? null, RequestScope::ownerId($request), $request->boolean('with_archived'), $request->user()));
     }
 
     /** `group=all` is every type over the engineers' window. */
     public function grid(Request $request): JsonResponse
     {
         $q = $request->validate([...$this->periodRules(), 'group' => ['required', Rule::in(['all', ...array_column(EmployeeType::cases(), 'value')])], 'per_page' => ['sometimes', 'integer', 'min:1'], 'page' => ['sometimes', 'integer', 'min:1'], 'site_id' => ['sometimes', 'uuid'], 'search' => ['sometimes', 'nullable', 'string', 'max:100'], 'with_archived' => ['sometimes', 'boolean']]);
-        $r = $this->grid->grid($q['group'] === 'all' ? null : EmployeeType::from($q['group']), $q['period_start'] ?? null, (int) ($q['per_page'] ?? 20), (int) ($q['page'] ?? 1), $q['date'] ?? null, RequestScope::ownerId($request), $q['site_id'] ?? null, $q['search'] ?? null, $this->withArchived($request));
+        $r = $this->grid->grid($q['group'] === 'all' ? null : EmployeeType::from($q['group']), $q['period_start'] ?? null, (int) ($q['per_page'] ?? 20), (int) ($q['page'] ?? 1), $q['date'] ?? null, RequestScope::ownerId($request), $q['site_id'] ?? null, $q['search'] ?? null, $request->boolean('with_archived'), $request->user());
 
         return ApiEnvelope::collection($request, $r['data'], $r['pagination']);
     }
@@ -162,14 +159,6 @@ final class AttendanceController
     private function periodRules(): array
     {
         return ['group' => ['required', Rule::enum(EmployeeType::class)], 'period_start' => ['sometimes', 'date_format:Y-m-d'], 'date' => ['sometimes', 'date_format:Y-m-d', 'prohibits:period_start']];
-    }
-
-    /** HR's «إظهار من تركوا العمل» (owner, 2026-11-11): honoured only with attendance.edit at `all`, otherwise ignored, never an error. */
-    private function withArchived(Request $request): bool
-    {
-        $user = $request->user();
-
-        return $request->boolean('with_archived') && $user !== null && $this->authorize->decide($user, 'attendance.edit')->allows(Scope::All);
     }
 
     /** The route only checks the shape; 2026-02-30 is refused here. */
