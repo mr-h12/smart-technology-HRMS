@@ -682,6 +682,31 @@ test('an archived employee’s page shows the banner with the date and reason an
   expect(screen.queryByRole('button', { name: 'إضافة تغيير' })).toBeNull()
 })
 
+test('correcting the leaving details sends only the termination date and reason', async () => {
+  const patch = vi.fn(() => json(200, { data: { ...archived, termination_date: '2026-01-30', termination_reason: 'انتهاء العقد' } }))
+  mockFetch({ 'GET /api/v1/residences': residences, 'GET /api/v1/employees/e1': () => json(200, { data: archived }), 'PATCH /api/v1/employees/e1': patch })
+  const first = renderWithAuth(<EmployeeDetailRoute id="e1" />, ['employee.view.all'], { router: false })
+  await screen.findByRole('status')
+  expect(screen.queryByRole('button', { name: 'تصحيح بيانات الترك' })).toBeNull()
+  first.unmount()
+  renderWithAuth(<EmployeeDetailRoute id="e1" />, ALL, { router: false })
+  await user.click(await screen.findByRole('button', { name: 'تصحيح بيانات الترك' }))
+  const dialog = screen.getByRole('dialog', { name: 'تصحيح بيانات الترك' })
+  const date = within(dialog).getByLabelText('تاريخ إنهاء الخدمة')
+  const reason = within(dialog).getByLabelText('سبب إنهاء الخدمة')
+  expect([date, reason].map((f) => (f as HTMLInputElement).value)).toEqual(['2026-01-31', 'استقالة'])
+  await user.clear(date)
+  await user.type(date, '2026-01-30')
+  await user.clear(reason)
+  await user.type(reason, 'انتهاء العقد')
+  await user.click(within(dialog).getByRole('button', { name: 'حفظ' }))
+  await waitFor(() => expect(patch).toHaveBeenCalled())
+  expect(JSON.parse((patch.mock.calls[0] as unknown as [string, RequestInit])[1].body as string)).toEqual({ termination_date: '2026-01-30', termination_reason: 'انتهاء العقد' })
+  await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull())
+  expect(screen.getByLabelText('تاريخ إنهاء الخدمة')).toHaveValue('2026-01-30') // the open form takes the saved values, so a later Save cannot send the old ones
+  expect(screen.getByLabelText('سبب إنهاء الخدمة')).toHaveValue('انتهاء العقد')
+})
+
 test('an active employee’s page has no archive banner', async () => {
   mockFetch({ 'GET /api/v1/residences': residences, 'GET /api/v1/employees/e1': () => json(200, { data: { ...archived, termination_date: cairoToday(), archived: false } }) })
   renderWithAuth(<EmployeeDetailRoute id="e1" />, ALL, { router: false })

@@ -122,7 +122,8 @@
       "active": "النشطون",
       "archived": "الأرشيف",
       "banner": "مؤرشف — ترك العمل في {{date}}",
-      "reason": "السبب: {{reason}}"
+      "reason": "السبب: {{reason}}",
+      "correct": "تصحيح بيانات الترك"
     },
     "reactivate": {
       "button": "إعادة التفعيل",

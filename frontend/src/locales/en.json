@@ -122,7 +122,8 @@
       "active": "Active",
       "archived": "Archive",
       "banner": "Archived — left on {{date}}",
-      "reason": "Reason: {{reason}}"
+      "reason": "Reason: {{reason}}",
+      "correct": "Correct leaving details"
     },
     "reactivate": {
       "button": "Reactivate",

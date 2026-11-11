@@ -1,4 +1,4 @@
-import { Archive, Briefcase, CalendarCheck, CalendarDays, ChevronLeft, ChevronRight, FileText, HardHat, History as HistoryIcon, IdCard, type LucideIcon, MapPin, RotateCcw, UserCog, UserPlus, Users, Wrench } from 'lucide-react'
+import { Archive, Briefcase, CalendarCheck, CalendarDays, ChevronLeft, ChevronRight, FileText, HardHat, History as HistoryIcon, IdCard, type LucideIcon, MapPin, PencilLine, RotateCcw, UserCog, UserPlus, Users, Wrench } from 'lucide-react'
 import { useEffect, useEffectEvent, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { Link, useLocation, useNavigate, useParams, useSearchParams } from 'react-router-dom'
@@ -472,8 +472,11 @@ function EmployeeForm({ emp, loadErr }: { emp?: Row; loadErr?: unknown }) {
         {sited && can('employee.assign_site') && !archived && <MoveSiteDialog empId={emp.id} />}
         {!worker && can('employee.assign_manager') && !archived && <AssignManagerDialog empId={emp.id} />}
         {can('employee.edit') && archived && (
-          // the open form drops the cleared values too, so a later Save cannot send them back
-          <ReactivateDialog emp={emp} onDone={() => ['termination_date', 'termination_reason'].forEach((k) => set(k, ''))} />
+          <>
+            {/* the open form takes the saved values too, so a later Save cannot send the old ones back */}
+            <CorrectTerminationDialog emp={emp} onDone={(saved) => ['termination_date', 'termination_reason'].forEach((k) => set(k, saved[k] ?? ''))} />
+            <ReactivateDialog emp={emp} onDone={() => ['termination_date', 'termination_reason'].forEach((k) => set(k, ''))} />
+          </>
         )}
       </Card>
       {archived && (
@@ -532,6 +535,36 @@ function ReactivateDialog({ emp, onDone }: { emp: Row; onDone: () => void }) {
       description={<span className="text-foreground">{ltrDates(t('employee.reactivate.confirm', { date: emp.termination_date }))}</span>}
     >
       {() => null}
+    </FormDialog>
+  )
+}
+
+/** Corrects an archived employee's termination date or reason: the only profile change the API takes on an archived employee, so only these two are sent. */
+function CorrectTerminationDialog({ emp, onDone }: { emp: Row; onDone: (saved: Row) => void }) {
+  const { t } = useTranslation()
+  const send = useSave()
+  const title = t('employee.archive.correct')
+  const ns = 'correct-' // the profile form below has fields of the same names
+  return (
+    <FormDialog
+      title={title}
+      trigger={
+        <Button type="button" variant="outline">
+          <PencilLine />
+          {title}
+        </Button>
+      }
+      init={{ termination_date: emp.termination_date ?? '', termination_reason: emp.termination_reason ?? '' }}
+      submit={(f) => send<Row>(`/employees/${emp.id}`, { method: 'PATCH', body: { termination_date: f.termination_date || null, termination_reason: f.termination_reason || null } })}
+      onDone={onDone}
+      shown={['termination_date', 'termination_reason']}
+    >
+      {(f) => (
+        <>
+          <TextField name="termination_date" ns={ns} label={t('employee.termination_date')} type="date" {...f} />
+          <TextField name="termination_reason" ns={ns} label={t('employee.termination_reason')} enterKeyHint="done" {...f} />
+        </>
+      )}
     </FormDialog>
   )
 }
