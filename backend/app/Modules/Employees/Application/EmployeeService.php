@@ -6,6 +6,7 @@ namespace App\Modules\Employees\Application;
 
 use App\Modules\Employees\Domain\DocumentKind;
 use App\Modules\Employees\Domain\EffectiveDated;
+use App\Modules\Employees\Domain\EmployeeArchived;
 use App\Modules\Employees\Domain\EmployeeCodeTaken;
 use App\Modules\Employees\Domain\EmployeeType;
 use App\Modules\Employees\Domain\PayMethod;
@@ -170,15 +171,24 @@ final class EmployeeService
     }
 
     /**
+     * An archived employee changes only its termination date and reason (reactivate or correct; owner, 2026-11-11), judged on changed
+     * values because the profile form sends every identity field on each save.
+     *
      * @param  array<string, mixed>  $data
      * @return array<string, mixed>
      */
     public function update(string $id, array $data): array
     {
-        $employee = Employee::findOrFail($id);
-        $employee->fill($data);
-        $this->assertBank($employee->only(['pay_method', 'bank_account']));
-        $employee->save();
+        DB::transaction(function () use ($id, $data): void {
+            $employee = Employee::findOrFail($id);
+            $archived = Employee::isArchived($employee->termination_date);
+            $employee->fill($data);
+            if ($archived && array_diff(array_keys($employee->getDirty()), ['termination_date', 'termination_reason']) !== []) {
+                throw new EmployeeArchived;
+            }
+            $this->assertBank($employee->only(['pay_method', 'bank_account']));
+            $employee->save();
+        });
 
         return $this->show($id);
     }
