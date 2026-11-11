@@ -133,7 +133,7 @@ export function EmployeeAttendance({ emp, readOnly = false }: { emp: Row; readOn
           </div>
         )}
       </Card>
-      {open && <DayEditor employee={emp} date={open} onOpenChange={(o) => !o && setOpen(undefined)} archived={readOnly} />}
+      {open && <DayEditor employee={emp} date={open} onOpenChange={(o) => !o && setOpen(undefined)} readOnly={readOnly} />}
     </>
   )
 }

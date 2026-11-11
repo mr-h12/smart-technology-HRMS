@@ -29,13 +29,13 @@ const asText = (f: string, v: unknown) => (v == null ? '' : AMOUNTS.includes(f) 
 /** Blank → null; minutes as integers (anything else goes as typed, so the server names the field). */
 const toBody = (f: string, v: string) => (v === '' ? null : MINUTES.includes(f) && /^\d+$/.test(v) ? Number.parseInt(v, 10) : v)
 
-/** One employee's day in a sheet. "Load latest" remounts the body, which refetches the day before the form starts again. An archived employee's day is view only. */
-export function DayEditor({ employee, date, onOpenChange, archived = false }: { employee: Row; date: string; onOpenChange: (open: boolean) => void; archived?: boolean }) {
+/** One employee's day in a sheet. "Load latest" remounts the body, which refetches the day before the form starts again. `readOnly` (archived): view only, noting the employee has left. */
+export function DayEditor({ employee, date, onOpenChange, readOnly = false }: { employee: Row; date: string; onOpenChange: (open: boolean) => void; readOnly?: boolean }) {
   const [gen, setGen] = useState(0)
   return (
     <Sheet open onOpenChange={onOpenChange}>
       <SheetContent side="right" aria-describedby={undefined}>
-        <DayBody key={gen} employee={employee} date={date} archived={archived} onDone={() => onOpenChange(false)} onReload={() => setGen((g) => g + 1)} />
+        <DayBody key={gen} employee={employee} date={date} archived={readOnly} onDone={() => onOpenChange(false)} onReload={() => setGen((g) => g + 1)} />
       </SheetContent>
     </Sheet>
   )
