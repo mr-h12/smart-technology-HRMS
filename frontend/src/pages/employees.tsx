@@ -1,8 +1,9 @@
-import { Briefcase, CalendarCheck, CalendarDays, ChevronLeft, ChevronRight, FileText, HardHat, History as HistoryIcon, IdCard, type LucideIcon, MapPin, RotateCcw, UserCog, UserPlus, Users, Wrench } from 'lucide-react'
+import { Archive, Briefcase, CalendarCheck, CalendarDays, ChevronLeft, ChevronRight, FileText, HardHat, History as HistoryIcon, IdCard, type LucideIcon, MapPin, PencilLine, RotateCcw, UserCog, UserPlus, Users, Wrench } from 'lucide-react'
 import { useEffect, useEffectEvent, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { Link, useLocation, useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import { MiniStat, type Tone } from '@/components/cards/StatCard'
+import { Alert } from '@/components/common/Alert'
 import { EmptyState } from '@/components/common/EmptyState'
 import { FilterSelect, SearchInput } from '@/components/common/Filters'
 import { PageHeader } from '@/components/common/PageHeader'
@@ -84,7 +85,8 @@ export function EmployeesPage() {
   const [q, setQ] = useState(params.get('q') ?? '') // the router writes the URL in a transition, which would lag a box bound to it
   const type = params.get('type') ?? ''
   const page = Number(params.get('page')) || 1
-  const view = params.get('view') === 'archived' ? 'archived' : 'active'
+  const office = can('employee.view.all') // a site manager never reaches office staff, nor the archive
+  const view = office && params.get('view') === 'archived' ? 'archived' : 'active'
   const archive = view === 'archived'
   const search = useDebounced(q, 250) // the box stays instant; the request waits for a pause in typing
   const filters = { ...(search && { search }), ...(type && { type }), ...(archive && { archived: 'true' }) }
@@ -101,7 +103,6 @@ export function EmployeesPage() {
   // the employee screen steps through this same filtered list: its request without the paging, the row's place in the whole result, its size
   const open = (id: string, i: number) => navigate(`/employees/${id}`, { state: { list: `/employees?${new URLSearchParams(filters)}`, pos: (page - 1) * PAGE + i, total } })
   const notes = rows.some((r) => 'hr_notes' in r) // the server sends notes only to the viewers allowed to read them
-  const office = can('employee.view.all') // a site manager never reaches office staff
   const types = TYPES.filter((v) => office || v !== 'office')
   const stats = STATS.filter(([k]) => office || k !== 'office')
 
@@ -133,14 +134,16 @@ export function EmployeesPage() {
           <div className="flex flex-col gap-3 xl:flex-row xl:items-center">
             <SearchInput value={q} onChange={(v) => { setQ(v); filter({ q: v }) }} placeholder={t('employee.search')} className="sm:w-full sm:max-w-md" />
             <FilterSelect value={type} onChange={(v) => filter({ type: v })} label={t('employee.type')} allLabel={t('employee.allTypes')} options={types.map((v) => [v, t(`enum.type.${v}`)])} />
-            <SegmentedControl
-              label={t('employee.archive.view')}
-              value={view}
-              onChange={(v) => filter({ view: v === 'archived' ? v : '' })}
-              className="w-max"
-              // the visible text is aria-hidden: the option's sr-only label already names it
-              options={(['active', 'archived'] as const).map((v) => ({ value: v, label: t(`employee.archive.${v}`), content: <span aria-hidden className="px-1.5 whitespace-nowrap">{t(`employee.archive.${v}`)}</span> }))}
-            />
+            {office && (
+              <SegmentedControl
+                label={t('employee.archive.view')}
+                value={view}
+                onChange={(v) => filter({ view: v === 'archived' ? v : '' })}
+                className="w-max"
+                // the visible text is aria-hidden: the option's sr-only label already names it
+                options={(['active', 'archived'] as const).map((v) => ({ value: v, label: t(`employee.archive.${v}`), content: <span aria-hidden className="px-1.5 whitespace-nowrap">{t(`employee.archive.${v}`)}</span> }))}
+              />
+            )}
             {(q || type) && (
               <Button variant="ghost" size="sm" onClick={clear} className="xl:ms-auto">
                 {t('common.clearFilters')}
@@ -336,7 +339,9 @@ function EmployeeForm({ emp, loadErr }: { emp?: Row; loadErr?: unknown }) {
   const errs = toErrs(err)
   // An own-scoped (manager) record comes without the sensitive identity and pay fields; never render or send what was not received.
   const has = (k: string) => !emp || k in emp
-  const editable = can(id ? 'employee.edit' : 'employee.create')
+  // the server decides it (termination date before today in Cairo): the page then only reads, bar Reactivate and the leaving details
+  const archived = emp?.archived === true
+  const editable = can(id ? 'employee.edit' : 'employee.create') && !archived
 
   async function save(ev: React.FormEvent<HTMLFormElement>) {
     ev.preventDefault()
@@ -445,7 +450,7 @@ function EmployeeForm({ emp, loadErr }: { emp?: Row; loadErr?: unknown }) {
               <p>
                 {t('employee.code')}: <span className="font-mono">{emp.code}</span>
               </p>
-              {can('employee.edit_code') && <ChangeCodeDialog emp={emp} />}
+              {can('employee.edit_code') && !archived && <ChangeCodeDialog emp={emp} />}
             </div>
           )}
         </div>
@@ -464,13 +469,25 @@ function EmployeeForm({ emp, loadErr }: { emp?: Row; loadErr?: unknown }) {
             </div>
           )}
         </dl>
-        {sited && can('employee.assign_site') && <MoveSiteDialog empId={emp.id} />}
-        {!worker && can('employee.assign_manager') && <AssignManagerDialog empId={emp.id} />}
-        {can('employee.edit') && emp.termination_date && emp.termination_date < cairoToday() && (
-          // the open form drops the cleared values too, so a later Save cannot send them back
-          <ReactivateDialog emp={emp} onDone={() => ['termination_date', 'termination_reason'].forEach((k) => set(k, ''))} />
+        {sited && can('employee.assign_site') && !archived && <MoveSiteDialog empId={emp.id} />}
+        {!worker && can('employee.assign_manager') && !archived && <AssignManagerDialog empId={emp.id} />}
+        {can('employee.edit') && archived && (
+          <>
+            {/* the open form takes the saved values too, so a later Save cannot send the old ones back */}
+            <CorrectTerminationDialog emp={emp} onDone={(saved) => ['termination_date', 'termination_reason'].forEach((k) => set(k, saved[k] ?? ''))} />
+            <ReactivateDialog emp={emp} onDone={() => ['termination_date', 'termination_reason'].forEach((k) => set(k, ''))} />
+          </>
         )}
       </Card>
+      {archived && (
+        // polite: a corrected leaving date is read out while the page stays open
+        <div role="status">
+          <Alert tone="warning" icon={Archive}>
+            <p className="font-semibold">{ltrDates(t('employee.archive.banner', { date: emp.termination_date }))}</p>
+            {emp.termination_reason && <p>{t('employee.archive.reason', { reason: emp.termination_reason })}</p>}
+          </Alert>
+        </div>
+      )}
 
       <Tabs value={tab} onValueChange={(v) => setParams({ tab: v }, { replace: true, state })}>
         <TabsList>
@@ -486,10 +503,10 @@ function EmployeeForm({ emp, loadErr }: { emp?: Row; loadErr?: unknown }) {
             profile,
             manager: <ManagerHistory emp={emp} />,
             site: <SiteHistory emp={emp} />,
-            history: <History emp={emp} />,
-            documents: <Documents emp={emp} />,
-            leave: <Leave emp={emp} initialYear={params.get('year')} />,
-            attendance: <EmployeeAttendance emp={emp} />,
+            history: <History emp={emp} readOnly={archived} />,
+            documents: <Documents emp={emp} readOnly={archived} />,
+            leave: <Leave emp={emp} initialYear={params.get('year')} readOnly={archived} />,
+            attendance: <EmployeeAttendance emp={emp} readOnly={archived} />,
           }[tab]}
         </TabsContent>
       </Tabs>
@@ -518,6 +535,36 @@ function ReactivateDialog({ emp, onDone }: { emp: Row; onDone: () => void }) {
       description={<span className="text-foreground">{ltrDates(t('employee.reactivate.confirm', { date: emp.termination_date }))}</span>}
     >
       {() => null}
+    </FormDialog>
+  )
+}
+
+/** Corrects an archived employee's termination date or reason: the only profile change the API takes on an archived employee, so only these two are sent. */
+function CorrectTerminationDialog({ emp, onDone }: { emp: Row; onDone: (saved: Row) => void }) {
+  const { t } = useTranslation()
+  const send = useSave()
+  const title = t('employee.archive.correct')
+  const ns = 'correct-' // the profile form below has fields of the same names
+  return (
+    <FormDialog
+      title={title}
+      trigger={
+        <Button type="button" variant="outline">
+          <PencilLine />
+          {title}
+        </Button>
+      }
+      init={{ termination_date: emp.termination_date ?? '', termination_reason: emp.termination_reason ?? '' }}
+      submit={(f) => send<Row>(`/employees/${emp.id}`, { method: 'PATCH', body: { termination_date: f.termination_date || null, termination_reason: f.termination_reason || null } })}
+      onDone={onDone}
+      shown={['termination_date', 'termination_reason']}
+    >
+      {(f) => (
+        <>
+          <TextField name="termination_date" ns={ns} label={t('employee.termination_date')} type="date" {...f} />
+          <TextField name="termination_reason" ns={ns} label={t('employee.termination_reason')} enterKeyHint="done" {...f} />
+        </>
+      )}
     </FormDialog>
   )
 }
@@ -710,7 +757,7 @@ function ManagerHistory({ emp }: { emp: Row }) {
   )
 }
 
-function History({ emp }: { emp: Row }) {
+function History({ emp, readOnly }: { emp: Row; readOnly: boolean }) {
   const { t, i18n } = useTranslation()
   const { can } = useAuth()
   const money = useMoney()
@@ -719,7 +766,7 @@ function History({ emp }: { emp: Row }) {
       <Card className="overflow-hidden">
         <CardHeader>
           <CardTitle>{t('history.types')}</CardTitle>
-          {can('employee.edit') && <ChangeDialog kind="type" emp={emp} />}
+          {can('employee.edit') && !readOnly && <ChangeDialog kind="type" emp={emp} />}
         </CardHeader>
         <Table>
           <TableHeader>
@@ -742,7 +789,7 @@ function History({ emp }: { emp: Row }) {
         <Card className="overflow-hidden">
           <CardHeader>
             <CardTitle>{t('history.pay')}</CardTitle>
-            {can('employee.edit') && <ChangeDialog kind="pay" emp={emp} />}
+            {can('employee.edit') && !readOnly && <ChangeDialog kind="pay" emp={emp} />}
           </CardHeader>
           <Table>
             <TableHeader>

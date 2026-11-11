@@ -1,6 +1,8 @@
 import i18n from '@/i18n'
 
 export type ApiErrorDetail = { field?: string; code: string; message: string }
+/** An item a refusal names as still open (`error.items` of employee_has_open_items); `ErrorBanner` links each to where it is decided. */
+export type OpenItem = { kind: 'leave_request' | 'wage_proposal'; id: string; status?: string; from_date?: string; to_date?: string }
 
 export class ApiError extends Error {
   code: string
@@ -8,12 +10,15 @@ export class ApiError extends Error {
   details: ApiErrorDetail[]
   /** The dates a refusal names (`error.dates`, e.g. leave_days_blocked, leave_cancel_blocked); `ErrorBanner` lists them. Empty when the error names none. */
   dates: string[]
-  constructor(code: string, message: string, status: number, details: ApiErrorDetail[] = [], dates: string[] = []) {
+  /** The open items a refusal names (`error.items`); empty when it names none. */
+  items: OpenItem[]
+  constructor(code: string, message: string, status: number, details: ApiErrorDetail[] = [], dates: string[] = [], items: OpenItem[] = []) {
     super(message)
     this.code = code
     this.status = status
     this.details = details
     this.dates = dates
+    this.items = items
   }
 }
 
@@ -70,7 +75,7 @@ async function send(path: string, { method = 'GET', body, signal }: Options = {}
       onUnauthorized()
     }
     const e = json?.error
-    throw new ApiError(e?.code ?? 'unknown_error', e?.message ?? res.statusText, res.status, e?.details ?? [], e?.dates ?? [])
+    throw new ApiError(e?.code ?? 'unknown_error', e?.message ?? res.statusText, res.status, e?.details ?? [], e?.dates ?? [], e?.items ?? [])
   }
   return res
 }

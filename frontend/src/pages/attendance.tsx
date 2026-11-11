@@ -18,7 +18,7 @@ import { Textarea } from '@/components/ui/input'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { useDebounced } from '@/hooks/useDebounced'
-import { cn, OFF } from '@/lib/utils'
+import { cn, FOCUS, OFF } from '@/lib/utils'
 import { useAuth } from '@/lib/auth'
 import { NO_SITE } from '@/lib/day-sheet'
 import { SITES, useApi, useList, useSave, WORK_SITES } from '@/lib/query'
@@ -58,8 +58,9 @@ function pickDate(s: string | null) {
 }
 
 /**
- * HR's attendance page, URL state `?group=&period=&date=&tab=&site=&q=` (site: all-scope attendance only, the sheet also takes `none`;
- * q: the grid's name or code search); the group defaults to engineers, the grid's period to the current one, the sheet's date to today.
+ * HR's attendance page, URL state `?group=&period=&date=&tab=&site=&q=&with_archived=` (site: all-scope attendance only, the sheet also takes `none`;
+ * q: the grid's name or code search; with_archived=1: the grid's switch, attendance.edit.all only); the group defaults to engineers,
+ * the grid's period to the current one, the sheet's date to today.
  */
 export function AttendancePage() {
   const { t, i18n } = useTranslation()
@@ -85,10 +86,13 @@ export function AttendancePage() {
   const urlSite = siteFilter ? params.get('site') ?? '' : ''
   const site = urlSite === NO_SITE && tab !== 'sheet' ? '' : urlSite
   const { data: workSites } = useApi<Row[]>(siteFilter ? WORK_SITES : null)
+  // HR brings those who left back to the grid to finish their last days; the header's missing count follows the grid
+  const archivedSwitch = tab === 'grid' && can('attendance.edit.all')
+  const withArchived = archivedSwitch && params.get('with_archived') === '1'
   // the sheet's period is the one holding its date; the grid's is the chosen one
   // the sheet keeps the last period while the next date's loads, so the header does not blink inside one period; a kept period
   // of another group, or one not holding the date, is not current: the header shows loading and offers no arrows or lock until the real one arrives
-  const { data: kept, err } = useApi<Period>(allowed ? `/attendance/period?${new URLSearchParams(tab === 'sheet' ? { group: periodGroup, date } : { group: periodGroup, ...(chosen && { period_start: chosen }) })}` : null, { keep: tab === 'sheet' })
+  const { data: kept, err } = useApi<Period>(allowed ? `/attendance/period?${new URLSearchParams(tab === 'sheet' ? { group: periodGroup, date } : { group: periodGroup, ...(chosen && { period_start: chosen }), ...(withArchived && { with_archived: '1' }) })}` : null, { keep: tab === 'sheet' })
   const period = tab !== 'sheet' || (kept && kept.group === periodGroup && kept.start <= date && date <= kept.end) ? kept : undefined
   const start = chosen ?? period?.start // the grid follows the URL as soon as an arrow moves it
   const move = (to: string) => set(tab === 'sheet' ? { date: to } : { period: to })
@@ -111,6 +115,12 @@ export function AttendancePage() {
           <FilterSelect value={site} onChange={(v) => set({ site: v || null })} label={t('attendance.siteFilter')} allLabel={t('attendance.allSites')} options={[...(tab === 'sheet' ? [[NO_SITE, t('attendance.noSite')] as [string, string]] : []), ...(workSites ?? []).map((s): [string, string] => [s.id, localName(s, i18n.language)])]} />
         )}
         {tab === 'grid' && <SearchInput value={q} onChange={(v) => { setQ(v); set({ q: v || null }) }} placeholder={t('attendance.sheet.search')} maxLength={100} />}
+        {archivedSwitch && (
+          <label className="flex h-9 min-h-tap items-center gap-3 text-sm font-medium">
+            <input type="checkbox" className={cn(FOCUS, 'size-4 accent-primary')} checked={withArchived} onChange={(e) => set({ with_archived: e.target.checked ? '1' : null })} />
+            {t('attendance.withArchived')}
+          </label>
+        )}
         <div className="flex flex-wrap items-center gap-1">
           <Button variant="outline" size="icon" disabled={!period} onClick={() => period && move(period.prev_start)} aria-label={t('attendance.prevPeriod')}>
             <ChevronLeft className="rtl:-scale-x-100" aria-hidden />
@@ -177,7 +187,7 @@ export function AttendancePage() {
         <TabsContent value="grid">
           <Card className="overflow-hidden">
             {bar}
-            {start ? <Grid key={`${group}/${start}/${site}/${search}`} group={group} start={start} site={site} search={search} onOpenDay={openDay} /> : !err && <TableSkeleton rows={8} />}
+            {start ? <Grid key={`${group}/${start}/${site}/${search}/${withArchived}`} group={group} start={start} site={site} search={search} withArchived={withArchived} onOpenDay={openDay} /> : !err && <TableSkeleton rows={8} />}
           </Card>
         </TabsContent>
         {can('attendance.edit') && (
@@ -228,10 +238,10 @@ function showToday(table: HTMLTableElement | null) {
 }
 
 /** One page of the period grid: a sticky employee column, then one button per day; a column is off when some row's day is derived. */
-function Grid({ group, start, site, search, onOpenDay }: { group: string; start: string; site: string; search: string; onOpenDay: (employee: Row, date: string) => void }) {
+function Grid({ group, start, site, search, withArchived, onOpenDay }: { group: string; start: string; site: string; search: string; withArchived: boolean; onOpenDay: (employee: Row, date: string) => void }) {
   const { t, i18n } = useTranslation()
   const [page, setPage] = useState(1)
-  const { rows, total, err, loading } = useList(`/attendance/grid?${new URLSearchParams({ group, period_start: start, ...(site && { site_id: site }), ...(search && { search }), page: String(page), per_page: String(PER_PAGE) })}`)
+  const { rows, total, err, loading } = useList(`/attendance/grid?${new URLSearchParams({ group, period_start: start, ...(site && { site_id: site }), ...(search && { search }), ...(withArchived && { with_archived: '1' }), page: String(page), per_page: String(PER_PAGE) })}`)
   const { data: sites = [], loading: sitesLoading } = useApi<Row[]>(SITES)
   const grid = rows as GridRow[]
   const today = cairoToday()
@@ -273,6 +283,7 @@ function Grid({ group, start, site, search, onOpenDay }: { group: string; start:
                 <span className="flex items-center gap-2">
                   <span className="text-muted-foreground">{employee.code}</span>
                   <bdi>{localName(employee, i18n.language)}</bdi>
+                  {employee.archived === true && <StatusBadge variant="neutral" dot={false} label={t('attendance.leftMark')} />}
                 </span>
               </TableCell>
               {days.map((d) => {
@@ -306,6 +317,8 @@ function Grid({ group, start, site, search, onOpenDay }: { group: string; start:
 
 /**
  * Locks the period; with missing days it lists them and needs an explicit confirmation (HR may lock before the period ends).
+ * It decides from the missing list, not the header count: the list holds those who left, as the lock does (owner, 2026-11-11).
+ * Lock waits while the list loads, and stays off if it fails, since what the lock would confirm is then unknown.
  * A lock that changed holidays, or found leave on one, stays open on those lists so HR reviews them.
  */
 function LockDialog({ period, onClose }: { period: Period; onClose: () => void }) {
@@ -315,7 +328,8 @@ function LockDialog({ period, onClose }: { period: Period; onClose: () => void }
   const [err, setErr] = useState<unknown>()
   const [busy, setBusy] = useState(false)
   const [done, setDone] = useState<Locked>()
-  const missing = period.missing > 0
+  const list = useList(`/attendance/missing?${new URLSearchParams({ group: period.group, period_start: period.start, per_page: '100' })}`)
+  const missing = list.total > 0
   function lock() {
     setBusy(true)
     setErr(undefined)
@@ -371,18 +385,16 @@ function LockDialog({ period, onClose }: { period: Period; onClose: () => void }
         <DialogBody className="grid gap-4">
           <ErrorBanner err={err} shown={[]} />
           <DialogDescription className="text-sm text-foreground">{t('attendance.lockBody')}</DialogDescription>
+          <MissingDays {...list} />
           {missing && (
-            <>
-              <MissingDays group={period.group} start={period.start} />
-              <label className="flex min-h-tap items-center gap-3 text-sm font-medium">
-                <input type="checkbox" required className="size-4" checked={confirmed} onChange={(e) => setConfirmed(e.target.checked)} />
-                {t('attendance.lockConfirmMissing')}
-              </label>
-            </>
+            <label className="flex min-h-tap items-center gap-3 text-sm font-medium">
+              <input type="checkbox" required className="size-4" checked={confirmed} onChange={(e) => setConfirmed(e.target.checked)} />
+              {t('attendance.lockConfirmMissing')}
+            </label>
           )}
         </DialogBody>
         <DialogFooter>
-          <Button type="button" disabled={busy || (missing && !confirmed)} onClick={lock}>
+          <Button type="button" disabled={busy || list.loading || !!list.err || (missing && !confirmed)} onClick={lock}>
             {t('attendance.lock')}
           </Button>
         </DialogFooter>
@@ -391,30 +403,31 @@ function LockDialog({ period, onClose }: { period: Period; onClose: () => void }
   )
 }
 
-function MissingDays({ group, start }: { group: string; start: string }) {
+/** The lock dialog's missing days (`GET /attendance/missing`): nothing when there are none; a leaver's row carries the «ترك العمل» mark. */
+function MissingDays({ rows, total, err, loading }: { rows: Row[]; total: number; err: unknown; loading: boolean }) {
   const { t, i18n } = useTranslation()
-  const { rows, total, err, loading } = useList(`/attendance/missing?${new URLSearchParams({ group, period_start: start, per_page: '100' })}`)
   const id = useId()
+  if (loading) return <TableSkeleton rows={3} />
+  if (err) return <ErrorBanner err={err} shown={[]} />
+  if (!total) return null
   return (
     <div className="grid gap-2">
       <p id={id} className="text-sm font-medium">{t('attendance.lockMissing')}</p>
-      <ErrorBanner err={err} shown={[]} />
-      {loading ? (
-        <TableSkeleton rows={3} />
-      ) : (
-        // its own scroll region, so the confirm checkbox and the Lock button stay in view
-        <div role="region" aria-labelledby={id} tabIndex={0} className="max-h-64 overflow-y-auto rounded-md border outline-none focus-visible:outline-2 focus-visible:outline-solid focus-visible:outline-offset-2 focus-visible:outline-ring">
-          <ul className="divide-y text-sm">
-            {rows.map((d) => (
-              <li key={`${d.employee_id}/${d.date}`} className="flex gap-3 px-3 py-2">
-                <span className="text-muted-foreground">{d.code}</span>
-                <span className="flex-1">{localName(d, i18n.language)}</span>
-                <span>{ltrDates(d.date)}</span>
-              </li>
-            ))}
-          </ul>
-        </div>
-      )}
+      {/* its own scroll region, so the confirm checkbox and the Lock button stay in view */}
+      <div role="region" aria-labelledby={id} tabIndex={0} className="max-h-64 overflow-y-auto rounded-md border outline-none focus-visible:outline-2 focus-visible:outline-solid focus-visible:outline-offset-2 focus-visible:outline-ring">
+        <ul className="divide-y text-sm">
+          {rows.map((d) => (
+            <li key={`${d.employee_id}/${d.date}`} className="flex gap-3 px-3 py-2">
+              <span className="text-muted-foreground">{d.code}</span>
+              <span className="flex flex-1 flex-wrap items-center gap-x-2">
+                {localName(d, i18n.language)}
+                {d.archived === true && <StatusBadge variant="neutral" dot={false} label={t('attendance.leftMark')} />}
+              </span>
+              <span>{ltrDates(d.date)}</span>
+            </li>
+          ))}
+        </ul>
+      </div>
       {total > rows.length && <Alert tone="warning">{t('common.tooMany')}</Alert>}
     </div>
   )

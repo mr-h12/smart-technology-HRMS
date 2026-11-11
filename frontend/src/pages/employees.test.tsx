@@ -599,6 +599,16 @@ test('the archive switch asks for archived employees from page 1 and shows the t
   expect(await within(screen.getByRole('row', { name: /أحمد علي/ })).findByText('2026-01-31')).toBeInTheDocument()
 })
 
+test('the archive switch shows only with employee.view.all, and ?view=archived without it lists the active employees', async () => {
+  const list = vi.fn((_url: string) => json(200, { data: [row1], meta: { pagination } }))
+  mockFetch({ 'GET /api/v1/employees': list })
+  renderWithAuth(<EmployeesPage />, ['employee.view.own'], { path: '/employees?view=archived' })
+  await screen.findByRole('row', { name: /أحمد علي/ })
+  expect(screen.queryByRole('group', { name: 'عرض الموظفين' })).toBeNull()
+  expect(list.mock.calls.map(([u]) => String(u)).filter((u) => u.includes('per_page=12')).every((u) => !u.includes('archived'))).toBe(true)
+  expect(screen.getByRole('columnheader', { name: 'الحالة' })).toBeInTheDocument()
+})
+
 test('an active employee with a future termination date shows when they leave; the others show Active', async () => {
   const today = cairoToday()
   const later = new Date(Date.parse(`${today}T00:00:00Z`) + 864e5).toISOString().slice(0, 10)
@@ -609,11 +619,11 @@ test('an active employee with a future termination date shows when they leave; t
   expect(within(screen.getByRole('row', { name: /سعيد/ })).getByText(/ينتهي في/)).toBeInTheDocument()
 })
 
-const archived = { ...emp, code: 7, termination_date: '2026-01-31', termination_reason: 'استقالة' }
+const archived = { ...emp, code: 7, termination_date: '2026-01-31', termination_reason: 'استقالة', archived: true }
 
 test('an archived employee is reactivated after confirming, and the cleared dates show', async () => {
   let current: Record<string, unknown> = archived
-  const patch = vi.fn(() => { current = { ...archived, termination_date: null, termination_reason: null }; return json(200, { data: current }) })
+  const patch = vi.fn(() => { current = { ...archived, termination_date: null, termination_reason: null, archived: false }; return json(200, { data: current }) })
   mockFetch({ 'GET /api/v1/residences': residences, 'GET /api/v1/employees/e1': () => json(200, { data: current }), 'PATCH /api/v1/employees/e1': patch })
   renderWithAuth(<EmployeeDetailRoute id="e1" />, ALL, { router: false })
   expect(await screen.findByLabelText('تاريخ إنهاء الخدمة')).toHaveValue('2026-01-31')
@@ -644,7 +654,7 @@ test('a form dialog without a description has no aria-describedby', async () => 
 
 test('Reactivate shows only for an archived employee and with employee.edit', async () => {
   const today = cairoToday()
-  mockFetch({ 'GET /api/v1/residences': residences, 'GET /api/v1/employees/e1': () => json(200, { data: { ...archived, termination_date: today } }) })
+  mockFetch({ 'GET /api/v1/residences': residences, 'GET /api/v1/employees/e1': () => json(200, { data: { ...archived, termination_date: today, archived: false } }) })
   const first = renderWithAuth(<EmployeeDetailRoute id="e1" />, ALL, { router: false })
   await screen.findByLabelText('تاريخ إنهاء الخدمة')
   expect(screen.queryByRole('button', { name: 'إعادة التفعيل' })).toBeNull() // terminated today: still active
@@ -653,6 +663,86 @@ test('Reactivate shows only for an archived employee and with employee.edit', as
   renderWithAuth(<EmployeeDetailRoute id="e1" />, ['employee.view.all'], { router: false })
   await screen.findByLabelText('تاريخ إنهاء الخدمة')
   expect(screen.queryByRole('button', { name: 'إعادة التفعيل' })).toBeNull()
+})
+
+test('an archived employee’s page shows the banner with the date and reason and changes nothing but its termination', async () => {
+  mockFetch({ 'GET /api/v1/residences': residences, 'GET /api/v1/employees/e1': () => json(200, { data: archived }) })
+  const perms = [...ALL, 'employee.edit_code.all', 'employee.assign_manager.all', 'employee.assign_site.all']
+  const first = renderWithAuth(<EmployeeDetailRoute id="e1" />, perms, { router: false })
+  const banner = await screen.findByRole('status')
+  expect(banner).toHaveTextContent('مؤرشف — ترك العمل في 2026-01-31')
+  expect(within(banner).getByText('2026-01-31')).toHaveAttribute('dir', 'ltr')
+  expect(banner).toHaveTextContent('السبب: استقالة')
+  expect(screen.getByLabelText('الاسم بالعربية')).toBeDisabled()
+  for (const name of ['حفظ', 'تغيير الرقم الوظيفي', 'تعيين مدير', 'نقل إلى موقع']) expect(screen.queryByRole('button', { name })).toBeNull()
+  expect(screen.getByRole('button', { name: 'إعادة التفعيل' })).toBeInTheDocument()
+  first.unmount()
+  renderWithAuth(<EmployeeDetailRoute id="e1" tab="history" />, perms, { router: false })
+  expect(await screen.findByText('سجل تغييرات نوع الموظف')).toBeInTheDocument()
+  expect(screen.queryByRole('button', { name: 'إضافة تغيير' })).toBeNull()
+})
+
+test('correcting the leaving details sends only the termination date and reason', async () => {
+  const patch = vi.fn(() => json(200, { data: { ...archived, termination_date: '2026-01-30', termination_reason: 'انتهاء العقد' } }))
+  mockFetch({ 'GET /api/v1/residences': residences, 'GET /api/v1/employees/e1': () => json(200, { data: archived }), 'PATCH /api/v1/employees/e1': patch })
+  const first = renderWithAuth(<EmployeeDetailRoute id="e1" />, ['employee.view.all'], { router: false })
+  await screen.findByRole('status')
+  expect(screen.queryByRole('button', { name: 'تصحيح بيانات الترك' })).toBeNull()
+  first.unmount()
+  renderWithAuth(<EmployeeDetailRoute id="e1" />, ALL, { router: false })
+  await user.click(await screen.findByRole('button', { name: 'تصحيح بيانات الترك' }))
+  const dialog = screen.getByRole('dialog', { name: 'تصحيح بيانات الترك' })
+  const date = within(dialog).getByLabelText('تاريخ إنهاء الخدمة')
+  const reason = within(dialog).getByLabelText('سبب إنهاء الخدمة')
+  expect([date, reason].map((f) => (f as HTMLInputElement).value)).toEqual(['2026-01-31', 'استقالة'])
+  await user.clear(date)
+  await user.type(date, '2026-01-30')
+  await user.clear(reason)
+  await user.type(reason, 'انتهاء العقد')
+  await user.click(within(dialog).getByRole('button', { name: 'حفظ' }))
+  await waitFor(() => expect(patch).toHaveBeenCalled())
+  expect(JSON.parse((patch.mock.calls[0] as unknown as [string, RequestInit])[1].body as string)).toEqual({ termination_date: '2026-01-30', termination_reason: 'انتهاء العقد' })
+  await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull())
+  expect(screen.getByLabelText('تاريخ إنهاء الخدمة')).toHaveValue('2026-01-30') // the open form takes the saved values, so a later Save cannot send the old ones
+  expect(screen.getByLabelText('سبب إنهاء الخدمة')).toHaveValue('انتهاء العقد')
+})
+
+test('an active employee’s page has no archive banner', async () => {
+  mockFetch({ 'GET /api/v1/residences': residences, 'GET /api/v1/employees/e1': () => json(200, { data: { ...archived, termination_date: cairoToday(), archived: false } }) })
+  renderWithAuth(<EmployeeDetailRoute id="e1" />, ALL, { router: false })
+  expect(await screen.findByLabelText('الاسم بالعربية')).toBeEnabled()
+  expect(screen.queryByRole('status')).toBeNull()
+})
+
+test('saving a termination date with open items shows the refusal and links to each item', async () => {
+  const items = [{ kind: 'leave_request', id: 'r1', status: 'pending', from_date: '2026-11-12', to_date: '2026-11-13' }, { kind: 'wage_proposal', id: 'p1' }]
+  mockFetch({ 'GET /api/v1/residences': residences, 'GET /api/v1/employees/e1': () => json(200, { data: emp }),
+    'PATCH /api/v1/employees/e1': () => json(409, { error: { code: 'employee_has_open_items', message: 'M', items } }) })
+  renderWithAuth(<EmployeeDetailRoute id="e1" />, ALL, { router: false })
+  await user.type(await screen.findByLabelText('تاريخ إنهاء الخدمة'), '2026-11-15')
+  await user.click(screen.getByRole('button', { name: 'حفظ' }))
+  const alert = await screen.findByRole('alert')
+  expect(alert).toHaveTextContent('M')
+  const leave = within(alert).getByRole('link', { name: /2026-11-12.*2026-11-13.*قيد المراجعة/ })
+  expect(leave).toHaveAttribute('href', '/leave?request=r1')
+  expect(within(leave).getByText('2026-11-12')).toHaveAttribute('dir', 'ltr')
+  expect(within(alert).getByRole('link', { name: 'يومية مقترحة بانتظار القرار' })).toHaveAttribute('href', '/wage-proposals?proposal=p1')
+})
+
+test('a refused save brings its alert into view, without motion for those who ask for less', async () => {
+  const scroll = vi.spyOn(Element.prototype, 'scrollIntoView')
+  vi.stubGlobal('matchMedia', (q: string) => ({ matches: q === '(prefers-reduced-motion: reduce)' }))
+  mockFetch({ 'GET /api/v1/residences': residences, 'GET /api/v1/employees/e1': () => json(200, { data: emp }),
+    'PATCH /api/v1/employees/e1': () => json(409, { error: { code: 'employee_has_open_items', message: 'M', items: [{ kind: 'wage_proposal', id: 'p1' }] } }) })
+  renderWithAuth(<EmployeeDetailRoute id="e1" />, ALL, { router: false })
+  await user.type(await screen.findByLabelText('تاريخ إنهاء الخدمة'), '2026-11-15')
+  expect(scroll).not.toHaveBeenCalled()
+  await user.click(screen.getByRole('button', { name: 'حفظ' }))
+  const alert = await screen.findByRole('alert')
+  await waitFor(() => expect(scroll).toHaveBeenCalledOnce())
+  expect(scroll.mock.contexts[0]).toBe(alert)
+  expect(scroll).toHaveBeenCalledWith({ block: 'nearest', behavior: 'auto' })
+  scroll.mockRestore()
 })
 
 const codeRoutes = (patch: (url: string, init?: RequestInit) => Response) =>

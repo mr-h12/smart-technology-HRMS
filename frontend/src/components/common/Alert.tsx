@@ -1,5 +1,5 @@
 import { CircleAlert, CircleCheck, Info, TriangleAlert, type LucideIcon } from 'lucide-react'
-import type { ReactNode } from 'react'
+import type { ReactNode, Ref } from 'react'
 
 type Tone = 'neutral' | 'info' | 'success' | 'warning' | 'danger'
 
@@ -18,19 +18,22 @@ export type AlertProps = {
   icon?: LucideIcon
   title?: string
   children: ReactNode
+  /** For a caller that scrolls the alert into view (ErrorBanner); scroll-mt-20 keeps it clear of the sticky header, as `main` does. */
+  ref?: Ref<HTMLDivElement>
 }
 
 /**
  * An inline note styled like content (rule 17), not a banner. Roles: danger → "alert"; success → "status" (it appears
  * after an action); neutral, info and warning → none (a static note must not interrupt a screen reader).
  */
-export function Alert({ tone, icon, title, children }: AlertProps) {
+export function Alert({ tone, icon, title, children, ref }: AlertProps) {
   const [box, ink, Default] = TONE[tone]
   const Icon = icon ?? Default
   return (
     <div
+      ref={ref}
       role={tone === 'danger' ? 'alert' : tone === 'success' ? 'status' : undefined}
-      className={`flex gap-3 rounded-lg border px-4 py-3 text-sm text-foreground ${box}`}
+      className={`flex scroll-mt-20 gap-3 rounded-lg border px-4 py-3 text-sm text-foreground ${box}`}
     >
       <Icon aria-hidden className={`mt-0.5 size-4 shrink-0 ${ink}`} />
       <div className="min-w-0 space-y-1">

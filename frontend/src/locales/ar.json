@@ -120,7 +120,14 @@
     "archive": {
       "view": "عرض الموظفين",
       "active": "النشطون",
-      "archived": "الأرشيف"
+      "archived": "الأرشيف",
+      "banner": "مؤرشف — ترك العمل في {{date}}",
+      "reason": "السبب: {{reason}}",
+      "correct": "تصحيح بيانات الترك"
+    },
+    "openItems": {
+      "leave_request": "طلب إجازة {{from}} – {{to}} ({{status}})",
+      "wage_proposal": "يومية مقترحة بانتظار القرار"
     },
     "reactivate": {
       "button": "إعادة التفعيل",
@@ -561,6 +568,8 @@
     "nextPeriod": "الفترة التالية",
     "periodRange": "من {{start}} إلى {{end}}",
     "employee": "الموظف",
+    "withArchived": "إظهار من تركوا العمل",
+    "leftMark": "ترك العمل",
     "periodLine": "الفترة من {{start}} إلى {{end}} · أيام غير مسجلة: {{missing}}",
     "locked": "مقفلة",
     "lock": "قفل الفترة",
@@ -648,6 +657,7 @@
       "missingNote": "لم يُسجَّل هذا اليوم بعد.",
       "lockedNote": "الفترة مقفلة، ولا يمكن تعديل أيامها.",
       "readOnlyNote": "للعرض فقط: لا تملك صلاحية تعديل الحضور.",
+      "archivedNote": "للعرض فقط: الموظف ترك العمل.",
       "clear": "مسح اليوم",
       "conflict": "عدّل مستخدم آخر هذا اليوم. حمّل آخر نسخة ثم أعد إدخال تغييراتك.",
       "loadLatest": "تحميل آخر نسخة"

@@ -34,16 +34,16 @@ final class AttendanceController
 
     public function period(Request $request): JsonResponse
     {
-        $q = $request->validate($this->periodRules());
+        $q = $request->validate([...$this->periodRules(), 'with_archived' => ['sometimes', 'boolean']]);
 
-        return ApiEnvelope::single($request, $this->grid->period(EmployeeType::from($q['group']), $q['period_start'] ?? null, $q['date'] ?? null, RequestScope::ownerId($request)));
+        return ApiEnvelope::single($request, $this->grid->period(EmployeeType::from($q['group']), $q['period_start'] ?? null, $q['date'] ?? null, RequestScope::ownerId($request), $request->boolean('with_archived'), $request->user()));
     }
 
     /** `group=all` is every type over the engineers' window. */
     public function grid(Request $request): JsonResponse
     {
-        $q = $request->validate([...$this->periodRules(), 'group' => ['required', Rule::in(['all', ...array_column(EmployeeType::cases(), 'value')])], 'per_page' => ['sometimes', 'integer', 'min:1'], 'page' => ['sometimes', 'integer', 'min:1'], 'site_id' => ['sometimes', 'uuid'], 'search' => ['sometimes', 'nullable', 'string', 'max:100']]);
-        $r = $this->grid->grid($q['group'] === 'all' ? null : EmployeeType::from($q['group']), $q['period_start'] ?? null, (int) ($q['per_page'] ?? 20), (int) ($q['page'] ?? 1), $q['date'] ?? null, RequestScope::ownerId($request), $q['site_id'] ?? null, $q['search'] ?? null);
+        $q = $request->validate([...$this->periodRules(), 'group' => ['required', Rule::in(['all', ...array_column(EmployeeType::cases(), 'value')])], 'per_page' => ['sometimes', 'integer', 'min:1'], 'page' => ['sometimes', 'integer', 'min:1'], 'site_id' => ['sometimes', 'uuid'], 'search' => ['sometimes', 'nullable', 'string', 'max:100'], 'with_archived' => ['sometimes', 'boolean']]);
+        $r = $this->grid->grid($q['group'] === 'all' ? null : EmployeeType::from($q['group']), $q['period_start'] ?? null, (int) ($q['per_page'] ?? 20), (int) ($q['page'] ?? 1), $q['date'] ?? null, RequestScope::ownerId($request), $q['site_id'] ?? null, $q['search'] ?? null, $request->boolean('with_archived'), $request->user());
 
         return ApiEnvelope::collection($request, $r['data'], $r['pagination']);
     }

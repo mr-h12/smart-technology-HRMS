@@ -40,7 +40,8 @@ final class AttendanceLocks
                 throw AttendanceRefused::because(AttendanceRefusal::PeriodAlreadyLocked);
             }
 
-            $employees = $this->roster->allOfType($p->group, $p->start, $p->end);
+            // Archived employees employed in the period too: their missing days need confirming and their derived days are stored.
+            $employees = $this->roster->withArchived()->allOfType($p->group, $p->start, $p->end);
             $holidayDates = OfficialHoliday::datesBetween($p->start, $p->end);
             $lock = AttendanceLock::firstOrNew(['employee_type' => $p->group->value, 'period_start' => $p->start]);
             $since = $lock->exists ? $lock->locked_at : null;

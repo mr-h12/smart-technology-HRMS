@@ -6,15 +6,19 @@ namespace App\Modules\Employees\Application;
 
 use App\Modules\Employees\Domain\DocumentKind;
 use App\Modules\Employees\Domain\EffectiveDated;
+use App\Modules\Employees\Domain\EmployeeArchived;
 use App\Modules\Employees\Domain\EmployeeCodeTaken;
+use App\Modules\Employees\Domain\EmployeeHasOpenItems;
 use App\Modules\Employees\Domain\EmployeeType;
 use App\Modules\Employees\Domain\PayMethod;
+use App\Modules\Employees\Domain\WageProposalStatus;
 use App\Modules\Employees\Infrastructure\Eloquent\Employee;
 use App\Modules\Employees\Infrastructure\Eloquent\EmployeeDocument;
 use App\Modules\Employees\Infrastructure\Eloquent\EmployeeManagerAssignment;
 use App\Modules\Employees\Infrastructure\Eloquent\EmployeePayChange;
 use App\Modules\Employees\Infrastructure\Eloquent\EmployeeSiteAssignment;
 use App\Modules\Employees\Infrastructure\Eloquent\EmployeeTypeChange;
+use App\Modules\Employees\Infrastructure\Eloquent\EmployeeWageProposal;
 use App\Modules\Identity\Application\Rbac\AuthorizeAction;
 use App\Modules\Identity\Domain\Rbac\Scope;
 use Illuminate\Database\Eloquent\Builder;
@@ -88,18 +92,15 @@ final class EmployeeService
     }
 
     /**
-     * The archive is the employees whose termination date has passed; the termination day itself is still worked (Attendance\Domain\Employment).
+     * The archive is the employees whose termination date has passed (Employee::isArchived).
      *
      * @return Builder<Employee> live employees, active or archived, or only those a manager reaches today
      */
     private function visibleTo(?string $ownerId, bool $archived = false): Builder
     {
-        $today = self::today();
-        $query = Employee::query()->where(fn (Builder $q) => $archived
-            ? $q->where('termination_date', '<', $today)
-            : $q->whereNull('termination_date')->orWhere('termination_date', '>=', $today));
+        $query = Employee::query()->archived($archived);
 
-        return $ownerId === null ? $query : EmployeeReach::apply($query, $ownerId, $today);
+        return $ownerId === null ? $query : EmployeeReach::apply($query, $ownerId, self::today());
     }
 
     /**
@@ -157,6 +158,7 @@ final class EmployeeService
 
         return [
             ...$this->summary($e, $full),
+            'archived' => Employee::isArchived($e->termination_date),
             'current_type' => EffectiveDated::at($types, $today)['type'] ?? null,
             ...($full ? ['current_pay' => EffectiveDated::at($pays, $today), 'pay_changes' => $pays] : []),
             'type_changes' => $types,
@@ -172,15 +174,28 @@ final class EmployeeService
     }
 
     /**
+     * An archived employee changes only its termination date and reason (reactivate or correct; owner, 2026-11-11), judged on changed
+     * values because the profile form sends every identity field on each save. Setting or changing a termination date waits until the
+     * employee's open items are decided; clearing it never does.
+     *
      * @param  array<string, mixed>  $data
      * @return array<string, mixed>
      */
     public function update(string $id, array $data): array
     {
-        $employee = Employee::findOrFail($id);
-        $employee->fill($data);
-        $this->assertBank($employee->only(['pay_method', 'bank_account']));
-        $employee->save();
+        DB::transaction(function () use ($id, $data): void {
+            $employee = Employee::findOrFail($id);
+            $archived = Employee::isArchived($employee->termination_date);
+            $employee->fill($data);
+            if ($archived && array_diff(array_keys($employee->getDirty()), ['termination_date', 'termination_reason']) !== []) {
+                throw new EmployeeArchived;
+            }
+            if ($employee->isDirty('termination_date') && $employee->termination_date !== null && ($items = $this->openItems($id)) !== []) {
+                throw new EmployeeHasOpenItems($items);
+            }
+            $this->assertBank($employee->only(['pay_method', 'bank_account']));
+            $employee->save();
+        });
 
         return $this->show($id);
     }
@@ -283,6 +298,12 @@ final class EmployeeService
         return $this->show($id);
     }
 
+    /** Whether this employee is archived today; false for an unknown id. */
+    public function isArchived(string $employeeId): bool
+    {
+        return Employee::isArchived(Employee::whereKey($employeeId)->value('termination_date'));
+    }
+
     /** Whether the employee is in the user's reach on $date (default today). */
     public function isManagedBy(string $employeeId, string $userId, ?string $date = null): bool
     {
@@ -348,6 +369,21 @@ final class EmployeeService
         });
 
         return $this->show($id);
+    }
+
+    /**
+     * Each module's open items for the employee (EmployeeOpenItems listeners: Leave's pending and escalated requests), then the pending wage proposals.
+     *
+     * @return list<array<string, string>>
+     */
+    private function openItems(string $id): array
+    {
+        $items = array_merge(...array_values(array_filter(event(new EmployeeOpenItems($id)) ?? [], 'is_array')));
+        foreach (EmployeeWageProposal::where(['employee_id' => $id, 'status' => WageProposalStatus::Pending])->orderBy('id')->pluck('id') as $proposal) {
+            $items[] = ['kind' => 'wage_proposal', 'id' => (string) $proposal];
+        }
+
+        return array_values($items);
     }
 
     private static function today(): string

@@ -108,6 +108,7 @@ On the site manager's screen (§2b): an engineer's stored late minutes are the r
 - Official holidays come from the holiday list. A holiday is a named period of one or more consecutive days (from, to; decided 2026-11-10), and every day in it is an official holiday. Two holidays never overlap; they may touch. A period may cross a payroll period boundary or a year end, and each day counts in its own period. When a weekly off day is also a holiday, the holiday wins.
 - A derived day is a leave day: no scheduled times, and a permanent worker's transport is none.
 - Derived on read while the period is open; stored at lock. HR can record the day instead (a site, if the person worked).
+- The lock still includes archived employees (termination date before today) employed in the period, though they are hidden from the attendance screens by default (owner, 2026-11-11): their missing days need confirming, an open day of theirs blocks the lock, and their derived days are stored.
 - Reopening keeps the stored days. A holiday can only be added, moved, shortened or deleted while every period of every group on each day of its old and new period is open (decided 2026-11-04, per day of a period 2026-11-10):
   - deleting, moving or shortening a holiday removes the days stored as that official holiday by a lock (source `derived`) on the dates it no longer covers. Those dates then derive again (a weekly off) or are missing, which the lock's confirm-missing step lists;
   - a new holiday day with no stored day derives and is stored at the next lock, as before;
@@ -208,7 +209,7 @@ Spec: `docs/superpowers/specs/2026-11-03-leave-design.md`. Attendance is the led
 - Sick days are counted apart and do not reduce the balance (L4). Unpaid days are counted apart too.
 - The year starts Jan 1. Nothing carries over.
 - Read date for year Y: D = the earliest of today, Dec 31 of Y and the termination date, moved up to the hire date when that is later (an employee HR created ahead of their start date). The type on D decides balance or none (day laborer → none); a mid-year monthly ↔ daily change is not pro-rated.
-- The balances list for Y holds everyone employed at some point in Y (hired by Dec 31 or with no hire date, not terminated before Jan 1) whose type on D is monthly. A manager sees those in their reach today.
+- The balances list for Y holds everyone employed at some point in Y (hired by Dec 31 or with no hire date, not terminated before Jan 1) whose type on D is monthly. A manager sees those in their reach today. Archived employees (termination date before today) are left out for every year (owner, 2026-11-11); their balance stays on their own page.
 - Someone who passes 1 year of service mid-year: HR gets an alert on the anniversary and decides whether to change the year's entitlement.
   The alert fires on date D for an employee of a monthly type employed on D whose hire date plus one year is D (a Feb 29 hire: Feb 28), unless the hire date is Jan 1 (they already have 1 year on Jan 1). Each holder of `leave.decide.all` gets it once, dated D (`leave:alert-anniversary`, daily 08:00 Cairo). A run on day R covers every D from R − 6 to R, so the next run makes up a missed or failed one.
 
@@ -292,6 +293,7 @@ How an uploaded attendance template (the grid: one row per employee, one column 
 - Limits (G9): 5 MB, `.xlsx` only, at most 2000 employee rows (a technical limit in code, not a setting). The file is read once per request and never stored.
 - Order of the cell checks: an unknown or out-of-scope employee code, or a code already used on an earlier row, refuses the row; then a future date, then a day not employed as the group's type; then an unchanged cell is set aside; then, on every changed cell, a locked period, an unknown site or day type, a stale version, and the day rules of single-day entry. A refused cell is skipped and listed; the other cells are still saved.
 - The import takes reach per cell: an own-scope user imports only the cells whose employee they reach on that cell's date.
+- Archived employees (termination date before today) are not rows of the template (owner, 2026-11-11); someone whose termination date is today or later is still a row, grey after it. A row typed in with an archived employee's code is still matched, and its cells up to the termination date are accepted (later ones are `employee_not_active`).
 
 ## Not calculated by the system
 - Bonuses, negligence deductions, penalties, lateness exemptions, insurance shares and income tax: entered by HR.

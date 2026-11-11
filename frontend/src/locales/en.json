@@ -120,7 +120,14 @@
     "archive": {
       "view": "Show employees",
       "active": "Active",
-      "archived": "Archive"
+      "archived": "Archive",
+      "banner": "Archived — left on {{date}}",
+      "reason": "Reason: {{reason}}",
+      "correct": "Correct leaving details"
+    },
+    "openItems": {
+      "leave_request": "Leave request {{from}} – {{to}} ({{status}})",
+      "wage_proposal": "Proposed daily wage awaiting a decision"
     },
     "reactivate": {
       "button": "Reactivate",
@@ -557,6 +564,8 @@
     "nextPeriod": "Next period",
     "periodRange": "{{start}} to {{end}}",
     "employee": "Employee",
+    "withArchived": "Show those who left",
+    "leftMark": "Left",
     "periodLine": "Period {{start}} to {{end}} · Missing days: {{missing}}",
     "locked": "Locked",
     "lock": "Lock period",
@@ -644,6 +653,7 @@
       "missingNote": "This day is not recorded yet.",
       "lockedNote": "The period is locked; its days cannot be edited.",
       "readOnlyNote": "View only: you do not have permission to edit attendance.",
+      "archivedNote": "View only: this employee has left.",
       "clear": "Clear day",
       "conflict": "Someone else changed this day. Load the latest version, then re-enter your changes.",
       "loadLatest": "Load latest"

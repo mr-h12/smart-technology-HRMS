@@ -73,6 +73,26 @@ class AttendanceLockTest extends TestCase
         $this->lock(['confirm_missing' => true])->assertCreated()->assertJsonPath('data.is_locked', true);
     }
 
+    public function test_the_lock_still_counts_and_stores_the_days_of_an_archived_employee(): void
+    {
+        $left = $this->employee('engineer', '2026-01-01', ['termination_date' => '2026-10-20']);
+        $this->putDay($left, '2026-10-05', ['site_id' => $this->site, 'in_time' => '08:00'])->assertOk();
+
+        $this->lock(['confirm_missing' => true])->assertStatus(422)->assertJsonPath('error.code', 'open_days');
+        $this->putDay($left, '2026-10-05', ['version' => 1, 'site_id' => $this->site, 'in_time' => '08:00', 'out_time' => '16:00'])->assertOk();
+        $this->lock(['confirm_missing' => true])->assertCreated();
+        // the Fridays and the holiday up to the termination date, none after it
+        $this->assertSame(['2026-10-02', '2026-10-06', '2026-10-09', '2026-10-16'],
+            AttendanceDay::where(['employee_id' => $left, 'source' => 'derived'])->orderBy('date')->pluck('date')->map(fn ($d) => substr((string) $d, 0, 10))->all());
+    }
+
+    public function test_the_missing_days_of_an_archived_employee_alone_still_need_confirming(): void
+    {
+        $this->employee('permanent_worker', '2026-01-01', ['termination_date' => '2026-10-20']);   // the group's only member, archived
+
+        $this->lock(['group' => 'permanent_worker'])->assertStatus(422)->assertJsonPath('error.code', 'missing_days_unconfirmed');
+    }
+
     public function test_lock_materializes_derived_days_as_stored_rows(): void
     {
         $this->lock(['confirm_missing' => true]);

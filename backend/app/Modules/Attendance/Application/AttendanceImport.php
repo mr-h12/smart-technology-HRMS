@@ -88,7 +88,8 @@ final class AttendanceImport
         }
 
         $employees = [];
-        foreach ($this->roster->allOfType($g, $p->start, $p->end, $ownerId) as $e) {
+        // An archived employee is not a template row, but a row typed in with their code is matched; their cells up to the termination date are accepted.
+        foreach ($this->roster->withArchived()->allOfType($g, $p->start, $p->end, $ownerId) as $e) {
             $employees[(int) $e['code']] = $e;
         }
         // Matched by code, not by row, so sorting the visible sheet cannot pair a cell with another employee's version.

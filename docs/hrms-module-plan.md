@@ -256,6 +256,15 @@ Answers before Release 2 item 2. Formulas: `docs/calculations.md`; spec: `docs/s
 - **Early departure / half day (R25):** no automatic deduction for any field type; payroll flags the minutes and HR deducts by hand with a reason.
 - **Engineers' transport:** the per-worker fare override, in full, on every day worked at a work site; none without an override.
 
+### Hidden archived employees: owner decisions of 2026-11-11
+An archived employee (termination date before today in Cairo) has left the company. Spec: `docs/superpowers/specs/2026-11-11-hide-archived-employees-design.md`.
+- **Attendance:** hidden by default from every attendance screen, for every role. HR (`attendance.edit.all`) has one switch on the period grid, «إظهار من تركوا العمل» (`with_archived=1`), off by default, to finish and lock their last days. Recorded days are never deleted; the lock, its missing list and the import still include them.
+- **Who reaches them:** only all-scope viewers (`employee.view.all`), through the Archive view, on a read-only page (data, attendance, leave, document download) with an «مؤرشف» banner. Its only actions are Reactivate and correcting the termination date or reason. A site manager sees neither the Archive switch nor any archived employee.
+- **Open items:** a termination date is refused while the employee has a pending or escalated leave request or a pending wage proposal (`employee_has_open_items`, 409, which lists them). Whatever slips through stays visible to HR until decided. Advances and custody join this rule when built.
+- **API by id:** a site manager is refused everything about an archived employee (one rule in `EmployeeReach`). For all-scope users reads are allowed; writes to the archived employee's record are refused (`employee_archived`, 409) except reactivating, correcting the termination date or reason, attendance days up to the termination date, and deleting. Deciding or cancelling a leave request and deciding a wage proposal stay allowed.
+- **Reactivating** brings everything back.
+- **History:** old notifications and the audit log stay as they are; no new alert counts an archived employee.
+
 ### Changes to the work plan
 - **Youssef:**
   - Add R19 (workday) to the attendance contracts. The shift default changes in one new migration, after R19 is answered.
