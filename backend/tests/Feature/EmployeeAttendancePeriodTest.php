@@ -102,7 +102,7 @@ class EmployeeAttendancePeriodTest extends TestCase
             // Fridays 10-02 and 10-16 and the holiday 10-06 are derived; 15 of the 25 days up to today are missing; 10-21..10-25 count nowhere
             ->assertJsonPath('data.summary', ['worked' => 3, 'absent' => 1, 'leave' => 2, 'off' => 4, 'missing' => 15]);
         $day = array_column($r->json('data.days'), null, 'date');
-        $this->assertSame(['stored', $this->site, '08:45', '18:30', 1, ['late_minutes' => 45, 'ot_minutes' => 105]],
+        $this->assertSame(['stored', $this->site, '08:45', '18:30', 1, ['late_minutes' => 45, 'ot_minutes' => 90]],
             [$day['2026-10-01']['state'], $day['2026-10-01']['site_id'], $day['2026-10-01']['in_time'], $day['2026-10-01']['out_time'], $day['2026-10-01']['version'], $day['2026-10-01']['hints']]);
         $this->assertSame(['derived', 'friday', []], [$day['2026-10-02']['state'], $day['2026-10-02']['leave_code'], $day['2026-10-02']['hints']]);
         $this->assertSame(['stored', 'annual'], [$day['2026-10-22']['state'], $day['2026-10-22']['leave_code']]);

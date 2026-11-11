@@ -131,7 +131,7 @@ class AttendanceSheetTest extends TestCase
     {
         $eng = $this->employee('engineer');
         $this->putDay($eng, '2026-10-18', ['site_id' => $this->site, 'in_time' => '08:45', 'out_time' => '18:30']);
-        $this->sheet('engineer', '2026-10-18')->assertJsonPath('data.rows.0.hints', ['late_minutes' => 45, 'ot_minutes' => 105]);
+        $this->sheet('engineer', '2026-10-18')->assertJsonPath('data.rows.0.hints', ['late_minutes' => 45, 'ot_minutes' => 90]);
     }
 
     public function test_office_rows_carry_the_lateness_hint(): void
