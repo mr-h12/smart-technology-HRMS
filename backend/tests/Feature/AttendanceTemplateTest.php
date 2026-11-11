@@ -187,7 +187,8 @@ class AttendanceTemplateTest extends TestCase
         $movedOut = $this->employee('engineer');
         $movedIn = $this->employee('day_laborer');
         app(EmployeeService::class)->addTypeChange($movedOut, ['type' => 'day_laborer', 'effective_from' => '2026-10-16']);
-        app(EmployeeService::class)->addTypeChange($movedIn, ['type' => 'engineer', 'effective_from' => '2026-09-26']);   // a type change starts a period of the new type
+        // Written directly: rows from before a type change had to start a period (imports, existing data) still grey the days before them.
+        Employee::findOrFail($movedIn)->typeChanges()->create(['type' => 'engineer', 'effective_from' => '2026-10-12']);
 
         $this->assertCount(4, $this->download(self::ENGINEERS)['attendance']['rows']);
         $dates = $this->dates();
@@ -195,7 +196,7 @@ class AttendanceTemplateTest extends TestCase
         $this->assertEqualsCanonicalizing([
             ...$refs(2, fn (string $d) => $d > '2026-10-20'),                                       // terminated 10-20
             ...$refs(3, fn (string $d) => $d >= '2026-10-16'),                                      // a day laborer from 10-16
-            ...$refs(4, fn (string $d) => $d > '2026-10-20'),                                       // an engineer from 09-26; today 10-20
+            ...$refs(4, fn (string $d) => $d < '2026-10-12' || $d > '2026-10-20'),                  // an engineer from 10-12; today 10-20
         ], $this->greyCells());
     }
 

@@ -76,8 +76,20 @@ class DatedChangeLockTest extends TestCase
         $this->assertRefused($this->postJson("/api/v1/employees/{$eng}/manager-assignments", ['manager_id' => $manager->id, 'effective_from' => '2026-07-10']), self::LOCKED);
         $this->assertRefused($this->postJson("/api/v1/sites/{$site}/allowance-rules", ['effective_from' => '2026-07-10', 'mode' => 'fixed', 'value' => '20']), self::LOCKED);
         $this->assertRefused($this->patchJson("/api/v1/employees/{$eng}", ['termination_date' => '2026-07-10']), self::LOCKED, 'termination_date');
-        // Clearing a termination date inside the locked period re-employs locked days.
+        // Clearing or moving a termination date inside the locked period re-employs locked days.
         $this->assertRefused($this->patchJson("/api/v1/employees/{$left}", ['termination_date' => null]), self::LOCKED, 'termination_date');
+        $this->assertRefused($this->patchJson("/api/v1/employees/{$left}", ['termination_date' => '2026-07-31']), self::LOCKED, 'termination_date');
+    }
+
+    public function test_a_row_also_answers_to_the_locks_of_types_held_after_its_date(): void
+    {
+        $this->cairo('2026-09-20 10:00');
+        $worker = $this->employee('permanent_worker');
+        $this->postJson("/api/v1/employees/{$worker}/type-changes", ['type' => 'day_laborer', 'effective_from' => '2026-09-01'])->assertCreated();
+        $this->lock('day_laborer', '2026-09-01');
+
+        // The permanent-worker period 08-26.. is open, but a pay row dated 08-28 also governs the locked day-laborer days 09-01..15.
+        $this->assertRefused($this->postJson("/api/v1/employees/{$worker}/pay-changes", ['effective_from' => '2026-08-28', 'salary' => '9500']), self::LOCKED);
     }
 
     public function test_dated_changes_after_the_locked_period_are_accepted(): void
@@ -94,6 +106,8 @@ class DatedChangeLockTest extends TestCase
         $this->postJson("/api/v1/employees/{$worker}/site-assignments", ['site_id' => $site, 'effective_from' => '2026-07-26'])->assertCreated();
         $this->postJson("/api/v1/sites/{$site}/allowance-rules", ['effective_from' => '2026-07-26', 'mode' => 'fixed', 'value' => '20'])->assertCreated();
         $this->postJson("/api/v1/employees/{$eng}/type-changes", ['type' => 'permanent_worker', 'effective_from' => '2026-07-26'])->assertCreated();
-        $this->patchJson("/api/v1/employees/{$worker}", ['termination_date' => '2026-07-26'])->assertOk();
+        // The termination date is the last day employed: only the days after it change.
+        $this->patchJson("/api/v1/employees/{$worker}", ['termination_date' => '2026-07-25'])->assertOk();
+        $this->patchJson("/api/v1/employees/{$worker}", ['termination_date' => '2026-07-31'])->assertOk();
     }
 }

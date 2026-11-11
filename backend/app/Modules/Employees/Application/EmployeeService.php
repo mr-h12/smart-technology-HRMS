@@ -27,6 +27,7 @@ use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\ModelNotFoundException;
 use Illuminate\Database\UniqueConstraintViolationException;
 use Illuminate\Support\Arr;
+use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\ValidationException;
@@ -196,10 +197,10 @@ final class EmployeeService
                 throw new EmployeeHasOpenItems($items);
             }
             if ($employee->isDirty('termination_date')) {
-                // The days after the earlier of the old and new dates switch between employed and not.
+                // The termination date is the last day employed: the days after the earlier of the old and new dates switch.
                 $old = $employee->getOriginal('termination_date');
                 $new = $employee->termination_date;
-                $this->assertUnlocked($employee, (string) min($old ?? $new, $new ?? $old), 'termination_date');
+                $this->assertUnlocked($employee, Carbon::parse((string) min($old ?? $new, $new ?? $old))->addDay()->toDateString(), 'termination_date');
             }
             $this->assertBank($employee->only(['pay_method', 'bank_account']));
             $employee->save();
@@ -435,13 +436,16 @@ final class EmployeeService
     }
 
     /**
-     * M1: a dated row governs the days from its date on, so a lock ending on or after the date, of the type in force there (every type when
-     * none is) or of the $new type, refuses it, as FareService does. Call inside the write's transaction (PeriodGuard::lockedFrom).
+     * M1: a dated row governs the days from its date on, so a lock ending on or after the date, of the type in force there or of any type
+     * the employee holds after it (every type when none is in force there), or of the $new type, refuses it, as FareService does. Call
+     * inside the write's transaction (PeriodGuard::lockedFrom).
      */
     private function assertUnlocked(Employee $employee, string $date, string $field = 'effective_from', ?EmployeeType $new = null): void
     {
-        $old = EffectiveDated::at($employee->typeChanges->map(fn ($t) => $this->row($t))->all(), $date)['type'] ?? null;
-        $types = $old === null ? EmployeeType::cases() : array_filter([EmployeeType::from($old), $new]);
+        $rows = $employee->typeChanges->map(fn ($t) => $this->row($t))->all();
+        $old = EffectiveDated::at($rows, $date)['type'] ?? null;
+        $later = array_column(array_filter($rows, fn (array $r) => $r['effective_from'] > $date), 'type');
+        $types = $old === null ? EmployeeType::cases() : [...array_map(EmployeeType::from(...), [$old, ...$later]), ...array_filter([$new])];
         if (PeriodGuard::lockedFrom($date, ...$types)) {
             throw ValidationException::withMessages([$field => __('errors.dated_change_period_locked')]);
         }
