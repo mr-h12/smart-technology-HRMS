@@ -86,6 +86,13 @@ class AttendanceLockTest extends TestCase
             AttendanceDay::where(['employee_id' => $left, 'source' => 'derived'])->orderBy('date')->pluck('date')->map(fn ($d) => substr((string) $d, 0, 10))->all());
     }
 
+    public function test_the_missing_days_of_an_archived_employee_alone_still_need_confirming(): void
+    {
+        $this->employee('permanent_worker', '2026-01-01', ['termination_date' => '2026-10-20']);   // the group's only member, archived
+
+        $this->lock(['group' => 'permanent_worker'])->assertStatus(422)->assertJsonPath('error.code', 'missing_days_unconfirmed');
+    }
+
     public function test_lock_materializes_derived_days_as_stored_rows(): void
     {
         $this->lock(['confirm_missing' => true]);
