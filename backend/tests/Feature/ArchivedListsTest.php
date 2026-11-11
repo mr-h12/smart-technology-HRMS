@@ -2,6 +2,7 @@
 
 namespace Tests\Feature;
 
+use App\Modules\Attendance\Application\AttendanceGrid;
 use App\Modules\Attendance\Application\AttendanceTemplate;
 use App\Modules\Employees\Domain\EmployeeType;
 use Illuminate\Foundation\Testing\RefreshDatabase;
@@ -80,5 +81,59 @@ class ArchivedListsTest extends TestCase
         $this->patchJson("/api/v1/employees/{$left}", ['termination_date' => null, 'termination_reason' => null])->assertOk();
 
         $this->assertCount(6, array_keys($this->onEveryList(), $left, true));                      // once on each of the six lists
+    }
+
+    /** $left (terminated 10-19) and $stays, both engineers with no stored day in the period of 2026-09-26: 21 and 22 missing days. */
+    private function twoEngineers(): array
+    {
+        return [$this->employee('engineer', '2026-01-01', ['termination_date' => '2026-10-19']), $this->employee('engineer')];
+    }
+
+    public function test_hr_brings_archived_employees_back_to_the_grid_and_its_header_count(): void
+    {
+        [$left, $stays] = $this->twoEngineers();
+
+        $this->getJson('/api/v1/attendance/period?group=engineer')->assertOk()->assertJsonPath('data.missing', 22);
+        $this->getJson('/api/v1/attendance/period?group=engineer&with_archived=1')->assertOk()->assertJsonPath('data.missing', 22 + 21);
+        $rows = $this->getJson('/api/v1/attendance/grid?group=engineer&with_archived=1')->assertOk()->json('data');
+        $this->assertSame([[$left, true], [$stays, false]], array_map(fn (array $r) => [$r['employee']['id'], $r['employee']['archived']], $rows));
+        $this->assertSame([$stays], $this->ids('/api/v1/attendance/grid?group=engineer', 'data.*.employee.id'));
+        $this->getJson('/api/v1/attendance/grid?group=engineer&with_archived=maybe')->assertStatus(422);
+    }
+
+    public function test_with_archived_is_ignored_without_attendance_edit_at_all_scope(): void
+    {
+        [, $stays] = $this->twoEngineers();
+        $this->signIn('ceo');                                                                       // attendance.view.all only
+
+        $this->assertSame([$stays], $this->ids('/api/v1/attendance/grid?group=engineer&with_archived=1', 'data.*.employee.id'));
+        $this->getJson('/api/v1/attendance/period?group=engineer&with_archived=1')->assertOk()->assertJsonPath('data.missing', 22);
+    }
+
+    public function test_the_site_filtered_grid_keeps_an_archived_office_employee_with_the_switch(): void
+    {
+        $o = $this->employee('office', '2026-01-01', ['termination_date' => '2026-10-19']);
+        $this->homeSite($o, $this->site, '2026-01-01');
+
+        $this->assertSame([$o], $this->ids("/api/v1/attendance/grid?group=office&site_id={$this->site}&with_archived=1", 'data.*.employee.id'));
+        $this->assertSame([], $this->ids("/api/v1/attendance/grid?group=office&site_id={$this->site}", 'data.*.employee.id'));
+    }
+
+    public function test_the_missing_list_still_lists_archived_employees_flagged(): void
+    {
+        [$left, $stays] = $this->twoEngineers();
+
+        $rows = $this->getJson('/api/v1/attendance/missing?group=engineer&per_page=100')->assertOk()->json('data');
+        $flags = collect($rows)->groupBy('employee_id')->map(fn ($r) => [count($r), $r->pluck('archived')->unique()->all()])->all();
+        $this->assertSame([$left => [21, [true]], $stays => [22, [false]]], $flags);
+    }
+
+    public function test_the_evening_alert_leaves_archived_employees_out(): void
+    {
+        [$left] = $this->twoEngineers();
+        $this->putDay($left, '2026-10-12', ['site_id' => $this->site, 'in_time' => '08:00'])->assertOk();   // an open day
+
+        $row = collect(app(AttendanceGrid::class)->missingCounts('2026-10-20'))->firstWhere(fn (array $r) => $r['group'] === 'engineer' && $r['period_start'] === '2026-09-26');
+        $this->assertSame([22, 0], [$row['missing'], $row['open']]);
     }
 }

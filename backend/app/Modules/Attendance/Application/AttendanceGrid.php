@@ -33,8 +33,12 @@ final class AttendanceGrid
 
     public function __construct(private readonly EmployeeRoster $roster, private readonly EffectiveDays $days, private readonly BusinessRules $rules, private readonly DayCrew $crew) {}
 
-    /** @return array{group: string, start: string, end: string, prev_start: string, next_start: ?string, is_locked: bool, lock: ?array<string, mixed>, missing: int} */
-    public function period(EmployeeType $g, ?string $start, ?string $date = null, ?string $ownerId = null): array
+    /**
+     * `missing` follows the grid: archived employees count only with $withArchived (HR's switch, owner 2026-11-11).
+     *
+     * @return array{group: string, start: string, end: string, prev_start: string, next_start: ?string, is_locked: bool, lock: ?array<string, mixed>, missing: int}
+     */
+    public function period(EmployeeType $g, ?string $start, ?string $date = null, ?string $ownerId = null, bool $withArchived = false): array
     {
         $p = $this->periodAt($g, $start, $date);
         $next = $p->next();
@@ -47,7 +51,7 @@ final class AttendanceGrid
             'next_start' => $next->start > EffectiveDays::today() ? null : $next->start,
             'is_locked' => PeriodGuard::isLocked($p),
             'lock' => $this->lock($p),
-            'missing' => count($this->missingDays($p, $ownerId)),
+            'missing' => count($this->missingDays($p, $ownerId, $withArchived)),
         ];
     }
 
@@ -56,22 +60,24 @@ final class AttendanceGrid
      * plus, for All and office, the office staff at that site on the period's last day (owner, 2026-11-08).
      * A null $g is All (owner, 2026-11-08, office added to 2026-11-05's field types): every type over the engineers' 26th→25th window.
      * $search keeps the employees whose name contains it or whose code is it, as the employees list does (owner, 2026-11-10).
+     * $withArchived (HR's switch, owner 2026-11-11) brings archived employees back as rows, each flagged `archived`.
      *
      * @return array{data: list<array<string, mixed>>, pagination: array{page: int, per_page: int, total: int, total_pages: int, has_next_page: bool, has_previous_page: bool}}
      */
-    public function grid(?EmployeeType $g, ?string $start, int $perPage, int $page, ?string $date = null, ?string $ownerId = null, ?string $siteId = null, ?string $search = null): array
+    public function grid(?EmployeeType $g, ?string $start, int $perPage, int $page, ?string $date = null, ?string $ownerId = null, ?string $siteId = null, ?string $search = null, bool $withArchived = false): array
     {
         $p = $this->periodAt($g ?? EmployeeType::Engineer, $start, $date);
+        $employees = $this->roster->withArchived($withArchived);
         $ids = $siteId === null ? null : [
             ...AttendanceDay::where('site_id', $siteId)->whereBetween('date', [$p->start, $p->end])->distinct()->pluck('employee_id')->map(fn ($id) => (string) $id)->all(),
-            ...($g === null || $g === EmployeeType::Office ? $this->roster->officeIdsAt($siteId, $p->end) : []),
+            ...($g === null || $g === EmployeeType::Office ? $employees->officeIdsAt($siteId, $p->end) : []),
         ];
-        $roster = $this->roster->ofType($g === null ? EmployeeType::cases() : [$g], $p->start, $p->end, $perPage, $page, $ownerId, $ids, $search);
+        $roster = $employees->ofType($g === null ? EmployeeType::cases() : [$g], $p->start, $p->end, $perPage, $page, $ownerId, $ids, $search);
         $days = $g === null ? $this->daysOfEveryType($p, $roster['data']) : $this->days->forPeriod($p, $roster['data']);
 
         return [
             'data' => array_map(fn (array $e) => [
-                'employee' => ['id' => $e['id'], 'code' => $e['code'], 'name_ar' => $e['name_ar'], 'name_en' => $e['name_en']],
+                'employee' => ['id' => $e['id'], 'code' => $e['code'], 'name_ar' => $e['name_ar'], 'name_en' => $e['name_en'], 'archived' => $e['archived']],
                 'days' => array_values(array_map(
                     fn (array $d) => ['date' => $d['date'], 'state' => $d['state'], 'source' => $d['source'], 'site_id' => $d['site_id'], 'leave_code' => $d['leave_code']],
                     $days[$e['id']],
@@ -81,10 +87,14 @@ final class AttendanceGrid
         ];
     }
 
-    /** @return array{data: list<array{employee_id: string, code: int, name_ar: string, name_en: ?string, date: string}>, pagination: array{page: int, per_page: int, total: int, total_pages: int, has_next_page: bool, has_previous_page: bool}} */
+    /**
+     * The lock dialog's list: archived employees employed in the period too, flagged, since the lock still needs their days (owner, 2026-11-11).
+     *
+     * @return array{data: list<array{employee_id: string, code: int, name_ar: string, name_en: ?string, archived: bool, date: string}>, pagination: array{page: int, per_page: int, total: int, total_pages: int, has_next_page: bool, has_previous_page: bool}}
+     */
     public function missing(EmployeeType $g, ?string $start, int $perPage, ?string $date = null, ?string $ownerId = null): array
     {
-        $all = $this->missingDays($this->periodAt($g, $start, $date), $ownerId);
+        $all = $this->missingDays($this->periodAt($g, $start, $date), $ownerId, true);
         $perPage = min(max($perPage, 1), 100);
         $page = Paginator::resolveCurrentPage();
         $total = count($all);
@@ -267,6 +277,7 @@ final class AttendanceGrid
      * The 21:00 alert's counts (owner, 2026-11-05), per group, for the open periods among the one containing $date and the one before,
      * up to $date: `missing` unrecorded days; `open` field days with an arrival and no departure (office never; a locked period never);
      * `crew_changes` the site managers' crew changes on $date (day laborers, the current period only). Counts only, never names (§9).
+     * Archived employees are left out (owner, 2026-11-11): the roster's default.
      *
      * @return list<array{group: string, period_start: string, period_end: string, missing: int, open: int, crew_changes: int}>
      */
@@ -345,17 +356,21 @@ final class AttendanceGrid
         return $days;
     }
 
-    /** @return list<array{employee_id: string, code: int, name_ar: string, name_en: ?string, date: string}> by code then date */
-    private function missingDays(Period $p, ?string $ownerId = null): array
+    /**
+     * One path, three answers for archived employees: the header count follows the grid, the lock dialog's list includes them, the 21:00 alert leaves them out.
+     *
+     * @return list<array{employee_id: string, code: int, name_ar: string, name_en: ?string, archived: bool, date: string}> by code then date
+     */
+    private function missingDays(Period $p, ?string $ownerId = null, bool $withArchived = false): array
     {
         // ponytail: in-PHP count over ~100 employees × 31 days; move to SQL if a group grows past ~1,000
-        $employees = $this->roster->allOfType($p->group, $p->start, $p->end, $ownerId);
+        $employees = $this->roster->withArchived($withArchived)->allOfType($p->group, $p->start, $p->end, $ownerId);
         $days = $this->days->forPeriod($p, $employees);
         $missing = [];
         foreach ($employees as $e) {
             foreach ($days[$e['id']] as $d) {
                 if ($d['state'] === 'missing') {
-                    $missing[] = ['employee_id' => $e['id'], 'code' => $e['code'], 'name_ar' => $e['name_ar'], 'name_en' => $e['name_en'], 'date' => $d['date']];
+                    $missing[] = ['employee_id' => $e['id'], 'code' => $e['code'], 'name_ar' => $e['name_ar'], 'name_en' => $e['name_en'], 'archived' => $e['archived'], 'date' => $d['date']];
                 }
             }
         }
