@@ -1,5 +1,6 @@
 import {
   Activity,
+  Banknote,
   Bus,
   CalendarCheck,
   CalendarDays,
@@ -49,6 +50,7 @@ export const NAV: { group: string; items: { path: string; key: string; icon: Luc
       { path: '/leave', key: 'nav.leave', icon: CalendarDays, abilities: ['leave.view'] },
       { path: '/wage-proposals', key: 'nav.wageProposals', icon: HandCoins, abilities: ['employee.approve_wage'] },
       { path: '/team-fares', key: 'nav.teamFares', icon: Bus, abilities: ['fare.manage', 'employee.view.own'] },
+      { path: '/payroll', key: 'nav.payroll', icon: Banknote, abilities: ['payroll.view'] },
     ],
   },
   { group: 'nav.group.settings', items: [{ path: '/settings', key: 'nav.settings', icon: Settings, abilities: ['site.view.all', 'setting.view', 'attendance.view'] }] },

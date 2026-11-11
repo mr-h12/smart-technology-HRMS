@@ -1,4 +1,4 @@
-import { CalendarCheck, ChevronLeft, ChevronRight, FileSpreadsheet, ListChecks, Lock, LockOpen, Users } from 'lucide-react'
+import { CalendarCheck, FileSpreadsheet, ListChecks, Lock, LockOpen, Users } from 'lucide-react'
 import { useId, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { useSearchParams } from 'react-router-dom'
@@ -7,6 +7,7 @@ import { Alert } from '@/components/common/Alert'
 import { EmptyState } from '@/components/common/EmptyState'
 import { FilterSelect, SearchInput } from '@/components/common/Filters'
 import { PageHeader } from '@/components/common/PageHeader'
+import { PeriodArrows } from '@/components/common/PeriodArrows'
 import { StatusBadge } from '@/components/common/StatusBadge'
 import { cairoToday, Dates, ErrorBanner, Field, FormDialog, localName, ltrDates, type Row, SelectField, useCairoTime, weekdayOf } from '@/components/form'
 import { TableSkeleton } from '@/components/layout/PageSkeleton'
@@ -121,18 +122,9 @@ export function AttendancePage() {
             {t('attendance.withArchived')}
           </label>
         )}
-        <div className="flex flex-wrap items-center gap-1">
-          <Button variant="outline" size="icon" disabled={!period} onClick={() => period && move(period.prev_start)} aria-label={t('attendance.prevPeriod')}>
-            <ChevronLeft className="rtl:-scale-x-100" aria-hidden />
-          </Button>
-          <span className="px-1 text-sm font-medium whitespace-nowrap">
-            {period ? ltrDates(t('attendance.periodRange', { start: period.start, end: period.end })) : '—'}
-          </span>
-          <Button variant="outline" size="icon" disabled={!period?.next_start} onClick={() => period?.next_start && move(period.next_start)} aria-label={t('attendance.nextPeriod')}>
-            <ChevronRight className="rtl:-scale-x-100" aria-hidden />
-          </Button>
+        <PeriodArrows period={period} onMove={move}>
           {!all && period?.is_locked && <StatusBadge variant="neutral" label={t('attendance.locked')} />}
-        </div>
+        </PeriodArrows>
       </div>
       {!all && period?.is_locked && period.lock && (
         <div className="border-b p-4">
