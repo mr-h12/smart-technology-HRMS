@@ -31,6 +31,7 @@ _Avoid_: الكود; code (in the UI)
 
 **Archive** (الأرشيف):
 The employees whose termination date has passed. The termination day itself is still worked, so an employee leaves the active list the day after. Reactivating an archived employee clears the termination date and reason, which counts the days since as employed again.
+Archived employees are hidden everywhere by default: in no list, search, picker, count or alert (owner, 2026-11-11). Only all-scope viewers reach them, through the Archive view of the employees list, on a read-only page whose only actions are Reactivate and correcting the termination date or reason; a site manager never reaches them. HR shows them on the period grid («إظهار من تركوا العمل») to finish their last days. The lock and payroll still include them.
 _Avoid_: inactive list, deleted (a deleted employee is gone from both lists)
 
 **View as** (عرض كـ):
