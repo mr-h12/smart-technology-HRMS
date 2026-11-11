@@ -35,6 +35,8 @@ return [
     'document_type' => 'يُقبل فقط ملف PDF أو JPG أو PNG أو WEBP.',
     'fare_site_not_yours' => 'هذا الموقع ليس من مواقعك.',
     'fare_period_locked' => 'هذا التاريخ داخل فترة حضور مقفلة.',
+    'dated_change_period_locked' => 'هذا التغيير يمس فترة حضور مقفلة. أعد فتح الفترة أولًا.',
+    'type_change_not_period_start' => 'يجب أن يبدأ تغيير النوع من أول يوم في فترة النوع الجديد.',
     'employee_type' => [
         'office' => 'موظف مثبت شركة',
         'engineer' => 'مهندس',

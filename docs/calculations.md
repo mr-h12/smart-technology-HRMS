@@ -242,7 +242,7 @@ Day cost comes from the engineer (section 2), permanent worker (section 3) or da
 ## 10. New hires, leavers, changes and end of service
 - Days not employed in a period (before hire, after leaving) → absence deduction over **30** days (section 1). HR can edit.
 - A salary change splits the period at its effective date; each part uses its own day rate.
-- A type change (monthly ↔ daily) starts at a period boundary.
+- A type change starts on the first day of a period of the new type. ⚠️ (R32) When that day does not start a period of the old type (engineers or permanent workers ↔ office or day laborers; office → day laborer on the 16th), the old type's last period ends the day before, and its remaining days are not employed (first bullet). This is the default until the owner answers.
 - End-of-service bonus suggestion = **0.5** month × years of service × last total wage (basic + incentives). HR edits it. ⚠️ Are fractions of a year counted? Which wage is the base? (The client's form drops the extra months.)
 - Clearance is allowed only when the employee has no open custody items.
 

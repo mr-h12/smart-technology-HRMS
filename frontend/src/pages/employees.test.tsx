@@ -512,6 +512,80 @@ test('pay dialog shapes its fields by the type in force on the chosen date', asy
   expect(screen.getByLabelText('الأجر اليومي')).toBeInTheDocument()
 })
 
+test('pay dialog opens with the current pay', async () => {
+  const post = vi.fn(() => json(201, { data: {} }))
+  const current_pay = { id: 'p1', effective_from: '2026-01-01', salary: '9000.000000', raise: '500.000000', insured_basic: '5000.000000', daily_wage: null, shift_start: '10:00:00', shift_end: '18:00:00' }
+  mockFetch({ 'GET /api/v1/residences': residences, 'POST /api/v1/employees/e1/pay-changes': post,
+    'GET /api/v1/employees/e1': () => json(200, { data: { ...emp, current_pay, pay_changes: [current_pay] } }) })
+  renderWithAuth(<EmployeeDetailRoute id="e1" tab="history" />, ALL, { router: false })
+  await user.click((await screen.findAllByRole('button', { name: 'إضافة تغيير' }))[1])
+  expect(screen.getByLabelText('المرتب')).toHaveValue('9000')
+  expect(screen.getByLabelText('العلاوة')).toHaveValue('500')
+  expect(screen.getByLabelText('الأساسي التأميني')).toHaveValue('5000')
+  expect(screen.getByLabelText('بداية الوردية')).toHaveValue('10:00')
+  expect(screen.getByLabelText('انتهاء الوردية')).toHaveValue('6:00')
+  // a cleared field goes out blank, so the server clears it instead of keeping the pay in force
+  await user.type(screen.getByLabelText('ساري اعتبارًا من'), '2026-11-01')
+  await user.clear(screen.getByLabelText('الأساسي التأميني'))
+  await user.click(within(screen.getByRole('dialog')).getByRole('button', { name: 'حفظ' }))
+  await waitFor(() => expect(post).toHaveBeenCalledTimes(1))
+  expect(JSON.parse((post.mock.calls[0] as unknown as [string, RequestInit])[1].body as string))
+    .toEqual({ effective_from: '2026-11-01', salary: '9000', raise: '500', insured_basic: '', shift_start: '10:00', shift_end: '18:00' })
+})
+
+const now = { id: 'p1', effective_from: '2026-01-01', salary: '9000.000000', raise: '500.000000', insured_basic: '5000.000000', daily_wage: null, shift_start: '10:00:00', shift_end: '18:00:00' }
+const ahead = { id: 'p2', effective_from: '2026-12-01', salary: '10000.000000', raise: '600.000000', insured_basic: '5500.000000', daily_wage: null, shift_start: '08:00:00', shift_end: '16:00:00' }
+
+test('pay dialog fills from the pay in force on the chosen date', async () => {
+  const post = vi.fn(() => json(201, { data: {} }))
+  mockFetch({ 'GET /api/v1/residences': residences, 'POST /api/v1/employees/e1/pay-changes': post,
+    'GET /api/v1/employees/e1': () => json(200, { data: { ...emp, current_pay: now, pay_changes: [now, ahead] } }) })
+  renderWithAuth(<EmployeeDetailRoute id="e1" tab="history" />, ALL, { router: false })
+  await user.click((await screen.findAllByRole('button', { name: 'إضافة تغيير' }))[1])
+  const date = screen.getByLabelText('ساري اعتبارًا من')
+  await user.type(date, '2025-06-01') // before the first row: nothing in force
+  expect(screen.getByLabelText('المرتب')).toHaveValue('')
+  await user.clear(date)
+  await user.type(date, '2027-01-01') // the December row entered ahead is in force then, not today's
+  expect(screen.getByLabelText('المرتب')).toHaveValue('10000')
+  expect(screen.getByLabelText('بداية الوردية')).toHaveValue('8:00')
+  await user.click(within(screen.getByRole('dialog')).getByRole('button', { name: 'حفظ' }))
+  await waitFor(() => expect(post).toHaveBeenCalledTimes(1))
+  expect(JSON.parse((post.mock.calls[0] as unknown as [string, RequestInit])[1].body as string))
+    .toEqual({ effective_from: '2027-01-01', salary: '10000', raise: '600', insured_basic: '5500', shift_start: '08:00', shift_end: '16:00' })
+})
+
+test('a date change keeps the pay HR typed and refills only the untouched fields', async () => {
+  const post = vi.fn(() => json(201, { data: {} }))
+  mockFetch({ 'GET /api/v1/residences': residences, 'POST /api/v1/employees/e1/pay-changes': post,
+    'GET /api/v1/employees/e1': () => json(200, { data: { ...emp, current_pay: now, pay_changes: [now, ahead] } }) })
+  renderWithAuth(<EmployeeDetailRoute id="e1" tab="history" />, ALL, { router: false })
+  await user.click((await screen.findAllByRole('button', { name: 'إضافة تغيير' }))[1])
+  await user.clear(screen.getByLabelText('المرتب'))
+  await user.type(screen.getByLabelText('المرتب'), '9500') // typed over today's 9000, before the date
+  await user.type(screen.getByLabelText('ساري اعتبارًا من'), '2027-01-01') // the December row is in force then
+  expect(screen.getByLabelText('المرتب')).toHaveValue('9500')
+  expect(screen.getByLabelText('العلاوة')).toHaveValue('600')
+  await user.click(within(screen.getByRole('dialog')).getByRole('button', { name: 'حفظ' }))
+  await waitFor(() => expect(post).toHaveBeenCalledTimes(1))
+  expect(JSON.parse((post.mock.calls[0] as unknown as [string, RequestInit])[1].body as string))
+    .toEqual({ effective_from: '2027-01-01', salary: '9500', raise: '600', insured_basic: '5500', shift_start: '08:00', shift_end: '16:00' })
+})
+
+test('a reopened pay dialog drops the last error', async () => {
+  mockFetch({ 'GET /api/v1/residences': residences, 'GET /api/v1/employees/e1': () => json(200, { data: emp }),
+    'POST /api/v1/employees/e1/pay-changes': () => json(422, { error: { code: 'validation_failed', message: 'Invalid', details: [{ field: 'salary', code: 'x', message: 'المرتب مطلوب' }] } }) })
+  renderWithAuth(<EmployeeDetailRoute id="e1" tab="history" />, ALL, { router: false })
+  const add = (await screen.findAllByRole('button', { name: 'إضافة تغيير' }))[1]
+  await user.click(add)
+  await user.click(within(screen.getByRole('dialog')).getByRole('button', { name: 'حفظ' }))
+  expect(await screen.findByText('المرتب مطلوب')).toBeInTheDocument()
+  await user.keyboard('{Escape}')
+  await user.click(add)
+  expect(screen.getByRole('dialog')).toBeInTheDocument()
+  expect(screen.queryByText('المرتب مطلوب')).toBeNull()
+})
+
 test('type-change dialog rejects the type already in force on that date', async () => {
   openEmp(history)
   const user = userEvent.setup()

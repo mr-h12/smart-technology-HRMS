@@ -70,6 +70,9 @@ export function parseBatch(input: string, rows: SheetRow[]): { matches: SheetRow
 /** A stored time ("HH:MM" or "HH:MM:SS") as "HH:MM"; null stays null. */
 export const hhmm = (t: string | number | null) => (t == null ? null : String(t).slice(0, 5))
 
+/** "350.000000" → "350", "312.500000" → "312.5": the stored amount as HR would type it. */
+export const plainAmount = (v: string) => (v.includes('.') ? v.replace(/\.?0+$/, '') : v)
+
 /** The bulk rows for one action over the chosen rows, each read by its own type; rows already in the target state are left out. */
 export function bulkRows(action: SheetAction, rows: SheetRow[], leaveTypeId: (code: string) => string | undefined): { rows: BulkRow[]; skipped: SheetRow[] } {
   const out: BulkRow[] = []

@@ -187,7 +187,8 @@ class AttendanceTemplateTest extends TestCase
         $movedOut = $this->employee('engineer');
         $movedIn = $this->employee('day_laborer');
         app(EmployeeService::class)->addTypeChange($movedOut, ['type' => 'day_laborer', 'effective_from' => '2026-10-16']);
-        app(EmployeeService::class)->addTypeChange($movedIn, ['type' => 'engineer', 'effective_from' => '2026-10-12']);
+        // Written directly: rows from before a type change had to start a period (imports, existing data) still grey the days before them.
+        Employee::findOrFail($movedIn)->typeChanges()->create(['type' => 'engineer', 'effective_from' => '2026-10-12']);
 
         $this->assertCount(4, $this->download(self::ENGINEERS)['attendance']['rows']);
         $dates = $this->dates();
