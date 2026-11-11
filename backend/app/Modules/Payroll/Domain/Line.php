@@ -19,17 +19,35 @@ final readonly class Line
     ) {}
 
     /**
-     * An engine's line: each amount rounded to 6 decimals, flagged with each day flag's name (the part before `:`) once, in
-     * first-seen order, and `negative_net` when the net is below 0.
+     * An engine's line: the net added last (net()), each amount rounded to 6 decimals, flagged with each day flag's name (the
+     * part before `:`) once, in first-seen order, and `negative_net` when the net is below 0.
      *
-     * @param  array<string, numeric-string>  $components  Component value → unrounded amount
+     * @param  array<string, numeric-string>  $components  Component value → unrounded amount, the net left out
      * @param  list<DayLine>  $days
      */
     public static function computed(array $components, array $days): self
     {
+        $components[Component::Net->value] = self::net($components);
         $flags = array_map(fn (string $f) => explode(':', $f)[0], array_merge(...array_column($days, 'flags')));
 
         return (new self(array_map(Money::round6(...), $components), $days, array_values(array_unique($flags))))->withNegativeNetFlag();
+    }
+
+    /**
+     * The net formula of every type, in one place (calculations §1–§4): each component times its sign, unrounded. Linear, so the
+     * change of a few components gives the change of the net.
+     *
+     * @param  array<string, numeric-string>  $components  Component value → amount
+     * @return numeric-string
+     */
+    public static function net(array $components): string
+    {
+        $net = '0';
+        foreach ($components as $c => $amount) {
+            $net = Money::add($net, Money::mul((string) Component::from($c)->sign(), $amount));
+        }
+
+        return $net;
     }
 
     /**

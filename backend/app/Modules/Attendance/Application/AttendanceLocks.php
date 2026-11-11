@@ -7,6 +7,7 @@ namespace App\Modules\Attendance\Application;
 use App\Modules\Attendance\Domain\AttendanceAuditEvents;
 use App\Modules\Attendance\Domain\AttendanceRefusal;
 use App\Modules\Attendance\Domain\AttendanceRefused;
+use App\Modules\Attendance\Domain\Period;
 use App\Modules\Attendance\Infrastructure\Eloquent\AttendanceDay;
 use App\Modules\Attendance\Infrastructure\Eloquent\AttendanceLock;
 use App\Modules\Attendance\Infrastructure\Eloquent\OfficialHoliday;
@@ -24,6 +25,12 @@ use Illuminate\Support\Facades\DB;
 final class AttendanceLocks
 {
     public function __construct(private readonly AttendanceGrid $grid, private readonly EffectiveDays $days, private readonly EmployeeRoster $roster) {}
+
+    /** Whether the period's attendance is locked, for the modules that only read it (Payroll). */
+    public static function isLocked(Period $p): bool
+    {
+        return PeriodGuard::isLocked($p);
+    }
 
     /**
      * Also lists, read before the derived days are stored: on a re-lock, the dates no longer official holidays whose stored days a holiday

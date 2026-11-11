@@ -27,25 +27,17 @@ final class DayLaborerEngine
             $dayLines[] = new DayLine($d->date, $d->siteId, array_map(Money::round6(...), $parts), Money::round6($dayCost), $flags);
         }
 
-        $bonus = $entry['bonus'] ?? '0';
-        $deduction = $entry['deduction'] ?? '0';
-        $net = Money::sub(
-            Money::sum($sum['wages'], $sum['allowance'], $sum['transport'], $sum['overtime'], $bonus),
-            Money::sum($sum['lateness'], $sum['advances'], $deduction),
-        );
-        $components = [
+        // §4: net = Σ wage + Σ allowance + Σ transport + Σ OT + bonuses − Σ lateness − advances − deductions (Line::net).
+        return Line::computed([
             Component::Wages->value => $sum['wages'],
             Component::Allowance->value => $sum['allowance'],
             Component::Transport->value => $sum['transport'],
             Component::Overtime->value => $sum['overtime'],
-            Component::Bonus->value => $bonus,
+            Component::Bonus->value => $entry['bonus'] ?? '0',
             Component::Lateness->value => $sum['lateness'],
             Component::Advances->value => $sum['advances'],
-            Component::Deduction->value => $deduction,
-            Component::Net->value => $net,
-        ];
-
-        return Line::computed($components, $dayLines);
+            Component::Deduction->value => $entry['deduction'] ?? '0',
+        ], $dayLines);
     }
 
     /**

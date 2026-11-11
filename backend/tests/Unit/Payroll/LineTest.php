@@ -16,4 +16,13 @@ class LineTest extends TestCase
         $settled = new Line(['net' => '0.000000'], [], ['negative_net', 'missing']);
         $this->assertSame(['missing'], $settled->withNegativeNetFlag()->flags);
     }
+
+    public function test_net_is_each_component_by_its_sign(): void
+    {
+        // Pay adds, deductions subtract; insured basic, incentives, the company's insurance share and a net already there count nothing.
+        $components = ['salary' => '9000', 'bonus' => '100', 'lateness' => '50', 'income_tax' => '400', 'insured_basic' => '5000', 'incentives' => '4000', 'insurance_company' => '700', 'net' => '1'];
+
+        $this->assertSame('8650.000000000000', Line::net($components));
+        $this->assertSame('8650.000000', Line::computed($components, [])->components['net']);
+    }
 }

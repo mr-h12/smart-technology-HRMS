@@ -34,16 +34,11 @@ final class MonthlyFieldEngine
 
         ['salary' => $salary, 'not_employed' => $notEmployed] = MonthlyBase::salary($days, $r);
         ['absence' => $absence, 'unpaid' => $unpaid, 'sick_cut' => $sickCut] = MonthlyBase::leave($days, $r);
-        $deduction = $entry['deduction'] ?? '0';
-        $insuranceEmployee = $entry['insurance_employee'] ?? '0';
-        $incomeTax = $entry['income_tax'] ?? '0';
         $insuredBasic = $entry['insured_basic'] ?? '0';
-        // §2 and §3: an engineer's day extra is overtime + outside − lateness, a permanent worker's OT money is overtime + outside.
-        $net = Money::sub(
-            Money::sum($salary, $sum['transport'], $sum['overtime'], $sum['outside']),
-            Money::sum($notEmployed, $sum['lateness'], $absence, $unpaid, $sickCut, $deduction, $insuranceEmployee, $incomeTax, $sum['advances']),
-        );
-        $components = [
+
+        // §2 and §3: net = salary + Σ day extra or OT money (overtime + outside − lateness) + Σ transport − absence − deduction
+        // − insurance − tax − advances, less the not-employed days and leave pay (§7, §10) (Line::net).
+        return Line::computed([
             Component::Salary->value => $salary,
             Component::Transport->value => $sum['transport'],
             Component::Overtime->value => $sum['overtime'],
@@ -53,17 +48,14 @@ final class MonthlyFieldEngine
             Component::UnpaidLeave->value => $unpaid,
             Component::SickCut->value => $sickCut,
             Component::NotEmployed->value => $notEmployed,
-            Component::Deduction->value => $deduction,
-            Component::InsuranceEmployee->value => $insuranceEmployee,
-            Component::IncomeTax->value => $incomeTax,
+            Component::Deduction->value => $entry['deduction'] ?? '0',
+            Component::InsuranceEmployee->value => $entry['insurance_employee'] ?? '0',
+            Component::IncomeTax->value => $entry['income_tax'] ?? '0',
             Component::Advances->value => $sum['advances'],
             Component::InsuranceCompany->value => $entry['insurance_company'] ?? '0',   // a company cost (§9), not in the net
             Component::InsuredBasic->value => $insuredBasic,
             Component::Incentives->value => Money::sub($salary, $insuredBasic),         // the payslip's split of the salary (§1)
-            Component::Net->value => $net,
-        ];
-
-        return Line::computed($components, $dayLines);
+        ], $dayLines);
     }
 
     /**

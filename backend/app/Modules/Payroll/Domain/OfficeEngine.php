@@ -37,36 +37,28 @@ final class OfficeEngine
         $overtime = Money::div(Money::mul(Money::mul((string) ($entry['ot_minutes'] ?? 0), $salary), $r->overtime), $minuteDivisor);
         $travel = Money::div(Money::mul((string) ($entry['travel_days'] ?? 0), $salary), $r->monthDays);                       // a day rate per travel day
         $tower = Money::div(Money::mul((string) ($entry['tower_days'] ?? 0), $salary), Money::mul($r->monthDays, '4'));   // a quarter day rate per tower day
-        $bonus = $entry['bonus'] ?? '0';
-        $negligence = $entry['negligence'] ?? '0';
-        $insuranceEmployee = $entry['insurance_employee'] ?? '0';
-        $incomeTax = $entry['income_tax'] ?? '0';
-        $advances = $entry['advances'] ?? '0';
         $insuredBasic = $entry['insured_basic'] ?? '0';
-        $net = Money::sub(
-            Money::sum($salary, $travel, $tower, $overtime, $bonus),
-            Money::sum($notEmployed, $lateness, $absence, $unpaid, $sickCut, $negligence, $insuranceEmployee, $incomeTax, $advances),
-        );
 
+        // §1: net = salary + travel + tower + overtime + bonus − insurance − tax − advance − negligence − lateness − absence, less
+        // the not-employed days and leave pay (§7, §10) (Line::net).
         return Line::computed([
             Component::Salary->value => $salary,
             Component::Travel->value => $travel,
             Component::Tower->value => $tower,
             Component::Overtime->value => $overtime,
-            Component::Bonus->value => $bonus,
+            Component::Bonus->value => $entry['bonus'] ?? '0',
             Component::Lateness->value => $lateness,
             Component::Absence->value => $absence,
             Component::UnpaidLeave->value => $unpaid,
             Component::SickCut->value => $sickCut,
             Component::NotEmployed->value => $notEmployed,
-            Component::Negligence->value => $negligence,
-            Component::InsuranceEmployee->value => $insuranceEmployee,
-            Component::IncomeTax->value => $incomeTax,
-            Component::Advances->value => $advances,
+            Component::Negligence->value => $entry['negligence'] ?? '0',
+            Component::InsuranceEmployee->value => $entry['insurance_employee'] ?? '0',
+            Component::IncomeTax->value => $entry['income_tax'] ?? '0',
+            Component::Advances->value => $entry['advances'] ?? '0',
             Component::InsuranceCompany->value => $entry['insurance_company'] ?? '0',   // a company cost (§9), not in the net
             Component::InsuredBasic->value => $insuredBasic,
             Component::Incentives->value => Money::sub($salary, $insuredBasic),         // the payslip's split of the salary (§1)
-            Component::Net->value => $net,
         ], $dayLines);
     }
 
