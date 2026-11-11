@@ -62,13 +62,13 @@ final class Money
     }
 
     /**
-     * Half-up to 6 decimals, away from zero for negatives. bcmath truncates toward zero, so add half a unit of the 6th decimal first.
+     * Half-up to 6 decimals, away from zero for negatives (bcround's default mode).
      *
      * @param  numeric-string  $a
      * @return numeric-string
      */
     public static function round6(string $a): string
     {
-        return bcadd($a, str_starts_with($a, '-') ? '-0.0000005' : '0.0000005', 6);
+        return bcround($a, 6);
     }
 }
