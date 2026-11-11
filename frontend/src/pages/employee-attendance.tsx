@@ -21,10 +21,14 @@ type EmployeePeriod = {
 const WEEK = ['saturday', 'sunday', 'monday', 'tuesday', 'wednesday', 'thursday', 'friday']
 /** Weekly off and official holidays: no colour, as the server's `off` count (AttendanceGrid::employeePeriod). */
 const OFF_CODES = ['friday', 'saturday', 'official_holiday', 'rest']
-/** What a day means on the calendar; the one source of its colour, its legend entry and the legend's count. */
+/**
+ * What a day means on the calendar; the one source of its colour, its legend entry, the legend's count and whether it opens.
+ * A derived day after today (a coming Friday or holiday) is future: nothing recorded it yet. A stored one keeps its kind.
+ */
 type Kind = 'present' | 'absent' | 'sick' | 'leave' | 'missing' | 'off' | 'future' | 'not_employed'
-const kind = (d: Day): Kind =>
+const kind = (d: Day, today: string): Kind =>
   d.state === 'missing' || d.state === 'future' || d.state === 'not_employed' ? d.state
+  : d.state === 'derived' && d.date > today ? 'future'
   : !d.leave_code ? 'present' // a stored day with no leave code; a derived day always has one
   : d.leave_code === 'absent' || d.leave_code === 'sick' ? d.leave_code
   : OFF_CODES.includes(d.leave_code) ? 'off'
@@ -91,7 +95,7 @@ export function EmployeeAttendance({ emp }: { emp: Row }) {
               {LEGEND.map((k) => (
                 <li key={k} className="flex items-center gap-1.5">
                   <span aria-hidden className={cn('size-3 rounded-full', LOOK[k])} />
-                  {t(`attendance.employeeTab.${k}`)} <span className="font-semibold">{data.days.filter((d) => kind(d) === k).length}</span>
+                  {t(`attendance.employeeTab.${k}`)} <span className="font-semibold">{data.days.filter((d) => kind(d, today) === k).length}</span>
                 </li>
               ))}
             </ul>
@@ -109,12 +113,13 @@ export function EmployeeAttendance({ emp }: { emp: Row }) {
                   {days.map((d, j) => {
                     const text = label(d)
                     const isToday = d.date === today
+                    const k = kind(d, today)
                     return (
                       <li key={d.date} className="border-t py-1.5" style={j ? undefined : { gridColumnStart: WEEK.indexOf(weekdayOf(d.date)) + 1 }}>
-                        <button type="button" disabled={d.state === 'future' || d.state === 'not_employed'} onClick={() => setOpen(d.date)}
+                        <button type="button" disabled={k === 'future' || k === 'not_employed'} onClick={() => setOpen(d.date)}
                           aria-label={`${t(`weekday.${weekdayOf(d.date)}`)} ${d.date}: ${text}`} title={text} aria-current={isToday ? 'date' : undefined}
                           className={cn('flex min-h-tap w-full items-center justify-center rounded-md enabled:hover:bg-muted disabled:cursor-not-allowed', FOCUS)}>
-                          <span className={cn('flex size-9 items-center justify-center rounded-full text-base font-semibold sm:size-10 sm:text-lg', LOOK[kind(d)], isToday && 'ring-2 ring-primary ring-offset-2 ring-offset-card')}>
+                          <span className={cn('flex size-9 items-center justify-center rounded-full text-base font-semibold sm:size-10 sm:text-lg', LOOK[k], isToday && 'ring-2 ring-primary ring-offset-2 ring-offset-card')}>
                             {Number(d.date.slice(8))}
                           </span>
                         </button>

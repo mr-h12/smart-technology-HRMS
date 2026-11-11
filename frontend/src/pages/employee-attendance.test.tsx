@@ -122,6 +122,18 @@ test('today is marked, and a day that cannot be edited is disabled', async () =>
   expect(screen.getByRole('button', { name: 'الجمعة 2026-10-02: إجازة الجمعة' })).toBeEnabled()
 })
 
+test('a weekly off after today is future unless a record was stored for it', async () => {
+  // the fixture derives Friday 23 Oct; a holiday a period lock stored on Saturday 24 Oct has a record to show
+  mockFetch(routes({ ...engineer, days: engineer.days.map((d) => (d.date === '2026-10-24' ? day(d.date, 'stored', { leave_code: 'official_holiday' }) : d)) }))
+  show()
+  const derived = 'الجمعة 2026-10-23: إجازة الجمعة'
+  const stored = 'السبت 2026-10-24: إجازة رسمية'
+  expect(await screen.findByRole('button', { name: derived })).toBeDisabled()
+  expect(await circle(derived)).toHaveClass('opacity-50')
+  expect(screen.getByRole('button', { name: stored })).toBeEnabled()
+  expect(await circle(stored)).not.toHaveClass('opacity-50')
+})
+
 test('the arrows move to the neighbouring period by its date, and a locked period says so', async () => {
   const r = routes({ ...engineer, period: { ...engineer.period, is_locked: true } })
   mockFetch(r)
