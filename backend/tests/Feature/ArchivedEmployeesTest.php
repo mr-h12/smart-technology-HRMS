@@ -4,6 +4,8 @@ namespace Tests\Feature;
 
 use App\Modules\Employees\Infrastructure\Eloquent\Employee;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Str;
 use Tests\AttendanceFixtures;
 use Tests\TestCase;
 
@@ -33,5 +35,41 @@ class ArchivedEmployeesTest extends TestCase
         $this->assertSame([$lastDay, $staying], Employee::query()->archived(false)->orderBy('code')->pluck('id')->all());
         $this->getJson("/api/v1/employees/{$left}")->assertOk()->assertJsonPath('data.archived', true);
         $this->getJson("/api/v1/employees/{$lastDay}")->assertOk()->assertJsonPath('data.archived', false);
+    }
+
+    public function test_every_write_keyed_by_an_archived_employee_is_refused(): void
+    {
+        $this->cairo('2026-10-20 12:00');
+        $left = $this->employee('office', '2026-01-01', ['termination_date' => '2026-10-01']);
+        $doc = (string) Str::uuid();                                                                // the guard runs before the controller
+        $audit = DB::table('audit_log')->count();
+
+        foreach ([
+            ['PATCH', "employees/{$left}/code"],
+            ['POST', "employees/{$left}/type-changes"],
+            ['POST', "employees/{$left}/pay-changes"],
+            ['POST', "employees/{$left}/manager-assignments"],
+            ['POST', "employees/{$left}/site-assignments"],
+            ['POST', "employees/{$left}/fare-overrides"],
+            ['POST', "employees/{$left}/documents"],
+            ['PATCH', "employees/{$left}/documents/{$doc}"],
+            ['DELETE', "employees/{$left}/documents/{$doc}"],
+            ['PUT', "employees/{$left}/leave/2026"],
+        ] as [$method, $uri]) {
+            $this->json($method, "/api/v1/{$uri}")->assertStatus(409)->assertJsonPath('error.code', 'employee_archived');
+        }
+        $this->withHeader('Accept-Language', 'en')->postJson("/api/v1/employees/{$left}/type-changes")->assertStatus(409)
+            ->assertJsonPath('error.message', 'This employee has left (archived), so this change is not allowed.');
+        $this->assertSame($audit, DB::table('audit_log')->count());
+    }
+
+    public function test_delete_and_days_up_to_the_termination_date_still_write_for_an_archived_employee(): void
+    {
+        $this->cairo('2026-10-20 12:00');
+        $left = $this->employee('office', '2026-01-01', ['termination_date' => '2026-10-01']);
+
+        $this->putDay($left, '2026-10-01', ['site_id' => null, 'in_time' => '09:00'])->assertOk();
+        $this->putDay($left, '2026-10-02', ['site_id' => null, 'in_time' => '09:00'])->assertStatus(422)->assertJsonPath('error.code', 'employee_not_active');
+        $this->deleteJson("/api/v1/employees/{$left}")->assertNoContent();
     }
 }

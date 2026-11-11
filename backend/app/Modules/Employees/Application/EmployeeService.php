@@ -281,6 +281,12 @@ final class EmployeeService
         return $this->show($id);
     }
 
+    /** Whether this employee is archived today; false for an unknown id. */
+    public function isArchived(string $employeeId): bool
+    {
+        return Employee::isArchived(Employee::whereKey($employeeId)->value('termination_date'));
+    }
+
     /** Whether the employee is in the user's reach on $date (default today). */
     public function isManagedBy(string $employeeId, string $userId, ?string $date = null): bool
     {

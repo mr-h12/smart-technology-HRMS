@@ -26,6 +26,7 @@ return [
     'code_deleted_holder' => "This ID was used by a deleted employee; deleted employees' IDs are not reused.",
     'code_changed_meanwhile' => 'This ID was just taken. Choose another one.',
     'code_above_highest' => 'The ID cannot be above :max, the highest ID issued so far.',
+    'employee_archived' => 'This employee has left (archived), so this change is not allowed.',
     'code_zero_ceo' => "ID 0 is the CEO's alone: it is given only while no one holds it, and never swapped with another employee.",
     'allowance_value_required' => 'Value is required unless the allowance type is "None".',
     'document_too_large' => 'The file is larger than :max MB.',
