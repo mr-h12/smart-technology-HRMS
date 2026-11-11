@@ -176,10 +176,8 @@ final class EffectiveDays
         }
         // Field types; for engineers and day laborers a hint only: payroll reads their stored minutes (calculations §2).
         if ($type !== EmployeeType::Office && $day['site_id'] !== null && $day['leave_code'] === null && $day['in_time'] !== null && $day['out_time'] !== null) {
-            $scheduledIn = $day['scheduled_in'] ?? self::fieldShift($employee, $day['date'], $s)['start'];
-            /** @var numeric-string $dayHours */
-            $dayHours = $s['day_hours'];
-            $m = DayRules::workerMinutes($scheduledIn, $day['in_time'], $day['out_time'], $dayHours);
+            $shift = self::fieldShift($employee, $day['date'], $s);
+            $m = DayRules::workerMinutes($day['scheduled_in'] ?? $shift['start'], $day['scheduled_out'] ?? $shift['end'], $day['in_time'], $day['out_time']);
 
             return ['late_minutes' => $m['late'], 'ot_minutes' => $m['ot']];
         }

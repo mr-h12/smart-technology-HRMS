@@ -71,22 +71,23 @@ final class DayRules
     }
 
     /**
-     * An out time earlier than the in time is a night shift that crossed midnight.
+     * Late never wraps midnight (question 14). Overtime starts at the shift end (question 20): an out time earlier than its
+     * in time is the next day, the actual out against the actual in and the scheduled out against the scheduled in (§3).
      *
-     * @param  numeric-string  $dayHours
      * @return array{late: int, ot: int}
      */
-    public static function workerMinutes(string $scheduledIn, string $in, string $out, string $dayHours): array
+    public static function workerMinutes(string $scheduledIn, string $scheduledOut, string $in, string $out): array
     {
-        $worked = self::minutes($out) - self::minutes($in);
-        if ($worked < 0) {
-            $worked += 1440;
-        }
-
         return [
             'late' => self::lateMinutes($scheduledIn, $in),
-            'ot' => max(0, $worked - (int) bcmul($dayHours, '60', 6)),
+            'ot' => max(0, self::endMinutes($in, $out) - self::endMinutes($scheduledIn, $scheduledOut)),
         ];
+    }
+
+    /** The end in minutes after the start's midnight: an end before the start is the next day (+24 h). */
+    private static function endMinutes(string $start, string $end): int
+    {
+        return self::minutes($end) + (self::minutes($end) < self::minutes($start) ? 1440 : 0);
     }
 
     /**
