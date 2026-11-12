@@ -22,4 +22,18 @@ final class PermissionHolders
             ->orderBy('u.id')
             ->pluck('u.id')->map(fn (mixed $id) => (string) $id)->all());
     }
+
+    /** @return list<string> ids of the live roles holding the live `resource.action.scope` triple, whether or not any user has them */
+    public function roleIds(string $triple): array
+    {
+        [$resource, $action, $scope] = explode('.', $triple);
+
+        return array_values(DB::table('roles as r')
+            ->join('role_permissions as rp', 'rp.role_id', '=', 'r.id')
+            ->join('permissions as p', 'p.id', '=', 'rp.permission_id')
+            ->where(['p.resource' => $resource, 'p.action' => $action, 'p.scope' => $scope])
+            ->whereNull(['r.deleted_at', 'p.deleted_at'])
+            ->orderBy('r.id')
+            ->pluck('r.id')->map(fn (mixed $id) => (string) $id)->all());
+    }
 }
