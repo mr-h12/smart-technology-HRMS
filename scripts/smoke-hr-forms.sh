@@ -10,6 +10,7 @@ case "$form" in
   resignation) phrases=('استقالة' 'سارة مثال للاختبار' 'تسليم' 'مسوغات التعيين');;
   early-leave-request) phrases=('Smart Technology' 'سارة مثال للاختبار' 'طلب انصراف' 'لمدة ساعة' 'واحدة و' '30' 'دقيقة' '08:30' '17:30' '16:00' '15/11/2026');;
   mission-permit) phrases=('سارة مثال للاختبار' 'إذن مأمورية' '15/11/2026' 'متابعة موقع الاختبار');;
+  leave-permit) phrases=('سارة مثال للاختبار' 'إذن انصراف' 'ساعتان' '16/11/2026' '15/11/2026' '14:30' '16:30' 'موعد طبي');;
   late-permit) phrases=('سارة مثال للاختبار' 'إذن تأخير' 'ساعتان' '16/11/2026' '15/11/2026' '11:00' 'موعد طبي');;
   overtime-request) phrases=('سارة مثال للاختبار' 'طلب عمل إضافي' 'Overtime Request' 'Checkout Time' '17:35' 'ساعة واحدة');;
   advance-request) phrases=('سارة مثال للاختبار' 'طلب سلفة' 'Employee Salary' '9000.00' '250.50' 'General Manager');;
@@ -35,7 +36,7 @@ unsigned=$(docker exec "$app" php tests/Smoke/render-hr-form.php setup)
 docker exec "$app" php artisan queue:work redis --queue=pdf --once --tries=3 -v
 docker exec "$app" php tests/Smoke/render-hr-form.php export "$unsigned" > "$output/unsigned.pdf"
 pdfs=("$output/unsigned.pdf")
-if [[ "$form" != advance-request && "$form" != overtime-request && "$form" != late-permit && "$form" != early-leave-request && "$form" != resignation && "$form" != warning-notice && "$form" != mission-permit ]]; then
+if [[ "$form" != advance-request && "$form" != overtime-request && "$form" != late-permit && "$form" != early-leave-request && "$form" != resignation && "$form" != warning-notice && "$form" != mission-permit && "$form" != leave-permit ]]; then
   signed=$(docker exec "$app" php tests/Smoke/render-hr-form.php approve "$unsigned")
   docker exec "$app" php artisan queue:work redis --queue=pdf --once --tries=3 -v
   docker exec "$app" php tests/Smoke/render-hr-form.php export "$signed" > "$output/signed.pdf"

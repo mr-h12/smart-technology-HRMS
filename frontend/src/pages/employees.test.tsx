@@ -1323,3 +1323,44 @@ test('generates the mission permit from the employee file', async () => {
     ...Object.fromEntries(fields.map(([name, , value]) => [name, value])), idempotency_key: expect.any(String),
   })
 })
+
+test('generates the leave permit from the employee file', async () => {
+  const generate = vi.fn(() => json(202, { data: { id: 'export1' } }))
+  const fields = [
+    ['addressee', 'مقدم لسيادتكم', 'مدير الاختبار', 'text'],
+    ['permit_date', 'تاريخ الإذن', '2026-11-16', 'date'],
+    ['start_time', 'من الساعة', '14:30', 'time'],
+    ['end_time', 'إلى الساعة', '16:00', 'time'],
+    ['reason', 'الأسباب', 'موعد طبي', 'textarea'],
+    ['job_title', 'المسمى الوظيفي', 'مهندسة اختبار', 'text'],
+    ['responsible_manager', 'المدير المسؤول', 'مسؤول القسم', 'text'],
+    ['issued_on', 'تاريخ التحرير', '2026-11-15', 'date'],
+  ]
+  mockFetch({
+    'GET /api/v1/employees/e1': () => json(200, { data: emp }),
+    'GET /api/v1/residences': residences,
+    'GET /api/v1/hr-manual-form-definitions': () => json(200, { data: { forms: [{
+      type: 'leave_permit', fields: fields.map(([name, , , input]) => ({ name, input, required: true, max: null })),
+    }] } }),
+    'POST /api/v1/employees/e1/hr-forms/manual/leave_permit': generate,
+  })
+  renderWithAuth(<EmployeeDetailRoute id="e1" tab="documents" />, [
+    'employee.view.all', 'hr_forms.generate.all',
+  ], { router: false })
+
+  const heading = await screen.findByRole('heading', { name: 'إذن انصراف' })
+  const section = within(heading.closest('section')!)
+  expect(section.getByText(/الطباعة فقط/)).toBeInTheDocument()
+  const action = section.getByRole('button', { name: 'إنشاء الملف' })
+  await user.click(action)
+  expect(generate).not.toHaveBeenCalled()
+  for (const [, label, value] of fields) {
+    await user.type(section.getByLabelText(label), value)
+  }
+  await user.click(action)
+  await waitFor(() => expect(generate).toHaveBeenCalledOnce())
+  const sent = vi.mocked(fetch).mock.calls.find(([url, opts]) => String(url).endsWith('/manual/leave_permit') && opts?.method === 'POST')
+  expect(JSON.parse(String(sent?.[1]?.body))).toEqual({
+    ...Object.fromEntries(fields.map(([name, , value]) => [name, value])), idempotency_key: expect.any(String),
+  })
+})

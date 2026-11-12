@@ -1354,7 +1354,8 @@
       "notices": {
         "warning_notice": "الطباعة فقط. لا تنشئ سجلًا تأديبيًا أو خصمًا أو مدخلًا للرواتب ولا تغيّر سجلات الموظف."
       },
-      "mission_permit": "إذن مأمورية"
+      "mission_permit": "إذن مأمورية",
+      "leave_permit": "إذن انصراف"
     },
     "leaveRequest": "نموذج طلب إجازة",
     "notificationMethod": "طريقة التبليغ",

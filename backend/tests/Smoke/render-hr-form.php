@@ -31,6 +31,7 @@ $earlyLeave = getenv('HRMS_SMOKE_FORM') === 'early-leave-request';
 $resignation = getenv('HRMS_SMOKE_FORM') === 'resignation';
 $warningNotice = getenv('HRMS_SMOKE_FORM') === 'warning-notice';
 $missionPermit = getenv('HRMS_SMOKE_FORM') === 'mission-permit';
+$departurePermit = getenv('HRMS_SMOKE_FORM') === 'leave-permit';
 try {
     if ($argv[1] === 'setup') {
         $employee = app(EmployeeService::class)->create([
@@ -55,6 +56,12 @@ try {
                 'mission_date' => '2026-11-15',
                 'mission_reason' => 'متابعة موقع الاختبار.',
                 'department_manager' => 'مدير الاختبار',
+            ], null);
+        } elseif ($departurePermit) {
+            Auth::setUser($hr);
+            $row = app(ManualHrForms::class)->create('leave_permit', $employee, $hr->id, (string) Str::uuid7(), [
+                'addressee' => 'مدير الاختبار', 'permit_date' => '2026-11-16', 'start_time' => '14:30', 'end_time' => '16:30',
+                'reason' => 'موعد طبي', 'job_title' => 'مهندسة اختبار', 'responsible_manager' => 'مسؤول القسم', 'issued_on' => '2026-11-15',
             ], null);
         } elseif ($warningNotice) {
             Auth::setUser($hr);

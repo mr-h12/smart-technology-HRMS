@@ -1323,7 +1323,8 @@
       "notices": {
         "warning_notice": "Printing only. This creates no disciplinary record, deduction or payroll input and makes no changes to employee records."
       },
-      "mission_permit": "Mission Permit"
+      "mission_permit": "Mission Permit",
+      "leave_permit": "Departure Permit"
     },
     "leaveRequest": "Leave request PDF",
     "notificationMethod": "Notification method",

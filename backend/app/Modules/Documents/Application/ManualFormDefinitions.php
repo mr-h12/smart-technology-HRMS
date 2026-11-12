@@ -61,6 +61,19 @@ final class ManualFormDefinitions
                     'department_manager' => ['input' => 'text', 'rules' => ['required', 'string', 'max:160']],
                 ],
             ],
+            'leave_permit' => [
+                'view' => 'hr-forms.leave-permit',
+                'fields' => [
+                    'addressee' => ['input' => 'text', 'rules' => ['required', 'string', 'max:160']],
+                    'permit_date' => ['input' => 'date', 'rules' => ['required', 'date_format:Y-m-d']],
+                    'start_time' => ['input' => 'time', 'rules' => ['required', 'date_format:H:i']],
+                    'end_time' => ['input' => 'time', 'rules' => ['required', 'date_format:H:i', 'after:start_time']],
+                    'reason' => ['input' => 'textarea', 'rules' => ['required', 'string', 'max:500']],
+                    'job_title' => ['input' => 'text', 'rules' => ['required', 'string', 'max:160']],
+                    'responsible_manager' => ['input' => 'text', 'rules' => ['required', 'string', 'max:160']],
+                    'issued_on' => ['input' => 'date', 'rules' => ['required', 'date_format:Y-m-d']],
+                ],
+            ],
         ];
     }
 }
