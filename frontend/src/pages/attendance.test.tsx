@@ -22,6 +22,7 @@ const routes = {
   'GET /api/v1/attendance/period': () => json(200, { data: period }),
   'GET /api/v1/attendance/grid': () => json(200, { data: rows, meta: { pagination } }),
   'GET /api/v1/sites': () => json(200, { data: sites, meta: { pagination } }),
+  'GET /api/v1/attendance/missing': () => json(200, { data: [], meta: { pagination: { ...pagination, total: 0 } } }), // the lock dialog always reads it
 }
 
 test('the grid shows each employee per day with missing and derived days marked', async () => {
@@ -149,6 +150,47 @@ test('locking with missing days lists them and needs the confirm checkbox', asyn
   await waitFor(() => expect(lock).toHaveBeenCalled())
   expect(JSON.parse(String(lock.mock.calls[0][1]?.body))).toEqual({ group: 'engineer', period_start: '2026-09-26', confirm_missing: true })
   await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument())
+})
+
+test('the lock dialog lists the missing days from the missing list even when the header counts none, and marks those who left', async () => {
+  const lock = vi.fn((_url: string, _init?: RequestInit) => json(201, { data: lockReply() }))
+  mockFetch({
+    ...routes,
+    'GET /api/v1/attendance/period': () => json(200, { data: { ...period, missing: 0 } }), // the header leaves leavers out
+    'GET /api/v1/attendance/missing': () => json(200, { data: [{ employee_id: 'e9', code: 9, name_ar: 'Engineer-9', name_en: 'Engineer-9', archived: true, date: '2026-10-03' }], meta: { pagination } }),
+    'POST /api/v1/attendance/locks': lock,
+  })
+  renderWithAuth(<AttendancePage />, lockPerms, { path: '/attendance?group=engineer&tab=grid' })
+  await user.click(await screen.findByRole('button', { name: 'قفل الفترة' }))
+  const dialog = await screen.findByRole('dialog', { name: 'قفل حضور الفترة' })
+  const row = await within(dialog).findByRole('listitem')
+  expect(row).toHaveTextContent('Engineer-9')
+  expect(within(row).getByText('ترك العمل')).toBeInTheDocument()
+  const submit = within(dialog).getByRole('button', { name: 'قفل الفترة' })
+  expect(submit).toBeDisabled()
+  await user.click(within(dialog).getByRole('checkbox', { name: 'أؤكد القفل رغم وجود أيام غير مسجلة' }))
+  await user.click(submit)
+  await waitFor(() => expect(lock).toHaveBeenCalled())
+  expect(JSON.parse(String(lock.mock.calls[0][1]?.body))).toEqual({ group: 'engineer', period_start: '2026-09-26', confirm_missing: true })
+})
+
+test('while the missing list loads, and when it fails, the lock dialog offers no confirmation and Lock waits', async () => {
+  let answer: ((r: Response) => void) | undefined
+  mockFetch({
+    ...routes,
+    'GET /api/v1/attendance/period': () => json(200, { data: { ...period, missing: 0 } }),
+    'GET /api/v1/attendance/missing': () => new Promise<Response>((r) => { answer = r }) as unknown as Response,
+  })
+  renderWithAuth(<AttendancePage />, lockPerms, { path: '/attendance?group=engineer&tab=grid' })
+  await user.click(await screen.findByRole('button', { name: 'قفل الفترة' }))
+  const dialog = await screen.findByRole('dialog', { name: 'قفل حضور الفترة' })
+  await waitFor(() => expect(answer).not.toBe(undefined))
+  expect(within(dialog).getByRole('button', { name: 'قفل الفترة' })).toBeDisabled()
+  expect(within(dialog).queryByRole('checkbox')).toBeNull()
+  answer!(json(403, { error: { code: 'forbidden', message: 'List refused.' } }))
+  expect(await within(dialog).findByText('List refused.')).toBeInTheDocument()
+  expect(within(dialog).getByRole('button', { name: 'قفل الفترة' })).toBeDisabled() // what the lock would confirm is unknown
+  expect(within(dialog).queryByRole('checkbox')).toBeNull()
 })
 
 test('a re-lock that changed holidays keeps the dialog open with the changes and only a Close button', async () => {
@@ -408,6 +450,88 @@ test('the grid filters by work site: the pick goes out as site_id from page 1, a
   await waitFor(() => expect(grid.mock.calls.at(-1)?.[0]).toContain('group=permanent_worker'))
   expect(grid.mock.calls.at(-1)?.[0]).not.toContain('site_id')
   expect(screen.getByRole('combobox', { name: 'الموقع' })).toHaveValue('')
+})
+
+test('the grid searches by name or code: typing asks from page 1 after a pause, ?q= seeds the box, and a group change keeps it', async () => {
+  const grid = vi.fn((_url: string) => json(200, { data: rows, meta: { pagination } }))
+  mockFetch({ ...routes, 'GET /api/v1/attendance/grid': grid })
+  const { unmount } = renderWithAuth(<AttendancePage />, ['attendance.view.all'], { path: '/attendance?group=engineer&tab=grid&period=2026-09-26' })
+  const box = await screen.findByRole('textbox', { name: 'ابحث بالاسم أو الرقم الوظيفي' })
+  expect(box).toHaveAttribute('maxlength', '100') // the API refuses a longer search
+  await user.type(box, 'سامي')
+  expect(box).toHaveValue('سامي') // the box is instant
+  await waitFor(() => expect(grid.mock.calls.at(-1)?.[0]).toContain(`search=${encodeURIComponent('سامي')}`))
+  expect(grid.mock.calls.filter(([u]) => u.includes('search=')).length).toBe(1) // one request after the pause, not one per letter
+  expect(grid.mock.calls.at(-1)?.[0]).toContain('page=1')
+  unmount()
+
+  grid.mockClear()
+  renderWithAuth(<AttendancePage />, ['attendance.view.all'], { path: '/attendance?group=engineer&tab=grid&q=7' })
+  expect(await screen.findByRole('textbox', { name: 'ابحث بالاسم أو الرقم الوظيفي' })).toHaveValue('7')
+  await waitFor(() => expect(grid.mock.calls.at(-1)?.[0]).toContain('search=7'))
+  await user.selectOptions(screen.getByRole('combobox', { name: 'المجموعة' }), 'office')
+  await waitFor(() => expect(grid.mock.calls.at(-1)?.[0]).toContain('group=office'))
+  expect(grid.mock.calls.at(-1)?.[0]).toContain('search=7')
+})
+
+test('a grid search with no match says so, and the search box is on the grid tab only', async () => {
+  mockFetch({ ...routes, 'GET /api/v1/attendance/grid': () => json(200, { data: [], meta: { pagination: { ...pagination, total: 0 } } }), 'GET /api/v1/attendance/sheet': () => new Promise<Response>(() => {}) as unknown as Response })
+  renderWithAuth(<AttendancePage />, ['attendance.view.all'], { path: '/attendance?group=engineer&tab=grid&q=nobody' })
+  expect(await screen.findByText('لا يوجد موظفون مطابقون.')).toBeInTheDocument()
+  await user.click(screen.getByRole('tab', { name: 'كشف اليوم' }))
+  await screen.findByRole('tab', { name: 'كشف اليوم', selected: true })
+  expect(screen.queryByRole('textbox', { name: 'ابحث بالاسم أو الرقم الوظيفي' })).toBeNull()
+})
+
+test('HR’s switch asks the grid and the header for with_archived=1, keeps it in the URL, and marks the rows of those who left', async () => {
+  const left = { employee: { id: 'e9', code: 9, name_ar: 'Engineer-9', name_en: 'Engineer-9', archived: true }, days: [cell('2026-10-01', 'stored', { site_id: 's1' })] }
+  const grid = vi.fn((url: string) => json(200, { data: url.includes('with_archived=1') ? [...rows, left] : rows, meta: { pagination } }))
+  const head = vi.fn((_url: string) => json(200, { data: period }))
+  mockFetch({ ...routes, 'GET /api/v1/attendance/grid': grid, 'GET /api/v1/attendance/period': head,
+    'GET /api/v1/attendance/days/e9/2026-10-01': () => new Promise<Response>(() => {}) as unknown as Response })
+  const { unmount } = renderWithAuth(<AttendancePage />, lockPerms, { path: '/attendance?group=engineer&tab=grid' })
+  const box = await screen.findByRole('checkbox', { name: 'إظهار من تركوا العمل' })
+  expect(box).not.toBeChecked()
+  await screen.findByRole('button', { name: 'Engineer-1 2026-10-01: Site-1' })
+  expect([...grid.mock.calls, ...head.mock.calls].some(([u]) => u.includes('with_archived'))).toBe(false)
+  await user.click(box)
+  await waitFor(() => expect(grid.mock.calls.at(-1)?.[0]).toContain('with_archived=1'))
+  expect(head.mock.calls.at(-1)?.[0]).toContain('with_archived=1') // the header's missing count follows the grid
+  const name = (await screen.findByText('Engineer-9')).closest('td')!
+  expect(within(name).getByText('ترك العمل')).toBeInTheDocument()
+  expect(within(screen.getByText('Engineer-1').closest('td')!).queryByText('ترك العمل')).toBeNull()
+  await user.click(screen.getByRole('button', { name: 'Engineer-9 2026-10-01: Site-1' })) // a leaver's day opens as usual
+  expect(await screen.findByRole('dialog', { name: 'يوم 2026-10-01 — Engineer-9' })).toBeInTheDocument()
+  await user.keyboard('{Escape}')
+  await user.selectOptions(screen.getByRole('combobox', { name: 'المجموعة' }), 'office')
+  await waitFor(() => expect(grid.mock.calls.at(-1)?.[0]).toContain('group=office'))
+  expect(grid.mock.calls.at(-1)?.[0]).toContain('with_archived=1')
+  await user.click(screen.getByRole('checkbox', { name: 'إظهار من تركوا العمل' }))
+  await waitFor(() => expect(grid.mock.calls.at(-1)?.[0]).not.toContain('with_archived'))
+  expect(head.mock.calls.at(-1)?.[0]).not.toContain('with_archived')
+  unmount()
+
+  grid.mockClear()
+  head.mockClear()
+  renderWithAuth(<AttendancePage />, lockPerms, { path: '/attendance?group=permanent_worker&tab=grid&with_archived=1' }) // a group not cached above
+  expect(await screen.findByRole('checkbox', { name: 'إظهار من تركوا العمل' })).toBeChecked()
+  await waitFor(() => expect(grid.mock.calls.at(-1)?.[0]).toContain('with_archived=1'))
+  expect(head.mock.calls.length).toBeGreaterThan(0)
+  expect(head.mock.calls.every(([u]) => u.includes('with_archived=1'))).toBe(true)
+})
+
+test('the switch needs attendance.edit.all and stays on the grid tab', async () => {
+  mockFetch({ ...routes, 'GET /api/v1/attendance/sheet': () => new Promise<Response>(() => {}) as unknown as Response })
+  for (const perms of [['attendance.view.all'], ['attendance.view.own', 'attendance.edit.own']]) {
+    const { unmount } = renderWithAuth(<AttendancePage />, perms, { path: '/attendance?group=engineer&tab=grid&with_archived=1' })
+    await screen.findByRole('button', { name: 'Engineer-1 2026-10-01: Site-1' })
+    expect(screen.queryByRole('checkbox', { name: 'إظهار من تركوا العمل' })).toBeNull()
+    unmount()
+  }
+  renderWithAuth(<AttendancePage />, lockPerms, { path: '/attendance?group=engineer&tab=sheet&with_archived=1&date=2026-10-01' })
+  await screen.findAllByText('2026-09-26')
+  expect(screen.queryByRole('checkbox', { name: 'إظهار من تركوا العمل' })).toBeNull()
+  expect(vi.mocked(fetch).mock.calls.map(([u]) => String(u)).filter((u) => u.includes('with_archived'))).toEqual([])
 })
 
 test.each([

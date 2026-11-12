@@ -79,7 +79,7 @@ class AttendanceDaysTest extends TestCase
     public function test_a_night_shift_crosses_midnight_and_belongs_to_the_in_date(): void
     {
         $this->putDay($this->employee('permanent_worker'), '2026-10-01', ['site_id' => $this->site, 'scheduled_in' => '20:00', 'scheduled_out' => '04:00', 'in_time' => '20:30', 'out_time' => '05:00', 'transport' => 'full'])
-            ->assertOk()->assertJsonPath('data.date', '2026-10-01')->assertJsonPath('data.hints.late_minutes', 30)->assertJsonPath('data.hints.ot_minutes', 30);
+            ->assertOk()->assertJsonPath('data.date', '2026-10-01')->assertJsonPath('data.hints.late_minutes', 30)->assertJsonPath('data.hints.ot_minutes', 60);
         $this->putDay($this->employee('engineer'), '2026-10-01', ['site_id' => $this->site, 'in_time' => '20:00', 'out_time' => '04:00'])
             ->assertStatus(422)->assertJsonPath('error.details.0.field', 'out_time');
     }
@@ -99,15 +99,27 @@ class AttendanceDaysTest extends TestCase
             ->assertJsonPath('data.in_time', null)->assertJsonPath('data.out_time', null);
     }
 
-    public function test_an_engineers_times_give_hints_and_leave_the_stored_minutes_alone(): void
+    public function test_an_engineers_times_give_hints_and_fill_only_the_unsent_minutes(): void
     {
         $eng = $this->employee('engineer');
         $this->putDay($eng, '2026-10-01', ['site_id' => $this->site, 'in_time' => '08:45', 'out_time' => '18:30', 'late_minutes' => 5, 'ot_minutes' => 0])->assertOk()
-            ->assertJsonPath('data.hints.late_minutes', 45)->assertJsonPath('data.hints.ot_minutes', 105)
+            ->assertJsonPath('data.hints.late_minutes', 45)->assertJsonPath('data.hints.ot_minutes', 90)
             ->assertJsonPath('data.late_minutes', 5)->assertJsonPath('data.ot_minutes', 0);
         $this->putDay($eng, '2026-10-04', ['site_id' => $this->site, 'in_time' => '08:00', 'out_time' => '17:00'])->assertOk()
-            ->assertJsonPath('data.hints.late_minutes', 0)->assertJsonPath('data.hints.ot_minutes', 60)
-            ->assertJsonPath('data.late_minutes', null)->assertJsonPath('data.ot_minutes', null);
+            ->assertJsonPath('data.hints.late_minutes', 0)->assertJsonPath('data.hints.ot_minutes', 0)
+            ->assertJsonPath('data.late_minutes', 0)->assertJsonPath('data.ot_minutes', 0);
+    }
+
+    public function test_single_day_entry_fills_an_empty_minutes_box_from_the_times_changed_or_not(): void
+    {
+        $eng = $this->employee('engineer');
+        AttendanceDay::create(['employee_id' => $eng, 'date' => '2026-10-01', 'site_id' => $this->site, 'in_time' => '08:40', 'out_time' => '18:30', 'source' => 'entered', 'version' => 1]);   // an old day
+        $this->putDay($eng, '2026-10-01', ['version' => 1, 'site_id' => $this->site, 'in_time' => '08:40', 'out_time' => '18:30'])->assertOk()
+            ->assertJsonPath('data.late_minutes', 40)->assertJsonPath('data.ot_minutes', 90);
+        $this->putDay($eng, '2026-10-01', ['version' => 2, 'site_id' => $this->site, 'in_time' => '08:40', 'out_time' => '18:30'])->assertOk()
+            ->assertJsonPath('data.version', 2)->assertJsonPath('data.late_minutes', 40);   // a time edited and typed back erases nothing
+        $this->putDay($eng, '2026-10-01', ['version' => 2, 'site_id' => $this->site, 'in_time' => '08:40', 'out_time' => '18:30', 'ot_minutes' => 0])->assertOk()
+            ->assertJsonPath('data.ot_minutes', 0);
     }
 
     public function test_a_day_laborer_stores_times_in_order_and_gets_hints(): void
@@ -117,8 +129,8 @@ class AttendanceDaysTest extends TestCase
         $this->putDay($l, '2026-10-01', ['site_id' => $this->site, 'in_time' => '17:00', 'out_time' => '08:00'])
             ->assertStatus(422)->assertJsonPath('error.details.0.field', 'out_time')->assertJsonPath('error.details.0.message', __('attendance.rule.out_before_in'));
         $this->putDay($l, '2026-10-01', ['site_id' => $this->site, 'in_time' => '08:45', 'out_time' => '17:00'])->assertOk()
-            ->assertJsonPath('data.in_time', '08:45')->assertJsonPath('data.hints.late_minutes', 45)->assertJsonPath('data.hints.ot_minutes', 15)
-            ->assertJsonPath('data.late_minutes', null);
+            ->assertJsonPath('data.in_time', '08:45')->assertJsonPath('data.hints.late_minutes', 45)->assertJsonPath('data.hints.ot_minutes', 0)
+            ->assertJsonPath('data.late_minutes', 45);
     }
 
     public function test_office_lateness_hint_uses_the_shift_and_the_grace(): void
@@ -241,6 +253,52 @@ class AttendanceDaysTest extends TestCase
         $this->getJson("/api/v1/attendance/grid?group=engineer&period_start=2026-08-26&site_id={$this->site}")
             ->assertOk()->assertJsonPath('meta.pagination.total', 0);                                    // the day is outside that period
         $this->getJson('/api/v1/attendance/grid?group=engineer&site_id=nope')->assertStatus(422)->assertJsonPath('error.details.0.field', 'site_id');
+    }
+
+    public function test_grid_search_matches_a_name_part_in_either_language_or_the_exact_code(): void
+    {
+        $a = $this->employee('engineer', '2026-01-01', ['name_ar' => 'محمود سامي', 'name_en' => 'Mahmoud Sami']);
+        $b = $this->employee('engineer');
+        $this->employee('office', '2026-01-01', ['name_ar' => 'سامي علي']);   // another group
+        $code = (int) DB::table('employees')->where('id', $b)->value('code');
+        $ids = fn (string $search) => array_column($this->getJson('/api/v1/attendance/grid?group=engineer&period_start=2026-09-26&search='.urlencode($search))->assertOk()
+            ->json('data.*.employee'), 'id');
+
+        $this->assertSame([$a], $ids('سامي'));
+        $this->assertSame([$a], $ids('SAMI'));
+        $this->assertSame([$b], $ids((string) $code));
+        $this->assertSame([$a, $b], $ids(''));                                                        // blank is no filter
+        $this->getJson('/api/v1/attendance/grid?group=engineer&search=nobody')->assertOk()->assertJsonPath('meta.pagination.total', 0);
+        $this->getJson('/api/v1/attendance/grid?group=engineer&search='.str_repeat('x', 101))->assertStatus(422)->assertJsonPath('error.details.0.field', 'search');
+    }
+
+    public function test_grid_search_combines_with_the_site_and_counts_only_the_matches(): void
+    {
+        $a = $this->employee('engineer');
+        $this->employee('engineer');
+        $c = $this->employee('engineer', '2026-01-01', ['name_ar' => 'Engineer-Site']);
+        $this->employee('engineer', '2026-01-01', ['name_ar' => 'Engineer-Away']);
+        $this->putDay($a, '2026-10-01', ['site_id' => $this->site]);
+        $this->putDay($c, '2026-10-01', ['site_id' => $this->site]);
+        $this->getJson("/api/v1/attendance/grid?group=engineer&period_start=2026-09-26&site_id={$this->site}&search=site")->assertOk()
+            ->assertJsonPath('meta.pagination.total', 1)->assertJsonCount(1, 'data')->assertJsonPath('data.0.employee.id', $c);
+        $this->getJson('/api/v1/attendance/grid?group=all&period_start=2026-09-26&per_page=1&search=engineer-')->assertOk()
+            ->assertJsonPath('meta.pagination.total', 4)->assertJsonPath('meta.pagination.total_pages', 4);
+    }
+
+    public function test_grid_search_stays_inside_an_own_scope_readers_reach(): void
+    {
+        $s2 = $this->workSite('Site-3');
+        $lead = $this->userWith('own', null);
+        DB::table('manager_sites')->insert(['manager_id' => $lead->id, 'site_id' => $this->site]);
+        $mine = $this->employee('permanent_worker');
+        $this->homeSite($mine, $this->site, '2026-09-01');
+        $this->homeSite($this->employee('permanent_worker', '2026-01-01', ['name_ar' => 'Other']), $this->site, '2026-09-01');   // reached, no match
+        $this->homeSite($this->employee('permanent_worker'), $s2, '2026-09-01');                                                 // a match out of reach
+
+        $this->actingAs($lead, 'api');
+        $this->getJson('/api/v1/attendance/grid?group=permanent_worker&period_start=2026-09-26&search=worker')->assertOk()
+            ->assertJsonPath('meta.pagination.total', 1)->assertJsonPath('data.0.employee.id', $mine);
     }
 
     public function test_grid_all_with_a_site_lists_every_field_type_that_worked_there_in_the_engineer_window(): void

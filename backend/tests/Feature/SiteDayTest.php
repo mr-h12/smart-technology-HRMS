@@ -55,6 +55,7 @@ class SiteDayTest extends TestCase
         }
         $this->assertStringNotContainsString('transport', $r->getContent());
         $this->assertStringNotContainsString('advance_amount', $r->getContent());
+        $this->assertDoesNotMatchRegularExpression('/"(pays|salary|daily_wage)":/', $r->getContent());   // roster rows carry `pays`; no wage key at any depth
     }
 
     public function test_engineers_appear_on_every_site_of_their_manager_and_show_where_they_are(): void

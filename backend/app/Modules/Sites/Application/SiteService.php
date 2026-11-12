@@ -4,7 +4,9 @@ declare(strict_types=1);
 
 namespace App\Modules\Sites\Application;
 
+use App\Modules\Attendance\Infrastructure\PeriodGuard;
 use App\Modules\Audit\Infrastructure\AuditLog;
+use App\Modules\Employees\Domain\EmployeeType;
 use App\Modules\Identity\Application\Rbac\PermissionHolders;
 use App\Modules\Identity\Domain\Authentication\IdentityAuditEvents;
 use App\Modules\Identity\Infrastructure\Eloquent\User;
@@ -105,7 +107,14 @@ final class SiteService
         if (! $none && blank($data['value'] ?? null)) {
             throw ValidationException::withMessages(['value' => __('errors.allowance_value_required')]);
         }
-        $site->allowanceRules()->create([...$data, 'value' => $none ? '0' : $data['value']]);
+        $rule = [...$data, 'value' => $none ? '0' : $data['value']];
+        DB::transaction(function () use ($site, $rule): void {
+            // M1: a site's rule reaches the days of every type worked there.
+            if (PeriodGuard::lockedFrom($rule['effective_from'], ...EmployeeType::cases())) {
+                throw ValidationException::withMessages(['effective_from' => __('errors.dated_change_period_locked')]);
+            }
+            $site->allowanceRules()->create($rule);
+        });
 
         return $this->show($id);
     }

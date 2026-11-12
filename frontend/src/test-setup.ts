@@ -19,3 +19,5 @@ window.scrollTo = () => {}
 
 // jsdom has no element scrolling; the tab strip scrolls itself sideways to the selected tab.
 Element.prototype.scrollBy ??= () => {}
+// ...and a form's error banner scrolls itself into view.
+Element.prototype.scrollIntoView ??= () => {}

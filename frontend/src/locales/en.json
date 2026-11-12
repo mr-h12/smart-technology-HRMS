@@ -48,7 +48,8 @@
     "leave": "Leave",
     "wageProposals": "Proposed wages",
     "teamFares": "Team transport",
-    "logs": "System logs"
+    "logs": "System logs",
+    "payroll": "Payroll"
   },
   "toggle": {
     "language": "Language",
@@ -100,7 +101,8 @@
       "history": "History",
       "documents": "Documents",
       "site": "Site",
-      "leave": "Leave"
+      "leave": "Leave",
+      "attendance": "Attendance"
     },
     "subtitle": "Every employee and worker, of every type.",
     "stat": {
@@ -113,10 +115,20 @@
     "status": "Status",
     "employee": "Employee",
     "leavesOn": "Leaves on {{date}}",
+    "prev": "Previous employee",
+    "next": "Next employee",
+    "position": "{{pos}} of {{total}}",
     "archive": {
       "view": "Show employees",
       "active": "Active",
-      "archived": "Archive"
+      "archived": "Archive",
+      "banner": "Archived — left on {{date}}",
+      "reason": "Reason: {{reason}}",
+      "correct": "Correct leaving details"
+    },
+    "openItems": {
+      "leave_request": "Leave request {{from}} – {{to}} ({{status}})",
+      "wage_proposal": "Proposed daily wage awaiting a decision"
     },
     "reactivate": {
       "button": "Reactivate",
@@ -362,7 +374,8 @@
       "holiday": "Official holidays",
       "employee_document": "Employee documents",
       "leave": "Leave",
-      "system_log": "System logs"
+      "system_log": "System logs",
+      "payroll": "Payroll"
     },
     "action": {
       "view": "View",
@@ -403,6 +416,10 @@
     },
     "system_log": {
       "view": "System logs: view"
+    },
+    "payroll": {
+      "view": "Payroll: view",
+      "manage": "Payroll: manage"
     }
   },
   "audit": {
@@ -459,7 +476,9 @@
       "attendance_locks": "Attendance locks",
       "official_holidays": "Official holidays",
       "notifications": "Notifications",
-      "employee_site_assignments": "Home sites"
+      "employee_site_assignments": "Home sites",
+      "payroll_entries": "Payroll inputs",
+      "payroll_overrides": "Payroll overrides"
     },
     "onBehalfOf": "on behalf of {{name}}"
   },
@@ -553,6 +572,8 @@
     "nextPeriod": "Next period",
     "periodRange": "{{start}} to {{end}}",
     "employee": "Employee",
+    "withArchived": "Show those who left",
+    "leftMark": "Left",
     "periodLine": "Period {{start}} to {{end}} · Missing days: {{missing}}",
     "locked": "Locked",
     "lock": "Lock period",
@@ -603,6 +624,14 @@
     },
     "legend": "Legend",
     "empty": "No employees in this group during this period.",
+    "employeeTab": {
+      "legend": "Colour key",
+      "present": "Present",
+      "absent": "Absent",
+      "sick": "Sick",
+      "leave": "Leave",
+      "missing": "Missing"
+    },
     "tab": {
       "grid": "Period grid",
       "sheet": "Day sheet",
@@ -628,10 +657,13 @@
       "note": "Note",
       "hintLate": "Computed lateness: {{minutes}} min",
       "hintOt": "Computed overtime: {{minutes}} min",
+      "computedOnSave": "Computed from the time on save",
+      "useSuggested": "Use this",
       "derivedNote": "This day was set automatically ({{type}}). Choose a site if the employee worked.",
       "missingNote": "This day is not recorded yet.",
       "lockedNote": "The period is locked; its days cannot be edited.",
       "readOnlyNote": "View only: you do not have permission to edit attendance.",
+      "archivedNote": "View only: this employee has left.",
       "clear": "Clear day",
       "conflict": "Someone else changed this day. Load the latest version, then re-enter your changes.",
       "loadLatest": "Load latest"
@@ -675,14 +707,22 @@
       "lastSite": "Last site: {{site}}",
       "totals": "Period totals",
       "locked": "This period is locked; the sheet is read-only.",
+      "someLocked": "Some rows are in a locked period and cannot be edited.",
       "noMatch": "No employees match.",
       "dayLabel": "{{date}} — {{count}} not recorded",
       "rowAction": "{{action}}: {{name}}",
       "actionOn": "{{action}} {{name}}",
       "actionCount": "{{action}} ({{count}})",
       "select": "Select {{name}}",
-      "selectPage": "Select this page",
+      "selectAll": "Select all ({{count}})",
       "rest": "Mark the rest present ({{count}})",
+      "restAbsent": "Mark the rest absent ({{count}})",
+      "absentConfirm": {
+        "title": "Mark absent",
+        "body_one": "1 employee will be marked absent. Are you sure?",
+        "body_other": "{{count}} employees will be marked absent. Are you sure?",
+        "ok": "Mark absent"
+      },
       "sweep": "All present",
       "sweepFor": "Mark the rest of {{cohort}} present",
       "bulk": {
@@ -706,6 +746,8 @@
         "matches": "Employees to be marked"
       },
       "toast": {
+        "skippedLocked": "{{count}} skipped: locked period.",
+        "skippedOffice": "{{count}} skipped: office staff have no work site.",
         "applied": "{{count}} recorded",
         "skippedNoSite": "{{count}} skipped: no last site. Record them from Details.",
         "tooMany": "At most {{max}} rows can be recorded at once; narrow the choice.",
@@ -721,6 +763,8 @@
       "search": "Search by name or employee ID",
       "found": "{{shown}} of {{total}}",
       "overBy": "OT {{minutes}} min",
+      "overUnapproved": "OT {{minutes}} min, not approved",
+      "approveOt": "Approve",
       "times": {
         "title": "Edit times",
         "selected": "{{count}} selected. A blank box changes nothing.",
@@ -778,6 +822,12 @@
     "add": "Add holiday",
     "edit": "Edit holiday",
     "date": "Date",
+    "from": "From",
+    "to": "To",
+    "range": "{{from}} – {{to}}",
+    "duration": "Duration",
+    "days_one": "{{count}} day",
+    "days_other": "{{count}} days",
     "name": "Holiday name",
     "delete": "Delete",
     "deleteConfirm": "Delete the official holiday \"{{name}}\"?"
@@ -1148,5 +1198,84 @@
     "viewErrors": "View this request's errors",
     "viewRequest": "View the request",
     "clearRequestId": "Clear the request ID filter"
+  },
+  "payroll": {
+    "subtitle": "Each employee's pay for the period, computed from attendance, with HR's inputs and overrides.",
+    "notLocked": "Attendance for this period is not locked yet, so these numbers are a preview and may still change.",
+    "empty": "No employees of this group in the period.",
+    "flags": "Flags",
+    "total": "Total",
+    "cellLabel": "{{label}} - {{name}}",
+    "openDays": "Days of {{name}}",
+    "daysOf": "{{name}}: days of the period",
+    "days": "Days of the period",
+    "dayCost": "Day cost",
+    "overrides": "Overrides",
+    "overridden": "Overridden. Reason: {{reason}}",
+    "inputsChanged": "The inputs changed after your edit: check the override.",
+    "conflict": "Someone else just changed the inputs of {{name}}; the sheet was reloaded. Check it and try again.",
+    "unsaved": "Not saved yet: it saves when you leave the row or press Enter.",
+    "notSaved": "The inputs of {{name}} were not saved: {{message}}",
+    "minutes": "{{minutes}} min",
+    "component": {
+      "salary": "Salary",
+      "wages": "Daily wages",
+      "allowance": "Site allowance",
+      "transport": "Fare",
+      "travel": "Travel allowance",
+      "tower": "Tower transport",
+      "overtime": "Overtime",
+      "outside": "Outside Alexandria",
+      "bonus": "Bonus",
+      "lateness": "Lateness deduction",
+      "absence": "Absence deduction",
+      "unpaid_leave": "Unpaid leave",
+      "sick_cut": "Sick leave cut",
+      "not_employed": "Days not employed",
+      "deduction": "Deduction",
+      "negligence": "Negligence deduction",
+      "insurance_employee": "Social insurance (employee share)",
+      "income_tax": "Income tax",
+      "advances": "Advances",
+      "insurance_company": "Social insurance (company share)",
+      "insured_basic": "Insured basic",
+      "incentives": "Incentives",
+      "net": "Net pay"
+    },
+    "field": {
+      "lateness_exemption_minutes": "Lateness exemption (minutes)",
+      "travel_days": "Travel days",
+      "tower_days": "Tower days",
+      "ot_minutes": "Overtime minutes",
+      "deduction_reason": "Deduction reason",
+      "note": "Notes"
+    },
+    "flag": {
+      "missing": "Missing days",
+      "open_day": "Open days",
+      "early_departure": "Early departure",
+      "no_wage": "No wage",
+      "no_fare": "No fare",
+      "negative_net": "Negative net",
+      "leave_to_check": "Leave to check",
+      "leave_on_holiday": "Leave on an official holiday",
+      "inputs_changed": "Inputs changed"
+    },
+    "override": {
+      "title": "Override: {{label}} - {{name}}",
+      "revertTitle": "Revert to computed: {{label}} - {{name}}",
+      "body": "Type the amount that replaces the computed one. The reason is kept in the audit log.",
+      "revertBody": "The component returns to its computed value. The reason is kept in the audit log.",
+      "computed": "Computed value",
+      "current": "Current override",
+      "reasonWas": "Override reason",
+      "amount": "Override amount",
+      "reason": "Reason",
+      "save": "Save override",
+      "revert": "Revert to computed",
+      "amountRequired": "Enter the override amount.",
+      "reasonRequired": "Write the reason for the override.",
+      "revertReasonRequired": "Write the reason for the revert."
+    }
   }
 }

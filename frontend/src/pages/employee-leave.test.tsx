@@ -359,3 +359,13 @@ test('without leave.request there is no request button', async () => {
   await screen.findByText('لا توجد طلبات إجازة.')
   expect(screen.queryByRole('button', { name: 'طلب إجازة' })).toBeNull()
 })
+
+test('an archived employee’s leave tab shows the balance and requests without request or adjust', async () => {
+  mockFetch({ [LEAVE]: () => leave(), [REQUESTS]: () => json(200, { data: [request], meta: { pagination } }) })
+  renderWithAuth(<Leave emp={emp} readOnly />, [...VIEW, 'leave.request.all', 'leave.adjust.all'])
+  expect(await remainingTile()).toHaveTextContent('11')
+  const list = await screen.findByRole('table', { name: 'طلبات الإجازة' })
+  expect(within(list).getByRole('link', { name: 'إجازة عارضة' })).toHaveAttribute('href', '/leave?request=r1')
+  expect(screen.queryByRole('button', { name: 'طلب إجازة' })).toBeNull()
+  expect(screen.queryByRole('button', { name: 'تعديل الرصيد' })).toBeNull()
+})

@@ -280,6 +280,108 @@ test('clicking a row opens the employee', async () => {
   expect(await screen.findByText('صفحة الموظف')).toBeInTheDocument()
 })
 
+// A and B are the two engineers of the list; each neighbour is one row of the same list request.
+const stepRoutes = (extra = {}) =>
+  mockFetch({
+    'GET /api/v1/residences': residences,
+    'GET /api/v1/employees/A': () => json(200, { data: { ...emp, id: 'A', name_ar: 'أحمد' } }),
+    'GET /api/v1/employees/B': () => json(200, { data: { ...emp, id: 'B', name_ar: 'بسمة' } }),
+    'GET /api/v1/employees': (url) => json(200, { data: url.endsWith('type=engineer&page=1&per_page=1') ? [{ id: 'A' }] : url.endsWith('type=engineer&page=2&per_page=1') ? [{ id: 'B' }] : [], meta: { pagination } }),
+    ...extra,
+  })
+const openA = (state: object = { list: '/employees?type=engineer', pos: 0, total: 2 }) =>
+  renderWithAuth(
+    <MemoryRouter initialEntries={[{ pathname: '/employees/A', state }]}>
+      <Routes><Route path="employees/:id" element={<EmployeeRoute />} /></Routes>
+    </MemoryRouter>,
+    ALL,
+    { router: false },
+  )
+
+test('the arrows step to the next employee of the list it was opened from', async () => {
+  stepRoutes()
+  openA()
+  expect(await screen.findByLabelText('الاسم بالعربية')).toHaveValue('أحمد')
+  expect(screen.getByText('1 من 2')).toBeInTheDocument()
+  expect(screen.getByRole('button', { name: 'الموظف السابق' })).toBeDisabled()
+  await waitFor(() => expect(screen.getByRole('button', { name: 'الموظف التالي' })).toBeEnabled())
+  await user.click(screen.getByRole('button', { name: 'الموظف التالي' }))
+  await waitFor(() => expect(screen.getByLabelText('الاسم بالعربية')).toHaveValue('بسمة'))
+  expect(screen.getByText('2 من 2')).toBeInTheDocument()
+  expect(screen.getByRole('button', { name: 'الموظف التالي' })).toBeDisabled()
+  await waitFor(() => expect(screen.getByRole('button', { name: 'الموظف السابق' })).toBeEnabled())
+  await user.click(screen.getByRole('tab', { name: 'السجل' })) // a tab writes the URL: the list context must survive it
+  expect(await screen.findByText('2 من 2')).toBeInTheDocument()
+})
+
+test.each([
+  ['/leave/balances?year=2026&type=office', '/api/v1/leave/balances?year=2026&type=office&page=2&per_page=1'],
+  ['/employees', '/api/v1/employees?page=2&per_page=1'], // a list with no filter at all
+])('the arrows step through the list of the screen it was opened from: %s', async (list, request) => {
+  const rows = vi.fn((url: string) => json(200, { data: url === request ? [{ id: 'B' }] : [], meta: { pagination } }))
+  stepRoutes({ [`GET /api/v1${list.split('?')[0]}`]: rows })
+  openA({ list, pos: 0, total: 2 })
+  await waitFor(() => expect(screen.getByRole('button', { name: 'الموظف التالي' })).toBeEnabled())
+  await user.click(screen.getByRole('button', { name: 'الموظف التالي' }))
+  await waitFor(() => expect(screen.getByLabelText('الاسم بالعربية')).toHaveValue('بسمة'))
+  expect(screen.getByText('2 من 2')).toBeInTheDocument()
+})
+
+test('the arrows step through the ids of a list the server does not page, with no list request', async () => {
+  stepRoutes()
+  openA({ ids: ['A', 'B'], pos: 0, total: 2 })
+  expect(await screen.findByLabelText('الاسم بالعربية')).toHaveValue('أحمد') // the arrows are live at once; click the form's, not the skeleton's
+  await user.click(screen.getByRole('button', { name: 'الموظف التالي' }))
+  await waitFor(() => expect(screen.getByLabelText('الاسم بالعربية')).toHaveValue('بسمة'))
+  expect(screen.getByText('2 من 2')).toBeInTheDocument()
+  expect(screen.getByRole('button', { name: 'الموظف السابق' })).toBeEnabled()
+  expect(vi.mocked(fetch).mock.calls.map(([u]) => String(u)).filter((u) => /per_page=1(&|$)/.test(u))).toEqual([])
+})
+
+test('the list takes its filters from the URL and an opened row knows its place in the whole list', async () => {
+  const list = vi.fn((_url: string) => json(200, { data: [row1], meta: { pagination: { ...pagination, total: 13 } } }))
+  mockFetch({ 'GET /api/v1/employees': list, 'GET /api/v1/employees/e1': () => json(200, { data: emp }), 'GET /api/v1/residences': residences })
+  renderWithAuth(
+    <Routes>
+      <Route path="employees" element={<EmployeesPage />} />
+      <Route path="employees/:id" element={<EmployeeRoute />} />
+    </Routes>,
+    ALL,
+    { path: '/employees?type=engineer&page=2' },
+  )
+  expect(await screen.findByRole('combobox', { name: 'نوع الموظف' })).toHaveValue('engineer')
+  expect(list.mock.calls.map(([u]) => u)).toContain('/api/v1/employees?page=2&per_page=12&type=engineer')
+  await user.click(await screen.findByText('المبيعات'))
+  expect(await screen.findByText('13 من 13')).toBeInTheDocument() // the first row of page 2
+  await waitFor(() => expect(list.mock.calls.map(([u]) => u)).toContain('/api/v1/employees?type=engineer&page=12&per_page=1'))
+})
+
+test('a horizontal swipe moves to the next employee; not a mostly vertical one, one on a focused field or one while a dialog is open', async () => {
+  stepRoutes()
+  openA()
+  const swipe = (dx: number, dy: number, on: EventTarget = window) =>
+    act(() => {
+      on.dispatchEvent(Object.assign(new Event('touchstart', { bubbles: true }), { touches: [{ clientX: 300, clientY: 300 }] }))
+      window.dispatchEvent(Object.assign(new Event('touchend'), { changedTouches: [{ clientX: 300 + dx, clientY: 300 + dy }] }))
+    })
+  await waitFor(() => expect(screen.getByRole('button', { name: 'الموظف التالي' })).toBeEnabled())
+  const name = screen.getByLabelText('الاسم بالعربية')
+  swipe(100, 80)
+  expect(name).toHaveValue('أحمد')
+  const dialog = document.createElement('div') // e.g. the phone nav sheet, whose backdrop is outside it
+  dialog.setAttribute('role', 'dialog')
+  document.body.append(dialog)
+  swipe(100, 10)
+  expect(screen.getByLabelText('الاسم بالعربية')).toHaveValue('أحمد')
+  dialog.remove()
+  act(() => name.focus()) // dragging the caret
+  swipe(100, 10, name)
+  expect(screen.getByLabelText('الاسم بالعربية')).toHaveValue('أحمد')
+  act(() => name.blur())
+  swipe(100, 10, name) // to the right: in Arabic the next employee comes in from the left; on a phone most swipes start on a field
+  await waitFor(() => expect(screen.getByLabelText('الاسم بالعربية')).toHaveValue('بسمة'))
+})
+
 test('create form shows a server field error under its field', async () => {
   mockFetch({
     'GET /api/v1/residences': residences,
@@ -410,6 +512,80 @@ test('pay dialog shapes its fields by the type in force on the chosen date', asy
   expect(screen.getByLabelText('الأجر اليومي')).toBeInTheDocument()
 })
 
+test('pay dialog opens with the current pay', async () => {
+  const post = vi.fn(() => json(201, { data: {} }))
+  const current_pay = { id: 'p1', effective_from: '2026-01-01', salary: '9000.000000', raise: '500.000000', insured_basic: '5000.000000', daily_wage: null, shift_start: '10:00:00', shift_end: '18:00:00' }
+  mockFetch({ 'GET /api/v1/residences': residences, 'POST /api/v1/employees/e1/pay-changes': post,
+    'GET /api/v1/employees/e1': () => json(200, { data: { ...emp, current_pay, pay_changes: [current_pay] } }) })
+  renderWithAuth(<EmployeeDetailRoute id="e1" tab="history" />, ALL, { router: false })
+  await user.click((await screen.findAllByRole('button', { name: 'إضافة تغيير' }))[1])
+  expect(screen.getByLabelText('المرتب')).toHaveValue('9000')
+  expect(screen.getByLabelText('العلاوة')).toHaveValue('500')
+  expect(screen.getByLabelText('الأساسي التأميني')).toHaveValue('5000')
+  expect(screen.getByLabelText('بداية الوردية')).toHaveValue('10:00')
+  expect(screen.getByLabelText('انتهاء الوردية')).toHaveValue('6:00')
+  // a cleared field goes out blank, so the server clears it instead of keeping the pay in force
+  await user.type(screen.getByLabelText('ساري اعتبارًا من'), '2026-11-01')
+  await user.clear(screen.getByLabelText('الأساسي التأميني'))
+  await user.click(within(screen.getByRole('dialog')).getByRole('button', { name: 'حفظ' }))
+  await waitFor(() => expect(post).toHaveBeenCalledTimes(1))
+  expect(JSON.parse((post.mock.calls[0] as unknown as [string, RequestInit])[1].body as string))
+    .toEqual({ effective_from: '2026-11-01', salary: '9000', raise: '500', insured_basic: '', shift_start: '10:00', shift_end: '18:00' })
+})
+
+const now = { id: 'p1', effective_from: '2026-01-01', salary: '9000.000000', raise: '500.000000', insured_basic: '5000.000000', daily_wage: null, shift_start: '10:00:00', shift_end: '18:00:00' }
+const ahead = { id: 'p2', effective_from: '2026-12-01', salary: '10000.000000', raise: '600.000000', insured_basic: '5500.000000', daily_wage: null, shift_start: '08:00:00', shift_end: '16:00:00' }
+
+test('pay dialog fills from the pay in force on the chosen date', async () => {
+  const post = vi.fn(() => json(201, { data: {} }))
+  mockFetch({ 'GET /api/v1/residences': residences, 'POST /api/v1/employees/e1/pay-changes': post,
+    'GET /api/v1/employees/e1': () => json(200, { data: { ...emp, current_pay: now, pay_changes: [now, ahead] } }) })
+  renderWithAuth(<EmployeeDetailRoute id="e1" tab="history" />, ALL, { router: false })
+  await user.click((await screen.findAllByRole('button', { name: 'إضافة تغيير' }))[1])
+  const date = screen.getByLabelText('ساري اعتبارًا من')
+  await user.type(date, '2025-06-01') // before the first row: nothing in force
+  expect(screen.getByLabelText('المرتب')).toHaveValue('')
+  await user.clear(date)
+  await user.type(date, '2027-01-01') // the December row entered ahead is in force then, not today's
+  expect(screen.getByLabelText('المرتب')).toHaveValue('10000')
+  expect(screen.getByLabelText('بداية الوردية')).toHaveValue('8:00')
+  await user.click(within(screen.getByRole('dialog')).getByRole('button', { name: 'حفظ' }))
+  await waitFor(() => expect(post).toHaveBeenCalledTimes(1))
+  expect(JSON.parse((post.mock.calls[0] as unknown as [string, RequestInit])[1].body as string))
+    .toEqual({ effective_from: '2027-01-01', salary: '10000', raise: '600', insured_basic: '5500', shift_start: '08:00', shift_end: '16:00' })
+})
+
+test('a date change keeps the pay HR typed and refills only the untouched fields', async () => {
+  const post = vi.fn(() => json(201, { data: {} }))
+  mockFetch({ 'GET /api/v1/residences': residences, 'POST /api/v1/employees/e1/pay-changes': post,
+    'GET /api/v1/employees/e1': () => json(200, { data: { ...emp, current_pay: now, pay_changes: [now, ahead] } }) })
+  renderWithAuth(<EmployeeDetailRoute id="e1" tab="history" />, ALL, { router: false })
+  await user.click((await screen.findAllByRole('button', { name: 'إضافة تغيير' }))[1])
+  await user.clear(screen.getByLabelText('المرتب'))
+  await user.type(screen.getByLabelText('المرتب'), '9500') // typed over today's 9000, before the date
+  await user.type(screen.getByLabelText('ساري اعتبارًا من'), '2027-01-01') // the December row is in force then
+  expect(screen.getByLabelText('المرتب')).toHaveValue('9500')
+  expect(screen.getByLabelText('العلاوة')).toHaveValue('600')
+  await user.click(within(screen.getByRole('dialog')).getByRole('button', { name: 'حفظ' }))
+  await waitFor(() => expect(post).toHaveBeenCalledTimes(1))
+  expect(JSON.parse((post.mock.calls[0] as unknown as [string, RequestInit])[1].body as string))
+    .toEqual({ effective_from: '2027-01-01', salary: '9500', raise: '600', insured_basic: '5500', shift_start: '08:00', shift_end: '16:00' })
+})
+
+test('a reopened pay dialog drops the last error', async () => {
+  mockFetch({ 'GET /api/v1/residences': residences, 'GET /api/v1/employees/e1': () => json(200, { data: emp }),
+    'POST /api/v1/employees/e1/pay-changes': () => json(422, { error: { code: 'validation_failed', message: 'Invalid', details: [{ field: 'salary', code: 'x', message: 'المرتب مطلوب' }] } }) })
+  renderWithAuth(<EmployeeDetailRoute id="e1" tab="history" />, ALL, { router: false })
+  const add = (await screen.findAllByRole('button', { name: 'إضافة تغيير' }))[1]
+  await user.click(add)
+  await user.click(within(screen.getByRole('dialog')).getByRole('button', { name: 'حفظ' }))
+  expect(await screen.findByText('المرتب مطلوب')).toBeInTheDocument()
+  await user.keyboard('{Escape}')
+  await user.click(add)
+  expect(screen.getByRole('dialog')).toBeInTheDocument()
+  expect(screen.queryByText('المرتب مطلوب')).toBeNull()
+})
+
 test('type-change dialog rejects the type already in force on that date', async () => {
   openEmp(history)
   const user = userEvent.setup()
@@ -497,6 +673,16 @@ test('the archive switch asks for archived employees from page 1 and shows the t
   expect(await within(screen.getByRole('row', { name: /أحمد علي/ })).findByText('2026-01-31')).toBeInTheDocument()
 })
 
+test('the archive switch shows only with employee.view.all, and ?view=archived without it lists the active employees', async () => {
+  const list = vi.fn((_url: string) => json(200, { data: [row1], meta: { pagination } }))
+  mockFetch({ 'GET /api/v1/employees': list })
+  renderWithAuth(<EmployeesPage />, ['employee.view.own'], { path: '/employees?view=archived' })
+  await screen.findByRole('row', { name: /أحمد علي/ })
+  expect(screen.queryByRole('group', { name: 'عرض الموظفين' })).toBeNull()
+  expect(list.mock.calls.map(([u]) => String(u)).filter((u) => u.includes('per_page=12')).every((u) => !u.includes('archived'))).toBe(true)
+  expect(screen.getByRole('columnheader', { name: 'الحالة' })).toBeInTheDocument()
+})
+
 test('an active employee with a future termination date shows when they leave; the others show Active', async () => {
   const today = cairoToday()
   const later = new Date(Date.parse(`${today}T00:00:00Z`) + 864e5).toISOString().slice(0, 10)
@@ -507,11 +693,11 @@ test('an active employee with a future termination date shows when they leave; t
   expect(within(screen.getByRole('row', { name: /سعيد/ })).getByText(/ينتهي في/)).toBeInTheDocument()
 })
 
-const archived = { ...emp, code: 7, termination_date: '2026-01-31', termination_reason: 'استقالة' }
+const archived = { ...emp, code: 7, termination_date: '2026-01-31', termination_reason: 'استقالة', archived: true }
 
 test('an archived employee is reactivated after confirming, and the cleared dates show', async () => {
   let current: Record<string, unknown> = archived
-  const patch = vi.fn(() => { current = { ...archived, termination_date: null, termination_reason: null }; return json(200, { data: current }) })
+  const patch = vi.fn(() => { current = { ...archived, termination_date: null, termination_reason: null, archived: false }; return json(200, { data: current }) })
   mockFetch({ 'GET /api/v1/residences': residences, 'GET /api/v1/employees/e1': () => json(200, { data: current }), 'PATCH /api/v1/employees/e1': patch })
   renderWithAuth(<EmployeeDetailRoute id="e1" />, ALL, { router: false })
   expect(await screen.findByLabelText('تاريخ إنهاء الخدمة')).toHaveValue('2026-01-31')
@@ -542,7 +728,7 @@ test('a form dialog without a description has no aria-describedby', async () => 
 
 test('Reactivate shows only for an archived employee and with employee.edit', async () => {
   const today = cairoToday()
-  mockFetch({ 'GET /api/v1/residences': residences, 'GET /api/v1/employees/e1': () => json(200, { data: { ...archived, termination_date: today } }) })
+  mockFetch({ 'GET /api/v1/residences': residences, 'GET /api/v1/employees/e1': () => json(200, { data: { ...archived, termination_date: today, archived: false } }) })
   const first = renderWithAuth(<EmployeeDetailRoute id="e1" />, ALL, { router: false })
   await screen.findByLabelText('تاريخ إنهاء الخدمة')
   expect(screen.queryByRole('button', { name: 'إعادة التفعيل' })).toBeNull() // terminated today: still active
@@ -551,6 +737,86 @@ test('Reactivate shows only for an archived employee and with employee.edit', as
   renderWithAuth(<EmployeeDetailRoute id="e1" />, ['employee.view.all'], { router: false })
   await screen.findByLabelText('تاريخ إنهاء الخدمة')
   expect(screen.queryByRole('button', { name: 'إعادة التفعيل' })).toBeNull()
+})
+
+test('an archived employee’s page shows the banner with the date and reason and changes nothing but its termination', async () => {
+  mockFetch({ 'GET /api/v1/residences': residences, 'GET /api/v1/employees/e1': () => json(200, { data: archived }) })
+  const perms = [...ALL, 'employee.edit_code.all', 'employee.assign_manager.all', 'employee.assign_site.all']
+  const first = renderWithAuth(<EmployeeDetailRoute id="e1" />, perms, { router: false })
+  const banner = await screen.findByRole('status')
+  expect(banner).toHaveTextContent('مؤرشف — ترك العمل في 2026-01-31')
+  expect(within(banner).getByText('2026-01-31')).toHaveAttribute('dir', 'ltr')
+  expect(banner).toHaveTextContent('السبب: استقالة')
+  expect(screen.getByLabelText('الاسم بالعربية')).toBeDisabled()
+  for (const name of ['حفظ', 'تغيير الرقم الوظيفي', 'تعيين مدير', 'نقل إلى موقع']) expect(screen.queryByRole('button', { name })).toBeNull()
+  expect(screen.getByRole('button', { name: 'إعادة التفعيل' })).toBeInTheDocument()
+  first.unmount()
+  renderWithAuth(<EmployeeDetailRoute id="e1" tab="history" />, perms, { router: false })
+  expect(await screen.findByText('سجل تغييرات نوع الموظف')).toBeInTheDocument()
+  expect(screen.queryByRole('button', { name: 'إضافة تغيير' })).toBeNull()
+})
+
+test('correcting the leaving details sends only the termination date and reason', async () => {
+  const patch = vi.fn(() => json(200, { data: { ...archived, termination_date: '2026-01-30', termination_reason: 'انتهاء العقد' } }))
+  mockFetch({ 'GET /api/v1/residences': residences, 'GET /api/v1/employees/e1': () => json(200, { data: archived }), 'PATCH /api/v1/employees/e1': patch })
+  const first = renderWithAuth(<EmployeeDetailRoute id="e1" />, ['employee.view.all'], { router: false })
+  await screen.findByRole('status')
+  expect(screen.queryByRole('button', { name: 'تصحيح بيانات الترك' })).toBeNull()
+  first.unmount()
+  renderWithAuth(<EmployeeDetailRoute id="e1" />, ALL, { router: false })
+  await user.click(await screen.findByRole('button', { name: 'تصحيح بيانات الترك' }))
+  const dialog = screen.getByRole('dialog', { name: 'تصحيح بيانات الترك' })
+  const date = within(dialog).getByLabelText('تاريخ إنهاء الخدمة')
+  const reason = within(dialog).getByLabelText('سبب إنهاء الخدمة')
+  expect([date, reason].map((f) => (f as HTMLInputElement).value)).toEqual(['2026-01-31', 'استقالة'])
+  await user.clear(date)
+  await user.type(date, '2026-01-30')
+  await user.clear(reason)
+  await user.type(reason, 'انتهاء العقد')
+  await user.click(within(dialog).getByRole('button', { name: 'حفظ' }))
+  await waitFor(() => expect(patch).toHaveBeenCalled())
+  expect(JSON.parse((patch.mock.calls[0] as unknown as [string, RequestInit])[1].body as string)).toEqual({ termination_date: '2026-01-30', termination_reason: 'انتهاء العقد' })
+  await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull())
+  expect(screen.getByLabelText('تاريخ إنهاء الخدمة')).toHaveValue('2026-01-30') // the open form takes the saved values, so a later Save cannot send the old ones
+  expect(screen.getByLabelText('سبب إنهاء الخدمة')).toHaveValue('انتهاء العقد')
+})
+
+test('an active employee’s page has no archive banner', async () => {
+  mockFetch({ 'GET /api/v1/residences': residences, 'GET /api/v1/employees/e1': () => json(200, { data: { ...archived, termination_date: cairoToday(), archived: false } }) })
+  renderWithAuth(<EmployeeDetailRoute id="e1" />, ALL, { router: false })
+  expect(await screen.findByLabelText('الاسم بالعربية')).toBeEnabled()
+  expect(screen.queryByRole('status')).toBeNull()
+})
+
+test('saving a termination date with open items shows the refusal and links to each item', async () => {
+  const items = [{ kind: 'leave_request', id: 'r1', status: 'pending', from_date: '2026-11-12', to_date: '2026-11-13' }, { kind: 'wage_proposal', id: 'p1' }]
+  mockFetch({ 'GET /api/v1/residences': residences, 'GET /api/v1/employees/e1': () => json(200, { data: emp }),
+    'PATCH /api/v1/employees/e1': () => json(409, { error: { code: 'employee_has_open_items', message: 'M', items } }) })
+  renderWithAuth(<EmployeeDetailRoute id="e1" />, ALL, { router: false })
+  await user.type(await screen.findByLabelText('تاريخ إنهاء الخدمة'), '2026-11-15')
+  await user.click(screen.getByRole('button', { name: 'حفظ' }))
+  const alert = await screen.findByRole('alert')
+  expect(alert).toHaveTextContent('M')
+  const leave = within(alert).getByRole('link', { name: /2026-11-12.*2026-11-13.*قيد المراجعة/ })
+  expect(leave).toHaveAttribute('href', '/leave?request=r1')
+  expect(within(leave).getByText('2026-11-12')).toHaveAttribute('dir', 'ltr')
+  expect(within(alert).getByRole('link', { name: 'يومية مقترحة بانتظار القرار' })).toHaveAttribute('href', '/wage-proposals?proposal=p1')
+})
+
+test('a refused save brings its alert into view, without motion for those who ask for less', async () => {
+  const scroll = vi.spyOn(Element.prototype, 'scrollIntoView')
+  vi.stubGlobal('matchMedia', (q: string) => ({ matches: q === '(prefers-reduced-motion: reduce)' }))
+  mockFetch({ 'GET /api/v1/residences': residences, 'GET /api/v1/employees/e1': () => json(200, { data: emp }),
+    'PATCH /api/v1/employees/e1': () => json(409, { error: { code: 'employee_has_open_items', message: 'M', items: [{ kind: 'wage_proposal', id: 'p1' }] } }) })
+  renderWithAuth(<EmployeeDetailRoute id="e1" />, ALL, { router: false })
+  await user.type(await screen.findByLabelText('تاريخ إنهاء الخدمة'), '2026-11-15')
+  expect(scroll).not.toHaveBeenCalled()
+  await user.click(screen.getByRole('button', { name: 'حفظ' }))
+  const alert = await screen.findByRole('alert')
+  await waitFor(() => expect(scroll).toHaveBeenCalledOnce())
+  expect(scroll.mock.contexts[0]).toBe(alert)
+  expect(scroll).toHaveBeenCalledWith({ block: 'nearest', behavior: 'auto' })
+  scroll.mockRestore()
 })
 
 const codeRoutes = (patch: (url: string, init?: RequestInit) => Response) =>

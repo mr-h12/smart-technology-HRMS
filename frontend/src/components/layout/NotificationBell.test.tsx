@@ -215,14 +215,14 @@ test('choosing a new leave request marks it read and opens it on the leave page'
   await waitFor(() => expect(patch).toHaveBeenCalledTimes(1))
 })
 
-test('a leave request about someone the reader cannot name still opens the request', async () => {
+test('a leave request about someone the reader cannot name reads as a generic line, and choosing it only marks it read', async () => {
   mockFetch({ 'GET /api/v1/notifications': inbox([requested(null, '2026-11-04T09:00:00Z')]) })
-  renderWithAuth(<><NotificationBell /><Where /></>, [])
+  renderWithAuth(<><NotificationBell /><Where /></>, [], { path: '/leave' })
   await user.click(await screen.findByRole('button', { name: 'فتح الإشعارات (0 غير مقروء)' }))
   const line = await screen.findByRole('menuitem')
   expect(line).toHaveAccessibleName(/^طلب إجازة جديد،\s*إجازة اعتيادية: 2026-11-10 – 2026-11-12$/)
   await user.click(line)
-  expect(screen.getByRole('status')).toHaveTextContent('/leave?request=r1')
+  expect(screen.getByRole('status')).toHaveTextContent(/^\/leave$/) // the request would be a 404
 })
 
 test('in English a new leave request uses the English name', async () => {
@@ -252,12 +252,12 @@ test('an escalated leave request is listed for its decider and opens the request
   expect(screen.getByRole('status')).toHaveTextContent('/leave?request=r1')
 })
 
-test('an approved and a refused leave are told apart, and each opens its request', async () => {
-  mockFetch({ 'GET /api/v1/notifications': inbox([decided('approved'), decided('refused', null)]), 'PATCH /api/v1/notifications/d-refused/read': () => json(200, { data: {} }) })
+test('an approved and a refused leave are told apart, and a named one opens its request', async () => {
+  mockFetch({ 'GET /api/v1/notifications': inbox([decided('approved'), decided('refused', null)]), 'PATCH /api/v1/notifications/d-approved/read': () => json(200, { data: {} }) })
   renderWithAuth(<><NotificationBell /><Where /></>, [])
   await user.click(await screen.findByRole('button', { name: 'فتح الإشعارات (2 غير مقروء)' }))
-  expect(await screen.findByRole('menuitem', { name: /تمت الموافقة على إجازة أحمد علي \(1042\)/ })).toBeInTheDocument()
-  await user.click(screen.getByRole('menuitem', { name: /رُفض طلب إجازة/ }))
+  expect(await screen.findByRole('menuitem', { name: /رُفض طلب إجازة/ })).toBeInTheDocument()
+  await user.click(screen.getByRole('menuitem', { name: /تمت الموافقة على إجازة أحمد علي \(1042\)/ }))
   expect(screen.getByRole('status')).toHaveTextContent('/leave?request=r2')
 })
 

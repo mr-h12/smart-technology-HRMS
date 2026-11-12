@@ -17,6 +17,7 @@ use App\Modules\Identity\Presentation\UserController;
 use App\Modules\Leave\Presentation\LeaveBalanceController;
 use App\Modules\Leave\Presentation\LeaveRequestController;
 use App\Modules\Notifications\Presentation\NotificationController;
+use App\Modules\Payroll\Presentation\PayrollController;
 use App\Modules\Settings\Presentation\SettingController;
 use App\Modules\Sites\Presentation\FareController;
 use App\Modules\Sites\Presentation\ResidenceController;
@@ -50,8 +51,9 @@ Route::middleware('auth')->group(function (): void {
         Route::post('/', 'store')->middleware('permission:employee.create');
         Route::middleware([])->whereUuid('employee')->group(function (): void {
             Route::get('{employee}', 'show')->middleware(['permission:employee.view', 'employee.scope']);
-            Route::patch('{employee}', 'update')->middleware(['permission:employee.edit', 'employee.scope']);
-            Route::delete('{employee}', 'destroy')->middleware(['permission:employee.delete', 'employee.scope']);
+            // archived_ok: these routes judge an archived employee themselves (EnsureEmployeeInScope).
+            Route::patch('{employee}', 'update')->middleware(['permission:employee.edit', 'employee.scope:archived_ok']);
+            Route::delete('{employee}', 'destroy')->middleware(['permission:employee.delete', 'employee.scope:archived_ok']);
             Route::patch('{employee}/code', 'changeCode')->middleware(['permission:employee.edit_code', 'employee.scope']);
             Route::post('{employee}/type-changes', 'typeChange')->middleware(['permission:employee.edit', 'employee.scope']);
             Route::post('{employee}/pay-changes', 'payChange')->middleware(['permission:employee.edit', 'employee.scope']);
@@ -112,8 +114,10 @@ Route::middleware('auth')->group(function (): void {
         Route::middleware([])->whereUuid('employee')->group(function (): void {
             $date = '\d{4}-\d{2}-\d{2}';
             Route::get('days/{employee}/{date}', 'show')->middleware(['permission:attendance.view', 'employee.scope'])->where('date', $date);
-            Route::put('days/{employee}/{date}', 'update')->middleware(['permission:attendance.edit', 'employee.scope'])->where('date', $date);
-            Route::delete('days/{employee}/{date}', 'destroy')->middleware(['permission:attendance.edit', 'employee.scope'])->where('date', $date);
+            // archived_ok: a day up to the termination date is still written (Employment refuses later ones).
+            Route::put('days/{employee}/{date}', 'update')->middleware(['permission:attendance.edit', 'employee.scope:archived_ok'])->where('date', $date);
+            Route::delete('days/{employee}/{date}', 'destroy')->middleware(['permission:attendance.edit', 'employee.scope:archived_ok'])->where('date', $date);
+            Route::get('employees/{employee}/period', 'employeePeriod')->middleware(['permission:attendance.view', 'employee.scope']);
         });
     });
 
@@ -137,6 +141,15 @@ Route::middleware('auth')->group(function (): void {
             Route::patch('{holiday}', 'update')->middleware('permission:holiday.manage');
             Route::delete('{holiday}', 'destroy')->middleware('permission:holiday.manage');
         });
+    });
+
+    // No `.own` scope: payroll is HR's and the CEO's (design 2026-11-09), so site managers get 403. The controller checks the period.
+    Route::prefix('payroll/{group}/{period_start}')->controller(PayrollController::class)->whereUuid(['employee', 'override'])->group(function (): void {
+        Route::get('/', 'sheet')->middleware('permission:payroll.view');
+        Route::get('employees/{employee}', 'employee')->middleware('permission:payroll.view');
+        Route::put('employees/{employee}/entry', 'entry')->middleware('permission:payroll.manage');
+        Route::post('employees/{employee}/overrides', 'addOverride')->middleware('permission:payroll.manage');
+        Route::delete('employees/{employee}/overrides/{override}', 'revertOverride')->middleware('permission:payroll.manage');
     });
 
     // Auth only: each account sees and marks only its own rows (the inbox filters by user).

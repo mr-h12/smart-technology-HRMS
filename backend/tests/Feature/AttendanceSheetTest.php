@@ -131,7 +131,7 @@ class AttendanceSheetTest extends TestCase
     {
         $eng = $this->employee('engineer');
         $this->putDay($eng, '2026-10-18', ['site_id' => $this->site, 'in_time' => '08:45', 'out_time' => '18:30']);
-        $this->sheet('engineer', '2026-10-18')->assertJsonPath('data.rows.0.hints', ['late_minutes' => 45, 'ot_minutes' => 105]);
+        $this->sheet('engineer', '2026-10-18')->assertJsonPath('data.rows.0.hints', ['late_minutes' => 45, 'ot_minutes' => 90]);
     }
 
     public function test_office_rows_carry_the_lateness_hint(): void
@@ -212,6 +212,18 @@ class AttendanceSheetTest extends TestCase
             $this->putDay($e, '2026-10-15', ['site_id' => $this->site]);
         }
         $this->assertSame($one, $count());
+    }
+
+    public function test_each_row_carries_its_own_types_lock(): void
+    {
+        $eng = $this->employee('engineer');
+        $laborer = $this->employee('day_laborer');
+        $this->postJson('/api/v1/attendance/locks', ['group' => 'engineer', 'period_start' => '2026-09-26', 'confirm_missing' => true])->assertCreated();
+
+        $locked = array_column(array_map(fn (array $r) => ['id' => $r['employee']['id'], 'locked' => $r['locked']], $this->sheet('all', '2026-10-18')->assertOk()->json('data.rows')), 'locked', 'id');
+        $this->assertSame([$eng => true, $laborer => false], $locked);
+        $this->sheet('engineer', '2026-10-18')->assertJsonPath('data.rows.0.locked', true);
+        $this->sheet('day_laborer', '2026-10-18')->assertJsonPath('data.rows.0.locked', false);
     }
 
     public function test_period_accepts_a_date(): void

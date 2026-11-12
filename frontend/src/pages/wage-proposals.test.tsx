@@ -3,7 +3,8 @@ import userEvent from '@testing-library/user-event'
 import { Route, Routes } from 'react-router-dom'
 import { afterEach, expect, test, vi } from 'vitest'
 import { json, mockFetch, pagination, renderWithAuth } from '@/test-utils'
-import { plainAmount, WageProposalsPage } from './wage-proposals'
+import { plainAmount } from '@/lib/day-sheet'
+import { WageProposalsPage } from './wage-proposals'
 
 afterEach(() => vi.unstubAllGlobals())
 

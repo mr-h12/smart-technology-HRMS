@@ -196,7 +196,7 @@ class LeaveBalancesTest extends TestCase
         $left = $this->employee('office', '2020-01-01', ['termination_date' => '2026-10-19']);
         $leaving = $this->employee('office', '2020-01-01', ['termination_date' => '2026-10-20']);
 
-        $this->assertSame([$office, $engineer, $worker, $left, $leaving], $this->listed());
+        $this->assertSame([$office, $engineer, $worker, $leaving], $this->listed());                // $left is archived (owner, 2026-11-11)
         $this->assertSame([$engineer], $this->listed('?type=engineer'));
         $this->assertSame([$worker], $this->listed('?type=permanent_worker'));
         $this->getJson('/api/v1/leave/balances?type=day_laborer')->assertStatus(422);
@@ -342,14 +342,15 @@ class LeaveBalancesTest extends TestCase
         $this->assertEquals(['entitlement' => 25, 'reason' => 'Reason-2', 'version' => 2], json_decode($rows[1]->new_values, true));
     }
 
-    public function test_last_years_list_holds_an_employee_who_left_last_year(): void
+    public function test_last_years_list_leaves_out_an_employee_who_left_and_their_leave_tab_keeps_the_balance(): void
     {
         $left = $this->employee('office', '2020-01-01', ['termination_date' => '2025-06-30']);
         $this->save($left, '2025-03-02', 'annual');
         app(EmployeeService::class)->addTypeChange($left, ['type' => 'day_laborer', 'effective_from' => '2025-09-01']);
 
-        $this->getJson('/api/v1/leave/balances?year=2025')->assertOk()->assertJsonPath('data.*.id', [$left])
-            ->assertJsonPath('data.0.type', 'office')->assertJsonPath('data.0.entitlement', 21)->assertJsonPath('data.0.used', 1)->assertJsonPath('data.0.remaining', 20);
+        $this->getJson('/api/v1/leave/balances?year=2025')->assertOk()->assertJsonPath('data', []);   // archived (owner, 2026-11-11)
+        $this->balance($left, 2025)->assertOk()->assertJsonPath('data.type', 'office')->assertJsonPath('data.balance.entitlement', 21)
+            ->assertJsonPath('data.balance.used', 1)->assertJsonPath('data.balance.remaining', 20);
         $this->assertSame([], $this->listed());
     }
 
@@ -357,7 +358,7 @@ class LeaveBalancesTest extends TestCase
     {
         $becameMonthly = $this->employee('day_laborer', '2020-01-01');
         $service = app(EmployeeService::class);
-        $service->addTypeChange($becameMonthly, ['type' => 'engineer', 'effective_from' => '2025-07-01']);
+        $service->addTypeChange($becameMonthly, ['type' => 'engineer', 'effective_from' => '2025-06-26']);
         $service->addTypeChange($becameMonthly, ['type' => 'day_laborer', 'effective_from' => '2026-03-01']);
         $becameDaily = $this->employee('office', '2020-01-01');
         $service->addTypeChange($becameDaily, ['type' => 'day_laborer', 'effective_from' => '2025-07-01']);
@@ -374,6 +375,7 @@ class LeaveBalancesTest extends TestCase
 
     public function test_the_list_leaves_out_employees_not_employed_during_the_year(): void
     {
+        $this->cairo('2024-12-31 12:00');                                                           // nobody is archived yet: the year window alone decides
         $this->employee('office', '2026-02-01');
         $this->employee('office', '2020-01-01', ['termination_date' => '2024-12-31']);
         $stayed = $this->employee('office', '2020-01-01', ['termination_date' => '2025-01-01']);
@@ -402,9 +404,9 @@ class LeaveBalancesTest extends TestCase
     public function test_a_list_row_carries_the_termination_date(): void
     {
         $this->employee('office', '2020-01-01');
-        $this->employee('office', '2020-01-01', ['termination_date' => '2026-10-19']);
+        $this->employee('office', '2020-01-01', ['termination_date' => '2026-10-20']);              // today: still listed
 
-        $this->getJson('/api/v1/leave/balances')->assertOk()->assertJsonPath('data.*.termination_date', [null, '2026-10-19']);
+        $this->getJson('/api/v1/leave/balances')->assertOk()->assertJsonPath('data.*.termination_date', [null, '2026-10-20']);
     }
 
     public function test_a_managers_list_for_last_year_holds_only_employees_in_reach_today(): void

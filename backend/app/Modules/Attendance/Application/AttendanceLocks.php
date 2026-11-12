@@ -7,6 +7,7 @@ namespace App\Modules\Attendance\Application;
 use App\Modules\Attendance\Domain\AttendanceAuditEvents;
 use App\Modules\Attendance\Domain\AttendanceRefusal;
 use App\Modules\Attendance\Domain\AttendanceRefused;
+use App\Modules\Attendance\Domain\Period;
 use App\Modules\Attendance\Infrastructure\Eloquent\AttendanceDay;
 use App\Modules\Attendance\Infrastructure\Eloquent\AttendanceLock;
 use App\Modules\Attendance\Infrastructure\Eloquent\OfficialHoliday;
@@ -23,7 +24,22 @@ use Illuminate\Support\Facades\DB;
 /** HR's lock and reopen of one group's attendance period. Locking stores every derived day, so a later setting or holiday change cannot rewrite it. */
 final class AttendanceLocks
 {
+    /** The leave day-types the lock lists when stored on an official holiday; Payroll flags the same days (`leave_on_holiday`). */
+    public const LEAVE_ON_HOLIDAY = [LeaveCode::Annual->value, LeaveCode::Casual->value, LeaveCode::Sick->value, LeaveCode::Unpaid->value];
+
     public function __construct(private readonly AttendanceGrid $grid, private readonly EffectiveDays $days, private readonly EmployeeRoster $roster) {}
+
+    /** Whether the period's attendance is locked, for the modules that only read it (Payroll). */
+    public static function isLocked(Period $p): bool
+    {
+        return PeriodGuard::isLocked($p);
+    }
+
+    /** @return list<string> the period's official holiday dates (Y-m-d), for the modules that only read them (Payroll) */
+    public static function holidayDates(Period $p): array
+    {
+        return OfficialHoliday::datesBetween($p->start, $p->end);
+    }
 
     /**
      * Also lists, read before the derived days are stored: on a re-lock, the dates no longer official holidays whose stored days a holiday
@@ -40,19 +56,17 @@ final class AttendanceLocks
                 throw AttendanceRefused::because(AttendanceRefusal::PeriodAlreadyLocked);
             }
 
-            $employees = $this->roster->allOfType($p->group, $p->start, $p->end);
-            $holidays = OfficialHoliday::whereBetween('date', [$p->start, $p->end])->orderBy('date');
-            $holidayDates = (clone $holidays)->pluck('date')->map(fn ($d) => (string) $d)->all();
+            // Archived employees employed in the period too: their missing days need confirming and their derived days are stored.
+            $employees = $this->roster->withArchived()->allOfType($p->group, $p->start, $p->end);
+            $holidayDates = OfficialHoliday::datesBetween($p->start, $p->end);
             $lock = AttendanceLock::firstOrNew(['employee_type' => $p->group->value, 'period_start' => $p->start]);
             $since = $lock->exists ? $lock->locked_at : null;
             $removed = $since === null ? [] : AttendanceDay::onlyTrashed()->whereIn('employee_id', array_column($employees, 'id'))->whereBetween('date', [$p->start, $p->end])
                 ->where('source', 'derived')->where('deleted_at', '>', $since)->whereNotIn('date', $holidayDates)
                 ->whereIn('site_id', Site::withTrashed()->where(['kind' => SiteKind::Leave->value, 'leave_code' => LeaveCode::OfficialHoliday->value])->select('id'))
                 ->distinct()->orderBy('date')->pluck('date')->map(fn ($d) => substr((string) $d, 0, 10))->all();
-            $added = $since === null ? [] : $holidays->where(fn ($q) => $q->where('created_at', '>', $since)->orWhere('updated_at', '>', $since))
-                ->pluck('date')->map(fn ($d) => (string) $d)->all();
+            $added = $since === null ? [] : OfficialHoliday::datesBetween($p->start, $p->end, $since);
             $names = array_column($employees, null, 'id');
-            $leaveCodes = array_map(fn (LeaveCode $c) => $c->value, [LeaveCode::Annual, LeaveCode::Casual, LeaveCode::Sick, LeaveCode::Unpaid]);
 
             $derived = [];
             $onHolidays = [];
@@ -65,7 +79,7 @@ final class AttendanceLocks
                     if ($day['state'] === 'derived') {
                         $derived[] = $day;
                     }
-                    if ($day['state'] === 'stored' && in_array($day['date'], $holidayDates, true) && in_array($day['leave_code'], $leaveCodes, true)) {
+                    if ($day['state'] === 'stored' && in_array($day['date'], $holidayDates, true) && in_array($day['leave_code'], self::LEAVE_ON_HOLIDAY, true)) {
                         $e = $names[$day['employee_id']];
                         $onHolidays[] = ['employee_id' => $e['id'], 'code' => $e['code'], 'name_ar' => $e['name_ar'], 'name_en' => $e['name_en'], 'date' => $day['date'], 'leave_code' => $day['leave_code']];
                     }

@@ -8,7 +8,9 @@ use App\Modules\Attendance\Domain\AttendanceRefused;
 use App\Modules\Attendance\Presentation\AlertMissingDaysCommand;
 use App\Modules\Audit\Infrastructure\SystemLog;
 use App\Modules\Audit\Presentation\PruneLogsCommand;
+use App\Modules\Employees\Domain\EmployeeArchived;
 use App\Modules\Employees\Domain\EmployeeCodeTaken;
+use App\Modules\Employees\Domain\EmployeeHasOpenItems;
 use App\Modules\Employees\Presentation\EnsureEmployeeInScope;
 use App\Modules\Employees\Presentation\ImportMasterDataCommand;
 use App\Modules\Identity\Domain\Authentication\AuthenticationRefused;
@@ -18,6 +20,7 @@ use App\Modules\Identity\Presentation\CreateUserCommand;
 use App\Modules\Leave\Domain\LeaveRefused;
 use App\Modules\Leave\Domain\NoLeaveBalance;
 use App\Modules\Leave\Presentation\AlertAnniversaryCommand;
+use App\Modules\Payroll\Presentation\Console\ExcelDifferencesCommand;
 use App\Support\Database\ConcurrencyConflict;
 use App\Support\Http\ApiEnvelope;
 use Illuminate\Auth\AuthenticationException;
@@ -39,7 +42,7 @@ return Application::configure(basePath: dirname(__DIR__))
         apiPrefix: 'api/v1',
         commands: __DIR__.'/../routes/console.php',
     )
-    ->withCommands([CreateUserCommand::class, AlertMissingDaysCommand::class, ImportMasterDataCommand::class, AlertAnniversaryCommand::class, PruneLogsCommand::class])
+    ->withCommands([CreateUserCommand::class, AlertMissingDaysCommand::class, ImportMasterDataCommand::class, AlertAnniversaryCommand::class, PruneLogsCommand::class, ExcelDifferencesCommand::class])
     ->withMiddleware(function (Middleware $middleware): void {
         // Global, not api-group: unmatched routes (404) never enter the api group.
         $middleware->prepend(AddRequestId::class);
@@ -110,7 +113,15 @@ return Application::configure(basePath: dirname(__DIR__))
             $request, $e->reason->status(), $e->reason->value, __('leave.refusal.'.$e->reason->value, $e->params), extra: $e->dates === [] ? [] : ['dates' => $e->dates],
         ));
 
-        $exceptions->dontReport(EmployeeCodeTaken::class);
+        $exceptions->dontReport([EmployeeCodeTaken::class, EmployeeArchived::class, EmployeeHasOpenItems::class]);
+
+        $exceptions->render(fn (EmployeeHasOpenItems $e, Request $request) => ApiEnvelope::error(
+            $request, 409, 'employee_has_open_items', __('errors.employee_has_open_items', ['count' => (string) count($e->items)]), extra: ['items' => $e->items],
+        ));
+
+        $exceptions->render(fn (EmployeeArchived $e, Request $request) => ApiEnvelope::error(
+            $request, 409, 'employee_archived', __('errors.employee_archived'),
+        ));
 
         $exceptions->render(fn (EmployeeCodeTaken $e, Request $request) => ApiEnvelope::error(
             $request, 409, 'code_taken', __('errors.code_taken', ['code' => $e->taken, 'name' => app()->getLocale() === 'en' && filled($e->nameEn) ? $e->nameEn : $e->nameAr]),

@@ -5,6 +5,7 @@ declare(strict_types=1);
 // The field labels and the custom messages: Laravel merges this over the framework's English messages.
 return [
     'custom' => [
+        'end_date' => ['after_or_equal' => 'The To date must be on or after the From date.'],
         'phone' => ['regex' => 'The phone must be an Egyptian mobile number: 11 digits starting with 010, 011, 012 or 015.'],
     ],
     'attributes' => [
@@ -45,6 +46,7 @@ return [
         'site_id' => 'Site',
         'amount' => 'Fare',
         'date' => 'Date',
+        'end_date' => 'To date',
         'email' => 'Email address',
         'password' => 'Password',
         'role_id' => 'Role',
@@ -94,5 +96,17 @@ return [
         'year' => 'Year',
         'worker_shift_start' => "Permanent workers' shift start",
         'worker_shift_end' => "Permanent workers' shift end",
+        'bonus' => 'Bonus',
+        'deduction' => 'Deduction',
+        'deduction_reason' => 'Deduction reason',
+        'negligence' => 'Negligence deduction',
+        'lateness_exemption_minutes' => 'Lateness exemption (minutes)',
+        'travel_days' => 'Travel days',
+        'tower_days' => 'Tower days',
+        'advances' => 'Advances',
+        'insurance_employee' => 'Social insurance (employee share)',
+        'insurance_company' => 'Social insurance (company share)',
+        'income_tax' => 'Income tax',
+        'component' => 'Component',
     ],
 ];

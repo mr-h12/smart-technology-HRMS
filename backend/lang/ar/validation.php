@@ -159,6 +159,7 @@ return [
     'url' => 'صيغة رابط حقل :attribute غير صحيحة.',
     'uuid' => 'حقل :attribute يجب أن يكون بصيغة UUID سليمة.',
     'custom' => [
+        'end_date' => ['after_or_equal' => 'يجب أن يكون «إلى تاريخ» في نفس يوم «من تاريخ» أو بعده.'],
         'phone' => ['regex' => 'يجب أن يكون رقم الهاتف رقم موبايل مصري من 11 رقمًا يبدأ بـ 010 أو 011 أو 012 أو 015.'],
     ],
     // Field labels; equal to the frontend's ar.json wording.
@@ -200,6 +201,7 @@ return [
         'site_id' => 'الموقع',
         'amount' => 'قيمة المواصلات',
         'date' => 'التاريخ',
+        'end_date' => 'إلى تاريخ',
         'email' => 'البريد الإلكتروني',
         'password' => 'كلمة المرور',
         'role_id' => 'الدور',
@@ -249,5 +251,17 @@ return [
         'year' => 'السنة',
         'worker_shift_start' => 'بدء وردية العمال المثبتين',
         'worker_shift_end' => 'انتهاء وردية العمال المثبتين',
+        'bonus' => 'المكافأة',
+        'deduction' => 'الخصم',
+        'deduction_reason' => 'سبب الخصم',
+        'negligence' => 'خصم الإهمال',
+        'lateness_exemption_minutes' => 'الإعفاء من التأخير (دقيقة)',
+        'travel_days' => 'عدد أيام السفر',
+        'tower_days' => 'عدد أيام البرج',
+        'advances' => 'السلف',
+        'insurance_employee' => 'التأمينات (حصة الموظف)',
+        'insurance_company' => 'التأمينات (حصة الشركة)',
+        'income_tax' => 'ضريبة كسب العمل',
+        'component' => 'البند',
     ],
 ];

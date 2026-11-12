@@ -47,7 +47,7 @@ final class EffectiveDays
         foreach ($rows as $row) {
             $stored[$row->employee_id][$row->date] = $row;
         }
-        $holidays = $locked ? [] : array_flip(OfficialHoliday::whereBetween('date', [$p->start, $p->end])->pluck('date')->all());
+        $holidays = $locked ? [] : array_flip(OfficialHoliday::datesBetween($p->start, $p->end));
         // A stored day may point at a since-deactivated or deleted leave type; a derived day only at the active one.
         $leaveTypes = Site::withTrashed()->where('kind', 'leave')->get(['id', 'leave_code', 'active', 'deleted_at']);
         $codeOf = $leaveTypes->pluck('leave_code', 'id')->all();
@@ -176,10 +176,8 @@ final class EffectiveDays
         }
         // Field types; for engineers and day laborers a hint only: payroll reads their stored minutes (calculations §2).
         if ($type !== EmployeeType::Office && $day['site_id'] !== null && $day['leave_code'] === null && $day['in_time'] !== null && $day['out_time'] !== null) {
-            $scheduledIn = $day['scheduled_in'] ?? self::fieldShift($employee, $day['date'], $s)['start'];
-            /** @var numeric-string $dayHours */
-            $dayHours = $s['day_hours'];
-            $m = DayRules::workerMinutes($scheduledIn, $day['in_time'], $day['out_time'], $dayHours);
+            $shift = self::fieldShift($employee, $day['date'], $s);
+            $m = DayRules::workerMinutes($day['scheduled_in'] ?? $shift['start'], $day['scheduled_out'] ?? $shift['end'], $day['in_time'], $day['out_time']);
 
             return ['late_minutes' => $m['late'], 'ot_minutes' => $m['ot']];
         }
@@ -191,7 +189,7 @@ final class EffectiveDays
     public function offDays(Period $p): array
     {
         $weeklyOff = $this->weeklyOff($p->group, $this->rules->all());
-        $holidays = array_flip(OfficialHoliday::whereBetween('date', [$p->start, $p->end])->pluck('date')->all());
+        $holidays = array_flip(OfficialHoliday::datesBetween($p->start, $p->end));
 
         return array_combine($p->days(), array_map(fn (string $d) => OffDays::leaveCodeFor($d, $weeklyOff, isset($holidays[$d])) !== null, $p->days()));
     }

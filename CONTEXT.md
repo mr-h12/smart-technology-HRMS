@@ -31,6 +31,7 @@ _Avoid_: الكود; code (in the UI)
 
 **Archive** (الأرشيف):
 The employees whose termination date has passed. The termination day itself is still worked, so an employee leaves the active list the day after. Reactivating an archived employee clears the termination date and reason, which counts the days since as employed again.
+Archived employees are hidden everywhere by default: in no list, search, picker, count or alert (owner, 2026-11-11). Only all-scope viewers reach them, through the Archive view of the employees list, on a read-only page whose only actions are Reactivate and correcting the termination date or reason; a site manager never reaches them. HR shows them on the period grid («إظهار من تركوا العمل») to finish their last days. The lock and payroll still include them.
 _Avoid_: inactive list, deleted (a deleted employee is gone from both lists)
 
 **View as** (عرض كـ):
@@ -105,7 +106,7 @@ HR's freeze of one group's period; nobody edits until HR reopens with a reason.
 _Avoid_: close (that is the Release 2 payroll period close)
 
 **Official holiday** (إجازة رسمية):
-A dated day off for everyone, kept in Settings.
+A named day or period of consecutive days off for everyone (such as Eid), kept in Settings; holidays never overlap.
 _Avoid_: public holiday, vacation
 
 **Derived day** (يوم تلقائي):
@@ -177,6 +178,16 @@ The pay lost for a full day absent (غ). Separate from lateness: a lateness mult
 **Override**:
 A value HR types in place of one the system computed, with a reason.
 _Avoid_: manual edit, adjustment
+
+**Payroll sheet** (المرتبات):
+One group's payroll for one period: a line per employee who holds the group's type on some day of the period (leavers included), with each component's computed value, payroll override and final value, the net, the flags and a totals row; each line opens to its days. It is computed on read from attendance and the payroll entries, and stays editable after the attendance lock until payroll close exists.
+_Avoid_: payroll run, payslip (that is one employee's PDF)
+
+**Payroll entry** (مدخلات المرتبات):
+HR's inputs for one employee in one period, the values payroll cannot compute: a bonus (office, day laborers); a deduction with its reason (field types); office's negligence deduction, lateness exemption, travel and tower days, overtime minutes and advances; the insurance shares and income tax (monthly staff); a note. A type takes only its own fields; blank counts as 0. The English UI calls it Payroll inputs or HR's inputs; in code: the table `payroll_entries`.
+
+**Payroll override** (قيمة بديلة):
+An override of one component of one employee's line on the payroll sheet, the net included. It keeps the computed value it replaced, so the line shows "inputs changed" when that value moves later; HR reverts it with a reason. A component has one live payroll override; a net override replaces the net, any other moves the net by its change.
 
 **Period** (فترة):
 One payroll cycle for one employee type: calendar month, 26th → 25th, or half month. A closed period is read-only.

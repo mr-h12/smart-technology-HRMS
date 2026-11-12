@@ -1,5 +1,6 @@
 import { screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
+import { Route, Routes, useLocation, useNavigate } from 'react-router-dom'
 import { afterEach, beforeEach, expect, test, vi } from 'vitest'
 import { queryClient } from '@/lib/query'
 import { json, me, mockFetch, pagination, renderApp, renderWithAuth } from '@/test-utils'
@@ -70,6 +71,51 @@ test('chips count and filter the rows', async () => {
   await user.click(screen.getByRole('button', { name: 'من غير مبلغ (2)' }))
   expect(bodyRows().map((r) => within(r).getAllByRole('cell')[0].textContent)).toEqual([expect.stringContaining('عادل منصور'), expect.stringContaining('فتحي سالم')])
   await user.click(all)
+  expect(bodyRows()).toHaveLength(5)
+})
+
+function Opened() {
+  const { pathname, state } = useLocation()
+  const navigate = useNavigate()
+  return (
+    <>
+      <p>{`opened ${pathname} ${JSON.stringify(state)}`}</p>
+      <button type="button" onClick={() => navigate(-1)}>back</button>
+    </>
+  )
+}
+const withEmployee = (permissions: string[], path = '/') =>
+  renderWithAuth(<Routes><Route path="/" element={<TeamFaresPage />} /><Route path="employees/:id" element={<Opened />} /></Routes>, permissions, { path })
+
+test('a name opens the employee with the rows the chip shows, in order, to step through', async () => {
+  mockFetch({ 'GET /api/v1/team-fares': team() })
+  withEmployee(LEAD)
+  await user.click(await screen.findByRole('button', { name: 'من غير مبلغ (2)' }))
+  await user.click(screen.getByRole('link', { name: /فتحي سالم/ }))
+  expect(await screen.findByText(`opened /employees/w4 ${JSON.stringify({ ids: ['w3', 'w4'], pos: 1, total: 2 })}`)).toBeInTheDocument()
+})
+
+test('the picked site manager and chip live in the URL, so Back from an employee shows the same team', async () => {
+  mockFetch({
+    'GET /api/v1/sites/manager-candidates': () => json(200, { data: MANAGERS }),
+    'GET /api/v1/team-fares': (url: string) => (url.includes('manager_id=m2') ? team([row('w9', 'حسن علي', 'day_laborer', {}), row('w8', 'رضا سعيد', 'day_laborer', { site: S2 })])() : team()()),
+  })
+  withEmployee(HR)
+  await user.click(await screen.findByRole('button', { name: 'م. هاني رزق' }))
+  await user.click(await screen.findByRole('button', { name: 'برج العرب' }))
+  await user.click(screen.getByRole('link', { name: /رضا سعيد/ }))
+  await user.click(await screen.findByRole('button', { name: 'back' }))
+  expect(await screen.findByRole('button', { name: 'برج العرب' })).toHaveAttribute('aria-pressed', 'true')
+  expect(screen.getByRole('button', { name: 'م. هاني رزق' })).toHaveAttribute('aria-pressed', 'true')
+  expect(bodyRows()).toHaveLength(1)
+  await user.click(screen.getByRole('button', { name: 'م. أحمد سامي' })) // another team starts on all its rows
+  expect(await screen.findByRole('button', { name: 'كل التيم (5)' })).toHaveAttribute('aria-pressed', 'true')
+})
+
+test('a chip in the URL that is not one of the team sites shows the whole team', async () => {
+  mockFetch({ 'GET /api/v1/team-fares': team() })
+  withEmployee(LEAD, '/?chip=gone')
+  expect(await screen.findByRole('button', { name: 'كل التيم (5)' })).toHaveAttribute('aria-pressed', 'true')
   expect(bodyRows()).toHaveLength(5)
 })
 

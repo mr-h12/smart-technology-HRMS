@@ -60,8 +60,8 @@ type Preset = { kind?: string; replaces?: Doc } | null
 /** A document row from `GET /employees/{id}`: only id, kind and expiry without `employee_document.view`. */
 type Doc = { id: string; kind: string; expires_at: string | null } & Partial<{ original_name: string; mime: string; size_bytes: number; note: string | null; created_at: string; uploader_name: string | null }>
 
-/** The employee's documents (API order: kind, then newest); editors upload, and see which kinds are still missing. */
-export function Documents({ emp }: { emp: Row }) {
+/** The employee's documents (API order: kind, then newest); editors upload, and see which kinds are still missing. `readOnly` (archived): open and download only. */
+export function Documents({ emp, readOnly = false }: { emp: Row; readOnly?: boolean }) {
   const { t, i18n } = useTranslation()
   const { can } = useAuth()
   const [preset, setPreset] = useState<Preset>(null)
@@ -71,7 +71,7 @@ export function Documents({ emp }: { emp: Row }) {
   const docs: Doc[] = emp.documents
   // the server decides per employee (view.all, or view.own within reach today): a row carries its file fields only if this user may open it
   const hasFile = (d: Doc) => 'original_name' in d
-  const editor = can('employee_document.edit')
+  const editor = can('employee_document.edit') && !readOnly
   const lng = intlLocale(i18n.language)
   const date = new Intl.DateTimeFormat(lng, { dateStyle: 'medium', timeZone: 'UTC' })
   const num = sizeFormat(i18n.language)

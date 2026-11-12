@@ -11,6 +11,7 @@ use Illuminate\Database\Eloquent\Builder;
 /**
  * Who a manager reaches on a date D, by the employee's type on D (design Part 1): an engineer assigned to them on D, or a worker whose
  * site on D (that day's crew change, else the home site) is one of their sites (P1: manager_sites is undated). Office staff are in no manager's reach (P2).
+ * An archived employee is in no one's reach, whatever the date (owner, 2026-11-11).
  */
 final class EmployeeReach
 {
@@ -26,7 +27,7 @@ final class EmployeeReach
     public static function apply(Builder $employees, string $managerId, string $date): Builder
     {
         // ponytail: correlated subqueries; a reach view if manager lists pass ~1,000
-        return $employees->whereRaw(
+        return $employees->archived(false)->whereRaw(
             'case '.Employee::TYPE_ON.' when ? then '.self::ENGINEER.' when ? then '.self::WORKER.' when ? then '.self::WORKER.' else false end',
             [
                 $date,

@@ -70,6 +70,74 @@ test('Save is blocked while a time has no AM/PM: no request, the hint shows and 
   expect(body(put)).toMatchObject({ in_time: '12:00', out_time: '22:15' })
 })
 
+test('a changed arrival empties only the late box, a changed departure only the overtime box; an empty box says it is computed on save', async () => {
+  const put = vi.fn(() => json(200, { data: day() }))
+  mockFetch(routes(day({ state: 'stored', source: 'entered', version: 1, site_id: 's2', in_time: '08:30', out_time: '18:00', late_minutes: 30, ot_minutes: 60, outside_minutes: 10 }), { [`PUT ${URL}`]: put }))
+  open()
+  await siteSelect()
+  const late = screen.getByLabelText('دقائق التأخير')
+  const ot = screen.getByLabelText('دقائق الوقت الإضافي')
+  expect(late).toHaveValue('30')
+  expect(ot).toHaveValue('60')
+  await user.clear(screen.getByLabelText('وقت الانصراف'))
+  await user.type(screen.getByLabelText('وقت الانصراف'), '19:00')
+  expect(late).toHaveValue('30')
+  expect(ot).toHaveValue('')
+  expect(ot).toHaveAttribute('placeholder', 'تُحسب من الوقت عند الحفظ')
+  await user.type(ot, '20')
+  await user.clear(screen.getByLabelText('وقت الحضور'))
+  await user.type(screen.getByLabelText('وقت الحضور'), '09:00')
+  expect(late).toHaveValue('')
+  expect(ot).toHaveValue('20') // the arrival never decides overtime: on a site manager's day that would approve it
+  expect(late).toHaveAttribute('placeholder', 'تُحسب من الوقت عند الحفظ')
+  expect(screen.getByLabelText('دقائق العمل خارج الإسكندرية')).not.toHaveAttribute('placeholder', 'تُحسب من الوقت عند الحفظ')
+  await user.click(screen.getByRole('button', { name: 'حفظ' }))
+  expect(body(put)).toMatchObject({ in_time: '09:00', out_time: '19:00', late_minutes: null, ot_minutes: 20 })
+})
+
+test('the overtime suggestion fills the overtime box', async () => {
+  mockFetch(routes(day({ state: 'stored', source: 'entered', version: 1, site_id: 's1', in_time: '08:00', out_time: '18:00', ot_minutes: 0, hints: { late_minutes: 0, ot_minutes: 75 } })))
+  open()
+  await siteSelect()
+  expect(screen.getByText('وقت إضافي محسوب: 75 دقيقة')).toBeInTheDocument()
+  await user.click(screen.getByRole('button', { name: 'استخدام الرقم' }))
+  expect(screen.getByLabelText('دقائق الوقت الإضافي')).toHaveValue('75')
+  expect(screen.queryByRole('button', { name: 'استخدام الرقم' })).toBeNull() // the box already holds it
+})
+
+test('a changed time hides the hint it decides (arrival: lateness, departure: overtime) until the stored time is typed back', async () => {
+  mockFetch(routes(day({ state: 'stored', source: 'entered', version: 1, site_id: 's1', in_time: '08:30:00', out_time: '18:00:00', ot_minutes: 0, hints: { late_minutes: 30, ot_minutes: 75 } })))
+  open()
+  await siteSelect()
+  const lateHint = 'تأخير محسوب: 30 دقيقة'
+  const otHint = 'وقت إضافي محسوب: 75 دقيقة'
+  const out = screen.getByLabelText('وقت الانصراف')
+  await user.clear(out)
+  await user.type(out, '19:00')
+  expect(screen.getByText(lateHint)).toBeInTheDocument()
+  expect(screen.queryByText(otHint)).toBeNull()
+  expect(screen.queryByRole('button', { name: 'استخدام الرقم' })).toBeNull()
+  expect(screen.getByLabelText('دقائق الوقت الإضافي')).toHaveAttribute('placeholder', 'تُحسب من الوقت عند الحفظ')
+  await user.clear(out)
+  await user.type(out, '18:00')
+  expect(screen.getByText(otHint)).toBeInTheDocument()
+  expect(screen.getByRole('button', { name: 'استخدام الرقم' })).toBeInTheDocument()
+  const arrival = screen.getByLabelText('وقت الحضور')
+  await user.clear(arrival)
+  await user.type(arrival, '09:00')
+  expect(screen.queryByText(lateHint)).toBeNull()
+  expect(screen.getByText(otHint)).toBeInTheDocument()
+  expect(screen.getByRole('button', { name: 'استخدام الرقم' })).toBeInTheDocument()
+})
+
+test('a read-only day offers no overtime button', async () => {
+  mockFetch(routes(day({ state: 'stored', source: 'entered', version: 1, site_id: 's1', in_time: '08:00', out_time: '18:00', hints: { ot_minutes: 75 }, period: { start: '2026-09-26', end: '2026-10-25', is_locked: true } })))
+  open()
+  await siteSelect()
+  expect(screen.getByText('وقت إضافي محسوب: 75 دقيقة')).toBeInTheDocument()
+  expect(screen.queryByRole('button', { name: 'استخدام الرقم' })).toBeNull()
+})
+
 test('choosing a leave type hides times and minutes', async () => {
   const put = vi.fn(() => json(200, { data: day() }))
   mockFetch(routes(day(), { [`PUT ${URL}`]: put }))

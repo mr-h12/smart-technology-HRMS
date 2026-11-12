@@ -9,6 +9,7 @@ use App\Modules\Attendance\Domain\AttendanceRefusal;
 use App\Modules\Attendance\Domain\AttendanceRefused;
 use App\Modules\Employees\Application\EmployeeReach;
 use App\Modules\Employees\Application\EmployeeRoster;
+use App\Modules\Employees\Domain\EmployeeArchived;
 use App\Modules\Employees\Domain\EmployeeType;
 use App\Modules\Identity\Application\Rbac\AuthorizeAction;
 use App\Modules\Identity\Application\Rbac\PermissionHolders;
@@ -93,7 +94,8 @@ final class LeaveRequests
     }
 
     /**
-     * Pending and escalated first, then newest. $managerId narrows to the employees in their reach today.
+     * Pending and escalated first, then newest. $managerId narrows to the employees in their reach today. Without $employeeId, an archived
+     * employee's decided requests are left out and their open ones kept until decided (owner, 2026-11-11); a deleted employee's list as before.
      *
      * @return array{data: list<array<string, mixed>>, pagination: array{page: int, per_page: int, total: int, total_pages: int, has_next_page: bool, has_previous_page: bool}}
      */
@@ -105,6 +107,9 @@ final class LeaveRequests
             // A request never crosses Dec 31, so its from_date names its year.
             ->when($year !== null, fn (Builder $q) => $q->whereBetween('from_date', ["{$year}-01-01", "{$year}-12-31"]))
             ->when($managerId !== null, fn (Builder $q) => $q->whereIn('employee_id', EmployeeReach::ids((string) $managerId, now('Africa/Cairo')->toDateString())))
+            ->when($employeeId === null, fn (Builder $q) => $q->where(fn (Builder $q) => $q
+                ->whereIn('status', [LeaveStatus::Pending->value, LeaveStatus::Escalated->value])
+                ->orWhereNotIn('employee_id', $this->roster->archivedIds())))
             ->orderByRaw("status in ('pending', 'escalated') desc")->orderByDesc('created_at')->orderByDesc('id');
         $result = $this->page($query, $perPage, $page);
 
@@ -244,11 +249,26 @@ final class LeaveRequests
     /** Deleting an employee with a pending or escalated request is refused (D4, 2026-11-04); call inside the delete's transaction. */
     public function assertNoOpenRequests(string $employeeId): void
     {
-        LeaveRequestLock::forEmployee($employeeId);
-        $open = LeaveRequest::where('employee_id', $employeeId)->whereIn('status', [LeaveStatus::Pending->value, LeaveStatus::Escalated->value])->count();
+        $open = count($this->openRequests($employeeId));
         if ($open > 0) {
             throw new LeaveRefused(LeaveRefusal::EmployeeHasOpenRequests, ['count' => (string) $open]);
         }
+    }
+
+    /**
+     * The employee's pending and escalated requests by from_date, under the lock submit takes: call inside the caller's transaction, so a
+     * request filed at the same moment waits for it (a termination date's open items, owner 2026-11-11).
+     *
+     * @return list<array{kind: string, id: string, status: string, from_date: string, to_date: string}>
+     */
+    public function openRequests(string $employeeId): array
+    {
+        LeaveRequestLock::forEmployee($employeeId);
+
+        return array_values(LeaveRequest::where('employee_id', $employeeId)->whereIn('status', [LeaveStatus::Pending->value, LeaveStatus::Escalated->value])
+            ->orderBy('from_date')->orderBy('id')->get()
+            ->map(fn (LeaveRequest $r) => ['kind' => 'leave_request', 'id' => (string) $r->id, 'status' => (string) $r->status, 'from_date' => (string) $r->from_date, 'to_date' => (string) $r->to_date])
+            ->all());
     }
 
     /**
@@ -355,7 +375,8 @@ final class LeaveRequests
     /**
      * The request's counted dates, or a refusal. Input first, then an unknown id is a 404 (ids are UUIDs, so probing is impractical), then reach,
      * so the later refusals never describe an employee out of reach. Own scope also needs reach today: the balance and the request list show a
-     * manager only the employees in reach today.
+     * manager only the employees in reach today. An archived employee takes no new request (owner, 2026-11-11), checked after reach so a
+     * manager's answer never confirms an id is a former employee.
      *
      * @return non-empty-list<string>
      */
@@ -377,6 +398,9 @@ final class LeaveRequests
                     throw new LeaveRefused(LeaveRefusal::NotInReach);
                 }
             }
+        }
+        if ($employee['archived']) {
+            throw new EmployeeArchived;
         }
         if (EmployeeRoster::typeInYear($employee, (int) substr($from, 0, 4)) === EmployeeType::DayLaborer->value) {
             throw new LeaveRefused(LeaveRefusal::DayLaborer);

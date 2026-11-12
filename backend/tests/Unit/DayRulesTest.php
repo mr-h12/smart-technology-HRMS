@@ -73,15 +73,24 @@ class DayRulesTest extends TestCase
 
     public function test_computed_minutes(): void
     {
-        $this->assertSame(['late' => 30, 'ot' => 30], DayRules::workerMinutes('20:00', '20:30', '05:00', '8'));
-        $this->assertSame(['late' => 0, 'ot' => 10], DayRules::workerMinutes('08:00', '07:50', '16:00', '8'));
-        $this->assertSame(['late' => 15, 'ot' => 0], DayRules::workerMinutes('08:00', '08:15', '15:00', '8'));
-        $this->assertSame(['late' => 0, 'ot' => 30], DayRules::workerMinutes('08:00', '08:00', '16:00', '7.5'));
-        $this->assertSame(['late' => 0, 'ot' => 60], DayRules::workerMinutes('08:00', '08:00', '17:00', '8'));   // the default field day
-        $this->assertSame(['late' => 45, 'ot' => 105], DayRules::workerMinutes('08:00', '08:45', '18:30', '8'));
+        $this->assertSame(['late' => 30, 'ot' => 60], DayRules::workerMinutes('20:00', '04:00', '20:30', '05:00'));
+        $this->assertSame(['late' => 0, 'ot' => 0], DayRules::workerMinutes('08:00', '16:00', '07:50', '16:00'));   // arriving early earns no overtime
+        $this->assertSame(['late' => 15, 'ot' => 0], DayRules::workerMinutes('08:00', '16:00', '08:15', '15:00'));
+        $this->assertSame(['late' => 0, 'ot' => 30], DayRules::workerMinutes('08:00', '15:30', '08:00', '16:00'));
+        $this->assertSame(['late' => 0, 'ot' => 0], DayRules::workerMinutes('08:00', '17:00', '08:00', '17:00'));   // the default field day
+        $this->assertSame(['late' => 45, 'ot' => 90], DayRules::workerMinutes('08:00', '17:00', '08:45', '18:30'));
         $this->assertSame(25, DayRules::officeLateMinutes('09:40', '09:00', 15));
         $this->assertSame(0, DayRules::officeLateMinutes('09:15', '09:00', 15));
         $this->assertSame(0, DayRules::officeLateMinutes('08:50', '09:00', 15));
+    }
+
+    /** Client question 20: overtime starts at the shift end, not after 8 hours worked; lateness never wraps midnight (question 14). */
+    public function test_overtime_starts_at_the_shift_end(): void
+    {
+        $this->assertSame(['late' => 0, 'ot' => 90], DayRules::workerMinutes('09:00', '16:00', '09:00', '17:30'));
+        $this->assertSame(['late' => 20, 'ot' => 0], DayRules::workerMinutes('09:00', '16:00', '09:20', '15:00'));
+        $this->assertSame(['late' => 0, 'ot' => 60], DayRules::workerMinutes('22:00', '06:00', '22:00', '07:00'));
+        $this->assertSame(['late' => 1430, 'ot' => 1440], DayRules::workerMinutes('00:00', '08:00', '23:50', '08:00'));
     }
 
     public function test_off_days_and_employment(): void

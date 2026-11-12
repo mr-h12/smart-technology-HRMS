@@ -383,6 +383,19 @@ async function view(over: object = {}, file: () => Response = html, pdfViewer = 
   return { user, dialog, urls, get, blobType }
 }
 
+test('an archived employee’s documents open but offer no upload, edit or delete', async () => {
+  vi.stubGlobal('URL', class extends URL { static createObjectURL = () => 'blob:doc-1'; static revokeObjectURL = () => {} })
+  mockFetch({ [FILE]: html })
+  const user = userEvent.setup()
+  renderWithAuth(<Documents emp={{ id: 'e1', documents: [d1] }} readOnly />, perms, { router: false })
+  expect(screen.queryByRole('button', { name: 'رفع مستند' })).toBeNull()
+  expect(screen.queryByRole('button', { name: 'الإجراءات' })).toBeNull()
+  expect(screen.queryByText(missingLine)).toBeNull()
+  await user.click(screen.getByRole('button', { name: 'صحيفة الحالة الجنائية' }))
+  const dialog = await screen.findByRole('dialog', { name: 'صحيفة الحالة الجنائية' })
+  expect(await within(dialog).findByRole('link', { name: 'تنزيل' })).toHaveAttribute('href', 'blob:doc-1')
+})
+
 test('an image opens as an img built from the stored mime', async () => {
   const { dialog, blobType } = await view({ mime: 'image/png', original_name: 'id.png' })
   const img = await within(dialog).findByRole('img')

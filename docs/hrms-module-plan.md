@@ -37,6 +37,7 @@ Smart Technology runs HR and payroll today on 6 hand-built Excel workbooks (anal
 | Attendance dates | HR enters or edits any day of an open period up to today (Cairo time). No future dates |
 | Attendance periods | Per group: office the calendar month, engineers and permanent workers the 26th → 25th, day laborers 1–15 and 16–end. The attendance lock is per (group, period) |
 | Attendance lock | HR locks one group's period in one action, after confirming the missing days; nobody edits until HR reopens with a reason. Weekly off days and official holidays are derived on read while the period is open and stored at lock. ⚠️ (owner) HR may lock a period before it ends. Reopening keeps the stored derived days. Deleting or moving a holiday removes its stored days on the old date; weekly-off days are not refreshed; the re-lock lists the holiday changes and the leave days on a holiday (owner, 2026-11-04) |
+| Official holidays | A holiday is a named period of consecutive days (from, to; at most 31), not only one date. Existing holidays became one-day periods; holidays never overlap, and a weekly off inside one is the holiday. Adding, editing or deleting needs every group's periods on all its old and new days open (owner, 2026-11-10; `docs/calculations.md` §2a) |
 | Attendance concurrency | Each day carries a `version`; a write with a stale version returns `409 concurrency_conflict`, never an overwrite. Days are never hard-deleted; clearing a day is an audited update |
 
 ## Modules by release
@@ -81,10 +82,11 @@ Smart Technology runs HR and payroll today on 6 hand-built Excel workbooks (anal
 1. **Fingerprint import** (office) → late minutes with grace, exemptions.
 2. **Payroll engines** for the 3 types, reproducing the Excel formulas (section 2.3 / 3.2–3.3 / 4.2 of the analysis doc).
    - The configurable multipliers above.
-   - Known Excel bugs fixed in the engine (e.g., raises included in net), and an **Excel-difference report** (employee, amount, reason) the client signs off.
+   - Known Excel bugs fixed in the engine (e.g., raises included in net), and an **Excel-difference report** (employee, amount, reason) the client signs off: one Arabic document for October 2026, generated from the regression test (owner, 2026-11-09).
    - HR override on every computed value.
+   - **Status: built** (PR B, branch `claude/payroll-engines`, 2026-11-12; spec `docs/superpowers/specs/2026-11-09-payroll-engines-design.md`): the three engines; the payroll sheet per group and period, computed on read, with HR's entry and overrides (API `/api/v1/payroll`, page «المرتبات», permissions `payroll.view.all` and `payroll.manage.all`); the fields of item 4; the October 2026 regression and `docs/reports/2026-10-excel-differences.md`. Not built: the advances ledger (item 3: until then the advances are those logged on attendance days, or typed on an office entry, deducted in full), payroll close and its read-only period (item 5: the sheet stays editable after the attendance lock), payout (item 6), the payslip PDF (item 7), the historical archive (item 8), the fingerprint import (item 1, on hold) and site-costing screens.
 3. **Advances/loans ledger**: amount, installments, repayment, balance.
-4. **Social insurance + income tax**: manual HR fields (permanent only).
+4. **Social insurance + income tax**: manual HR fields (permanent only). Built with item 2: HR's entry for monthly staff holds the employee share, the company share and income tax; blank = 0.
 5. **Period close**: HR closes → CEO approves → lock / HR reopen.
 6. **Payout**: paid flag + how received.
 7. **Payslip PDF** (template: مفردات مرتب).
@@ -243,6 +245,28 @@ Status is verified against `main` at `7be93b9` (PR #3 merged) by reading the cod
 - **All on the period grid now includes office staff.** With a site, it lists who has a stored day there in the period, plus the office staff at that site on the period's last day.
 - **A row with no site** offers «تحديد الموقع» to a holder of `employee.assign_site`, for office staff and workers. Engineers have no such button.
 
+### Payroll engines: owner decisions of 2026-11-09
+Answers before Release 2 item 2. Formulas: `docs/calculations.md`; spec: `docs/superpowers/specs/2026-11-09-payroll-engines-design.md`.
+- **Review findings first:** M1 (dated changes accepted inside a locked period; a type change not starting at a period boundary) and M2 (a pay change drops insured basic, raise and shift override) from `docs/reviews/2026-11-08-release-1-review.md` are fixed in their own PR before any engine code, because payroll reads those records. The other findings stay debt.
+- **Insurance and tax (question 11):** typed by HR per employee per period (employee share, company share, income tax); blank = 0; nothing carries over.
+- **Rounding (question 12):** none, the net included; paid as computed, shown to 2 decimals.
+- **Excel-difference report (question 13):** one Arabic document for October 2026, generated from the October regression test; each line names the employee label, the amount and the Excel error number or decision behind it. The client signs it once before go-live. No comparison screen.
+- **Midnight (question 14):** lateness does not wrap around midnight.
+- **Overtime start (question 20):** after the shift end, not after 8 h worked. Permanent workers' OT = actual out − scheduled out; engineers' and day laborers' OT stay the minutes HR approves, with the hint from the shift end.
+- **Absence (R21):** غ days deduct days × salary ÷ 30 for every monthly type; a day laborer earns no wage that day.
+- **Early departure / half day (R25):** no automatic deduction for any field type; payroll flags the minutes and HR deducts by hand with a reason.
+- **Engineers' transport:** the per-worker fare override, in full, on every day worked at a work site; none without an override.
+- **Wage approval in a locked period (owner, 2026-11-11):** HR's approval of a site manager's proposed wage (`DayCrew::decide`) writes the daily wage from the hire date (else the proposal's date) even when that date falls in a locked attendance period, although M1 refuses other dated changes there. Accepted as built: no lock check, no code change (`docs/client-questions.md` question 21).
+
+### Hidden archived employees: owner decisions of 2026-11-11
+An archived employee (termination date before today in Cairo) has left the company. Spec: `docs/superpowers/specs/2026-11-11-hide-archived-employees-design.md`.
+- **Attendance:** hidden by default from every attendance screen, for every role. HR (`attendance.edit.all`) has one switch on the period grid, «إظهار من تركوا العمل» (`with_archived=1`), off by default, to finish and lock their last days. Recorded days are never deleted; the lock, its missing list and the import still include them.
+- **Who reaches them:** only all-scope viewers (`employee.view.all`), through the Archive view, on a read-only page (data, attendance, leave, document download) with an «مؤرشف» banner. Its only actions are Reactivate and correcting the termination date or reason. A site manager sees neither the Archive switch nor any archived employee.
+- **Open items:** a termination date is refused while the employee has a pending or escalated leave request or a pending wage proposal (`employee_has_open_items`, 409, which lists them). Whatever slips through stays visible to HR until decided. Advances and custody join this rule when built.
+- **API by id:** a site manager is refused everything about an archived employee (one rule in `EmployeeReach`). For all-scope users reads are allowed; writes to the archived employee's record are refused (`employee_archived`, 409) except reactivating, correcting the termination date or reason, attendance days up to the termination date, and deleting. Deciding or cancelling a leave request and deciding a wage proposal stay allowed.
+- **Reactivating** brings everything back.
+- **History:** old notifications and the audit log stay as they are; no new alert counts an archived employee.
+
 ### Changes to the work plan
 - **Youssef:**
   - Add R19 (workday) to the attendance contracts. The shift default changes in one new migration, after R19 is answered.
@@ -250,7 +274,7 @@ Status is verified against `main` at `7be93b9` (PR #3 merged) by reading the cod
 - **Second developer:**
   - WP-B1 gains the phone check on a database copy (Q8), the server-side notes rule (Q6) and the CEO-only 0 (Q2; R23 answered 2026-11-06: 0 is the CEO's alone).
   - The account-to-employee link (Q4) is a new small PR in Employees, before the site-manager workspace.
-- **Third developer (Payroll):** builds §0a with the multiplier per type. R26 and R27 are answered (2026-11-06); it still needs R21 and R25.
+- **Third developer (Payroll):** builds §0a with the multiplier per type. R26 and R27 are answered (2026-11-06), R21 and R25 on 2026-11-09.
 
 ## Modules, ownership and parallel work
 **Status: proposal.** Owner approval needed. Developer names are the current team: **Youssef**, who built Releases 1a–1c, and **the second developer**, who joins now. A third developer may join later.

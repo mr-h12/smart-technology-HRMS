@@ -61,7 +61,8 @@ export function LeavePage() {
   const request = params.get('request')
   const tab = params.get('tab') === 'balances' && !request ? 'balances' : 'requests'
   const thisYear = Number(cairoToday().slice(0, 4))
-  const [year, setYear] = useState(String(thisYear))
+  const picked = params.get('year') // the balances year, in the URL so Back restores it; Requests keeps its own year filter
+  const year = picked ?? String(thisYear)
 
   return (
     <div className="space-y-6">
@@ -72,13 +73,14 @@ export function LeavePage() {
       />
       <RequestDialog open={asking} onOpenChange={setAsking} />
       {request && <DecideDialog id={request} open={closed !== key} onOpenChange={() => setClosed(key)} />}
-      <Tabs value={tab} onValueChange={(v) => setParams(v === 'balances' ? { tab: v } : {}, { replace: true })}>
+      {/* the balances year outlives a visit to Requests; the other balances filters start over */}
+      <Tabs value={tab} onValueChange={(v) => setParams({ ...(v === 'balances' && { tab: v }), ...(picked && { year: picked }) }, { replace: true })}>
         <TabsList>
           <TabsTrigger value="requests"><ClipboardList className="size-4" aria-hidden /> {t('leave.tab.requests')}</TabsTrigger>
           <TabsTrigger value="balances"><Scale className="size-4" aria-hidden /> {t('leave.tab.balances')}</TabsTrigger>
         </TabsList>
         <TabsContent value="requests"><Requests thisYear={thisYear} highlight={request} /></TabsContent>
-        <TabsContent value="balances"><Balances thisYear={thisYear} year={year} setYear={setYear} /></TabsContent>
+        <TabsContent value="balances"><Balances thisYear={thisYear} year={year} /></TabsContent>
       </Tabs>
     </div>
   )
@@ -137,35 +139,43 @@ function Requests({ thisYear, highlight }: { thisYear: number; highlight: string
 }
 
 /** `GET /leave/balances`: one row per monthly employee, every number the server's (docs/calculations.md §7). The year is the page's: the header names it. */
-function Balances({ thisYear, year, setYear }: { thisYear: number; year: string; setYear: (y: string) => void }) {
+function Balances({ thisYear, year }: { thisYear: number; year: string }) {
   const { t, i18n } = useTranslation()
   const { can } = useAuth()
   const today = cairoToday()
-  const [type, setType] = useState('')
-  const [q, setQ] = useState('')
-  const [page, setPage] = useState(1)
+  // the filters and page live in the URL, so going back from an employee shows the same list; a default ('') leaves its key out
+  const [params, setParams] = useSearchParams()
+  const set = (patch: Record<string, string>) =>
+    setParams((p) => {
+      for (const [k, v] of Object.entries(patch)) {
+        if (v) p.set(k, v)
+        else p.delete(k)
+      }
+      return p
+    }, { replace: true })
+  const [q, setQ] = useState(params.get('q') ?? '') // the router writes the URL in a transition, which would lag a box bound to it
+  const type = params.get('type') ?? ''
+  const page = Number(params.get('page')) || 1
   const search = useDebounced(q, 250)
-  const qs = new URLSearchParams({ year, page: String(page), per_page: String(PAGE), ...(type && { type }), ...(search && { q: search }) })
+  const filters = { year, ...(type && { type }), ...(search && { q: search }) }
+  const qs = new URLSearchParams({ ...filters, page: String(page), per_page: String(PAGE) })
   const { rows, total, err, loading } = useList(`/leave/balances?${qs}`)
-  const filter = (set: (v: string) => void) => (v: string) => {
-    set(v)
-    setPage(1)
-  }
+  const filter = (patch: Record<string, string>) => set({ ...patch, page: '' })
 
   return (
     <Card className="overflow-hidden">
       <div className="flex flex-wrap items-center gap-3 border-b p-4">
-        <SearchInput value={q} onChange={filter(setQ)} placeholder={t('leave.search')} className="sm:w-full sm:max-w-md" />
-        <FilterSelect value={type} onChange={filter(setType)} label={t('employee.type')} allLabel={t('employee.allTypes')} options={MONTHLY_TYPES.filter((v) => v !== 'office' || can('leave.view.all')).map((v) => [v, t(`enum.type.${v}`)])} />
+        <SearchInput value={q} onChange={(v) => { setQ(v); filter({ q: v }) }} placeholder={t('leave.search')} className="sm:w-full sm:max-w-md" />
+        <FilterSelect value={type} onChange={(v) => filter({ type: v })} label={t('employee.type')} allLabel={t('employee.allTypes')} options={MONTHLY_TYPES.filter((v) => v !== 'office' || can('leave.view.all')).map((v) => [v, t(`enum.type.${v}`)])} />
         <SegmentedControl
           label={t('leave.year')}
           value={year}
-          onChange={filter(setYear)}
+          onChange={(y) => filter({ year: y === String(thisYear) ? '' : y })}
           className="w-max"
           options={[thisYear - 1, thisYear, thisYear + 1].map(String).map((y) => ({ value: y, label: y, content: <span aria-hidden className="px-1.5">{y}</span> }))}
         />
         {(q || type) && (
-          <Button variant="ghost" size="sm" onClick={() => { setQ(''); setType(''); setPage(1) }} className="lg:ms-auto">
+          <Button variant="ghost" size="sm" onClick={() => { setQ(''); filter({ q: '', type: '' }) }} className="lg:ms-auto">
             {t('common.clearFilters')}
           </Button>
         )}
@@ -175,10 +185,12 @@ function Balances({ thisYear, year, setYear }: { thisYear: number; year: string;
         rows={rows}
         rowKey={(r) => r.id}
         to={(r) => `/employees/${r.id}?tab=leave&year=${year}`}
+        // the employee screen steps through this same list: its request without the paging, the row's place in the whole result, its size
+        state={(_, i) => ({ list: `/leave/balances?${new URLSearchParams(filters)}`, pos: (page - 1) * PAGE + i, total })}
         loading={loading}
         error={err}
         empty={{ icon: CalendarDays, title: t('common.noResults') }}
-        page={{ page, pageSize: PAGE, total, onPageChange: setPage }}
+        page={{ page, pageSize: PAGE, total, onPageChange: (p) => set({ page: p > 1 ? String(p) : '' }) }}
         title={{
           header: t('employee.employee'),
           cell: (r) => (

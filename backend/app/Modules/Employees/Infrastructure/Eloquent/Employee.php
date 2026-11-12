@@ -47,6 +47,30 @@ class Employee extends Model
             ->when(preg_match('/^(0|[1-9]\d{0,8})$/D', $search) === 1, fn (Builder $q) => $q->orWhere('code', (int) $search)));
     }
 
+    /**
+     * Archived = the termination date is before today in Cairo; the termination day itself is still worked (CONTEXT.md, Archive).
+     * The one rule every caller uses: this for PHP, the `archived` scope for SQL.
+     */
+    public static function isArchived(?string $terminationDate): bool
+    {
+        return $terminationDate !== null && $terminationDate < now('Africa/Cairo')->toDateString();
+    }
+
+    /**
+     * archived() keeps the archived employees, archived(false) the others. Qualified: EmployeeReach applies it to other modules' queries.
+     *
+     * @param  Builder<self>  $query
+     */
+    #[Scope]
+    protected function archived(Builder $query, bool $archived = true): void
+    {
+        $column = $query->qualifyColumn('termination_date');
+        $today = now('Africa/Cairo')->toDateString();
+        $query->where(fn (Builder $q) => $archived
+            ? $q->where($column, '<', $today)
+            : $q->whereNull($column)->orWhere($column, '>=', $today));
+    }
+
     /** @return HasMany<EmployeeTypeChange, $this> */
     public function typeChanges(): HasMany
     {

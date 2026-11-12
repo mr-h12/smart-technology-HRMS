@@ -24,7 +24,7 @@ const LOOK: Record<Status, { cls: string; text: string; icon: LucideIcon }> = {
   leave: { cls: 'bg-info-bg border-info-border', text: 'text-info', icon: CalendarOff },
   derived: { cls: 'border-dashed bg-muted', text: 'text-muted-foreground', icon: CalendarOff },
 }
-// the quick actions: [action, label key, icon, status tone]. The bulk bar and the paste dialog show all three; a row shows Present and puts the rest in its ⋯ menu
+// the quick actions: [action, label key, icon, status tone]. The bulk bar and the paste dialog show all three; a row shows Present and Absent and puts Sick in its ⋯ menu
 export const QUICK: [SheetAction, string, LucideIcon, string][] = [
   [{ kind: 'present' }, 'attendance.sheet.action.present', Check, 'text-success hover:bg-success-bg hover:border-success-border'],
   [{ kind: 'leave', code: 'absent' }, 'attendance.sheet.action.absent', UserX, 'text-destructive hover:bg-destructive-bg hover:border-destructive-border'],
@@ -40,8 +40,10 @@ const TOTALS = [['worked', 'text-success', 'attendance.sheet.kpi.worked'], ['lea
  * One page of the day sheet: a table from xl up, cards below it (below xl the table is wider than its card, in both groups). Below 2xl
  * the table's actions are icons, and its totals always sit in two columns, so the table fits its card. Writes go back through `onApply` (the sheet's `apply()`).
  */
-export function SheetRows({ rows, group, editable, date, sites, selected, pending, leaveTypeId, onToggle, onApply, onOpenDay }: {
+export function SheetRows({ rows, allIds, group, editable, date, sites, selected, pending, leaveTypeId, onToggle, onApply, onOpenDay }: {
   rows: SheetRow[]
+  /** Every row the filter shows, on every page: what the select-all box toggles. */
+  allIds: string[]
   /** The group shown; a row's own type decides how it reads, the group only the table's columns. */
   group: string
   editable: boolean
@@ -66,41 +68,44 @@ export function SheetRows({ rows, group, editable, date, sites, selected, pendin
     return s ? localName(s, lang) : '—'
   }
   const status = (r: SheetRow) => statusOf(r, isOfficeRow(r))
+  // a row in a locked period (in All, its own type's) reads as on a read-only sheet
+  const writable = (r: SheetRow) => editable && !r.locked
   const workSites = sites.filter((s) => s.kind === 'work' && s.active)
   // the day's leave type (a derived day has no site: its code's leave type); the seeded ones have no name_en, so English falls back to the code's name
   const leaveName = (r: SheetRow, code: string) => {
     const s = sites.find((x) => x.id === r.day.site_id) ?? sites.find((x) => x.kind === 'leave' && x.leave_code === code)
     return s ? localName(s, lang, t(`attendance.leaveName.${code}`, { defaultValue: s.name_ar })) : t(`attendance.leaveName.${code}`, { defaultValue: code })
   }
-  const pageIds = rows.map((r) => r.employee.id)
-  const pageAll = pageIds.every((id) => selected.has(id))
-  const pageSome = pageIds.some((id) => selected.has(id))
+  const allOn = allIds.every((id) => selected.has(id))
+  const someOn = allIds.some((id) => selected.has(id))
   const noLeave = (a: SheetAction) => a.kind === 'leave' && !leaveTypeId(a.code)
   // a field row is present at its last site; without one there is nowhere to put it (bulk paths skip such rows with a toast)
   const noSite = (a: SheetAction, r: SheetRow) => a.kind === 'present' && !isOfficeRow(r) && !r.last_site_id
   const noSiteId = useId()
-  // the select-page box: in the table header from xl, on its own line above the cards below it
-  const pageCheck = <input type="checkbox" className={cn(FOCUS, 'size-4 accent-primary')} checked={pageAll} ref={(el) => { if (el) el.indeterminate = pageSome && !pageAll }} onChange={() => onToggle(pageIds, !pageAll)} />
+  // the select-all box (every filtered row, not just this page): in the table header from xl, on its own line above the cards below it
+  const allCheck = <input type="checkbox" className={cn(FOCUS, 'size-4 accent-primary')} checked={allOn} ref={(el) => { if (el) el.indeterminate = someOn && !allOn }} onChange={() => onToggle(allIds, !allOn)} />
   const check = (r: SheetRow) => (
     <label className="flex min-h-tap min-w-tap cursor-pointer items-center justify-center">
       <input type="checkbox" className={cn(FOCUS, 'size-4 accent-primary')} checked={selected.has(r.employee.id)} onChange={(e) => onToggle([r.employee.id], e.target.checked)} />
       <span className="sr-only">{t('attendance.sheet.select', { name: name(r) })}</span>
     </label>
   )
-  // compact (the table): icon-only below 2xl, named by its tooltip; the aria-label always names the action and the employee
-  const present = (r: SheetRow, compact = false) => {
-    const [action, label, Icon, tone] = QUICK[0]
+  // Present (QUICK[0]) or Absent (QUICK[1]), pressed when the row already is. compact (the table): icon-only below 2xl, named by its
+  // tooltip; the aria-label always names the action and the employee
+  const quick = (i: 0 | 1, r: SheetRow, compact = false) => {
+    const [action, label, Icon, tone] = QUICK[i]
     const s = status(r)
     return (
-      <Button type="button" variant="outline" size="sm" className={cn('px-2.5', tone, 'aria-pressed:border-success/25 aria-pressed:bg-success/10')} aria-pressed={s === 'present' || s === 'late'}
-        disabled={pending.has(r.employee.id) || noSite(action, r)} {...(compact && { title: t(label) })} {...(noSite(action, r) && { title: t('attendance.sheet.noLastSite'), 'aria-describedby': noSiteId })}
+      <Button type="button" variant="outline" size="sm" className={cn('px-2.5', tone, i ? 'aria-pressed:border-destructive/25 aria-pressed:bg-destructive/10' : 'aria-pressed:border-success/25 aria-pressed:bg-success/10')}
+        aria-pressed={i ? s === 'absent' : s === 'present' || s === 'late'}
+        disabled={pending.has(r.employee.id) || noSite(action, r) || noLeave(action)} {...(compact && { title: t(label) })} {...(noSite(action, r) && { title: t('attendance.sheet.noLastSite'), 'aria-describedby': noSiteId })}
         aria-label={t('attendance.sheet.rowAction', { action: t(label), name: name(r) })} onClick={() => onApply(action, r, t('attendance.sheet.actionOn', { action: t(label), name: name(r) }))}>
         <Icon aria-hidden />
         <span className={cn(compact && 'hidden 2xl:inline')}>{t(label)}</span>
       </Button>
     )
   }
-  // ⋯: the other quick actions and Details. Not modal, so the day editor it opens never inherits a blocked page
+  // ⋯: Sick and Details. Not modal, so the day editor it opens never inherits a blocked page
   const more = (r: SheetRow) => (
     <DropdownMenu modal={false}>
       <DropdownMenuTrigger asChild>
@@ -110,7 +115,7 @@ export function SheetRows({ rows, group, editable, date, sites, selected, pendin
         </Button>
       </DropdownMenuTrigger>
       <DropdownMenuContent align="end">
-        {QUICK.slice(1).map(([action, label, Icon]) => (
+        {QUICK.slice(2).map(([action, label, Icon]) => (
           <DropdownMenuItem key={label} disabled={pending.has(r.employee.id) || noLeave(action)} onSelect={() => onApply(action, r, t('attendance.sheet.actionOn', { action: t(label), name: name(r) }))}>
             <Icon aria-hidden />
             {t(label)}
@@ -124,16 +129,33 @@ export function SheetRows({ rows, group, editable, date, sites, selected, pendin
     </DropdownMenu>
   )
   /**
-   * A row's times, each placed by `cell`: office rows the in-time, present field rows arrival and departure with the server's late/OT
-   * hints; boxes while the day is editable, plain text otherwise. Keyed by the stored times, so a refetch never wipes typing.
+   * A row's times, each placed by `cell`: office rows the in-time, present field rows arrival and departure with their late/OT minutes;
+   * boxes while the day is editable, plain text otherwise. Keyed by the stored times, so a refetch never wipes typing.
+   * Engineers and day laborers show their stored minutes (an old day with none stored, the server's hint); overtime the times suggest
+   * but nobody stored is «غير معتمد», with «اعتماد» to store it. Permanent workers show the hints (their minutes come from the times at payroll).
    */
   const times = (r: SheetRow, cell: (field: TimeField, node: ReactNode) => ReactNode) => {
     const fields: TimeField[] = isOfficeRow(r) ? ['in_time'] : status(r) === 'present' ? ['in_time', 'out_time'] : []
     if (!fields.length) return null
-    const late = r.hints.late_minutes ?? 0
-    const over = r.hints.ot_minutes ?? 0
-    const hint = (f: TimeField) => (isOfficeRow(r) ? undefined : f === 'in_time' ? (late > 0 ? t('attendance.sheet.lateBy', { minutes: late }) : undefined) : over > 0 ? t('attendance.sheet.overBy', { minutes: over }) : undefined)
-    if (!editable) return fields.map((f) => cell(f, <><span className="text-sm">{formatTime(r.day[f], lang)}</span><Hint text={hint(f)} /></>))
+    const stores = r.employee.type === 'engineer' || r.employee.type === 'day_laborer'
+    const late = stores && r.day.late_minutes != null ? Number(r.day.late_minutes) : (r.hints.late_minutes ?? 0)
+    const over = stores ? Number(r.day.ot_minutes ?? 0) : (r.hints.ot_minutes ?? 0)
+    const suggested = stores && !over ? (r.hints.ot_minutes ?? 0) : 0
+    const approve = t('attendance.sheet.approveOt')
+    const hint = (f: TimeField) => (isOfficeRow(r) ? null
+      : f === 'in_time' ? late > 0 && <Hint text={t('attendance.sheet.lateBy', { minutes: late })} />
+      : over > 0 ? <Hint text={t('attendance.sheet.overBy', { minutes: over })} />
+      : suggested > 0 && (
+        <Hint text={t('attendance.sheet.overUnapproved', { minutes: suggested })}>
+          {writable(r) && (
+            <Button type="button" variant="outline" size="xs" className="ms-1" disabled={pending.has(r.employee.id)} aria-label={t('attendance.sheet.rowAction', { action: approve, name: name(r) })}
+              onClick={() => onApply({ kind: 'time', ot_minutes: suggested }, r, t('attendance.sheet.actionOn', { action: approve, name: name(r) }))}>
+              {approve}
+            </Button>
+          )}
+        </Hint>
+      ))
+    if (!writable(r)) return fields.map((f) => cell(f, <><span className="text-sm">{formatTime(r.day[f], lang)}</span>{hint(f)}</>))
     return (
       <TimeCells key={`${r.employee.id}/${r.day.in_time}/${r.day.out_time}`} cell={cell} disabled={pending.has(r.employee.id)}
         cells={fields.map((f) => ({ field: f, was: hhmm(r.day[f]) ?? '', label: t('attendance.sheet.rowAction', { action: t(`attendance.day.${f}`), name: name(r) }), hint: hint(f) }))}
@@ -192,12 +214,12 @@ export function SheetRows({ rows, group, editable, date, sites, selected, pendin
       </DropdownMenu>
     )
   }
-  const canSetSite = (r: SheetRow) => r.needs_site && can('employee.assign_site')
+  const canSetSite = (r: SheetRow) => r.needs_site && !r.locked && can('employee.assign_site') // a locked day's date is always refused
   const setSite = (r: SheetRow) => canSetSite(r) && <MoveSiteDialog empId={r.employee.id} from={date} ariaLabel={t('attendance.sheet.rowAction', { action: t('site.set'), name: name(r) })} />
   const where = (r: SheetRow) => {
     if (all) return r.site_id ? <span className="rounded-md border bg-card px-2 py-0.5 text-xs">{siteName(r.site_id)}</span> : !canSetSite(r) && <span className="text-xs text-muted-foreground">{t('attendance.noSite')}</span>
     if (isOfficeRow(r)) return null
-    if (editable) return siteChip(r)
+    if (writable(r)) return siteChip(r)
     const s = status(r)
     if (s === 'present') return <span className="rounded-md border bg-card px-2 py-0.5 text-xs">{siteName(r.day.site_id)}</span>
     if (s === 'missing' && r.last_site_id) return <span className="text-xs text-muted-foreground">{t('attendance.sheet.lastSite', { site: siteName(r.last_site_id) })}</span>
@@ -260,8 +282,8 @@ export function SheetRows({ rows, group, editable, date, sites, selected, pendin
               {editable && (
                 <TableHead className="w-0 px-1 first:ps-2">
                   <label className="flex min-h-tap min-w-tap cursor-pointer items-center justify-center">
-                    {pageCheck}
-                    <span className="sr-only">{t('attendance.sheet.selectPage')}</span>
+                    {allCheck}
+                    <span className="sr-only">{t('attendance.sheet.selectAll', { count: allIds.length })}</span>
                   </label>
                 </TableHead>
               )}
@@ -277,7 +299,7 @@ export function SheetRows({ rows, group, editable, date, sites, selected, pendin
           <TableBody>
             {rows.map((r) => (
               <TableRow key={r.employee.id} className={cn(LINE, '[&>td]:py-1.5', selected.has(r.employee.id) && SELECTED)}>
-                {editable && <TableCell className="px-1 first:ps-2">{check(r)}</TableCell>}
+                {editable && <TableCell className="px-1 first:ps-2">{writable(r) && check(r)}</TableCell>}
                 {/* the code shares the employee cell (no column of its own): in English the "Employee ID" header alone pushed the table past its card at 1280 */}
                 <TableCell className="whitespace-normal">
                   <span className="flex flex-wrap items-baseline gap-x-2">
@@ -297,7 +319,7 @@ export function SheetRows({ rows, group, editable, date, sites, selected, pendin
                 {!office && fieldTimes(r)}
                 <TableCell>
                   <div className="flex items-center justify-end gap-1.5">
-                    {editable ? <>{present(r, true)}{more(r)}</> : details(r, true)}
+                    {writable(r) ? <>{quick(0, r, true)}{quick(1, r, true)}{more(r)}</> : details(r, true)}
                   </div>
                 </TableCell>
                 <TableCell className={cn('border-s', !selected.has(r.employee.id) && 'bg-muted/40')}>{tableTotals(r)}</TableCell>
@@ -308,8 +330,8 @@ export function SheetRows({ rows, group, editable, date, sites, selected, pendin
       </div>
       {editable && (
         <label className={cn(LINE, 'flex min-h-tap cursor-pointer items-center gap-1.5 ps-1.5 pe-4 text-sm font-medium xl:hidden')}>
-          <span className="flex min-h-tap min-w-tap items-center justify-center">{pageCheck}</span>
-          {t('attendance.sheet.selectPage')}
+          <span className="flex min-h-tap min-w-tap items-center justify-center">{allCheck}</span>
+          {t('attendance.sheet.selectAll', { count: allIds.length })}
         </label>
       )}
       <ul aria-label={t('attendance.employee')} className="xl:hidden">
@@ -317,7 +339,7 @@ export function SheetRows({ rows, group, editable, date, sites, selected, pendin
           <li key={r.employee.id} className={cn(LINE, 'space-y-1.5 px-4 py-2.5 last:border-0', selected.has(r.employee.id) && SELECTED)}>
             <div className="flex flex-wrap items-center gap-x-3 gap-y-1.5">
               <div className="flex min-w-0 grow basis-40 items-center gap-1.5">
-                {editable && <div className="-my-2.5 -ms-2.5">{check(r)}</div>}
+                {writable(r) && <div className="-my-2.5 -ms-2.5">{check(r)}</div>}
                 <div className="min-w-0">
                   <span className="flex items-center gap-2">
                     <span className="text-muted-foreground">{r.employee.code}</span>
@@ -330,7 +352,7 @@ export function SheetRows({ rows, group, editable, date, sites, selected, pendin
               <div className="flex min-w-0 grow items-center gap-2 sm:grow-0">
                 <div className="min-w-0">{where(r)}</div>
                 {setSite(r)}
-                <div className="ms-auto flex gap-2">{editable ? <>{present(r)}{more(r)}</> : details(r)}</div>
+                <div className="ms-auto flex gap-2">{writable(r) ? <>{quick(0, r)}{quick(1, r)}{more(r)}</> : details(r)}</div>
               </div>
             </div>
             {(isOfficeRow(r) || status(r) === 'present') && <div className="grid gap-x-3 gap-y-1.5 sm:grid-cols-2">{times(r, cardCell)}</div>}
@@ -348,9 +370,9 @@ export const selectOnFocus = {
   onMouseUp: (e: MouseEvent) => e.preventDefault(),
 }
 
-/** A server late/OT hint under a time, in the warning tone. */
-function Hint({ text }: { text?: string }) {
-  return text ? <p className="mt-1 flex items-center gap-1 text-xs text-warning"><Clock className="size-3.5 shrink-0" aria-hidden />{text}</p> : null
+/** Late/OT minutes under a time, in the warning tone; `children` sit after the text (the overtime «اعتماد»). */
+function Hint({ text, children }: { text: string; children?: ReactNode }) {
+  return <p className="mt-1 flex items-center gap-1 text-xs text-warning"><Clock className="size-3.5 shrink-0" aria-hidden />{text}{children}</p>
 }
 
 /**
@@ -360,7 +382,7 @@ function Hint({ text }: { text?: string }) {
  * time, so typing replaces it. `cell` places each box (a table cell, a card slot).
  */
 function TimeCells({ cells, disabled, onCommit, cell }: {
-  cells: { field: TimeField; was: string; label: string; hint?: string }[]
+  cells: { field: TimeField; was: string; label: string; hint?: ReactNode }[]
   disabled: boolean
   /** Resolves truthy once written; a refused write puts the stored times back, so a later blur does not send them again. */
   onCommit: (times: Partial<Record<TimeField, string>>) => Promise<unknown>
@@ -384,12 +406,15 @@ function TimeCells({ cells, disabled, onCommit, cell }: {
     setDraft(next)
     if (Object.keys(out).length) void onCommit(out).then((written) => { if (!written) setDraft(stored()) })
   }
+  // the hint sits outside the box: moving to its «اعتماد» leaves the pair, so a typed time is written first
   return cells.map((c, i) => cell(c.field, (
-    <div ref={(el) => { boxes.current[i] = el }} onBlur={(e) => { if (!boxes.current.some((b) => b?.contains(e.relatedTarget))) done() }}
-      onKeyDown={(e) => { if (e.key === 'Escape') setDraft(stored()); else if (e.key === 'Enter' && e.target instanceof HTMLInputElement) e.target.blur() }}>
-      <TimeInput value={draft[c.field].v} label={c.label} aria-label={c.label} quietHint disabled={disabled} {...selectOnFocus}
-        onChange={(v, needs) => setDraft((d) => ({ ...d, [c.field]: { v, needs } }))} />
-      <Hint text={c.hint} />
-    </div>
+    <>
+      <div ref={(el) => { boxes.current[i] = el }} onBlur={(e) => { if (!boxes.current.some((b) => b?.contains(e.relatedTarget))) done() }}
+        onKeyDown={(e) => { if (e.key === 'Escape') setDraft(stored()); else if (e.key === 'Enter' && e.target instanceof HTMLInputElement) e.target.blur() }}>
+        <TimeInput value={draft[c.field].v} label={c.label} aria-label={c.label} quietHint disabled={disabled} {...selectOnFocus}
+          onChange={(v, needs) => setDraft((d) => ({ ...d, [c.field]: { v, needs } }))} />
+      </div>
+      {c.hint}
+    </>
   )))
 }

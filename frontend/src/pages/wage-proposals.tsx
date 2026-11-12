@@ -10,6 +10,7 @@ import { asciiDigits, ErrorBanner, type Errs, localName, ltrDates, TextField, to
 import { Button } from '@/components/ui/button'
 import { Card } from '@/components/ui/card'
 import { Dialog, DialogBody, DialogContent, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog'
+import { plainAmount } from '@/lib/day-sheet'
 import { useList, useSave } from '@/lib/query'
 
 /** A row of `GET /employees/wage-proposals`: a daily wage a site manager proposed for a day laborer they added, waiting for HR. */
@@ -27,9 +28,6 @@ export type WageProposal = {
 const LIST = '/employees/wage-proposals?per_page=100'
 // the server's rule: a positive amount with up to 6 decimals
 const WAGE = /^\d{1,12}(\.\d{1,6})?$/
-
-/** "350.000000" → "350", "312.500000" → "312.5": the stored amount as HR would type it. */
-export const plainAmount = (v: string) => (v.includes('.') ? v.replace(/\.?0+$/, '') : v)
 
 /** `/wage-proposals`: HR approves or refuses each wage a site manager proposed (`employee.approve_wage.all`). `?proposal=` opens one (the bell). */
 export function WageProposalsPage() {

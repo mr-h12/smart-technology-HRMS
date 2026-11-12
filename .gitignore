@@ -4,6 +4,8 @@
 # Client payroll data: salaries, national IDs, bank accounts. Never commit.
 /*.xlsx
 docs/templates/*.xlsx
+# The Excel-difference report's client copy, with names (payroll:excel-differences --names).
+*-client.md
 backend/vendor/
 backend/.env
 backend/storage/*.key
