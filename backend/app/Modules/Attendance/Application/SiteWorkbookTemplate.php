@@ -5,17 +5,80 @@ declare(strict_types=1);
 namespace App\Modules\Attendance\Application;
 
 use App\Modules\Attendance\Domain\Employment;
+use App\Modules\Attendance\Infrastructure\XlsxTemplateWriter;
 use App\Modules\Employees\Application\EmployeeRoster;
 use App\Modules\Sites\Application\SiteService;
+use App\Modules\Sites\Domain\SiteKind;
+use App\Modules\Sites\Infrastructure\Eloquent\Residence;
+use App\Modules\Sites\Infrastructure\Eloquent\Site;
 use DateTimeImmutable;
+use InvalidArgumentException;
 
 /** The site workbook (ملف الموقع, calculations §14 W1–W4): one site's empty Excel file for a range of days, filled by its site manager. */
 final class SiteWorkbookTemplate
 {
+    /** W1: one sheet per day, at most this many (a technical limit of the file, not a setting). */
+    public const MAX_DAYS = 31;
+
+    /** Empty rows per day sheet, or twice the site's own people when that is more (a technical limit of the file, not a setting). */
+    public const MIN_ROWS = 30;
+
     public function __construct(
         private readonly EmployeeRoster $roster,
         private readonly SiteService $sites,
+        private readonly XlsxTemplateWriter $writer,
     ) {}
+
+    /**
+     * W1: the empty file, in Arabic whatever the request language. $siteId is a live, active work site and $from..$to at most
+     * MAX_DAYS dates; the caller checks both.
+     *
+     * @return string the path of a temp .xlsx file; the caller deletes it
+     */
+    public function file(string $siteId, string $from, string $to): string
+    {
+        $names = $this->names($siteId, $from, $to);
+        $site = (string) $this->sites->show($siteId)['name_ar'];
+        $dates = self::dates($from, $to);
+        if ($dates === []) {
+            throw new InvalidArgumentException("{$from} is after {$to}.");
+        }
+        /** @var list<string> $leave */
+        $leave = Site::where(['kind' => SiteKind::Leave->value, 'active' => true])->orderBy('name_ar')->pluck('name_ar')->all();
+        /** @var list<string> $residences */
+        $residences = Residence::orderBy('name_ar')->pluck('name_ar')->all();
+
+        return $this->writer->writeWorkbook([
+            'sheets' => array_map(fn (string $d) => [
+                'name' => self::sheetName($d),
+                'title' => (string) __('attendance.workbook.title', ['site' => $site, 'day' => self::sheetName($d).'-'.substr($d, 0, 4)], 'ar'),
+            ], $dates),
+            'columns' => self::columns(),
+            'rows' => max(self::MIN_ROWS, 2 * count(array_filter($names, fn (array $n) => $n['own']))),
+            'statuses' => [(string) __('attendance.template.present', [], 'ar'), ...$leave],
+            'names' => array_column($names, 'entry'),
+            'residences' => $residences,
+            'meta' => [$siteId, $from, $to],
+            'prompt' => ['title' => (string) __('attendance.workbook.prompt_title', [], 'ar'), 'text' => (string) __('attendance.workbook.prompt', [], 'ar')],
+        ]);
+    }
+
+    /** @return non-empty-list<string> the ten headers of a day sheet, in the order of the owner's rule 4 */
+    public static function columns(): array
+    {
+        /** @var non-empty-list<string> $columns */
+        $columns = __('attendance.workbook.columns', [], 'ar');
+
+        return $columns;
+    }
+
+    /** A day sheet's name: the Arabic weekday and `dd-mm`, e.g. «السبت 07-11». */
+    public static function sheetName(string $date): string
+    {
+        $d = new DateTimeImmutable($date);
+
+        return __('attendance.workbook.weekday.'.$d->format('w'), [], 'ar').' '.$d->format('d-m');
+    }
 
     /**
      * The name list (W4): `name_ar (type label) · code`, the site's own people first. The label is the type on the first day of the

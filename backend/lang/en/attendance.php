@@ -60,4 +60,5 @@ return [
         'duplicate_row' => 'This employee appears twice in the file.',
         'code_name_mismatch' => 'The ID or name changed since this file was downloaded. Download a fresh template.',
     ],
+    'workbook_max_days' => 'The range is at most :max days.',
 ];

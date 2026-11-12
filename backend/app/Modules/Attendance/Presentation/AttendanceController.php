@@ -9,10 +9,15 @@ use App\Modules\Attendance\Application\AttendanceGrid;
 use App\Modules\Attendance\Application\AttendanceImport;
 use App\Modules\Attendance\Application\AttendanceTemplate;
 use App\Modules\Attendance\Application\EffectiveDays;
+use App\Modules\Attendance\Application\SiteWorkbookTemplate;
 use App\Modules\Employees\Application\EmployeeService;
 use App\Modules\Employees\Domain\EmployeeType;
+use App\Modules\Identity\Domain\Rbac\AuthorizationRefused;
 use App\Modules\Identity\Presentation\RequestScope;
+use App\Modules\Sites\Domain\SiteKind;
 use App\Support\Http\ApiEnvelope;
+use Closure;
+use DateTimeImmutable;
 use Illuminate\Database\Eloquent\ModelNotFoundException;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -30,6 +35,7 @@ final class AttendanceController
         private readonly EmployeeService $employees,
         private readonly AttendanceTemplate $template,
         private readonly AttendanceImport $import,
+        private readonly SiteWorkbookTemplate $workbook,
     ) {}
 
     public function period(Request $request): JsonResponse
@@ -79,6 +85,26 @@ final class AttendanceController
         $path = $this->template->file(EmployeeType::from($q['group']), $q['period_start'], RequestScope::narrowestOwnerId($request, 'attendance.view', 'attendance.edit'));
 
         return response()->download($path, "attendance-{$q['group']}-{$q['period_start']}.xlsx", ['Content-Type' => 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'])
+            ->deleteFileAfterSend();
+    }
+
+    /** The site workbook (calculations §14 W1): one live, active work site and at most 31 days, future dates allowed. HR only. */
+    public function siteWorkbook(Request $request): BinaryFileResponse
+    {
+        $this->assertAllScope($request);
+        $q = $request->validate([
+            'site_id' => ['bail', 'required', 'uuid', Rule::exists('sites', 'id')->where('kind', SiteKind::Work->value)->where('active', true)->whereNull('deleted_at')],
+            'from' => ['required', 'date_format:Y-m-d'],
+            'to' => ['bail', 'required', 'date_format:Y-m-d', 'after_or_equal:from', function (string $attribute, mixed $value, Closure $fail) use ($request): void {
+                $from = DateTimeImmutable::createFromFormat('!Y-m-d', (string) $request->query('from'));
+                if ($from !== false && $from->diff(new DateTimeImmutable((string) $value))->days >= SiteWorkbookTemplate::MAX_DAYS) {
+                    $fail(__('attendance.workbook_max_days', ['max' => SiteWorkbookTemplate::MAX_DAYS]));
+                }
+            }],
+        ]);
+        $path = $this->workbook->file($q['site_id'], $q['from'], $q['to']);
+
+        return response()->download($path, "site-workbook-{$q['from']}-{$q['to']}.xlsx", ['Content-Type' => 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'])
             ->deleteFileAfterSend();
     }
 
@@ -153,6 +179,17 @@ final class AttendanceController
         $file = $q['file'];
 
         return [EmployeeType::from($q['group']), $q['period_start'], $file->getPathname()];
+    }
+
+    /**
+     * The site workbook writes with no owner, which skips a site manager's reach (spec «Differences» 5), so a caller holding either
+     * attendance permission at own scope is refused before anything is read or validated.
+     */
+    private function assertAllScope(Request $request): void
+    {
+        if (RequestScope::narrowestOwnerId($request, 'attendance.view', 'attendance.edit') !== null) {
+            throw AuthorizationRefused::of('attendance.edit');
+        }
     }
 
     /** @return array<string, array<mixed>> */
