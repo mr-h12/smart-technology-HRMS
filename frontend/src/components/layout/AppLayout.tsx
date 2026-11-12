@@ -67,9 +67,11 @@ export const NAV: { group: string; items: { path: string; key: string; icon: Luc
 
 export const navAbilities = (path: string) => NAV.flatMap((g) => g.items).find((n) => n.path === path)?.abilities ?? []
 
-/** The first page the user may open; the fallback is the 1a landing page. */
+/**
+ * Where the user lands: a site manager (attendance recorded at own scope only) on Site attendance, their daily job; anyone else on
+ * the first page they may open. The fallback is the 1a landing page.
+ */
 export const homePath = (can: (ability: string) => boolean) =>
-  // a site manager's daily job is recording their sites' attendance, so they start there
   can('attendance.record.own') && !can('attendance.record.all') ? '/site-day' : (NAV.flatMap((g) => g.items).find((n) => n.abilities.some(can))?.path ?? '/employees')
 
 export function LanguageToggle() {

@@ -1033,6 +1033,22 @@ test('choosing an existing account hides the other fields and posts only the acc
   expect(bodyOf(post)).toEqual({ user_id: 'u8' })
 })
 
+test('the chosen account’s whole email shows on its own line, left to right, outside the select', async () => {
+  smRoutes({ ...emp, site_manager: null })
+  renderWithAuth(<EmployeeDetailRoute id="e1" />, SM, { router: false })
+  await user.click(await screen.findByRole('button', { name: 'تعيين كمدير موقع' }))
+  const dialog = screen.getByRole('dialog')
+  await within(dialog).findAllByRole('option', { name: /^حساب قديم/ })
+  // a closed native select clips its label on a phone, and namesakes differ only by the email
+  await user.selectOptions(within(dialog).getByLabelText('الحساب'), 'u7')
+  expect(within(dialog).getByText('old@smart.test')).toHaveAttribute('dir', 'ltr')
+  await user.selectOptions(within(dialog).getByLabelText('الحساب'), 'u8')
+  const email = within(dialog).getByText('old.two@smart.test')
+  expect(email).toHaveAttribute('dir', 'ltr')
+  expect(email.closest('select')).toBeNull()
+  expect(within(dialog).queryByText('old@smart.test')).toBeNull()
+})
+
 test('the account picker offers the site-manager accounts not yet linked to an employee, each by name and email', async () => {
   smRoutes({ ...emp, site_manager: null })
   renderWithAuth(<EmployeeDetailRoute id="e1" />, SM, { router: false })

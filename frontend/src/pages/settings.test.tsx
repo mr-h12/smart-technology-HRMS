@@ -527,6 +527,14 @@ describe('fares', () => {
     await waitFor(() => expect(fareUrls()).toContain('/api/v1/fares?per_page=100&date=2026-11-05&manager_id=m2'))
   })
 
+  test('from 640 px the site-manager filter grows to its longest name and email, so the closed filter shows the whole account', async () => {
+    fares()
+    open()
+    const filter = await screen.findByRole('combobox', { name: 'مدير الموقع' })
+    expect(filter).toHaveClass('sm:w-auto', 'sm:max-w-md')
+    expect(filter).not.toHaveClass('sm:w-44')
+  })
+
   test('editing a row posts a dated fare for its pair', async () => {
     fares()
     open()

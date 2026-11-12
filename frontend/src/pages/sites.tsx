@@ -460,7 +460,8 @@ export function FaresTab() {
       notice={
         <>
           <div className="flex flex-wrap items-center gap-2">
-            {leads.data && <FilterSelect value={lead} onChange={(v) => { setLead(v); setPage(1) }} label={t('fare.lead')} allLabel={t('fare.allLeads')} options={leads.data.map((m) => [m.id, accountLabel(m)])} />}
+            {/* as wide as its longest name and email: a closed native select clips its label, and namesakes differ only by the email */}
+            {leads.data && <FilterSelect value={lead} onChange={(v) => { setLead(v); setPage(1) }} label={t('fare.lead')} allLabel={t('fare.allLeads')} options={leads.data.map((m) => [m.id, accountLabel(m)])} className="sm:w-auto sm:max-w-md" />}
           </div>
           <Notice show={fares.total > fares.rows.length} text={t('fare.tooMany')} />
         </>

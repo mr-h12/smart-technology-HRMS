@@ -710,7 +710,13 @@ function SiteManagerFields({ f, empId, linked }: { f: FormApi; empId: string; li
       <ErrorBanner err={sites.err ?? engineers.err ?? accounts.err} shown={[]} />
       {!linked && <SelectField name="user_id" label={t('siteManager.existing')} blank={t('siteManager.newAccount')} options={(accounts.data ?? []).map((u) => [u.id, accountLabel(u)])} {...f} />}
       {f.values.user_id ? (
-        <p className="text-sm text-muted-foreground">{t('siteManager.existingHint')}</p>
+        <div className="space-y-1">
+          {/* the closed select clips its label on a phone; namesakes differ only by the email */}
+          <p className="text-[13px] text-muted-foreground">
+            <bdi dir="ltr" className="break-all">{accounts.data?.find((u) => u.id === f.values.user_id)?.email}</bdi>
+          </p>
+          <p className="text-sm text-muted-foreground">{t('siteManager.existingHint')}</p>
+        </div>
       ) : (
         <>
           {!linked && (
