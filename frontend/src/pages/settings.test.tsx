@@ -205,15 +205,18 @@ test('site managers dialog pre-checks current managers and saves the ticked ids'
   mockFetch({
     'GET /api/v1/sites': list([sites[0]]),
     'GET /api/v1/sites/s1': () => json(200, { data: { ...sites[0], managers: [{ id: 'u1', name: 'خالد' }], allowance_rules: [] } }),
-    'GET /api/v1/sites/manager-candidates': () => json(200, { data: [{ id: 'u1', name: 'خالد' }, { id: 'u2', name: 'سامي' }] }),
+    'GET /api/v1/sites/manager-candidates': () => json(200, { data: [{ id: 'u1', name: 'خالد', email: 'khaled@smart.test' }, { id: 'u3', name: 'خالد', email: 'khaled.ali@smart.test' }, { id: 'u2', name: 'سامي', email: 'sami@smart.test' }] }),
     'PUT /api/v1/sites/s1/managers': put,
   })
   renderWithAuth(<SettingsPage />, [...MANAGE, 'site.assign_manager.all'])
   await rowMenu('موقع أ')
   await user.click(await screen.findByRole('menuitem', { name: 'مديرو الموقع' }))
-  expect(await screen.findByRole('checkbox', { name: 'خالد' })).toBeChecked()
-  expect(screen.getByRole('checkbox', { name: 'سامي' })).not.toBeChecked()
-  await user.click(screen.getByRole('checkbox', { name: 'سامي' }))
+  // two accounts with one name: the email, read left to right, tells them apart
+  expect(await screen.findByRole('checkbox', { name: 'خالد khaled@smart.test' })).toBeChecked()
+  expect(screen.getByRole('checkbox', { name: 'خالد khaled.ali@smart.test' })).not.toBeChecked()
+  expect(screen.getByText('khaled.ali@smart.test')).toHaveAttribute('dir', 'ltr')
+  expect(screen.getByRole('checkbox', { name: 'سامي sami@smart.test' })).not.toBeChecked()
+  await user.click(screen.getByRole('checkbox', { name: 'سامي sami@smart.test' }))
   await user.click(screen.getByRole('button', { name: 'حفظ' }))
   expect(body(put)).toEqual({ manager_ids: ['u1', 'u2'] })
   // The server offers only the accounts that can manage a site (their role sees its own sites), never the whole users list.
@@ -379,17 +382,17 @@ test('the managers dialog ticks the managers as they are now, not as cached', as
   mockFetch({
     'GET /api/v1/sites': list([sites[0]]),
     'GET /api/v1/sites/s1': () => json(200, { data: { ...sites[0], managers, allowance_rules: [] } }),
-    'GET /api/v1/sites/manager-candidates': () => json(200, { data: [{ id: 'u1', name: 'خالد' }, { id: 'u2', name: 'سامي' }] }),
+    'GET /api/v1/sites/manager-candidates': () => json(200, { data: [{ id: 'u1', name: 'خالد', email: 'khaled@smart.test' }, { id: 'u2', name: 'سامي', email: 'sami@smart.test' }] }),
   })
   renderWithAuth(<SettingsPage />, [...MANAGE, 'site.assign_manager.all'])
   const open = async () => { await rowMenu('موقع أ'); await user.click(await screen.findByRole('menuitem', { name: 'مديرو الموقع' })) }
   await open()
-  expect(await screen.findByRole('checkbox', { name: 'سامي' })).not.toBeChecked()
+  expect(await screen.findByRole('checkbox', { name: 'سامي sami@smart.test' })).not.toBeChecked()
   await user.keyboard('{Escape}')
   await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull())
   managers = [{ id: 'u1', name: 'خالد' }, { id: 'u2', name: 'سامي' }]
   await open()
-  await waitFor(() => expect(screen.getByRole('checkbox', { name: 'سامي' })).toBeChecked())
+  await waitFor(() => expect(screen.getByRole('checkbox', { name: 'سامي sami@smart.test' })).toBeChecked())
 })
 
 test('the leave-type dialog offers the Saturday code', async () => {
@@ -488,7 +491,7 @@ describe('fares', () => {
   const fares = (data: unknown[] = FARES, total?: number, extra = {}) => mockFetch({
     'GET /api/v1/sites': list(sites),
     'GET /api/v1/residences': list(residences),
-    'GET /api/v1/sites/manager-candidates': () => json(200, { data: [{ id: 'm1', name: 'م. أحمد سامي' }] }),
+    'GET /api/v1/sites/manager-candidates': () => json(200, { data: [{ id: 'm1', name: 'م. أحمد سامي', email: 'ahmed@smart.test' }, { id: 'm2', name: 'م. أحمد سامي', email: 'ahmed.sami@smart.test' }] }),
     'GET /api/v1/fares': list(data, total),
     'POST /api/v1/fares': () => json(201, { data: {} }),
     ...extra,
@@ -516,9 +519,20 @@ describe('fares', () => {
   test('the team-lead filter asks by manager_id', async () => {
     fares()
     open()
-    await screen.findByRole('option', { name: 'م. أحمد سامي' })
-    await user.selectOptions(screen.getByRole('combobox', { name: 'مدير الموقع' }), 'm1')
-    await waitFor(() => expect(fareUrls()).toContain('/api/v1/fares?per_page=100&date=2026-11-05&manager_id=m1'))
+    const filter = await screen.findByRole('combobox', { name: 'مدير الموقع' })
+    await within(filter).findAllByRole('option', { name: /^م. أحمد سامي/ })
+    // two accounts with one name: the email, isolated so it reads left to right in Arabic, tells them apart
+    expect(within(filter).getAllByRole('option').map((o) => o.textContent)).toEqual(['الكل', 'م. أحمد سامي · \u2066ahmed@smart.test\u2069', 'م. أحمد سامي · \u2066ahmed.sami@smart.test\u2069'])
+    await user.selectOptions(filter, 'm2')
+    await waitFor(() => expect(fareUrls()).toContain('/api/v1/fares?per_page=100&date=2026-11-05&manager_id=m2'))
+  })
+
+  test('from 640 px the site-manager filter grows to its longest name and email, so the closed filter shows the whole account', async () => {
+    fares()
+    open()
+    const filter = await screen.findByRole('combobox', { name: 'مدير الموقع' })
+    expect(filter).toHaveClass('sm:w-auto', 'sm:max-w-md')
+    expect(filter).not.toHaveClass('sm:w-44')
   })
 
   test('editing a row posts a dated fare for its pair', async () => {

@@ -476,6 +476,19 @@ final class EmployeeService
         return $this->show($id);
     }
 
+    /**
+     * The accounts makeSiteManager() would link: the manager candidates linked to no live employee, linkable()'s rule.
+     *
+     * @return list<array{id: string, name: string, email: string}> by name
+     */
+    public function siteManagerCandidates(): array
+    {
+        $candidates = $this->sites->managerCandidates();
+        $linked = Employee::whereIn('user_id', array_column($candidates, 'id'))->pluck('user_id')->map(fn (mixed $id) => (string) $id)->all();
+
+        return array_values(array_filter($candidates, fn (array $c) => ! in_array($c['id'], $linked, true)));
+    }
+
     /** An existing account to link: a site-manager account linked to no other live employee (employees_user_id_unique is the last guard). */
     private function linkable(string $userId): string
     {

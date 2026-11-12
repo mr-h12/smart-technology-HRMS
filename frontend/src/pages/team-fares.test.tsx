@@ -101,14 +101,14 @@ test('the picked site manager and chip live in the URL, so Back from an employee
     'GET /api/v1/team-fares': (url: string) => (url.includes('manager_id=m2') ? team([row('w9', 'حسن علي', 'day_laborer', {}), row('w8', 'رضا سعيد', 'day_laborer', { site: S2 })])() : team()()),
   })
   withEmployee(HR)
-  await user.click(await screen.findByRole('button', { name: 'م. هاني رزق' }))
+  await user.click(await screen.findByRole('button', { name: 'م. هاني رزق hany@smart.test' }))
   await user.click(await screen.findByRole('button', { name: 'برج العرب' }))
   await user.click(screen.getByRole('link', { name: /رضا سعيد/ }))
   await user.click(await screen.findByRole('button', { name: 'back' }))
   expect(await screen.findByRole('button', { name: 'برج العرب' })).toHaveAttribute('aria-pressed', 'true')
-  expect(screen.getByRole('button', { name: 'م. هاني رزق' })).toHaveAttribute('aria-pressed', 'true')
+  expect(screen.getByRole('button', { name: 'م. هاني رزق hany@smart.test' })).toHaveAttribute('aria-pressed', 'true')
   expect(bodyRows()).toHaveLength(1)
-  await user.click(screen.getByRole('button', { name: 'م. أحمد سامي' })) // another team starts on all its rows
+  await user.click(screen.getByRole('button', { name: 'م. أحمد سامي ahmed@smart.test' })) // another team starts on all its rows
   expect(await screen.findByRole('button', { name: 'كل التيم (5)' })).toHaveAttribute('aria-pressed', 'true')
 })
 
@@ -142,7 +142,7 @@ test('the CEO gets not found', async () => {
   expect(urls('/team-fares')).toEqual([])
 })
 
-const MANAGERS = [{ id: 'm1', name: 'م. أحمد سامي' }, { id: 'm2', name: 'م. هاني رزق' }]
+const MANAGERS = [{ id: 'm1', name: 'م. أحمد سامي', email: 'ahmed@smart.test' }, { id: 'm2', name: 'م. هاني رزق', email: 'hany@smart.test' }]
 
 test('an all-scope user lands on the first site manager with no click, and picking another switches the team', async () => {
   mockFetch({
@@ -152,8 +152,8 @@ test('an all-scope user lands on the first site manager with no click, and picki
   renderWithAuth(<TeamFaresPage />, HR)
   await screen.findByText('محمود عبد الله')
   const managers = screen.getByRole('group', { name: 'مدير الموقع' })
-  const first = within(managers).getByRole('button', { name: 'م. أحمد سامي' })
-  const second = within(managers).getByRole('button', { name: 'م. هاني رزق' })
+  const first = within(managers).getByRole('button', { name: 'م. أحمد سامي ahmed@smart.test' })
+  const second = within(managers).getByRole('button', { name: 'م. هاني رزق hany@smart.test' })
   expect(first).toHaveAttribute('aria-pressed', 'true')
   expect(second).toHaveAttribute('aria-pressed', 'false')
   expect(screen.queryByRole('combobox')).toBeNull()
@@ -166,6 +166,20 @@ test('an all-scope user lands on the first site manager with no click, and picki
   expect(first).toHaveAttribute('aria-pressed', 'false')
   expect(screen.queryByText('محمود عبد الله')).toBeNull()
   expect(urls('/team-fares')).toEqual(['/api/v1/team-fares?manager_id=m1', '/api/v1/team-fares?manager_id=m2'])
+})
+
+test('two site managers with one name are told apart by the email on their chips', async () => {
+  mockFetch({
+    'GET /api/v1/sites/manager-candidates': () => json(200, { data: [MANAGERS[0], { id: 'm3', name: 'م. أحمد سامي', email: 'ahmed.sami@smart.test' }] }),
+    'GET /api/v1/team-fares': team(),
+  })
+  renderWithAuth(<TeamFaresPage />, HR)
+  const managers = await screen.findByRole('group', { name: 'مدير الموقع' })
+  const other = await within(managers).findByRole('button', { name: 'م. أحمد سامي ahmed.sami@smart.test' })
+  expect(within(managers).getByRole('button', { name: 'م. أحمد سامي ahmed@smart.test' })).toHaveAttribute('aria-pressed', 'true')
+  expect(other).toHaveAttribute('aria-pressed', 'false')
+  expect(within(other).getByText('ahmed.sami@smart.test')).toHaveAttribute('dir', 'ltr')
+  expect(within(other).getByText('ahmed.sami@smart.test')).toHaveClass('text-muted-foreground')
 })
 
 test('while the site managers load the page shows the skeleton, not an empty state', async () => {
@@ -197,7 +211,7 @@ const post = (part: string) => vi.mocked(fetch).mock.calls.filter(([u, i]) => i?
 const edit = async (name: string) => user.click(await screen.findByRole('button', { name: `تعديل مواصلات ${name}` }))
 const saving = (extra = {}) => mockFetch({
   'GET /api/v1/team-fares': team(),
-  'GET /api/v1/sites/manager-candidates': () => json(200, { data: [{ id: 'm1', name: 'م. أحمد سامي' }] }),
+  'GET /api/v1/sites/manager-candidates': () => json(200, { data: [MANAGERS[0]] }),
   'POST /api/v1/employees/w2/fare-overrides': () => json(201, { data: {} }),
   'POST /api/v1/employees/e1/fare-overrides': () => json(201, { data: {} }),
   'POST /api/v1/fares': () => json(201, { data: {} }),
@@ -208,7 +222,7 @@ const saving = (extra = {}) => mockFetch({
 /** HR opens the page and picks the site manager m1. */
 const asHr = async (permissions = HR) => {
   const view = renderWithAuth(<TeamFaresPage />, permissions)
-  await user.click(await screen.findByRole('button', { name: 'م. أحمد سامي' }))
+  await user.click(await screen.findByRole('button', { name: 'م. أحمد سامي ahmed@smart.test' }))
   return view
 }
 

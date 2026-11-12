@@ -934,7 +934,7 @@ const smRoutes = (data: object, extra = {}) =>
     'GET /api/v1/employees/e1': () => json(200, { data }),
     'GET /api/v1/sites': () => json(200, { data: [{ id: 's1', name_ar: 'موقع أ' }, { id: 's2', name_ar: 'موقع ب' }], meta: { pagination } }),
     'GET /api/v1/employees': () => json(200, { data: [{ id: 'e1', name_ar: 'أحمد' }, { id: 'g1', name_ar: 'مهندس أول' }, { id: 'g2', name_ar: 'مهندس ثان' }], meta: { pagination } }),
-    'GET /api/v1/sites/manager-candidates': () => json(200, { data: [{ id: 'u7', name: 'حساب قديم' }] }),
+    'GET /api/v1/employees/site-manager-candidates': () => json(200, { data: [{ id: 'u7', name: 'حساب قديم', email: 'old@smart.test' }, { id: 'u8', name: 'حساب قديم', email: 'old.two@smart.test' }] }),
     ...extra,
   })
 const bodyOf = (fn: ReturnType<typeof vi.fn>) => JSON.parse((fn.mock.calls[0] as unknown as [string, RequestInit])[1].body as string)
@@ -1022,15 +1022,48 @@ test('choosing an existing account hides the other fields and posts only the acc
   renderWithAuth(<EmployeeDetailRoute id="e1" />, SM, { router: false })
   await user.click(await screen.findByRole('button', { name: 'تعيين كمدير موقع' }))
   const dialog = screen.getByRole('dialog')
-  await within(dialog).findByRole('option', { name: 'حساب قديم' })
-  await user.selectOptions(within(dialog).getByLabelText('الحساب'), 'u7')
+  await within(dialog).findAllByRole('option', { name: /^حساب قديم/ })
+  await user.selectOptions(within(dialog).getByLabelText('الحساب'), 'u8')
   for (const label of ['البريد الإلكتروني', 'كلمة المرور']) expect(within(dialog).queryByLabelText(label)).toBeNull()
   expect(within(dialog).queryByRole('group', { name: 'المواقع التي يغطيها' })).toBeNull()
   expect(within(dialog).queryByRole('group', { name: 'المهندسون' })).toBeNull()
   expect(within(dialog).getByText(/يحتفظ بمواقعه ومهندسيه الحاليين/)).toBeInTheDocument()
   await user.click(within(dialog).getByRole('button', { name: 'حفظ' }))
   await waitFor(() => expect(post).toHaveBeenCalled())
-  expect(bodyOf(post)).toEqual({ user_id: 'u7' })
+  expect(bodyOf(post)).toEqual({ user_id: 'u8' })
+})
+
+test('the chosen account’s whole email shows on its own line, left to right, outside the select', async () => {
+  smRoutes({ ...emp, site_manager: null })
+  renderWithAuth(<EmployeeDetailRoute id="e1" />, SM, { router: false })
+  await user.click(await screen.findByRole('button', { name: 'تعيين كمدير موقع' }))
+  const dialog = screen.getByRole('dialog')
+  await within(dialog).findAllByRole('option', { name: /^حساب قديم/ })
+  // a closed native select clips its label on a phone, and namesakes differ only by the email
+  await user.selectOptions(within(dialog).getByLabelText('الحساب'), 'u7')
+  expect(within(dialog).getByText('old@smart.test')).toHaveAttribute('dir', 'ltr')
+  await user.selectOptions(within(dialog).getByLabelText('الحساب'), 'u8')
+  const email = within(dialog).getByText('old.two@smart.test')
+  expect(email).toHaveAttribute('dir', 'ltr')
+  expect(email.closest('select')).toBeNull()
+  expect(within(dialog).queryByText('old@smart.test')).toBeNull()
+})
+
+test('the account picker offers the site-manager accounts not yet linked to an employee, each by name and email', async () => {
+  smRoutes({ ...emp, site_manager: null })
+  renderWithAuth(<EmployeeDetailRoute id="e1" />, SM, { router: false })
+  await user.click(await screen.findByRole('button', { name: 'تعيين كمدير موقع' }))
+  const picker = within(screen.getByRole('dialog')).getByLabelText('الحساب')
+  await within(picker).findAllByRole('option', { name: /^حساب قديم/ })
+  // two accounts with one name: the email, isolated so it reads left to right in Arabic, tells them apart
+  expect(within(picker).getAllByRole('option').map((o) => [o.getAttribute('value'), o.textContent])).toEqual([
+    ['', 'حساب جديد'],
+    ['u7', 'حساب قديم · \u2066old@smart.test\u2069'],
+    ['u8', 'حساب قديم · \u2066old.two@smart.test\u2069'],
+  ])
+  const urls = vi.mocked(fetch).mock.calls.map(([u]) => String(u))
+  expect(urls).toContain('/api/v1/employees/site-manager-candidates')
+  expect(urls.filter((u) => u.includes('/sites/manager-candidates'))).toEqual([])
 })
 
 test('a refused email shows under its field; an employee already linked shows as the dialog error', async () => {

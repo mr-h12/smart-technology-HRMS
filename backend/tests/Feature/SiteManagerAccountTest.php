@@ -235,6 +235,49 @@ class SiteManagerAccountTest extends TestCase
         $this->assertNull($this->linkOf($other));
     }
 
+    public function test_the_dialog_offers_only_the_site_manager_accounts_it_can_link(): void
+    {
+        $this->make($this->employee('engineer'), $this->body())->assertCreated();   // Engineer-1's account, linked
+        $b = $this->makeUser('manager', ['name' => 'Manager-B']);
+        $a = $this->makeUser('manager', ['name' => 'Manager-A']);
+
+        $offered = $this->getJson('/api/v1/employees/site-manager-candidates')->assertOk()->json('data');
+        $this->assertSame([
+            ['id' => $a->id, 'name' => 'Manager-A', 'email' => $a->email],
+            ['id' => $b->id, 'name' => 'Manager-B', 'email' => $b->email],
+        ], $offered);
+
+        foreach ($offered as $account) {   // POST links every account offered, which then leaves the list
+            $this->make($this->employee('engineer'), ['user_id' => $account['id']])->assertCreated()->assertJsonPath('data.site_manager.id', $account['id']);
+        }
+        $this->getJson('/api/v1/employees/site-manager-candidates')->assertOk()->assertJsonPath('data', []);
+    }
+
+    public function test_only_callers_who_may_make_a_site_manager_list_the_candidates(): void
+    {
+        $url = '/api/v1/employees/site-manager-candidates';
+        $this->actingAs($this->makeUser('developer'), 'api');
+        $this->getJson($url)->assertOk();
+
+        $needed = ['user.manage.all', 'site.assign_manager.all', 'employee.assign_manager.all'];
+        $callers = [$this->makeUser('manager'), $this->makeUser('ceo')];
+        foreach ($needed as $i => $missing) {   // a role holding the other two
+            $role = Role::create(['slug' => "lacks-{$i}", 'name' => "lacks-{$i}", 'name_ar' => "lacks-{$i}"]);
+            foreach (array_diff($needed, [$missing]) as $grant) {
+                [$resource, $action, $scope] = explode('.', $grant);
+                $role->permissions()->attach(Permission::where(['resource' => $resource, 'action' => $action, 'scope' => $scope])->value('id'));
+            }
+            $callers[] = $this->makeUser("lacks-{$i}");
+        }
+        foreach ($callers as $caller) {
+            $this->actingAs($caller, 'api');
+            $this->getJson($url)->assertForbidden()->assertJsonPath('error.code', 'permission_denied');
+        }
+
+        $this->app['auth']->forgetGuards();
+        $this->getJson($url)->assertUnauthorized();
+    }
+
     public function test_hr_changes_the_sites_and_adds_engineers_later(): void
     {
         [$s1, $s2, $s3] = [$this->workSite('Site-1'), $this->workSite('Site-2'), $this->workSite('Site-3')];
