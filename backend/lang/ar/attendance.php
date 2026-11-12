@@ -59,6 +59,12 @@ return [
         'unknown_site' => 'الموقع أو نوع اليوم غير موجود.',
         'duplicate_row' => 'هذا الموظف مكرر في الملف.',
         'code_name_mismatch' => 'تم تغيير الرقم الوظيفي أو الاسم بعد تنزيل هذا الملف. يرجى تنزيل قالب جديد.',
+        'name_required' => 'في هذا الصف بيانات بدون اسم.',
+        'status_required' => 'اختر الحالة لهذا الاسم.',
+        'unknown_status' => 'الحالة غير موجودة؛ اختر حاضر أو نوع إجازة.',
+        'bad_time' => 'الوقت غير صحيح؛ اكتبه مثل 08:30.',
+        'bad_amount' => 'المبلغ يجب أن يكون رقمًا أكبر من صفر.',
+        'note_too_long' => 'الملاحظة أطول من 500 حرف.',
     ],
     'workbook_max_days' => 'المدة :max يومًا على الأكثر.',
     // The site workbook's own text: the file is Arabic whatever the request language (calculations §14 W1).
