@@ -154,7 +154,11 @@ final class XlsxTemplateWriter
         $bold = new Style(fontBold: true, format: '@');
         $columns = array_keys($book['columns']);
         // Widths in characters, plus 3 (Arabic glyphs run wider than the '0' Excel measures by); the title is not measured.
-        $widths = array_map(fn (int $c) => max(8, ...array_map(mb_strlen(...), [$book['columns'][$c], ...(isset(self::DROPDOWNS[$c]) ? $book[self::DROPDOWNS[$c][1]] : [])])) + 3, $columns);
+        $widths = array_map(function (int $c) use ($book) {
+            $list = isset(self::DROPDOWNS[$c]) ? $book[self::DROPDOWNS[$c][1]] : [];
+
+            return max(8, ...array_map(mb_strlen(...), [$book['columns'][$c], ...$list])) + 3;
+        }, $columns);
 
         foreach ($book['sheets'] as $i => $day) {
             $sheet = $i === 0 ? $writer->getCurrentSheet() : $writer->addNewSheetAndMakeItCurrent();

@@ -136,14 +136,8 @@ final class EmployeeRoster
             ...$this->rows($this->employees()->with(self::RELATIONS)->whereKey($this->officeIdsAt($siteId, $from))),
             ...array_merge([], ...array_map(fn (string $m) => $this->engineersOf($m, $from), $managerIds)),
         ], null, 'id');
-        $others = [];
-        foreach ([EmployeeType::DayLaborer, EmployeeType::PermanentWorker, EmployeeType::Engineer] as $type) {
-            foreach ($this->allOfType($type, $from, $to) as $e) {
-                if (! isset($own[$e['id']])) {
-                    $others[$e['id']] = $e;
-                }
-            }
-        }
+        $field = [EmployeeType::DayLaborer, EmployeeType::PermanentWorker, EmployeeType::Engineer];
+        $others = array_filter($this->rows($this->employedAs($field, $from, $to, null)), fn (array $e) => ! isset($own[$e['id']]));
         $byName = fn (array $a, array $b) => strcmp($a['name_ar'], $b['name_ar']) ?: $a['code'] <=> $b['code'];
         usort($own, $byName);
         usort($others, $byName);
