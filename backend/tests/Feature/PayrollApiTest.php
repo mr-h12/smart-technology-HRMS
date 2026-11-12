@@ -249,6 +249,16 @@ class PayrollApiTest extends TestCase
         $this->getJson(self::PERIOD['engineer']."/employees/{$id}")->assertJsonPath('data.flags', ['missing']);   // nothing written
     }
 
+    public function test_an_entry_field_is_not_overridden(): void
+    {
+        // HR types it on the entry; an override of it would move the net with no marker on the page.
+        $engineer = $this->employee('engineer');
+        $office = $this->employee('office');
+
+        $this->refused($this->postJson(self::PERIOD['engineer']."/employees/{$engineer}/overrides", ['component' => 'deduction', 'amount' => '1', 'reason' => 'x']), 'component');
+        $this->refused($this->postJson(self::PERIOD['office']."/employees/{$office}/overrides", ['component' => 'bonus', 'amount' => '1', 'reason' => 'x']), 'component');
+    }
+
     public function test_bad_period_start_is_422(): void
     {
         $id = $this->employee('engineer');

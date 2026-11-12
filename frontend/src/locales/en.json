@@ -1250,10 +1250,11 @@
       "missing": "Missing days",
       "open_day": "Open days",
       "early_departure": "Early departure",
-      "no_wage": "No daily wage",
+      "no_wage": "No wage",
       "no_fare": "No fare",
       "negative_net": "Negative net",
       "leave_to_check": "Leave to check",
+      "leave_on_holiday": "Leave on an official holiday",
       "inputs_changed": "Inputs changed"
     },
     "override": {

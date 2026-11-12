@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Modules\Payroll\Application;
 
+use App\Modules\Attendance\Application\AttendanceLocks;
 use App\Modules\Attendance\Application\EffectiveDays;
 use App\Modules\Attendance\Domain\Employment;
 use App\Modules\Attendance\Domain\Period;
@@ -49,8 +50,8 @@ final class PayrollInputs
 
     /**
      * Per employee: one DayInput per calendar day of the period, in date order from index 0; the insured basic of the pay row in force on
-     * their last day of the group's type in the period; and `no_fare` when a day that pays a fare found none (the engines cannot tell
-     * "no fare" from 0).
+     * their last day of the group's type in the period; `no_fare` when a day that pays a fare found none (the engines cannot tell
+     * "no fare" from 0); and `leave_on_holiday` for a stored leave day on an official holiday.
      *
      * @param  list<array<string, mixed>>  $employees  EmployeeRoster rows
      * @return array<string, array{days: list<DayInput>, insured_basic: numeric-string|null, flags: list<string>}> by employee id
@@ -71,6 +72,7 @@ final class PayrollInputs
             $rules = $this->allowances->inForce(array_map('strval', array_keys($siteIds)), $p->start, $p->end);
         }
         $fares = $this->fares->inForce(array_map(fn (array $e) => (string) $e['id'], $employees), $p->start, $p->end);
+        $holidays = AttendanceLocks::holidayDates($p);
 
         $inputs = [];
         foreach ($employees as $e) {
@@ -85,7 +87,11 @@ final class PayrollInputs
                 $wage = self::wage($p->group, $pay);
                 [$fare, $fareFound] = self::fare($fares, $p->group, $id, $state, $day);
                 if (! $fareFound) {
-                    $input['flags'] = ['no_fare'];
+                    $input['flags'][] = 'no_fare';
+                }
+                // As the lock lists them (calculations §2a): HR reviews the day; nothing is changed or deducted.
+                if ($day['state'] === 'stored' && in_array((string) $date, $holidays, true) && in_array($day['leave_code'], AttendanceLocks::LEAVE_ON_HOLIDAY, true)) {
+                    $input['flags'][] = 'leave_on_holiday';
                 }
                 [$scheduledIn, $scheduledOut] = self::schedule($p->group, $e, $day, $s);
                 $input['days'][] = new DayInput(
@@ -199,6 +205,7 @@ final class PayrollInputs
         /** @var array{effective_from: string, mode: AllowanceMode, value: string}|null $rule */
         $rule = EffectiveDated::at($rules[$day['site_id']] ?? [], (string) $day['date']);
 
+        // ponytail: Sites\Domain\Allowance::for truncates share × wage at scale 6 (under 0.000001 a day, no October effect); upgrade = Money::mul.
         return $rule === null ? '0' : Decimal::of(Allowance::for($rule['mode']->value, Decimal::of($rule['value'], 'allowance'), $wage ?? '0'), 'allowance');
     }
 

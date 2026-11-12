@@ -103,7 +103,7 @@ Each day records: site, arrival and departure, OT minutes, late minutes, minutes
 - Deduction (الخصم) = penalty entered by HR with a reason
 - Transport = the engineer's per-worker fare override in force for the day's site, in full, for every day worked at a work site; none on a leave day or without an override (owner, 2026-11-09). There is no half fare for engineers.
 - Net = salary + Σ day extra + Σ transport − absence − deduction − insurance − tax − advance installments
-- Engineers and permanent workers have no bonus input: HR pays a bonus by an override. ⚠️ (client question 24)
+- Engineers and permanent workers have no bonus input: HR pays a bonus by a net override. ⚠️ (client question 24)
 
 Outside-Alex minutes are paid at ×1, with no multiplier, as in the Excel.
 
@@ -121,6 +121,7 @@ On the site manager's screen (§2b): an engineer's stored late minutes are the r
   - a new holiday day with no stored day derives and is stored at the next lock, as before;
   - stored weekly-off days are never refreshed, because the weekly-off setting has no effective date; days HR or the leave workflow wrote (source `entered`, `imported`, `leave`) are never touched;
   - a re-lock lists the holiday days removed and every day, inside the locked period, of the holidays added or changed since the last lock, and separately the leave days (annual, casual, sick, unpaid) that now fall on a holiday. It does not change those leave days; HR reviews them.
+- The payroll sheet flags the same stored leave days (annual, casual, sick, unpaid on an official holiday) on the employee's line, `leave_on_holiday`, locked or not; it changes and deducts nothing. ⚠️ An absence (غ) on a holiday is not flagged; the owner is asked whether it should be.
 - A derived day is never an absence.
 
 ## 2b. Field shift and the site manager's day — decided 2026-11-04
@@ -159,7 +160,7 @@ Each day records: scheduled in/out (default: the field shift, §2b), actual in/o
 - Lateness money = chargeable late minutes × minute rate × **2** (the permanent-worker multiplier, §0a; the Excel charged late hours × hour rate × 2, with no grace)
 - OT minutes = max(0, actual out − scheduled out), overtime starting at the shift end (owner, 2026-11-09, client question 20). A time earlier than the day's in time is the next day (+24 h): actual out against actual in, scheduled out against scheduled in. The Excel used max(0, hours worked − 8 h); the two agree only when the worker arrived at the scheduled time of an 8-hour shift, so every other October day is an Excel-difference line. A day whose stored scheduled times equal its actual times gives 0 OT minutes. ⚠️ (client question 25)
 - OT money = OT minutes × minute rate × **1.5** + outside-Alex money
-- Transport = fare (section 4 fare rule; HR sets every fare) for full, fare ÷ 2 for half. HR picks per day for now (1c), the manager later. The attendance grid shows full by default, including on a missing or future work day, but payroll pays transport only on a recorded work day (an open one included): a missing day (HR confirms these at the lock) or a future day pays none. A leave day stores none.
+- Transport = fare (section 4 fare rule; HR sets every fare) for full, fare ÷ 2 for half. HR picks per day for now (1c), the manager later. The attendance grid shows full by default, including on a missing or future work day, but payroll pays transport only on a recorded work day (an open one included): a missing day or a future day pays none. A leave day stores none.
 - Day cost = day rate + OT money (site costing)
 - Absence and early departure: as for engineers (§2; R21, R25, owner 2026-11-09).
 - Net = salary + Σ OT money + Σ transport − Σ lateness − absence − deduction − insurance − tax − advance installments

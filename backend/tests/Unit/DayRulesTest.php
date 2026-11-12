@@ -90,7 +90,7 @@ class DayRulesTest extends TestCase
         $this->assertSame(['late' => 0, 'ot' => 90], DayRules::workerMinutes('09:00', '16:00', '09:00', '17:30'));
         $this->assertSame(['late' => 20, 'ot' => 0], DayRules::workerMinutes('09:00', '16:00', '09:20', '15:00'));
         $this->assertSame(['late' => 0, 'ot' => 60], DayRules::workerMinutes('22:00', '06:00', '22:00', '07:00'));
-        $this->assertSame(1430, DayRules::workerMinutes('00:00', '08:00', '23:50', '08:00')['late']);
+        $this->assertSame(['late' => 1430, 'ot' => 1440], DayRules::workerMinutes('00:00', '08:00', '23:50', '08:00'));
     }
 
     public function test_off_days_and_employment(): void

@@ -60,14 +60,15 @@ final class PayrollRules
     }
 
     /**
-     * Any Component value; PayrollSheet refuses one the type's line does not carry.
+     * Any Component value but the type's entry fields (HR types those on the entry: an override of one would move the net with no
+     * marker on the page); PayrollSheet refuses one the type's line does not carry.
      *
      * @return array<string, array<mixed>>
      */
-    public static function override(mixed $component): array
+    public static function override(EmployeeType $group, mixed $component): array
     {
         return [
-            'component' => ['required', Rule::enum(Component::class)],
+            'component' => ['required', Rule::enum(Component::class), Rule::notIn(self::ENTRY_FIELDS[$group->value])],
             // The net alone may be negative: every other component is a magnitude its sign adds or deducts (Component::sign).
             'amount' => ['required', 'string', $component === Component::Net->value ? EmployeeRules::SIGNED_MONEY : EmployeeRules::MONEY],
             'reason' => self::REASON,

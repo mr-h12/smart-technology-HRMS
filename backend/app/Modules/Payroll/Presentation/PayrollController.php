@@ -45,7 +45,7 @@ final class PayrollController
     public function addOverride(Request $request, string $group, string $periodStart, string $employee): JsonResponse
     {
         $p = $this->period($group, $periodStart);
-        $data = $request->validate(PayrollRules::override($request->input('component')), [], ['amount' => __('validation.attributes.value')]);
+        $data = $request->validate(PayrollRules::override($p->group, $request->input('component')), [], ['amount' => __('validation.attributes.value')]);
 
         return ApiEnvelope::single($request, $this->sheet->addOverride($p, $employee, $data['component'], $data['amount'], $data['reason']), 201);
     }

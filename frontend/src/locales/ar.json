@@ -1281,10 +1281,11 @@
       "missing": "أيام غير مسجلة",
       "open_day": "أيام مفتوحة",
       "early_departure": "انصراف مبكر",
-      "no_wage": "بلا يومية",
+      "no_wage": "بلا أجر",
       "no_fare": "بلا مواصلات",
       "negative_net": "صافٍ بالسالب",
       "leave_to_check": "إجازة للمراجعة",
+      "leave_on_holiday": "إجازة في عطلة رسمية",
       "inputs_changed": "تغيّرت المدخلات"
     },
     "override": {

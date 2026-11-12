@@ -216,6 +216,22 @@ class PayrollSheetTest extends TestCase
         $this->assertNotContains('no_fare', $workers[1]['flags']);   // a day with no transport needs no fare
     }
 
+    public function test_a_leave_day_on_a_holiday_is_flagged_but_an_absence_is_not(): void
+    {
+        // The lock's list (annual, casual, sick, unpaid); غ waits for the owner. The flag survives a later no_fare day.
+        $types = $this->leaveTypes();
+        $this->holiday('2026-10-06');
+        $leave = ['in_time' => null, 'out_time' => null, 'transport' => 'none'];
+        $onLeave = $this->employee('permanent_worker');   // no residence: its work day finds no fare
+        $this->day($onLeave, '2026-10-06', ['site_id' => $types['annual'], ...$leave]);
+        $this->day($onLeave, '2026-10-07', ['scheduled_in' => '08:00', 'scheduled_out' => '17:00', 'transport' => 'full']);
+        $this->day($this->employee('permanent_worker'), '2026-10-06', ['site_id' => $types['absent'], ...$leave]);
+
+        $lines = $this->sheet()->sheet($this->engineers(EmployeeType::PermanentWorker))['lines'];
+        $this->assertSame(['leave_on_holiday', 'no_fare'], array_values(array_intersect($lines[0]['flags'], ['leave_on_holiday', 'no_fare'])));
+        $this->assertNotContains('leave_on_holiday', $lines[1]['flags']);
+    }
+
     public function test_office_line_reads_the_office_shift_its_entry_and_the_insured_basic(): void
     {
         $id = $this->employee('office', '2026-01-01', ['insured_basic' => '5000']);
