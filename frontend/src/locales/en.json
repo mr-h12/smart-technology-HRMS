@@ -289,7 +289,7 @@
     "error": {
       "invalid_credentials": "Incorrect email or password.",
       "account_locked": "Your account has been locked after too many failed sign-in attempts. Please contact your system administrator.",
-      "account_suspended": "Your account has been deactivated. Please contact your system administrator.",
+      "account_suspended": "This account has been deactivated. Please contact HR.",
       "rate_limited": "Too many attempts. Please try again in a minute.",
       "unknown": "Unable to sign in. Please try again."
     },
