@@ -268,7 +268,7 @@ export function SelectField({ name, label, values, set, errs, options, groups, b
 
 export function useForm(initial: Row = {}) {
   const [form, setForm] = useState<Row>(initial)
-  return { form, setForm, set: (k: string, v: string) => setForm((f) => ({ ...f, [k]: v })) }
+  return { form, setForm, set: (k: string, v: string | string[]) => setForm((f) => ({ ...f, [k]: v })) }
 }
 
 export { useList } from '@/lib/query'
@@ -276,7 +276,8 @@ export { useList } from '@/lib/query'
 /** Controlled-dialog props for a dialog opened from a row menu; it mounts only while open. */
 export type Controlled = { open?: boolean; onOpenChange?: (open: boolean) => void }
 
-export type FormApi = { values: Row; set: (k: string, v: string) => void; errs: Record<string, string> }
+/** `set` takes a list for a checkbox list's ticked ids. */
+export type FormApi = { values: Row; set: (k: string, v: string | string[]) => void; errs: Record<string, string> }
 
 /**
  * Dialog whose form state lives in the body, so it is fresh on every open (Radix unmounts closed content). Passing `open` makes it controlled;
