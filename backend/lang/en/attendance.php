@@ -59,6 +59,12 @@ return [
         'unknown_site' => 'Unknown site or day type.',
         'duplicate_row' => 'This employee appears twice in the file.',
         'code_name_mismatch' => 'The ID or name changed since this file was downloaded. Download a fresh template.',
+        'name_required' => 'This row has data but no name.',
+        'status_required' => 'Choose a status for this name.',
+        'unknown_status' => 'Unknown status; choose Present or a leave day-type.',
+        'bad_time' => 'Not a valid time; write it like 08:30.',
+        'bad_amount' => 'The amount must be a number above zero.',
+        'note_too_long' => 'The note is longer than 500 characters.',
     ],
     'workbook_max_days' => 'The range is at most :max days.',
 ];

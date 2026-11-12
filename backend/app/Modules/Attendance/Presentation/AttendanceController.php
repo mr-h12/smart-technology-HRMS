@@ -9,10 +9,13 @@ use App\Modules\Attendance\Application\AttendanceGrid;
 use App\Modules\Attendance\Application\AttendanceImport;
 use App\Modules\Attendance\Application\AttendanceTemplate;
 use App\Modules\Attendance\Application\EffectiveDays;
+use App\Modules\Attendance\Application\SiteWorkbookImport;
 use App\Modules\Attendance\Application\SiteWorkbookTemplate;
 use App\Modules\Employees\Application\EmployeeService;
 use App\Modules\Employees\Domain\EmployeeType;
+use App\Modules\Identity\Application\Rbac\AuthorizeAction;
 use App\Modules\Identity\Domain\Rbac\AuthorizationRefused;
+use App\Modules\Identity\Domain\Rbac\Scope;
 use App\Modules\Identity\Presentation\RequestScope;
 use App\Modules\Sites\Domain\SiteKind;
 use App\Support\Http\ApiEnvelope;
@@ -28,6 +31,9 @@ use Symfony\Component\HttpFoundation\BinaryFileResponse;
 
 final class AttendanceController
 {
+    /** G9, W16: 5 MB, .xlsx only. The file is read from PHP's temp path and never stored. */
+    private const FILE = ['required', 'file', 'max:5120', 'mimes:xlsx', 'extensions:xlsx'];
+
     public function __construct(
         private readonly AttendanceGrid $grid,
         private readonly EffectiveDays $days,
@@ -36,6 +42,7 @@ final class AttendanceController
         private readonly AttendanceTemplate $template,
         private readonly AttendanceImport $import,
         private readonly SiteWorkbookTemplate $workbook,
+        private readonly SiteWorkbookImport $workbookImport,
     ) {}
 
     public function period(Request $request): JsonResponse
@@ -108,6 +115,18 @@ final class AttendanceController
             ->deleteFileAfterSend();
     }
 
+    /** The site workbook's preview (calculations §14 W15): every row written, then rolled back; nothing is saved, the upload included. HR only. */
+    public function siteWorkbookPreview(Request $request): JsonResponse
+    {
+        $this->assertAllScope($request);
+        /** @var UploadedFile $file */
+        $file = $request->validate(['file' => self::FILE])['file'];
+        $user = $request->user();
+        $mayCreate = $user !== null && app(AuthorizeAction::class)->decide($user, 'employee.create')->allows(Scope::All);
+
+        return ApiEnvelope::single($request, $this->workbookImport->preview($file->getPathname(), $mayCreate));
+    }
+
     /** The import's preview: the template's rule (P34), view and edit with the narrower scope. Nothing is saved, the upload included. */
     public function preview(Request $request): JsonResponse
     {
@@ -163,17 +182,13 @@ final class AttendanceController
         return ApiEnvelope::single($request, $this->writes->clear($employee, $date, (int) $q['version']));
     }
 
-    /**
-     * G9: 5 MB, .xlsx only. The file is read from PHP's temp path and never stored.
-     *
-     * @return array{EmployeeType, string, string}
-     */
+    /** @return array{EmployeeType, string, string} */
     private function upload(Request $request): array
     {
         $q = $request->validate([
             'group' => ['required', Rule::enum(EmployeeType::class)],
             'period_start' => ['required', 'date_format:Y-m-d'],
-            'file' => ['required', 'file', 'max:5120', 'mimes:xlsx', 'extensions:xlsx'],
+            'file' => self::FILE,
         ]);
         /** @var UploadedFile $file */
         $file = $q['file'];
