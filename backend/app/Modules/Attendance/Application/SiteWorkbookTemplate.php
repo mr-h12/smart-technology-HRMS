@@ -94,7 +94,7 @@ final class SiteWorkbookTemplate
     public function names(string $siteId, string $from, string $to, ?array $managers = null): array
     {
         /** @var list<array{id: string, name: string}> $managers */
-        $managers ??= $this->sites->show($siteId)['managers'];
+        $managers = $managers ?? $this->sites->show($siteId)['managers'];
         $people = $this->roster->siteWorkbookPeople($siteId, array_column($managers, 'id'), $from, $to);
         $dates = self::dates($from, $to);
 
