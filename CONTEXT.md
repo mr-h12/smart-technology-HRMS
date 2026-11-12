@@ -184,7 +184,7 @@ One group's payroll for one period: a line per employee who holds the group's ty
 _Avoid_: payroll run, payslip (that is one employee's PDF)
 
 **Payroll entry** (مدخلات المرتبات):
-HR's inputs for one employee in one period, the values payroll cannot compute: a bonus (office, day laborers); a deduction with its reason (field types); office's negligence deduction, lateness exemption, travel and tower days, overtime minutes and advances; the insurance shares and income tax (monthly staff); a note. A type takes only its own fields; blank counts as 0.
+HR's inputs for one employee in one period, the values payroll cannot compute: a bonus (office, day laborers); a deduction with its reason (field types); office's negligence deduction, lateness exemption, travel and tower days, overtime minutes and advances; the insurance shares and income tax (monthly staff); a note. A type takes only its own fields; blank counts as 0. The English UI calls it Payroll inputs or HR's inputs; in code: the table `payroll_entries`.
 
 **Payroll override** (قيمة بديلة):
 An override of one component of one employee's line on the payroll sheet, the net included. It keeps the computed value it replaced, so the line shows "inputs changed" when that value moves later; HR reverts it with a reason. A component has one live payroll override; a net override replaces the net, any other moves the net by its change.

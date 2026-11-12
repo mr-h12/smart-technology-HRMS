@@ -150,6 +150,9 @@ Net formulas: `calculations.md` §1–§4. Totals per column at the foot of the 
 
 Missing days, open days (arrival without departure), early-departure minutes (R25), days with no wage or no fare found,
 leave days on a holiday, an override whose inputs changed, and imported history rows carrying an Excel-error warning.
+Amended 2026-11-12, as built: this build raises neither "leave days on a holiday" (the attendance re-lock lists them,
+`calculations.md` §2a) nor the imported-history warning (it waits for the historical archive, module plan Release 2
+item 8); it adds `negative_net` and `leave_to_check`. The flags as built are listed under "API and screen".
 
 ## Rules the engines follow (decided)
 
@@ -227,9 +230,10 @@ attendance pages). Every answer uses the response envelope; money is a decimal s
   Person-N as in the analysis doc), type, salary or wage, raise, insured basic, the daily rows (site label, times, minutes,
   advances) and the Excel's own per-person results (the المجمع columns). No names, national IDs or phone numbers.
   The label → name map stays in the owner's checkout.
-  Amended 2026-11-12, as built: every المجمع row is kept, and each person carries `in_excel_total`, because the Excel totals are
-  SUBTOTAL(9) under an AutoFilter that hides rows, three of them paid (analysis §6 #17). Work sites are labels `Site-N` (leave
-  day-types keep their code); the real site names go to the map.
+  Amended 2026-11-12, as built: every المجمع row is kept, and each field and day-laborer person carries `in_excel_total`
+  (the office fixture has no such key; the test counts it as true), because the Excel totals are SUBTOTAL(9) under an
+  AutoFilter that hides rows, three of them paid (analysis §6 #17). Work sites are labels `Site-N`; leave day-types keep the
+  Excel's Arabic name, mapped to a `leave_code`. The real site names go to the map.
 - **Test:** seeds the fixture, runs the engines for engineers + permanent workers (26 Sep → 25 Oct) and day laborers
   (1–15 Oct) through the API (amended 2026-11-12: it reads each sheet through `GET /api/v1/payroll/{group}/{period_start}`),
   and compares each person's components with the Excel's. Every difference must match a

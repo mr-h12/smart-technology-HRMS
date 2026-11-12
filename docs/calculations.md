@@ -75,7 +75,7 @@ lateness deduction      = chargeable late minutes × wage ÷ divisor × multipli
 - Social insurance (employee share) = entered by HR; blank = 0 (section 5)
 - Income tax = entered by HR; blank = 0
 - Advance installment = section 6
-- Negligence deduction = entered by HR. Office has no general deduction: the negligence deduction is HR's only deduction for office staff, as in the net below. ⚠️ (client question 26)
+- Negligence deduction = entered by HR. Office has no general deduction (the penalty of §2): the negligence deduction is HR's only penalty for office staff, as in the net below. ⚠️ (client question 26)
 
 **Net**
 ```
@@ -152,14 +152,14 @@ Each day records: scheduled in/out (default: the field shift, §2b), actual in/o
 
 - Scheduled in/out are stored on each day; they default to the field shift setting (`worker_shift_start`/`worker_shift_end`: **09:00–16:00** once HR sets it, §2b; seeded **08:00–17:00**) or the pay-row override. Late minutes = max(0, actual in − scheduled in); OT minutes = max(0, actual out − scheduled out), as below. Both are shown as hints. Payroll reads a day without stored scheduled times at the same default.
 - Late minutes do not wrap around midnight (owner, 2026-11-09, client question 14): scheduled 00:00 with arrival 23:50 the day before gives 1,430 late minutes; scheduled 23:50 with arrival 00:10 gives 0. HR overrides the rare case with a reason.
-  The same family, by the rules below: scheduled 00:00–08:00, arrival 23:50, departure 08:00 also gives 1,440 OT minutes; scheduled 20:00–04:00, arrival 00:30, departure 05:00 gives 0 late and 0 OT minutes, with a false early-departure flag of 1,380 minutes; scheduled 23:50–08:00, arrival 00:10, departure 08:00 gives a false early-departure flag of 1,440 minutes (flags only, no money). HR overrides these days with a reason. ⚠️ (client question 28)
+  The same family, by the rules below, for a permanent worker: scheduled 00:00–08:00, arrival 23:50, departure 08:00 also gives 1,440 OT minutes; scheduled 20:00–04:00, arrival 00:30, departure 05:00 gives 0 late and 0 OT minutes, with a false early-departure flag of 1,380 minutes; scheduled 23:50–08:00, arrival 00:10, departure 08:00 gives a false early-departure flag of 1,440 minutes. Both flags move no money, and they reach an engineer whose shift is that night shift too; an engineer's OT stays the minutes HR approved (§2). HR overrides these days with a reason. ⚠️ (client question 28)
 
 - Hours worked = actual out − actual in. If out is earlier than in, the shift crossed midnight: add 24 h.
 - Late hours = actual in − scheduled in (if positive)
 - Lateness money = chargeable late minutes × minute rate × **2** (the permanent-worker multiplier, §0a; the Excel charged late hours × hour rate × 2, with no grace)
 - OT minutes = max(0, actual out − scheduled out), overtime starting at the shift end (owner, 2026-11-09, client question 20). A time earlier than the day's in time is the next day (+24 h): actual out against actual in, scheduled out against scheduled in. The Excel used max(0, hours worked − 8 h); the two agree only when the worker arrived at the scheduled time of an 8-hour shift, so every other October day is an Excel-difference line. A day whose stored scheduled times equal its actual times gives 0 OT minutes. ⚠️ (client question 25)
 - OT money = OT minutes × minute rate × **1.5** + outside-Alex money
-- Transport = fare (section 4 fare rule; HR sets every fare) for full, fare ÷ 2 for half. HR picks per day for now (1c), the manager later. The attendance grid shows full by default, including on a missing or future work day, but payroll pays transport only on a recorded work day (an open one included): a missing or future day, which only an open period's preview has, pays none. A leave day stores none.
+- Transport = fare (section 4 fare rule; HR sets every fare) for full, fare ÷ 2 for half. HR picks per day for now (1c), the manager later. The attendance grid shows full by default, including on a missing or future work day, but payroll pays transport only on a recorded work day (an open one included): a missing day (HR confirms these at the lock) or a future day pays none. A leave day stores none.
 - Day cost = day rate + OT money (site costing)
 - Absence and early departure: as for engineers (§2; R21, R25, owner 2026-11-09).
 - Net = salary + Σ OT money + Σ transport − Σ lateness − absence − deduction − insurance − tax − advance installments
