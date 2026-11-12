@@ -81,7 +81,7 @@ final class ExperienceCertificateController
     }
 
     /** @param LengthAwarePaginator<int, stdClass> $rows */
-    private static function list(Request $request, LengthAwarePaginator $rows): JsonResponse
+    public static function list(Request $request, LengthAwarePaginator $rows): JsonResponse
     {
         return ApiEnvelope::collection($request, array_values(array_map(self::metadata(...), $rows->items())), [
             'page' => $rows->currentPage(), 'per_page' => $rows->perPage(), 'total' => $rows->total(),
@@ -118,7 +118,7 @@ final class ExperienceCertificateController
     private function scoped(Request $request, string $export): stdClass
     {
         $row = $this->certificates->find($export);
-        abort_if($row->form_type === AttendanceRequestForms::ADVANCE && ! $this->advances->canViewPay($request->user()), 403);
+        abort_if(($row->form_type === AttendanceRequestForms::ADVANCE || (ManualFormDefinitions::all()[$row->form_type]['candidate'] ?? false)) && ! $this->advances->canViewPay($request->user()), 403);
         $scope = RequestScope::ownerId($request);
         abort_if($scope !== null && ($row->employee_id === null || ! $this->employees->isManagedBy((string) $row->employee_id, $scope)), 404);
 

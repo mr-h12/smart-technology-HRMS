@@ -8,6 +8,7 @@ use App\Modules\Audit\Infrastructure\AuditLog;
 use App\Modules\Employees\Application\EmployeeService;
 use App\Support\Database\ConcurrencyConflict;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Validation\ValidationException;
 use stdClass;
 
 final class ManualHrForms
@@ -15,16 +16,24 @@ final class ManualHrForms
     public function __construct(private readonly ExperienceCertificates $exports, private readonly EmployeeService $employees) {}
 
     /** @param array<string, mixed> $fields */
-    public function create(string $form, string $employeeId, string $actor, string $key, array $fields, ?string $scope): stdClass
+    public function create(string $form, ?string $employeeId, string $actor, string $key, array $fields, ?string $scope): stdClass
     {
         if ($form === 'sim_receipt' && is_string($fields['sim_number'] ?? null) && str_starts_with($fields['sim_number'], '+20')) {
             $fields['sim_number'] = '0'.substr($fields['sim_number'], 3);
+        }
+        if ($form === 'job_offer') {
+            $salary = (string) $fields['monthly_salary'];
+            if (! is_numeric($salary) || bccomp($salary, '0', 2) <= 0) {
+                throw ValidationException::withMessages(['monthly_salary' => __('validation.gt.numeric', ['attribute' => __('validation.attributes.monthly_salary'), 'value' => '0'])]);
+            }
+            $fields['monthly_salary'] = bcadd($salary, '0', 2);
+            $fields['evaluation_months'] = (int) $fields['evaluation_months'];
         }
         ksort($fields);
 
         return DB::transaction(function () use ($form, $employeeId, $actor, $key, $fields, $scope): stdClass {
             DB::table('users')->where('id', $actor)->lockForUpdate()->firstOrFail();
-            $employee = $this->employees->show($employeeId, $scope);
+            $employee = $employeeId === null ? [] : $this->employees->show($employeeId, $scope);
             $existing = DB::table('hr_form_exports')->where(['requested_by' => $actor, 'idempotency_key' => $key])->first();
             if ($existing !== null) {
                 $snapshot = json_decode((string) $existing->snapshot, true, flags: JSON_THROW_ON_ERROR);

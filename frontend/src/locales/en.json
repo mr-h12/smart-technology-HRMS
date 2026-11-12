@@ -1316,18 +1316,26 @@
         "mission_date": "Mission date",
         "mission_reason": "Reason for the mission",
         "department_manager": "Department manager",
-        "sim_number": "Mobile line number"
+        "sim_number": "Mobile line number",
+        "candidate_name": "Candidate name",
+        "address": "Address",
+        "monthly_salary": "Monthly salary",
+        "evaluation_months": "Evaluation period in months",
+        "reply_deadline": "Reply deadline",
+        "start_date": "Start date"
       },
       "early_leave_request": "Early Departure Request",
       "resignation": "Resignation",
       "warning_notice": "Warning notice",
       "notices": {
         "warning_notice": "Printing only. This creates no disciplinary record, deduction or payroll input and makes no changes to employee records.",
-        "sim_receipt": "Printing only. This creates no custody or asset record and leaves employee records unchanged."
+        "sim_receipt": "Printing only. This creates no custody or asset record and leaves employee records unchanged.",
+        "job_offer": "Printing only. This creates no employee, contract, or pay record."
       },
       "mission_permit": "Mission Permit",
       "leave_permit": "Departure Permit",
-      "sim_receipt": "SIM Receipt"
+      "sim_receipt": "SIM Receipt",
+      "job_offer": "Job Offer"
     },
     "leaveRequest": "Leave request PDF",
     "notificationMethod": "Notification method",

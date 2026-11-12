@@ -1347,18 +1347,26 @@
         "mission_date": "تاريخ المأمورية",
         "mission_reason": "سبب المأمورية",
         "department_manager": "مدير القسم",
-        "sim_number": "رقم الخط"
+        "sim_number": "رقم الخط",
+        "candidate_name": "اسم المرشح",
+        "address": "العنوان",
+        "monthly_salary": "الراتب الشهري",
+        "evaluation_months": "فترة التقييم بالأشهر",
+        "reply_deadline": "آخر موعد للرد",
+        "start_date": "تاريخ بدء العمل"
       },
       "early_leave_request": "طلب انصراف باكرًا",
       "resignation": "استقالة",
       "warning_notice": "نموذج إنذار",
       "notices": {
         "warning_notice": "الطباعة فقط. لا تنشئ سجلًا تأديبيًا أو خصمًا أو مدخلًا للرواتب ولا تغيّر سجلات الموظف.",
-        "sim_receipt": "الطباعة فقط. لا تنشئ سجل عهدة أو أصل ولا تغيّر سجلات الموظف."
+        "sim_receipt": "الطباعة فقط. لا تنشئ سجل عهدة أو أصل ولا تغيّر سجلات الموظف.",
+        "job_offer": "الطباعة فقط. لا تنشئ سجل موظف أو عقدًا أو سجل أجر."
       },
       "mission_permit": "إذن مأمورية",
       "leave_permit": "إذن انصراف",
-      "sim_receipt": "استلام خط موبايل"
+      "sim_receipt": "استلام خط موبايل",
+      "job_offer": "خطاب قبول توظيف"
     },
     "leaveRequest": "نموذج طلب إجازة",
     "notificationMethod": "طريقة التبليغ",

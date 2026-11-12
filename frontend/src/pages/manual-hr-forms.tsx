@@ -31,7 +31,18 @@ export function ManualHrForms({ employee }: { employee: Row }) {
   )
 }
 
-function ManualForm({ form, employee }: { form: Definition; employee: Row }) {
+export function CandidateFormsPage() {
+  const { t } = useTranslation()
+  const { data, err } = useApi<{ forms: Definition[] }>('/hr-manual-form-definitions?candidate=1')
+  const form = data?.forms.find(({ type }) => type === 'job_offer')
+  return <section className="space-y-3">
+    <ErrorBanner err={err} shown={[]} />
+    {form && <ManualForm form={form} />}
+    {!form && !err && <p>{t('hrForms.manual.job_offer')}</p>}
+  </section>
+}
+
+function ManualForm({ form, employee }: { form: Definition; employee?: Row }) {
   const { t, i18n } = useTranslation()
   const { can } = useAuth()
   const save = useSave()
@@ -39,7 +50,9 @@ function ManualForm({ form, employee }: { form: Definition; employee: Row }) {
   const [error, setError] = useState<unknown>()
   const saving = useRef(false)
   const submission = useRef<{ payload: string; key: string } | undefined>(undefined)
-  const history = `/employees/${employee.id}/hr-form-exports`
+  const candidatePath = `/hr-forms/manual-candidate/${form.type}`
+  const history = employee ? `/employees/${employee.id}/hr-form-exports` : candidatePath
+  const generatePath = employee ? `/employees/${employee.id}/hr-forms/manual/${form.type}` : candidatePath
 
   async function run(action: () => Promise<unknown>) {
     if (saving.current) return
@@ -59,7 +72,7 @@ function ManualForm({ form, employee }: { form: Definition; employee: Row }) {
     const payload = JSON.stringify(fields)
     void run(async () => {
       if (submission.current?.payload !== payload) submission.current = { payload, key: crypto.randomUUID() }
-      await save(`/employees/${employee.id}/hr-forms/manual/${form.type}`, {
+      await save(generatePath, {
         body: { ...fields, idempotency_key: submission.current.key },
       }, [history])
       submission.current = undefined
@@ -74,9 +87,11 @@ function ManualForm({ form, employee }: { form: Definition; employee: Row }) {
       <ErrorBanner err={error} shown={[]} />
       {can('hr_forms.generate') && (
         <form className="grid gap-3 sm:grid-cols-2" onSubmit={generate}>
+          {employee && <>
           <label className="grid gap-1">{t('common.name')}<Input readOnly value={localName(employee, i18n.language)} /></label>
           <label className="grid gap-1">{t('employee.code')}<Input readOnly value={employee.code ?? ''} /></label>
           <label className="grid gap-1">{t('employee.department')}<Input readOnly value={employee.department ?? ''} /></label>
+          </>}
           {form.fields.map(({ name, input, required, max }) => {
             const props = { name, required, maxLength: max ?? undefined, disabled: busy }
             if (input === 'checkbox') {
@@ -97,19 +112,19 @@ function ManualForm({ form, employee }: { form: Definition; employee: Row }) {
           <Button disabled={busy} className="sm:col-span-2">{t('hrForms.generate')}</Button>
         </form>
       )}
-      {can('hr_forms.view') && <ManualExports form={form.type} history={history} busy={busy}
+      {can('hr_forms.view') && <ManualExports form={form.type} history={history} candidate={!employee} busy={busy}
         retry={can('hr_forms.generate') ? (id) => void run(() => save(`/hr-form-exports/${id}/retry-manual/${form.type}`, {}, [history])) : undefined}
         reportError={setError} />}
     </section>
   )
 }
 
-function ManualExports({ form, history, busy, retry, reportError }: {
-  form: string; history: string; busy: boolean; retry?: (id: string) => void; reportError: (err: unknown) => void
+function ManualExports({ form, history, candidate, busy, retry, reportError }: {
+  form: string; history: string; candidate: boolean; busy: boolean; retry?: (id: string) => void; reportError: (err: unknown) => void
 }) {
   const { t } = useTranslation()
   const [page, setPage] = useState(1)
-  const list = useList(`${history}?page=${page}&form_type=${form}`, { refetchInterval: 2500 })
+  const list = useList(`${history}?page=${page}${candidate ? '' : `&form_type=${form}`}`, { refetchInterval: 2500 })
   return (
     <>
       <ErrorBanner err={list.err} shown={[]} />

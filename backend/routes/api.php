@@ -58,8 +58,14 @@ Route::middleware('auth')->group(function (): void {
         ->whereUuid('employee')->middleware(['permission:hr_forms.generate', 'employee.scope']);
     Route::get('hr-manual-form-definitions', [ManualHrFormController::class, 'definitions'])
         ->middleware('permission:hr_forms.view,hr_forms.generate');
+    $candidateForms = array_keys(array_filter(ManualFormDefinitions::all(), fn (array $definition): bool => $definition['candidate'] ?? false));
+    $employeeForms = array_diff(array_keys(ManualFormDefinitions::all()), $candidateForms);
+    Route::post('hr-forms/manual-candidate/{form}', [ManualHrFormController::class, 'storeCandidate'])
+        ->whereIn('form', $candidateForms)->middleware('permission:hr_forms.generate');
+    Route::get('hr-forms/manual-candidate/{form}', [ManualHrFormController::class, 'candidates'])
+        ->whereIn('form', $candidateForms)->middleware('permission:hr_forms.view');
     Route::post('employees/{employee}/hr-forms/manual/{form}', [ManualHrFormController::class, 'store'])
-        ->whereUuid('employee')->whereIn('form', array_keys(ManualFormDefinitions::all()))
+        ->whereUuid('employee')->whereIn('form', array_values($employeeForms))
         ->middleware(['permission:hr_forms.generate', 'employee.scope']);
     Route::post('hr-form-exports/{export}/retry-manual/{form}', [ManualHrFormController::class, 'retry'])
         ->whereUuid('export')->whereIn('form', array_keys(ManualFormDefinitions::all()))->middleware('permission:hr_forms.generate');

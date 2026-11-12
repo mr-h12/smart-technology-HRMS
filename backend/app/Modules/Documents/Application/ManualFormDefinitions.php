@@ -7,7 +7,7 @@ namespace App\Modules\Documents\Application;
 final class ManualFormDefinitions
 {
     /**
-     * @return array<string, array{view: view-string, audit_field_names_only?: bool, fields: array<string, array{input: string, rules: list<string>}>}>
+     * @return array<string, array{view: view-string, audit_field_names_only?: bool, candidate?: bool, fields: array<string, array{input: string, rules: list<string>}>}>
      */
     public static function all(): array
     {
@@ -50,6 +50,21 @@ final class ManualFormDefinitions
                     'warning_period' => ['input' => 'textarea', 'rules' => ['required', 'string', 'max:200']],
                     'warning_prior_occurrence' => ['input' => 'textarea', 'rules' => ['required', 'string', 'max:200']],
                     'warning_explanation_request' => ['input' => 'textarea', 'rules' => ['required', 'string', 'max:200']],
+                ],
+            ],
+            'job_offer' => [
+                'view' => 'hr-forms.job-offer',
+                'candidate' => true,
+                'audit_field_names_only' => true,
+                'fields' => [
+                    'issued_on' => ['input' => 'date', 'rules' => ['required', 'date_format:Y-m-d']],
+                    'candidate_name' => ['input' => 'text', 'rules' => ['required', 'string', 'max:160']],
+                    'address' => ['input' => 'textarea', 'rules' => ['required', 'string', 'max:300']],
+                    'job_title' => ['input' => 'text', 'rules' => ['required', 'string', 'max:160']],
+                    'monthly_salary' => ['input' => 'text', 'rules' => ['required', 'string', 'regex:/^(?:0|[1-9][0-9]{0,11})(?:[.][0-9]{1,2})?$/D']],
+                    'evaluation_months' => ['input' => 'text', 'rules' => ['required', 'integer', 'min:1', 'max:120']],
+                    'reply_deadline' => ['input' => 'date', 'rules' => ['required', 'date_format:Y-m-d', 'after_or_equal:issued_on']],
+                    'start_date' => ['input' => 'date', 'rules' => ['required', 'date_format:Y-m-d', 'after_or_equal:reply_deadline']],
                 ],
             ],
             'sim_receipt' => [

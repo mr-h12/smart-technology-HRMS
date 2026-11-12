@@ -6,6 +6,7 @@ mkdir -p "$output"
 image="${HRMS_PDF_IMAGE:-hrms-php-forms}"
 form="${HRMS_SMOKE_FORM:-experience-certificate}"
 case "$form" in
+  job-offer) phrases=('خطاب قبول' 'نور مثال للاختبار' '12345.60' '01/02/2027' '05/02/2027' '08/02/2027' 'المزايا' 'مقر الشركة' 'العرض الوظيفي');;
   sim-receipt) phrases=('استلام خط موبايل' 'سارة مثال للاختبار' '01000000000' '15/11/2026');;
   warning-notice) phrases=('نموذج إنذار' 'سارة مثال للاختبار' '15/11/2026' 'ملف الاختبار' 'يوم واحد' 'أول مرة' 'توضيح السبب');;
   resignation) phrases=('استقالة' 'سارة مثال للاختبار' 'تسليم' 'مسوغات التعيين');;
@@ -37,7 +38,7 @@ unsigned=$(docker exec "$app" php tests/Smoke/render-hr-form.php setup)
 docker exec "$app" php artisan queue:work redis --queue=pdf --once --tries=3 -v
 docker exec "$app" php tests/Smoke/render-hr-form.php export "$unsigned" > "$output/unsigned.pdf"
 pdfs=("$output/unsigned.pdf")
-if [[ "$form" != advance-request && "$form" != overtime-request && "$form" != late-permit && "$form" != early-leave-request && "$form" != resignation && "$form" != warning-notice && "$form" != mission-permit && "$form" != leave-permit && "$form" != sim-receipt ]]; then
+if [[ "$form" != advance-request && "$form" != overtime-request && "$form" != late-permit && "$form" != early-leave-request && "$form" != resignation && "$form" != warning-notice && "$form" != mission-permit && "$form" != leave-permit && "$form" != sim-receipt && "$form" != job-offer ]]; then
   signed=$(docker exec "$app" php tests/Smoke/render-hr-form.php approve "$unsigned")
   docker exec "$app" php artisan queue:work redis --queue=pdf --once --tries=3 -v
   docker exec "$app" php tests/Smoke/render-hr-form.php export "$signed" > "$output/signed.pdf"

@@ -69,7 +69,7 @@ final class ExperienceCertificates
     }
 
     /** @param array<string, mixed> $snapshot */
-    public function storeUnsigned(string $form, string $employee, string $actor, string $key, array $snapshot, ?string $previousId): stdClass
+    public function storeUnsigned(string $form, ?string $employee, string $actor, string $key, array $snapshot, ?string $previousId): stdClass
     {
         $id = (string) Str::uuid7();
         $now = now();

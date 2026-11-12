@@ -12,11 +12,16 @@ final class ArabicServiceDuration
     {
         $parts = [
             self::part($duration->y, 'سنة واحدة', 'سنتان', 'سنوات', 'سنة'),
-            self::part($duration->m, 'شهر واحد', 'شهران', 'أشهر', 'شهرًا'),
+            self::months($duration->m),
             self::days($duration->d),
         ];
 
         return implode(' و', array_filter($parts));
+    }
+
+    public static function months(int $count): string
+    {
+        return self::part($count, 'شهر واحد', 'شهران', 'أشهر', 'شهرًا');
     }
 
     public static function days(int $count): string

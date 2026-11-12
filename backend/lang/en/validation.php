@@ -9,6 +9,7 @@ return [
         'phone' => ['regex' => 'The phone must be an Egyptian mobile number: 11 digits starting with 010, 011, 012 or 015.'],
     ],
     'attributes' => [
+        'monthly_salary' => 'monthly salary',
         'name_ar' => 'Arabic name',
         'name_en' => 'English name',
         'fingerprint_name' => 'Fingerprint name',

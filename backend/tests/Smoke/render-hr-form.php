@@ -62,6 +62,13 @@ try {
             $row = app(ManualHrForms::class)->create('sim_receipt', $employee, $hr->id, (string) Str::uuid7(), [
                 'sim_number' => '01000000000', 'issued_on' => '2026-11-15',
             ], null);
+        } elseif (getenv('HRMS_SMOKE_FORM') === 'job-offer') {
+            Auth::setUser($hr);
+            $row = app(ManualHrForms::class)->create('job_offer', null, $hr->id, (string) Str::uuid7(), [
+                'issued_on' => '2027-02-01', 'candidate_name' => 'نور مثال للاختبار', 'address' => 'شارع الاختبار',
+                'job_title' => 'مهندسة اختبار', 'monthly_salary' => '12345.6', 'evaluation_months' => 4,
+                'reply_deadline' => '2027-02-05', 'start_date' => '2027-02-08',
+            ], null);
         } elseif ($departurePermit) {
             Auth::setUser($hr);
             $row = app(ManualHrForms::class)->create('leave_permit', $employee, $hr->id, (string) Str::uuid7(), [

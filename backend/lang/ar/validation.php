@@ -164,6 +164,7 @@ return [
     ],
     // Field labels; equal to the frontend's ar.json wording.
     'attributes' => [
+        'monthly_salary' => 'الراتب الشهري',
         'name_ar' => 'الاسم بالعربية',
         'name_en' => 'الاسم بالإنجليزية',
         'fingerprint_name' => 'اسم البصمة',
