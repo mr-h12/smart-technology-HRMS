@@ -126,7 +126,7 @@ Code lives under `backend/app/Modules/<Module>/{Domain,Application,Infrastructur
 
 - Enforce dynamic RBAC at API and row level. Hiding a button is never access control.
 - Most employees have no account; a site manager's account may be linked to their employee record. Accounts are Developer, CEO, HR, and Manager. The Developer and HR create accounts and set or change passwords (R22); HR only for accounts whose role holds no `.all` permission HR lacks. There is no self-service reset or change.
-- A manager sees and acts on only the employees assigned to them (dated assignment). Test this on every endpoint that returns or mutates employee-scoped data, including nested resources, downloads, exports, and notifications.
+- A site manager sees and acts on only the people they reach on the date: the workers whose home site is one of their sites and the engineers assigned to them, never office staff and never their own record. Test this on every endpoint that returns or mutates employee-scoped data, including nested resources, downloads, exports, and notifications.
 - Authorize each action on the target record and its current state, including nested resources, downloads, bulk actions, exports, and async job requests (for example, nothing is editable in a closed period; clearance is blocked while custody is open).
 - Test a negative case for every permission-sensitive operation: a caller without access must be unable to read, infer, mutate, export, or download the data.
 - Salary, national ID, insurance number, and bank account are sensitive. Expose them only to permissions that need them, and keep them out of logs, notifications, error messages, and manager-facing views unless a rule says otherwise.

@@ -10,7 +10,7 @@ Smart Technology runs HR and payroll today on 6 hand-built Excel workbooks (anal
 | Stack | Mirror the CRM (`docs/adr/0001-mirror-crm-stack.md`): Laravel 13 / PHP 8.4, PostgreSQL 17, Redis, `/api/v1`, UUIDv7, modular + deptrac, PHPUnit, CRM-style RBAC + audit log, browsershot PDFs. Frontend: the demo's look + react-i18next |
 | Hosting | Client's on-prem server, delivered as **Docker**. ⚠️ **Backups are NOT set up: manual until the owner confirms. Keep this warning visible in the release notes and the developer console.** |
 | Language | Arabic + English (RTL/LTR) |
-| Users | 7 accounts: 1 CEO, 1 HR, 5 managers. **No employee or worker accounts.** Developer role can add accounts |
+| Users | 7 accounts: 1 CEO, 1 HR, 5 managers. **Most employees have no account;** a site manager's account may be linked to their employee record. Developer and HR add accounts (R22; HR within its reach) |
 | Roles | Developer (super-admin) > CEO > HR > Manager. HR can edit everything a manager enters |
 | Data entry | Manager records attendance, absence, lateness, leave and requests for the people on their sites; attendance is HR-only for now (see Attendance entry (1c)) |
 | Approvals | Manager → HR → (HR decides) CEO, or HR approves alone |
