@@ -1247,3 +1247,42 @@ test('requires confirmation of the resignation declarations in the employee file
   const sent = vi.mocked(fetch).mock.calls.find(([url, opts]) => String(url).endsWith('/manual/resignation') && opts?.method === 'POST')
   expect(JSON.parse(String(sent?.[1]?.body))).toEqual({ confirm_declarations: 'on', idempotency_key: expect.any(String) })
 })
+
+test('prints a warning from the employee file with its incident fields and print-only notice', async () => {
+  const generate = vi.fn(() => json(202, { data: { id: 'export1' } }))
+  const fields = [
+    ['job_title', 'المسمى الوظيفي', 'مهندسة اختبار', 'text'],
+    ['warning_date', 'تاريخ الإنذار', '2026-11-15', 'date'],
+    ['warning_incident', 'الواقعة', 'لم يتم تسليم ملف الاختبار.', 'textarea'],
+    ['warning_period', 'التواريخ أو المدة المذكورة', 'لمدة يوم واحد.', 'textarea'],
+    ['warning_prior_occurrence', 'بيان التكرار السابق', 'هذه أول مرة.', 'textarea'],
+    ['warning_explanation_request', 'طلب التوضيح', 'يرجى توضيح السبب.', 'textarea'],
+  ]
+  mockFetch({
+    'GET /api/v1/employees/e1': () => json(200, { data: emp }),
+    'GET /api/v1/residences': residences,
+    'GET /api/v1/hr-manual-form-definitions': () => json(200, { data: { forms: [{
+      type: 'warning_notice', fields: fields.map(([name, , , input]) => ({ name, input, required: true, max: null })),
+    }] } }),
+    'POST /api/v1/employees/e1/hr-forms/manual/warning_notice': generate,
+  })
+  renderWithAuth(<EmployeeDetailRoute id="e1" tab="documents" />, [
+    'employee.view.all', 'hr_forms.generate.all',
+  ], { router: false })
+
+  const heading = await screen.findByRole('heading', { name: 'نموذج إنذار' })
+  const section = within(heading.closest('section')!)
+  expect(section.getByText(/لا تنشئ سجلًا تأديبيًا أو خصمًا أو مدخلًا للرواتب/)).toBeInTheDocument()
+  const action = section.getByRole('button', { name: 'إنشاء الملف' })
+  await user.click(action)
+  expect(generate).not.toHaveBeenCalled()
+  for (const [, label, value] of fields) {
+    await user.type(section.getByLabelText(label), value)
+  }
+  await user.click(action)
+  await waitFor(() => expect(generate).toHaveBeenCalledOnce())
+  const sent = vi.mocked(fetch).mock.calls.find(([url, opts]) => String(url).endsWith('/manual/warning_notice') && opts?.method === 'POST')
+  expect(JSON.parse(String(sent?.[1]?.body))).toEqual({
+    ...Object.fromEntries(fields.map(([name, , value]) => [name, value])), idempotency_key: expect.any(String),
+  })
+})

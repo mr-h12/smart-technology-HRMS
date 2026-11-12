@@ -7,7 +7,7 @@ namespace App\Modules\Documents\Application;
 final class ManualFormDefinitions
 {
     /**
-     * @return array<string, array{view: view-string, fields: array<string, array{input: string, rules: list<string>}>}>
+     * @return array<string, array{view: view-string, audit_field_names_only?: bool, fields: array<string, array{input: string, rules: list<string>}>}>
      */
     public static function all(): array
     {
@@ -38,6 +38,18 @@ final class ManualFormDefinitions
                 'view' => 'hr-forms.resignation',
                 'fields' => [
                     'confirm_declarations' => ['input' => 'checkbox', 'rules' => ['required', 'accepted']],
+                ],
+            ],
+            'warning_notice' => [
+                'view' => 'hr-forms.warning-notice',
+                'audit_field_names_only' => true,
+                'fields' => [
+                    'job_title' => ['input' => 'text', 'rules' => ['required', 'string', 'max:160']],
+                    'warning_date' => ['input' => 'date', 'rules' => ['required', 'date_format:Y-m-d']],
+                    'warning_incident' => ['input' => 'textarea', 'rules' => ['required', 'string', 'max:800']],
+                    'warning_period' => ['input' => 'textarea', 'rules' => ['required', 'string', 'max:200']],
+                    'warning_prior_occurrence' => ['input' => 'textarea', 'rules' => ['required', 'string', 'max:200']],
+                    'warning_explanation_request' => ['input' => 'textarea', 'rules' => ['required', 'string', 'max:200']],
                 ],
             ],
         ];

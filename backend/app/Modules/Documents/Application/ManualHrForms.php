@@ -39,8 +39,10 @@ final class ManualHrForms
                 ...array_intersect_key($employee, array_flip(['name_ar', 'name_en', 'code', 'department'])),
                 'fields' => $fields,
             ], null);
+            $namesOnly = ManualFormDefinitions::all()[$form]['audit_field_names_only'] ?? false;
+            $auditFields = $namesOnly ? ['field_names' => array_keys($fields)] : ['fields' => $fields];
             AuditLog::record('CREATED', 'hr_form_exports', (string) $export->id, null, [
-                'form_type' => $form, 'serial_number' => $export->serial_number, 'fields' => $fields,
+                'form_type' => $form, 'serial_number' => $export->serial_number, ...$auditFields,
             ]);
 
             return $export;

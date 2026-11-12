@@ -29,6 +29,7 @@ $overtime = getenv('HRMS_SMOKE_FORM') === 'overtime-request';
 $latePermit = getenv('HRMS_SMOKE_FORM') === 'late-permit';
 $earlyLeave = getenv('HRMS_SMOKE_FORM') === 'early-leave-request';
 $resignation = getenv('HRMS_SMOKE_FORM') === 'resignation';
+$warningNotice = getenv('HRMS_SMOKE_FORM') === 'warning-notice';
 try {
     if ($argv[1] === 'setup') {
         $employee = app(EmployeeService::class)->create([
@@ -46,6 +47,13 @@ try {
                 'job_title' => 'مهندسة اختبار', 'reason' => 'سبب تجريبي',
                 ...($advance ? ['repayment_method' => 'cash', 'previous_advance' => false, 'finance_remarks' => 'ملاحظات تجريبية'] : []),
             ], null, $advance ? 'advance' : 'overtime');
+        } elseif ($warningNotice) {
+            Auth::setUser($hr);
+            $row = app(ManualHrForms::class)->create('warning_notice', $employee, $hr->id, (string) Str::uuid7(), [
+                'job_title' => 'مهندسة اختبار', 'warning_date' => '2026-11-15',
+                'warning_incident' => 'لم يتم تسليم ملف الاختبار.', 'warning_period' => 'لمدة يوم واحد.',
+                'warning_prior_occurrence' => 'هذه أول مرة.', 'warning_explanation_request' => 'يرجى توضيح السبب.',
+            ], null);
         } elseif ($resignation) {
             Auth::setUser($hr);
             $row = app(ManualHrForms::class)->create('resignation', $employee, $hr->id, (string) Str::uuid7(), [

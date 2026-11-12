@@ -1307,10 +1307,19 @@
         "regular_start": "Regular start time",
         "regular_end": "Regular end time",
         "requested_end": "Requested departure time",
-        "confirm_declarations": "I confirm that the employee has undertaken to hand over their assigned duties and has received their employment documents and all financial dues, as stated in the form."
+        "confirm_declarations": "I confirm that the employee has undertaken to hand over their assigned duties and has received their employment documents and all financial dues, as stated in the form.",
+        "warning_date": "Warning date",
+        "warning_incident": "Incident",
+        "warning_period": "Dates or duration cited",
+        "warning_prior_occurrence": "Prior-occurrence statement",
+        "warning_explanation_request": "Request for explanation"
       },
       "early_leave_request": "Early Departure Request",
-      "resignation": "Resignation"
+      "resignation": "Resignation",
+      "warning_notice": "Warning notice",
+      "notices": {
+        "warning_notice": "Printing only. This creates no disciplinary record, deduction or payroll input and makes no changes to employee records."
+      }
     },
     "leaveRequest": "Leave request PDF",
     "notificationMethod": "Notification method",

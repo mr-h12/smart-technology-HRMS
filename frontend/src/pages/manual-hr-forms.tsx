@@ -70,7 +70,7 @@ function ManualForm({ form, employee }: { form: Definition; employee: Row }) {
   return (
     <section className="space-y-3">
       <h3 className="font-semibold">{t(`hrForms.manual.${form.type}`)}</h3>
-      <p className="text-sm text-muted-foreground">{t('hrForms.manual.notice')}</p>
+      <p className="text-sm text-muted-foreground">{t(`hrForms.manual.notices.${form.type}`, { defaultValue: t('hrForms.manual.notice') })}</p>
       <ErrorBanner err={error} shown={[]} />
       {can('hr_forms.generate') && (
         <form className="grid gap-3 sm:grid-cols-2" onSubmit={generate}>
