@@ -510,6 +510,17 @@
     "none": "No manager",
     "history": "Manager history"
   },
+  "siteManager": {
+    "make": "Make site manager",
+    "edit": "Site manager's sites and engineers",
+    "account": "Site manager account",
+    "existing": "Account",
+    "newAccount": "New account",
+    "existingHint": "This account will be linked to the employee and keeps its current sites and engineers. Edit them from the same button after linking.",
+    "sites": "Sites covered",
+    "engineers": "Engineers",
+    "engineersHint": "Ticked engineers follow this site manager from the effective date. To move a current one, assign another manager on their page."
+  },
   "rule": {
     "group": {
       "time": "Pay and working hours",

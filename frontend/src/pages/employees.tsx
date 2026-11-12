@@ -1,4 +1,4 @@
-import { Archive, Briefcase, CalendarCheck, CalendarDays, ChevronLeft, ChevronRight, FileText, HardHat, History as HistoryIcon, IdCard, type LucideIcon, MapPin, PencilLine, RotateCcw, UserCog, UserPlus, Users, Wrench } from 'lucide-react'
+import { Archive, Briefcase, CalendarCheck, CalendarDays, ChevronLeft, ChevronRight, FileText, HardHat, History as HistoryIcon, IdCard, KeyRound, type LucideIcon, MapPin, PencilLine, RotateCcw, UserCog, UserPlus, Users, Wrench } from 'lucide-react'
 import { useEffect, useEffectEvent, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { Link, useLocation, useNavigate, useParams, useSearchParams } from 'react-router-dom'
@@ -26,6 +26,7 @@ import { useAuth } from '@/lib/auth'
 import { hhmm, plainAmount } from '@/lib/day-sheet'
 import { cn } from '@/lib/utils'
 import { RESIDENCES, USERS, useApi, useList, useSave, WORK_SITES } from '@/lib/query'
+import { noGenerator } from './console'
 import { EmployeeAttendance } from './employee-attendance'
 import { Documents } from './employee-documents'
 import { Leave } from './employee-leave'
@@ -441,7 +442,7 @@ function EmployeeForm({ emp, loadErr }: { emp?: Row; loadErr?: unknown }) {
     <div className="mx-auto max-w-5xl space-y-6">
       <Pager />
       <ErrorBanner err={loadErr} shown={[]} />
-      <Card className="flex flex-col gap-4 p-5 sm:flex-row sm:items-center">
+      <Card className="flex flex-col gap-4 p-5 sm:flex-row sm:flex-wrap sm:items-center">
         <UserAvatar name={emp.name_ar} size="xl" />
         <div className="min-w-0 flex-1 space-y-1">
           <h1 className="text-page-title">{emp.name_ar}</h1>
@@ -469,9 +470,20 @@ function EmployeeForm({ emp, loadErr }: { emp?: Row; loadErr?: unknown }) {
               <dd>{emp.current_manager?.name ?? t('manager.none')}</dd>
             </div>
           )}
+          {emp.site_manager && (
+            <div className="flex flex-wrap items-center gap-x-2">
+              <dt className="text-muted-foreground">{t('siteManager.account')}</dt>
+              <dd className="flex min-w-0 flex-wrap items-center gap-2">
+                <bdi dir="ltr" className="break-all">{emp.site_manager.email}</bdi>
+                {!emp.site_manager.is_active && <StatusBadge variant="neutral" label={t('console.inactive')} />}
+              </dd>
+            </div>
+          )}
         </dl>
         {sited && can('employee.assign_site') && !archived && <MoveSiteDialog empId={emp.id} />}
         {!worker && can('employee.assign_manager') && !archived && <AssignManagerDialog empId={emp.id} />}
+        {/* the key comes only to HR and the Developer: null until linked; making one also creates or links an account */}
+        {'site_manager' in emp && !archived && can('site.assign_manager') && can('employee.assign_manager') && (emp.site_manager || can('user.manage')) && <SiteManagerDialog emp={emp} />}
         {can('employee.edit') && archived && (
           <>
             {/* the open form takes the saved values too, so a later Save cannot send the old ones back */}
@@ -644,6 +656,103 @@ function ManagerSelect(f: FormApi) {
       <ErrorBanner err={err} shown={[]} />
       <SelectField name="manager_id" label={t('manager.title')} blank options={users.filter((u) => u.is_active).map((u) => [u.id, u.name])} {...f} />
     </>
+  )
+}
+
+/**
+ * Makes the employee a site manager with a new account or an existing site-manager account; once linked, sets the account's sites and
+ * adds engineers. The ticked sites replace the account's (a covered site no longer active is not listed, so it stays); engineers are
+ * only added, from the date: a current one leaves by being given another manager on their own page.
+ */
+function SiteManagerDialog({ emp }: { emp: Row }) {
+  const { t } = useTranslation()
+  const send = useSave()
+  const linked: Row | null = emp.site_manager
+  const title = t(linked ? 'siteManager.edit' : 'siteManager.make')
+  async function submit(form: Row) {
+    const team = { site_ids: form.site_ids, engineer_ids: form.engineer_ids, ...(form.engineer_ids.length > 0 && { effective_from: form.effective_from }) }
+    const body = linked ? team : form.user_id ? { user_id: form.user_id } : { email: form.email, password: form.password, ...team }
+    try {
+      return await send(`/employees/${emp.id}/site-manager`, { method: linked ? 'PUT' : 'POST', body }, ['employees', 'sites', 'users'])
+    } catch (e) {
+      // a refused id is named by its place (site_ids.2): its message goes under the whole list
+      if (e instanceof ApiError) for (const d of e.details) d.field = d.field?.replace(/\.\d+$/, '')
+      throw e
+    }
+  }
+  return (
+    <FormDialog
+      title={title}
+      trigger={
+        <Button type="button" variant="outline">
+          <KeyRound />
+          {title}
+        </Button>
+      }
+      init={{ user_id: '', email: '', password: '', site_ids: linked?.site_ids ?? [], engineer_ids: [], effective_from: cairoToday() }}
+      submit={submit}
+      onDone={() => {}}
+      shown={['user_id', 'email', 'password', 'site_ids', 'engineer_ids', 'effective_from']}
+    >
+      {(f) => <SiteManagerFields f={f} empId={emp.id} linked={linked} />}
+    </FormDialog>
+  )
+}
+
+/** Mounted with the dialog body, so the sites, the engineers and the accounts load when it opens. */
+function SiteManagerFields({ f, empId, linked }: { f: FormApi; empId: string; linked: Row | null }) {
+  const { t } = useTranslation()
+  const sites = useList(WORK_SITES)
+  const engineers = useList('/employees?type=engineer&per_page=100')
+  const accounts = useApi<Row[]>(linked ? null : '/sites/manager-candidates') // the server refuses one already linked
+  return (
+    <>
+      <ErrorBanner err={sites.err ?? engineers.err ?? accounts.err} shown={[]} />
+      {!linked && <SelectField name="user_id" label={t('siteManager.existing')} blank={t('siteManager.newAccount')} options={(accounts.data ?? []).map((u) => [u.id, u.name])} {...f} />}
+      {f.values.user_id ? (
+        <p className="text-sm text-muted-foreground">{t('siteManager.existingHint')}</p>
+      ) : (
+        <>
+          {!linked && (
+            <>
+              <TextField name="email" label={t('auth.email')} type="email" dir="ltr" {...f} />
+              <TextField name="password" label={t('auth.password')} {...noGenerator} {...f} />
+            </>
+          )}
+          <Ticks name="site_ids" label={t('siteManager.sites')} list={sites} f={f} />
+          <Ticks name="engineer_ids" label={t('siteManager.engineers')} list={{ ...engineers, rows: engineers.rows.filter((e) => e.id !== empId) }} f={f} fixed={linked?.engineer_ids} hint={t('siteManager.engineersHint')} />
+          {f.values.engineer_ids.length > 0 && <TextField name="effective_from" label={t('change.effective_from')} type="date" {...f} />}
+        </>
+      )}
+    </>
+  )
+}
+
+/** A checkbox list of `list`'s rows in a box that scrolls on its own; the `fixed` ids show ticked and cannot be unticked. */
+function Ticks({ name, label, list, f, fixed = [], hint }: { name: string; label: string; list: { rows: Row[]; loading: boolean }; f: FormApi; fixed?: string[]; hint?: string }) {
+  const { t } = useTranslation()
+  const on: string[] = f.values[name]
+  const err = f.errs[name]
+  return (
+    <fieldset className="min-w-0 space-y-1.5" aria-describedby={[hint && `${name}-hint`, err && `${name}-err`].filter(Boolean).join(' ') || undefined}>
+      <legend className="mb-1.5 text-[13px] font-medium">{label}</legend>
+      <div className="max-h-56 overflow-y-auto overscroll-contain rounded-lg border p-1 scrollbar-thin">
+        {list.loading ? (
+          <TableSkeleton rows={2} />
+        ) : list.rows.length ? (
+          list.rows.map((r) => (
+            <label key={r.id} className="flex min-h-tap items-center gap-3 rounded-md px-2 text-sm hover:bg-muted">
+              <input type="checkbox" checked={fixed.includes(r.id) || on.includes(r.id)} disabled={fixed.includes(r.id)} onChange={(e) => f.set(name, e.target.checked ? [...on, r.id] : on.filter((id) => id !== r.id))} />
+              {r.name_ar}
+            </label>
+          ))
+        ) : (
+          <p className="px-2 py-3 text-sm text-muted-foreground">{t('common.noResults')}</p>
+        )}
+      </div>
+      {hint && <p id={`${name}-hint`} className="text-[13px] text-muted-foreground">{hint}</p>}
+      {err && <p id={`${name}-err`} className="text-[13px] text-destructive">{err}</p>}
+    </fieldset>
   )
 }
 

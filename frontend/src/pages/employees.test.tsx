@@ -925,6 +925,180 @@ test('HR keeps the office option and tile', async () => {
   expect(tiles).toHaveClass('xl:grid-cols-5')
 })
 
+// Make site manager: HR sees `site_manager` (null or the linked account); the CEO and site managers get no key at all.
+const SM = ['employee.view.all', 'user.manage.all', 'site.assign_manager.all', 'employee.assign_manager.all']
+const account = { id: 'u5', email: 'site.manager@smart.test', is_active: true, role: { id: 'r3', slug: 'manager', name: 'Site manager', name_ar: 'مدير الموقع' }, site_ids: ['s1', 's9'], engineer_ids: ['g1'] }
+const smRoutes = (data: object, extra = {}) =>
+  mockFetch({
+    'GET /api/v1/residences': residences,
+    'GET /api/v1/employees/e1': () => json(200, { data }),
+    'GET /api/v1/sites': () => json(200, { data: [{ id: 's1', name_ar: 'موقع أ' }, { id: 's2', name_ar: 'موقع ب' }], meta: { pagination } }),
+    'GET /api/v1/employees': () => json(200, { data: [{ id: 'e1', name_ar: 'أحمد' }, { id: 'g1', name_ar: 'مهندس أول' }, { id: 'g2', name_ar: 'مهندس ثان' }], meta: { pagination } }),
+    'GET /api/v1/sites/manager-candidates': () => json(200, { data: [{ id: 'u7', name: 'حساب قديم' }] }),
+    ...extra,
+  })
+const bodyOf = (fn: ReturnType<typeof vi.fn>) => JSON.parse((fn.mock.calls[0] as unknown as [string, RequestInit])[1].body as string)
+
+test('Make site manager shows only with the three permissions, on an active employee whose record says it is not one', async () => {
+  smRoutes({ ...emp, site_manager: null })
+  const first = renderWithAuth(<EmployeeDetailRoute id="e1" />, SM, { router: false })
+  expect(await screen.findByRole('button', { name: 'تعيين كمدير موقع' })).toBeInTheDocument()
+  first.unmount()
+  for (const missing of SM.slice(1)) {
+    const r = renderWithAuth(<EmployeeDetailRoute id="e1" />, SM.filter((p) => p !== missing), { router: false })
+    await screen.findByLabelText('الاسم بالعربية')
+    expect(screen.queryByRole('button', { name: 'تعيين كمدير موقع' })).toBeNull()
+    r.unmount()
+  }
+  smRoutes(emp) // no key: the CEO or a site manager
+  const noKey = renderWithAuth(<EmployeeDetailRoute id="e1" />, SM, { router: false })
+  await screen.findByLabelText('الاسم بالعربية')
+  expect(screen.queryByRole('button', { name: 'تعيين كمدير موقع' })).toBeNull()
+  noKey.unmount()
+  smRoutes({ ...archived, site_manager: null })
+  renderWithAuth(<EmployeeDetailRoute id="e1" />, SM, { router: false })
+  await screen.findByRole('status')
+  expect(screen.queryByRole('button', { name: 'تعيين كمدير موقع' })).toBeNull()
+})
+
+test('a linked employee shows the account email, the inactive badge, and the edit button with the two assign permissions', async () => {
+  smRoutes({ ...emp, site_manager: { ...account, is_active: false } })
+  renderWithAuth(<EmployeeDetailRoute id="e1" />, ['employee.view.all', 'site.assign_manager.all', 'employee.assign_manager.all'], { router: false })
+  const email = await screen.findByText('site.manager@smart.test')
+  expect(email).toHaveAttribute('dir', 'ltr')
+  const line = email.closest('div')!
+  expect(within(line).getByRole('term')).toHaveTextContent('حساب مدير الموقع')
+  expect(within(line).getByText('معطّل')).toBeInTheDocument()
+  expect(screen.getByRole('button', { name: 'مواقع ومهندسو مدير الموقع' })).toBeInTheDocument()
+  expect(screen.queryByRole('button', { name: 'تعيين كمدير موقع' })).toBeNull()
+})
+
+test('an active linked account shows no inactive badge', async () => {
+  smRoutes({ ...emp, site_manager: account })
+  renderWithAuth(<EmployeeDetailRoute id="e1" />, ['employee.view.all'], { router: false })
+  await screen.findByText('site.manager@smart.test')
+  expect(screen.queryByText('معطّل')).toBeNull()
+  expect(screen.queryByRole('button', { name: 'مواقع ومهندسو مدير الموقع' })).toBeNull()
+})
+
+test('a new site-manager account posts the email, password, ticked sites, ticked engineers and the date', async () => {
+  const post = vi.fn(() => json(201, { data: { ...emp, site_manager: account } }))
+  smRoutes({ ...emp, site_manager: null }, { 'POST /api/v1/employees/e1/site-manager': post })
+  renderWithAuth(<EmployeeDetailRoute id="e1" />, SM, { router: false })
+  await user.click(await screen.findByRole('button', { name: 'تعيين كمدير موقع' }))
+  const dialog = screen.getByRole('dialog', { name: 'تعيين كمدير موقع' })
+  expect(within(dialog).getByLabelText('الحساب')).toHaveValue('')
+  expect(within(dialog).getByRole('option', { name: 'حساب جديد' })).toBeInTheDocument()
+  await user.type(within(dialog).getByLabelText('البريد الإلكتروني'), 'new.manager@smart.test')
+  await user.type(within(dialog).getByLabelText('كلمة المرور'), 'Secret-2026')
+  await user.click(await within(dialog).findByRole('checkbox', { name: 'موقع ب' }))
+  const engineers = within(dialog).getByRole('group', { name: 'المهندسون' })
+  expect(await within(engineers).findByRole('checkbox', { name: 'مهندس أول' })).toBeInTheDocument()
+  expect(within(engineers).queryByRole('checkbox', { name: 'أحمد' })).toBeNull() // the employee themself
+  expect(within(dialog).queryByLabelText('ساري اعتبارًا من')).toBeNull() // only once an engineer is ticked
+  await user.click(within(engineers).getByRole('checkbox', { name: 'مهندس ثان' }))
+  expect(within(dialog).getByLabelText('ساري اعتبارًا من')).toHaveValue(cairoToday())
+  await user.click(within(dialog).getByRole('button', { name: 'حفظ' }))
+  await waitFor(() => expect(post).toHaveBeenCalled())
+  expect(bodyOf(post)).toEqual({ email: 'new.manager@smart.test', password: 'Secret-2026', site_ids: ['s2'], engineer_ids: ['g2'], effective_from: cairoToday() })
+  await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull())
+})
+
+test('a new account with no engineer sends an empty list and no date', async () => {
+  const post = vi.fn(() => json(201, { data: emp }))
+  smRoutes({ ...emp, site_manager: null }, { 'POST /api/v1/employees/e1/site-manager': post })
+  renderWithAuth(<EmployeeDetailRoute id="e1" />, SM, { router: false })
+  await user.click(await screen.findByRole('button', { name: 'تعيين كمدير موقع' }))
+  await user.type(screen.getByLabelText('البريد الإلكتروني'), 'a@smart.test')
+  await user.type(screen.getByLabelText('كلمة المرور'), 'Secret-2026')
+  await user.click(within(screen.getByRole('dialog')).getByRole('button', { name: 'حفظ' }))
+  await waitFor(() => expect(post).toHaveBeenCalled())
+  expect(bodyOf(post)).toEqual({ email: 'a@smart.test', password: 'Secret-2026', site_ids: [], engineer_ids: [] })
+})
+
+test('choosing an existing account hides the other fields and posts only the account', async () => {
+  const post = vi.fn(() => json(201, { data: emp }))
+  smRoutes({ ...emp, site_manager: null }, { 'POST /api/v1/employees/e1/site-manager': post })
+  renderWithAuth(<EmployeeDetailRoute id="e1" />, SM, { router: false })
+  await user.click(await screen.findByRole('button', { name: 'تعيين كمدير موقع' }))
+  const dialog = screen.getByRole('dialog')
+  await within(dialog).findByRole('option', { name: 'حساب قديم' })
+  await user.selectOptions(within(dialog).getByLabelText('الحساب'), 'u7')
+  for (const label of ['البريد الإلكتروني', 'كلمة المرور']) expect(within(dialog).queryByLabelText(label)).toBeNull()
+  expect(within(dialog).queryByRole('group', { name: 'المواقع التي يغطيها' })).toBeNull()
+  expect(within(dialog).queryByRole('group', { name: 'المهندسون' })).toBeNull()
+  expect(within(dialog).getByText(/يحتفظ بمواقعه ومهندسيه الحاليين/)).toBeInTheDocument()
+  await user.click(within(dialog).getByRole('button', { name: 'حفظ' }))
+  await waitFor(() => expect(post).toHaveBeenCalled())
+  expect(bodyOf(post)).toEqual({ user_id: 'u7' })
+})
+
+test('a refused email shows under its field; an employee already linked shows as the dialog error', async () => {
+  let refusal = { field: 'email', code: 'unique', message: 'البريد مستخدم' }
+  smRoutes({ ...emp, site_manager: null }, { 'POST /api/v1/employees/e1/site-manager': () => json(422, { error: { code: 'validation_failed', message: 'Invalid', details: [refusal] } }) })
+  renderWithAuth(<EmployeeDetailRoute id="e1" />, SM, { router: false })
+  await user.click(await screen.findByRole('button', { name: 'تعيين كمدير موقع' }))
+  const dialog = screen.getByRole('dialog')
+  const save = within(dialog).getByRole('button', { name: 'حفظ' })
+  await user.click(save)
+  await waitFor(() => expect(within(dialog).getByLabelText('البريد الإلكتروني')).toHaveAccessibleDescription('البريد مستخدم'))
+  expect(within(dialog).queryByRole('alert')).toBeNull()
+  refusal = { field: 'employee', code: 'x', message: 'هذا الموظف مدير موقع بالفعل' }
+  await user.click(save)
+  expect(await within(dialog).findByRole('alert')).toHaveTextContent('هذا الموظف مدير موقع بالفعل')
+})
+
+test('editing starts from the current sites and engineers, keeps an inactive site and puts only the new engineers', async () => {
+  const put = vi.fn(() => json(200, { data: { ...emp, site_manager: account } }))
+  smRoutes({ ...emp, site_manager: account }, { 'PUT /api/v1/employees/e1/site-manager': put })
+  renderWithAuth(<EmployeeDetailRoute id="e1" />, SM, { router: false })
+  await user.click(await screen.findByRole('button', { name: 'مواقع ومهندسو مدير الموقع' }))
+  const dialog = screen.getByRole('dialog', { name: 'مواقع ومهندسو مدير الموقع' })
+  expect(within(dialog).queryByLabelText('الحساب')).toBeNull()
+  expect(within(dialog).queryByLabelText('البريد الإلكتروني')).toBeNull()
+  expect(await within(dialog).findByRole('checkbox', { name: 'موقع أ' })).toBeChecked()
+  expect(within(dialog).getByRole('checkbox', { name: 'موقع ب' })).not.toBeChecked()
+  const current = await within(dialog).findByRole('checkbox', { name: 'مهندس أول' })
+  expect(current).toBeChecked()
+  expect(current).toBeDisabled()
+  await user.click(within(dialog).getByRole('checkbox', { name: 'موقع ب' }))
+  await user.click(within(dialog).getByRole('button', { name: 'حفظ' }))
+  await waitFor(() => expect(put).toHaveBeenCalledTimes(1))
+  // s9 is a covered site no longer active: it is not listed, and saving keeps it
+  expect(bodyOf(put)).toEqual({ site_ids: ['s1', 's9', 's2'], engineer_ids: [] })
+})
+
+test('editing sends a newly ticked engineer with the date', async () => {
+  const put = vi.fn(() => json(200, { data: { ...emp, site_manager: account } }))
+  smRoutes({ ...emp, site_manager: account }, { 'PUT /api/v1/employees/e1/site-manager': put })
+  renderWithAuth(<EmployeeDetailRoute id="e1" />, SM, { router: false })
+  await user.click(await screen.findByRole('button', { name: 'مواقع ومهندسو مدير الموقع' }))
+  const dialog = screen.getByRole('dialog')
+  await user.click(await within(dialog).findByRole('checkbox', { name: 'مهندس ثان' }))
+  const date = within(dialog).getByLabelText('ساري اعتبارًا من')
+  await user.clear(date)
+  await user.type(date, '2026-12-01')
+  await user.click(within(dialog).getByRole('button', { name: 'حفظ' }))
+  await waitFor(() => expect(put).toHaveBeenCalledTimes(1))
+  expect(bodyOf(put)).toEqual({ site_ids: ['s1', 's9'], engineer_ids: ['g2'], effective_from: '2026-12-01' })
+})
+
+test('a refused engineer shows under the engineers list and a refused site id under the sites list', async () => {
+  const put = vi.fn(() => json(422, { error: { code: 'validation_failed', message: 'Invalid', details: [
+    { field: 'engineer_ids', code: 'x', message: 'مهندس ثان ليس مهندسًا في هذا التاريخ' },
+    { field: 'site_ids.1', code: 'exists', message: 'الموقع المحدد غير صالح' },
+  ] } }))
+  smRoutes({ ...emp, site_manager: account }, { 'PUT /api/v1/employees/e1/site-manager': put })
+  renderWithAuth(<EmployeeDetailRoute id="e1" />, SM, { router: false })
+  await user.click(await screen.findByRole('button', { name: 'مواقع ومهندسو مدير الموقع' }))
+  const dialog = screen.getByRole('dialog')
+  await user.click(await within(dialog).findByRole('checkbox', { name: 'مهندس ثان' }))
+  await user.click(within(dialog).getByRole('button', { name: 'حفظ' }))
+  expect(await within(within(dialog).getByRole('group', { name: 'المهندسون' })).findByText('مهندس ثان ليس مهندسًا في هذا التاريخ')).toBeInTheDocument()
+  expect(within(within(dialog).getByRole('group', { name: 'المواقع التي يغطيها' })).getByText('الموقع المحدد غير صالح')).toBeInTheDocument()
+  expect(within(dialog).queryByRole('alert')).toBeNull()
+})
+
 test('the documents tab needs employee_document.view', async () => {
   mockFetch({ 'GET /api/v1/employees/e1': () => json(200, { data: emp }), 'GET /api/v1/residences': residences })
   const { unmount } = renderWithAuth(<EmployeeDetailRoute id="e1" tab="documents" />, ['employee.view.own'], { router: false })
