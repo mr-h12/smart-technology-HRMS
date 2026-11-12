@@ -46,7 +46,7 @@ A place where a day of work is done, usually a client location.
 _Avoid_: location, project, place (المكان)
 
 **Home site** (الموقع الأساسي):
-The site a worker belongs to from a date until HR moves them. A worker helping at another site, even for one day, is moved there first; a day laborer's one-day move is a crew change instead (see Crew). An office employee may hold one too, set by HR, but it only lists them at that site in HR's attendance filter: it gives no site manager reach and changes no pay, fare or site costing (owner, 2026-11-08). Engineers have none: where an engineer is comes from their recorded days.
+The site a worker belongs to from a date until HR moves them. A worker helping at another site, even for one day, is moved there first; a day laborer's one-day move is a crew change instead (see Crew). A one-day visit HR records through the site workbook needs neither: the day alone is at the visited site. A site manager's own writes still need the home site (owner, 2026-11-12). An office employee may hold one too, set by HR, but it only lists them at that site in HR's attendance filter: it gives no site manager reach and changes no pay, fare or site costing (owner, 2026-11-08). Engineers have none: where an engineer is comes from their recorded days.
 _Avoid_: current site, assigned site
 
 **Crew** (طاقم):
@@ -54,7 +54,7 @@ The day laborers on a site's list for one date: those whose home site it is, cha
 _Avoid_: team, gang, roster (that is the whole list, workers and engineers)
 
 **Proposed laborer** (عامل مقترح):
-A new day laborer a site manager adds to today's crew, with their name, gender, optional mobile and a proposed wage. They have no home site and no pay row until HR approves the wage; if HR refuses it, they end on that day and leave every crew, and the days already recorded wait for HR.
+A new day laborer a site manager adds to today's crew, with their name, gender, optional mobile and a proposed wage. HR's site workbook can also create one, with a national ID, an optional mobile, residence and proposed wage, and gender male until HR changes it (a default pending the owner); with no proposed wage HR sets the wage on the employee's page. They have no home site and no pay row until HR approves the wage; if HR refuses it, they end on that day and leave every crew, and the days already recorded wait for HR.
 _Avoid_: temporary worker, new hire
 
 **Proposed wage** (أجر مقترح):
@@ -117,6 +117,10 @@ _Avoid_: default day, auto row
 **Day sheet** (كشف اليوم):
 One group's attendance for one date, where HR marks many employees at once. The group All lists every type for reading only; each row's Details opens the day editor.
 _Avoid_: roll call, check-in screen
+
+**Site workbook** (ملف الموقع):
+An Excel file HR downloads empty for one site and up to 31 days, one sheet per day. The site manager fills it by name: each person's status, times, advance and note, and a new day laborer's details. HR uploads it, previews and confirms. Every day it records is HR's and is at that site for that date only. It sits beside the per-type attendance template, which takes one site or leave day-type per cell (owner, 2026-11-12).
+_Avoid_: site sheet, site template, Excel file (alone)
 
 **Last site** (آخر موقع):
 The work site of an employee's latest recorded work day in the 7 days before a date.
