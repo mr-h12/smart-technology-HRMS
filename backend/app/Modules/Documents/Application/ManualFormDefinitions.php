@@ -52,6 +52,14 @@ final class ManualFormDefinitions
                     'warning_explanation_request' => ['input' => 'textarea', 'rules' => ['required', 'string', 'max:200']],
                 ],
             ],
+            'sim_receipt' => [
+                'view' => 'hr-forms.sim-receipt',
+                'audit_field_names_only' => true,
+                'fields' => [
+                    'sim_number' => ['input' => 'text', 'rules' => ['required', 'string', 'regex:/^(?:01|[+]201)[0-9]{9}$/D']],
+                    'issued_on' => ['input' => 'date', 'rules' => ['required', 'date_format:Y-m-d']],
+                ],
+            ],
             'mission_permit' => [
                 'view' => 'hr-forms.mission-permit',
                 'fields' => [

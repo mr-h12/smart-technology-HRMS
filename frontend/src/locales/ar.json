@@ -1346,16 +1346,19 @@
         "warning_explanation_request": "طلب التوضيح",
         "mission_date": "تاريخ المأمورية",
         "mission_reason": "سبب المأمورية",
-        "department_manager": "مدير القسم"
+        "department_manager": "مدير القسم",
+        "sim_number": "رقم الخط"
       },
       "early_leave_request": "طلب انصراف باكرًا",
       "resignation": "استقالة",
       "warning_notice": "نموذج إنذار",
       "notices": {
-        "warning_notice": "الطباعة فقط. لا تنشئ سجلًا تأديبيًا أو خصمًا أو مدخلًا للرواتب ولا تغيّر سجلات الموظف."
+        "warning_notice": "الطباعة فقط. لا تنشئ سجلًا تأديبيًا أو خصمًا أو مدخلًا للرواتب ولا تغيّر سجلات الموظف.",
+        "sim_receipt": "الطباعة فقط. لا تنشئ سجل عهدة أو أصل ولا تغيّر سجلات الموظف."
       },
       "mission_permit": "إذن مأمورية",
-      "leave_permit": "إذن انصراف"
+      "leave_permit": "إذن انصراف",
+      "sim_receipt": "استلام خط موبايل"
     },
     "leaveRequest": "نموذج طلب إجازة",
     "notificationMethod": "طريقة التبليغ",

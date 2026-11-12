@@ -18,7 +18,7 @@ final class LogMasker
 
     /** Exact names, not fragments: `pay`/`rate`/`basic` would also hide `pay_method`, `allowance_mode` and `fares`. */
     private const SENSITIVE_KEYS = ['salary', 'raise', 'insured_basic', 'daily_wage', 'value', 'amount', 'advance_request', 'advance_amount', 'current_pay', 'national_id',
-        'insurance_no', 'bank_account', 'phone',
+        'insurance_no', 'bank_account', 'phone', 'sim_number',
         'warning_incident', 'warning_period', 'warning_prior_occurrence', 'warning_explanation_request'];
 
     /** Western, Arabic-Indic and Persian digits, mixed in one run too: HR types on Arabic keyboards. `/u` is safe after mb_scrub. */

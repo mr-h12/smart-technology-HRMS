@@ -1315,16 +1315,19 @@
         "warning_explanation_request": "Request for explanation",
         "mission_date": "Mission date",
         "mission_reason": "Reason for the mission",
-        "department_manager": "Department manager"
+        "department_manager": "Department manager",
+        "sim_number": "Mobile line number"
       },
       "early_leave_request": "Early Departure Request",
       "resignation": "Resignation",
       "warning_notice": "Warning notice",
       "notices": {
-        "warning_notice": "Printing only. This creates no disciplinary record, deduction or payroll input and makes no changes to employee records."
+        "warning_notice": "Printing only. This creates no disciplinary record, deduction or payroll input and makes no changes to employee records.",
+        "sim_receipt": "Printing only. This creates no custody or asset record and leaves employee records unchanged."
       },
       "mission_permit": "Mission Permit",
-      "leave_permit": "Departure Permit"
+      "leave_permit": "Departure Permit",
+      "sim_receipt": "SIM Receipt"
     },
     "leaveRequest": "Leave request PDF",
     "notificationMethod": "Notification method",

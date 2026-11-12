@@ -57,6 +57,11 @@ try {
                 'mission_reason' => 'متابعة موقع الاختبار.',
                 'department_manager' => 'مدير الاختبار',
             ], null);
+        } elseif (getenv('HRMS_SMOKE_FORM') === 'sim-receipt') {
+            Auth::setUser($hr);
+            $row = app(ManualHrForms::class)->create('sim_receipt', $employee, $hr->id, (string) Str::uuid7(), [
+                'sim_number' => '01000000000', 'issued_on' => '2026-11-15',
+            ], null);
         } elseif ($departurePermit) {
             Auth::setUser($hr);
             $row = app(ManualHrForms::class)->create('leave_permit', $employee, $hr->id, (string) Str::uuid7(), [

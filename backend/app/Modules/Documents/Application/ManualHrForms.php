@@ -17,6 +17,9 @@ final class ManualHrForms
     /** @param array<string, mixed> $fields */
     public function create(string $form, string $employeeId, string $actor, string $key, array $fields, ?string $scope): stdClass
     {
+        if ($form === 'sim_receipt' && is_string($fields['sim_number'] ?? null) && str_starts_with($fields['sim_number'], '+20')) {
+            $fields['sim_number'] = '0'.substr($fields['sim_number'], 3);
+        }
         ksort($fields);
 
         return DB::transaction(function () use ($form, $employeeId, $actor, $key, $fields, $scope): stdClass {
