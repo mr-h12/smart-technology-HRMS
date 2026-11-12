@@ -60,4 +60,13 @@ return [
         'duplicate_row' => 'هذا الموظف مكرر في الملف.',
         'code_name_mismatch' => 'تم تغيير الرقم الوظيفي أو الاسم بعد تنزيل هذا الملف. يرجى تنزيل قالب جديد.',
     ],
+    // The site workbook's own text: the file is Arabic whatever the request language (calculations §14 W1).
+    'workbook' => [
+        'type' => [
+            'engineer' => 'مهندس',
+            'permanent_worker' => 'عامل مثبت',
+            'day_laborer' => 'يومية',
+            'office' => 'موظف مكتب',
+        ],
+    ],
 ];

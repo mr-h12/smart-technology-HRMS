@@ -121,6 +121,36 @@ final class EmployeeRoster
             ->orderBy('code'));
     }
 
+    /**
+     * The site workbook's name list (calculations §14 W4), with no manager reach: it is HR's file. own = the workers and office staff whose
+     * site on $from is $siteId and the engineers assigned on $from to any of $managerIds; others = every other day laborer, permanent worker
+     * and engineer employed on some day of [$from, $to]. Each group by name_ar in code-point order (as the C.UTF-8 database sorts), then code.
+     *
+     * @param  list<string>  $managerIds
+     * @return array{own: list<array<string, mixed>>, others: list<array<string, mixed>>}
+     */
+    public function siteWorkbookPeople(string $siteId, array $managerIds, string $from, string $to): array
+    {
+        $own = array_column([
+            ...$this->onSite($siteId, $from),
+            ...$this->rows($this->employees()->with(self::RELATIONS)->whereKey($this->officeIdsAt($siteId, $from))),
+            ...array_merge([], ...array_map(fn (string $m) => $this->engineersOf($m, $from), $managerIds)),
+        ], null, 'id');
+        $others = [];
+        foreach ([EmployeeType::DayLaborer, EmployeeType::PermanentWorker, EmployeeType::Engineer] as $type) {
+            foreach ($this->allOfType($type, $from, $to) as $e) {
+                if (! isset($own[$e['id']])) {
+                    $others[$e['id']] = $e;
+                }
+            }
+        }
+        $byName = fn (array $a, array $b) => strcmp($a['name_ar'], $b['name_ar']) ?: $a['code'] <=> $b['code'];
+        usort($own, $byName);
+        usort($others, $byName);
+
+        return ['own' => $own, 'others' => $others];
+    }
+
     /** @return list<string> the office staff whose site on $date is $siteId; that site only lists them there (owner, 2026-11-08) */
     public function officeIdsAt(string $siteId, string $date): array
     {
