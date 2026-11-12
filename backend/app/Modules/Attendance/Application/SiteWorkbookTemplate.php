@@ -8,6 +8,7 @@ use App\Modules\Attendance\Domain\Employment;
 use App\Modules\Attendance\Infrastructure\XlsxTemplateWriter;
 use App\Modules\Employees\Application\EmployeeRoster;
 use App\Modules\Sites\Application\SiteService;
+use App\Modules\Sites\Domain\LeaveCode;
 use App\Modules\Sites\Domain\SiteKind;
 use App\Modules\Sites\Infrastructure\Eloquent\Residence;
 use App\Modules\Sites\Infrastructure\Eloquent\Site;
@@ -37,21 +38,24 @@ final class SiteWorkbookTemplate
      */
     public function file(string $siteId, string $from, string $to): string
     {
-        $names = $this->names($siteId, $from, $to);
-        $site = (string) $this->sites->show($siteId)['name_ar'];
         $dates = self::dates($from, $to);
         if ($dates === []) {
             throw new InvalidArgumentException("{$from} is after {$to}.");
         }
+        /** @var array{name_ar: string, managers: list<array{id: string, name: string}>} $site */
+        $site = $this->sites->show($siteId);
+        $names = $this->names($siteId, $from, $to, $site['managers']);
+        // As the approved sample: absence (غ) first, then the other leave day-types by name; `is distinct from` is never null.
         /** @var list<string> $leave */
-        $leave = Site::where(['kind' => SiteKind::Leave->value, 'active' => true])->orderBy('name_ar')->pluck('name_ar')->all();
+        $leave = Site::where(['kind' => SiteKind::Leave->value, 'active' => true])
+            ->orderByRaw('leave_code is distinct from ?', [LeaveCode::Absent->value])->orderBy('name_ar')->pluck('name_ar')->all();
         /** @var list<string> $residences */
         $residences = Residence::orderBy('name_ar')->pluck('name_ar')->all();
 
         return $this->writer->writeWorkbook([
             'sheets' => array_map(fn (string $d) => [
                 'name' => self::sheetName($d),
-                'title' => (string) __('attendance.workbook.title', ['site' => $site, 'day' => self::sheetName($d).'-'.substr($d, 0, 4)], 'ar'),
+                'title' => (string) __('attendance.workbook.title', ['site' => $site['name_ar'], 'day' => self::sheetName($d).'-'.substr($d, 0, 4)], 'ar'),
             ], $dates),
             'columns' => self::columns(),
             'rows' => max(self::MIN_ROWS, 2 * count(array_filter($names, fn (array $n) => $n['own']))),
@@ -84,12 +88,13 @@ final class SiteWorkbookTemplate
      * The name list (W4): `name_ar (type label) · code`, the site's own people first. The label is the type on the first day of the
      * range the person is employed, in Arabic whatever the request language (W1).
      *
+     * @param  list<array{id: string, name: string}>|null  $managers  the site's managers (SiteService::show), when the caller has read them
      * @return list<array{entry: string, employee: array<string, mixed>, own: bool}>
      */
-    public function names(string $siteId, string $from, string $to): array
+    public function names(string $siteId, string $from, string $to, ?array $managers = null): array
     {
         /** @var list<array{id: string, name: string}> $managers */
-        $managers = $this->sites->show($siteId)['managers'];
+        $managers ??= $this->sites->show($siteId)['managers'];
         $people = $this->roster->siteWorkbookPeople($siteId, array_column($managers, 'id'), $from, $to);
         $dates = self::dates($from, $to);
 

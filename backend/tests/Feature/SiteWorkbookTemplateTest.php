@@ -3,25 +3,24 @@
 namespace Tests\Feature;
 
 use App\Modules\Attendance\Application\SiteWorkbookTemplate;
+use App\Modules\Employees\Application\EmployeeRoster;
 use App\Modules\Employees\Application\EmployeeService;
 use App\Modules\Identity\Infrastructure\Eloquent\User;
 use App\Modules\Sites\Infrastructure\Eloquent\Residence;
 use App\Modules\Sites\Infrastructure\Eloquent\Site;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\DB;
-use Illuminate\Testing\TestResponse;
-use OpenSpout\Reader\XLSX\Reader;
 use PHPUnit\Framework\Attributes\DataProvider;
-use Symfony\Component\HttpFoundation\BinaryFileResponse;
 use Tests\AttendanceFixtures;
 use Tests\TestCase;
-use ZipArchive;
+use Tests\XlsxFiles;
 
 /** The site workbook (calculations §14 W1, W4; spec docs/superpowers/specs/2026-11-12-site-workbook-design.md «The file»). */
 class SiteWorkbookTemplateTest extends TestCase
 {
     use AttendanceFixtures;
     use RefreshDatabase;
+    use XlsxFiles;
 
     private const COLUMNS = ['الاسم', 'الحالة', 'حضور', 'انصراف', 'سلفة', 'ملاحظات', 'الرقم القومي', 'الموبايل', 'محل الإقامة', 'الأجر المقترح'];
 
@@ -32,9 +31,6 @@ class SiteWorkbookTemplateTest extends TestCase
     private string $site;
 
     private User $manager;
-
-    /** The downloaded file's bytes, kept for the XML checks. */
-    private string $xlsx = '';
 
     protected function setUp(): void
     {
@@ -79,6 +75,30 @@ class SiteWorkbookTemplateTest extends TestCase
         ], array_column($names, 'entry'));
         $this->assertSame([true, true, true, true, false, false, false], array_column($names, 'own'));
         $this->assertSame($laborer, $names[0]['employee']['id']);
+    }
+
+    /** W4, spec «The name list»: the engineers assigned to any of the site's managers are own people, not only the first manager's. */
+    public function test_the_engineers_of_every_manager_of_the_site_are_own_people(): void
+    {
+        $second = $this->managerOf($this->site);
+        $first = $this->assign($this->employee('engineer', '2026-01-01', ['name_ar' => 'Eng-A']), $this->manager);
+        $other = $this->assign($this->employee('engineer', '2026-01-01', ['name_ar' => 'Eng-B']), $second);
+
+        $names = $this->names();
+
+        $this->assertSame([$this->entry($first, 'مهندس'), $this->entry($other, 'مهندس')], array_column($names, 'entry'));
+        $this->assertSame([true, true], array_column($names, 'own'));
+    }
+
+    /** W4: office staff homed here but employed on no day of the range (terminated before it starts, not yet archived) are left out. */
+    public function test_someone_employed_on_no_day_of_the_range_is_left_out(): void
+    {
+        $office = $this->employee('office', '2026-01-01', ['name_ar' => 'Leaving', 'termination_date' => '2026-11-20']);
+        $this->homeSite($office, $this->site, '2026-01-01');
+
+        // The roster still counts them as the site's own on the range's first day (officeIdsAt reads the type, not the employment).
+        $this->assertSame([$office], array_column(app(EmployeeRoster::class)->siteWorkbookPeople($this->site, [], '2026-11-21', '2026-11-27')['own'], 'id'));
+        $this->assertSame([], app(SiteWorkbookTemplate::class)->names($this->site, '2026-11-21', '2026-11-27'));
     }
 
     /** W4, spec «Differences» 14: archived people and other sites' office staff are left out; a site manager's own record is listed. */
@@ -193,6 +213,7 @@ class SiteWorkbookTemplateTest extends TestCase
         $leave = $this->leaveTypes();
         Site::whereKey($leave['rest'])->update(['active' => false]);
         Site::findOrFail($leave['other'])->delete();
+        Site::whereKey($leave['absent'])->update(['name_ar' => 'غ']);
         $this->homeSite($this->employee('day_laborer', '2026-01-01', ['name_ar' => '=SUM(1)']), $this->site, '2026-01-01');
         $this->employee('engineer');
         Residence::create(['name_ar' => 'Residence-B']);
@@ -201,11 +222,13 @@ class SiteWorkbookTemplateTest extends TestCase
 
         $this->download($this->params());
 
-        $active = Site::where(['kind' => 'leave', 'active' => true])->pluck('name_ar')->all();
-        sort($active, SORT_STRING);                                                                 // the C.UTF-8 database order
-        $this->assertNotContains((string) Site::whereKey($leave['rest'])->value('name_ar'), $active);
         $lists = $this->cells(8);
-        $this->assertSame(['حاضر', ...$active], $this->column($lists, 'A'));
+        // As the approved sample: the present word, then absence (غ), then the other active leave day-types (the migrations' four and
+        // leaveTypes()' own, less rest and other) by name in code-point order.
+        $this->assertSame(
+            ['حاضر', 'غ', 'Leave-friday', 'Leave-official_holiday', 'Leave-sick', 'اجازة السبت', 'اعتيادية', 'بدون أجر', 'عارضة'],
+            $this->column($lists, 'A'),
+        );
         $this->assertSame(array_column($this->names(), 'entry'), $this->column($lists, 'B'));
         $this->assertStringStartsWith('=SUM(1) (يومية) · ', $lists['B1']['value']);
         $this->assertSame('inlineStr', $lists['B1']['type']);
@@ -359,7 +382,6 @@ class SiteWorkbookTemplateTest extends TestCase
 
     /**
      * Downloads the workbook, in Arabic unless $headers say otherwise (sending it deletes the temp file), and reads every sheet back.
-     * Copied from AttendanceTemplateTest, which stays untouched.
      *
      * @param  array<string, string>  $headers
      * @return array<string, array{visible: bool, rows: list<list<mixed>>}>
@@ -373,54 +395,7 @@ class SiteWorkbookTemplateTest extends TestCase
         $this->assertStringContainsString("site-workbook-{$q['from']}-{$q['to']}.xlsx", (string) $response->headers->get('Content-Disposition'));
         $this->xlsx = $this->sent($response);
 
-        $path = $this->tempXlsx();
-        $reader = new Reader;
-        $reader->open($path);
-        $sheets = [];
-        foreach ($reader->getSheetIterator() as $sheet) {
-            $rows = [];
-            foreach ($sheet->getRowIterator() as $row) {
-                $rows[] = $row->toArray();
-            }
-            $sheets[$sheet->getName()] = ['visible' => $sheet->isVisible(), 'rows' => $rows];
-        }
-        $reader->close();
-        unlink($path);
-
-        return $sheets;
-    }
-
-    private function sent(TestResponse $response): string
-    {
-        $file = $response->baseResponse;
-        $this->assertInstanceOf(BinaryFileResponse::class, $file);
-        $path = $file->getFile()->getPathname();
-        ob_start();
-        $file->sendContent();
-        $bytes = (string) ob_get_clean();
-        $this->assertFileDoesNotExist($path);
-
-        return $bytes;
-    }
-
-    private function tempXlsx(): string
-    {
-        $path = (string) tempnam(sys_get_temp_dir(), 'template-test-');
-        file_put_contents($path, $this->xlsx);
-
-        return $path;
-    }
-
-    private function zipEntry(string $name): string
-    {
-        $path = $this->tempXlsx();
-        $zip = new ZipArchive;
-        $zip->open($path);
-        $xml = (string) $zip->getFromName($name);
-        $zip->close();
-        unlink($path);
-
-        return $xml;
+        return $this->sheets();
     }
 
     /**

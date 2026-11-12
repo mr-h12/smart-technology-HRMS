@@ -162,7 +162,7 @@ A test can assert every line of this section. It matches the approved sample (`b
 
 | Column | Holds |
 |---|---|
-| A | «حاضر», then the Arabic name of every active leave day-type |
+| A | «حاضر», then the absence day-type (غ), then the Arabic name of every other active leave day-type, by name |
 | B | the name list |
 | C | every residence's name |
 | D | D1 the site id (UUID), D2 `from`, D3 `to` (`Y-m-d`) |
