@@ -1340,7 +1340,7 @@ test('a present field row shows its arrival and departure with the late and OT h
   expect(within(tr).getByRole('textbox', { name: 'وقت الحضور Engineer-2' })).toHaveValue('8:45')
   expect(within(tr).getByRole('textbox', { name: 'وقت الانصراف Engineer-2' })).toHaveValue('6:00')
   expect(within(tr).getByText('متأخر 45 د')).toHaveClass('text-warning')
-  expect(within(tr).getByText('إضافي 75 د')).toHaveClass('text-warning')
+  expect(within(tr).getByText('إضافي 75 د غير معتمد')).toHaveClass('text-warning') // nothing stored: an old day, or a site manager's departure
   expect(within(rowOf('Engineer-1')).queryByRole('textbox')).not.toBeInTheDocument()
   expect(within(rowOf('Engineer-3')).queryByRole('textbox')).not.toBeInTheDocument()
 })
@@ -1441,6 +1441,57 @@ test('a locked sheet shows the times as plain text', async () => {
   expect(within(tr).queryByRole('textbox')).not.toBeInTheDocument()
   expect(within(tr).getByText('8:45 ص')).toBeInTheDocument()
   expect(within(tr).getByText('6:00 م')).toBeInTheDocument()
+  expect(within(tr).getByText('إضافي 75 د غير معتمد')).toBeInTheDocument()
+  expect(within(tr).queryByRole('button', { name: 'اعتماد Engineer-2' })).not.toBeInTheDocument()
+})
+
+// stored minutes (2026-11-12): engineers and day laborers show what is stored; an old day with nothing stored shows the hint
+const storedRow = (late: number | null, ot: number | null, type = 'engineer') => {
+  const r = row(2, 'Engineer-2', { ...timed.day, late_minutes: late, ot_minutes: ot }, { last_site_id: 's1', hints: { late_minutes: 45, ot_minutes: 75 } })
+  return { ...r, employee: { ...r.employee, type } }
+}
+const storedRoutes = (r: object) => ({ ...routes, 'GET /api/v1/attendance/sheet': () => sheet([r]) })
+
+test('an engineer row shows the stored late and overtime minutes, not the hints', async () => {
+  mockFetch(storedRoutes(storedRow(30, 60)))
+  edit()
+  await table()
+  const tr = rowOf('Engineer-2')
+  expect(within(tr).getByText('متأخر 30 د')).toBeInTheDocument()
+  expect(within(tr).getByText('إضافي 60 د')).toBeInTheDocument()
+  expect(within(tr).queryByText(/45|75/)).not.toBeInTheDocument()
+  expect(within(tr).queryByRole('button', { name: 'اعتماد Engineer-2' })).not.toBeInTheDocument()
+})
+
+test('stored 0 shows no lateness; stored 0 overtime with a suggestion shows it unapproved with «اعتماد»', async () => {
+  mockFetch(storedRoutes(storedRow(0, 0, 'day_laborer')))
+  edit()
+  await table()
+  const tr = rowOf('Engineer-2')
+  expect(within(tr).queryByText(/^متأخر/)).not.toBeInTheDocument()
+  expect(within(tr).getByText('إضافي 75 د غير معتمد')).toBeInTheDocument()
+  expect(within(tr).getByRole('button', { name: 'اعتماد Engineer-2' })).toHaveTextContent('اعتماد')
+})
+
+test('«اعتماد» sends the suggested overtime in one bulk row with the row\'s version and site', async () => {
+  const bulk = bulkOk()
+  mockFetch({ ...storedRoutes(storedRow(45, null)), 'POST /api/v1/attendance/days/bulk': bulk })
+  edit()
+  await table()
+  await user.click(within(rowOf('Engineer-2')).getByRole('button', { name: 'اعتماد Engineer-2' }))
+  await waitFor(() => expect(bulk).toHaveBeenCalledTimes(1))
+  expect(sent(bulk)).toEqual({ date: '2026-10-18', rows: [{ employee_id: 'e2', version: 1, site_id: 's1', ot_minutes: 75 }] })
+  await waitFor(() => expect(toast.success).toHaveBeenCalledWith('تم تسجيل 1', expect.anything()))
+})
+
+test('a permanent worker row keeps the hints and has no «اعتماد»', async () => {
+  mockFetch(storedRoutes(storedRow(null, null, 'permanent_worker')))
+  edit()
+  await table()
+  const tr = rowOf('Engineer-2')
+  expect(within(tr).getByText('متأخر 45 د')).toBeInTheDocument()
+  expect(within(tr).getByText('إضافي 75 د')).toBeInTheDocument()
+  expect(within(tr).queryByRole('button', { name: 'اعتماد Engineer-2' })).not.toBeInTheDocument()
 })
 
 // S2b: the site chip

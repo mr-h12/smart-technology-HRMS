@@ -374,6 +374,18 @@ class SiteDaySaveTest extends TestCase
         $this->assertSame(90, $this->stored($this->l1)->late_minutes);
     }
 
+    public function test_a_site_managers_overtime_is_stored_as_0_until_hr_approves_it(): void
+    {
+        $this->cairo('2026-10-22 19:00');
+        $this->actingAs($this->m, 'api');
+        $this->save($this->s1, [$this->work($this->e1, '08:00', '18:30')])->assertOk();
+        $this->assertSame([0, 0], [$this->stored($this->e1)->late_minutes, $this->stored($this->e1)->ot_minutes]);
+
+        $this->signIn('hr');
+        $this->postJson('/api/v1/attendance/days/bulk', ['date' => '2026-10-22', 'rows' => [['employee_id' => $this->e1, 'version' => 1, 'site_id' => $this->s1, 'ot_minutes' => 90]]])->assertOk();
+        $this->assertSame([0, 90], [$this->stored($this->e1)->late_minutes, $this->stored($this->e1)->ot_minutes]);
+    }
+
     public function test_hr_and_ceo_cannot_save(): void
     {
         $this->save($this->s1, [$this->work($this->w1, '08:00')])->assertForbidden();

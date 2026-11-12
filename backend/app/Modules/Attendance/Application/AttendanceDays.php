@@ -348,6 +348,21 @@ final class AttendanceDays
         if ($dryRun) {
             return $live->version ?? 0;
         }
+        // An engineer's or day laborer's minutes from the times (calculations §13, owner 2026-11-12), unless the write sends a number:
+        // on a new day, a change to a work day or a changed time. Not bound by the typing cap. The site manager's overtime waits for HR.
+        if (in_array($type, [EmployeeType::Engineer, EmployeeType::DayLaborer], true) && $site?->kind === SiteKind::Work->value) {
+            $was = $liveKind === SiteKind::Work->value;
+            $changed = fn (string $t) => ! $was || $values[$t] !== ($live->getAttribute($t) === null ? null : substr((string) $live->getAttribute($t), 0, 5));
+            $shift = EffectiveDays::fieldShift($employee, $date, $settings ?? $this->rules->all());
+            [$in, $out] = [$values['in_time'], $values['out_time']];
+            if (($input['late_minutes'] ?? null) === null && $changed('in_time')) {
+                $values['late_minutes'] = $in === null ? null : DayRules::lateMinutes($shift['start'], $in);
+            }
+            if (($input['ot_minutes'] ?? null) === null && ($changed('in_time') || $changed('out_time'))) {
+                $values['ot_minutes'] = $in === null || $out === null ? null
+                    : ($source === 'manager' ? 0 : DayRules::workerMinutes($shift['start'], $shift['end'], $in, $out)['ot']);
+            }
+        }
 
         if ($isLeave && $type === EmployeeType::PermanentWorker) {
             $values['transport'] = 'none';
