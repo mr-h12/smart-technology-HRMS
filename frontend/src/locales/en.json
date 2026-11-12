@@ -1303,8 +1303,12 @@
         "reason": "Reason",
         "responsible_manager": "Responsible manager",
         "issued_on": "Issue date",
-        "job_title": "Job title"
-      }
+        "job_title": "Job title",
+        "regular_start": "Regular start time",
+        "regular_end": "Regular end time",
+        "requested_end": "Requested departure time"
+      },
+      "early_leave_request": "Early Departure Request"
     },
     "leaveRequest": "Leave request PDF",
     "notificationMethod": "Notification method",

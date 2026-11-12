@@ -25,6 +25,15 @@ final class ManualFormDefinitions
                     'issued_on' => ['input' => 'date', 'rules' => ['required', 'date_format:Y-m-d']],
                 ],
             ],
+            'early_leave_request' => [
+                'view' => 'hr-forms.early-leave-request',
+                'fields' => [
+                    'regular_start' => ['input' => 'time', 'rules' => ['required', 'date_format:H:i']],
+                    'regular_end' => ['input' => 'time', 'rules' => ['required', 'date_format:H:i', 'after:regular_start']],
+                    'requested_end' => ['input' => 'time', 'rules' => ['required', 'date_format:H:i', 'after:regular_start', 'before:regular_end']],
+                    'issued_on' => ['input' => 'date', 'rules' => ['required', 'date_format:Y-m-d']],
+                ],
+            ],
         ];
     }
 }

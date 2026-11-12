@@ -1182,3 +1182,40 @@ test.each([true, false])('late permit in the employee file respects generate per
   const sent = vi.mocked(fetch).mock.calls.find(([url, opts]) => String(url).endsWith('/manual/late_permit') && opts?.method === 'POST')
   expect(JSON.parse(String(sent?.[1]?.body))).toEqual({ addressee: 'مدير الاختبار', idempotency_key: expect.any(String) })
 })
+
+test('selects the early departure request in the employee file and submits its schedule', async () => {
+  const generate = vi.fn(() => json(202, { data: { id: 'export1' } }))
+  const schedule = { regular_start: '08:30', regular_end: '17:30', requested_end: '16:00', issued_on: '2026-11-15' }
+  mockFetch({
+    'GET /api/v1/employees/e1': () => json(200, { data: { ...emp, code: 7, department: 'قسم الاختبار' } }),
+    'GET /api/v1/residences': residences,
+    'GET /api/v1/hr-manual-form-definitions': () => json(200, { data: { forms: [
+      { type: 'late_permit', fields: [] },
+      { type: 'early_leave_request', fields: Object.keys(schedule).map((name) => ({
+        name, input: name === 'issued_on' ? 'date' : 'time', required: true, max: null,
+      })) },
+    ] } }),
+    'POST /api/v1/employees/e1/hr-forms/manual/early_leave_request': generate,
+  })
+  renderWithAuth(<EmployeeDetailRoute id="e1" tab="documents" />, [
+    'employee.view.all', 'hr_forms.generate.all',
+  ], { router: false })
+
+  await user.selectOptions(await screen.findByRole('combobox', { name: 'نماذج للطباعة' }), 'early_leave_request')
+  const heading = screen.getByRole('heading', { name: 'طلب انصراف باكرًا' })
+  const section = within(heading.closest('section')!)
+  expect(section.getByText(/الطباعة فقط/)).toBeInTheDocument()
+  expect(section.getByLabelText('الاسم')).toHaveValue(emp.name_ar)
+  expect(section.getByLabelText('القسم')).toHaveValue('قسم الاختبار')
+  const action = section.getByRole('button', { name: 'إنشاء الملف' })
+  await user.click(action)
+  expect(generate).not.toHaveBeenCalled()
+  await user.type(section.getByLabelText('بداية الدوام الرسمية'), schedule.regular_start)
+  await user.type(section.getByLabelText('نهاية الدوام الرسمية'), schedule.regular_end)
+  await user.type(section.getByLabelText('وقت الانصراف المطلوب'), schedule.requested_end)
+  await user.type(section.getByLabelText('تاريخ التحرير'), schedule.issued_on)
+  await user.click(action)
+  await waitFor(() => expect(generate).toHaveBeenCalledOnce())
+  const sent = vi.mocked(fetch).mock.calls.find(([url, opts]) => String(url).endsWith('/manual/early_leave_request') && opts?.method === 'POST')
+  expect(JSON.parse(String(sent?.[1]?.body))).toEqual({ ...schedule, idempotency_key: expect.any(String) })
+})

@@ -1334,8 +1334,12 @@
         "reason": "الأسباب",
         "responsible_manager": "المدير المسؤول",
         "issued_on": "تاريخ التحرير",
-        "job_title": "المسمى الوظيفي"
-      }
+        "job_title": "المسمى الوظيفي",
+        "regular_start": "بداية الدوام الرسمية",
+        "regular_end": "نهاية الدوام الرسمية",
+        "requested_end": "وقت الانصراف المطلوب"
+      },
+      "early_leave_request": "طلب انصراف باكرًا"
     },
     "leaveRequest": "نموذج طلب إجازة",
     "notificationMethod": "طريقة التبليغ",
