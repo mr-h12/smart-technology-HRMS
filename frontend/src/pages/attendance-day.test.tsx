@@ -70,7 +70,7 @@ test('Save is blocked while a time has no AM/PM: no request, the hint shows and 
   expect(body(put)).toMatchObject({ in_time: '12:00', out_time: '22:15' })
 })
 
-test('a changed arrival empties the late and overtime boxes, a changed departure the overtime; an empty box says it is computed on save', async () => {
+test('a changed arrival empties only the late box, a changed departure only the overtime box; an empty box says it is computed on save', async () => {
   const put = vi.fn(() => json(200, { data: day() }))
   mockFetch(routes(day({ state: 'stored', source: 'entered', version: 1, site_id: 's2', in_time: '08:30', out_time: '18:00', late_minutes: 30, ot_minutes: 60, outside_minutes: 10 }), { [`PUT ${URL}`]: put }))
   open()
@@ -88,11 +88,11 @@ test('a changed arrival empties the late and overtime boxes, a changed departure
   await user.clear(screen.getByLabelText('وقت الحضور'))
   await user.type(screen.getByLabelText('وقت الحضور'), '09:00')
   expect(late).toHaveValue('')
-  expect(ot).toHaveValue('')
+  expect(ot).toHaveValue('20') // the arrival never decides overtime: on a site manager's day that would approve it
   expect(late).toHaveAttribute('placeholder', 'تُحسب من الوقت عند الحفظ')
   expect(screen.getByLabelText('دقائق العمل خارج الإسكندرية')).not.toHaveAttribute('placeholder', 'تُحسب من الوقت عند الحفظ')
   await user.click(screen.getByRole('button', { name: 'حفظ' }))
-  expect(body(put)).toMatchObject({ in_time: '09:00', out_time: '19:00', late_minutes: null, ot_minutes: null })
+  expect(body(put)).toMatchObject({ in_time: '09:00', out_time: '19:00', late_minutes: null, ot_minutes: 20 })
 })
 
 test('the overtime suggestion fills the overtime box', async () => {
@@ -100,12 +100,12 @@ test('the overtime suggestion fills the overtime box', async () => {
   open()
   await siteSelect()
   expect(screen.getByText('وقت إضافي محسوب: 75 دقيقة')).toBeInTheDocument()
-  await user.click(screen.getByRole('button', { name: 'اعتماد' }))
+  await user.click(screen.getByRole('button', { name: 'استخدام الرقم' }))
   expect(screen.getByLabelText('دقائق الوقت الإضافي')).toHaveValue('75')
-  expect(screen.queryByRole('button', { name: 'اعتماد' })).toBeNull() // the box already holds it
+  expect(screen.queryByRole('button', { name: 'استخدام الرقم' })).toBeNull() // the box already holds it
 })
 
-test('a changed time hides the computed minutes it decides, until the stored time is typed back', async () => {
+test('a changed time hides the hint it decides (arrival: lateness, departure: overtime) until the stored time is typed back', async () => {
   mockFetch(routes(day({ state: 'stored', source: 'entered', version: 1, site_id: 's1', in_time: '08:30:00', out_time: '18:00:00', ot_minutes: 0, hints: { late_minutes: 30, ot_minutes: 75 } })))
   open()
   await siteSelect()
@@ -116,18 +116,18 @@ test('a changed time hides the computed minutes it decides, until the stored tim
   await user.type(out, '19:00')
   expect(screen.getByText(lateHint)).toBeInTheDocument()
   expect(screen.queryByText(otHint)).toBeNull()
-  expect(screen.queryByRole('button', { name: 'اعتماد' })).toBeNull()
+  expect(screen.queryByRole('button', { name: 'استخدام الرقم' })).toBeNull()
   expect(screen.getByLabelText('دقائق الوقت الإضافي')).toHaveAttribute('placeholder', 'تُحسب من الوقت عند الحفظ')
   await user.clear(out)
   await user.type(out, '18:00')
   expect(screen.getByText(otHint)).toBeInTheDocument()
-  expect(screen.getByRole('button', { name: 'اعتماد' })).toBeInTheDocument()
+  expect(screen.getByRole('button', { name: 'استخدام الرقم' })).toBeInTheDocument()
   const arrival = screen.getByLabelText('وقت الحضور')
   await user.clear(arrival)
   await user.type(arrival, '09:00')
   expect(screen.queryByText(lateHint)).toBeNull()
-  expect(screen.queryByText(otHint)).toBeNull()
-  expect(screen.queryByRole('button', { name: 'اعتماد' })).toBeNull()
+  expect(screen.getByText(otHint)).toBeInTheDocument()
+  expect(screen.getByRole('button', { name: 'استخدام الرقم' })).toBeInTheDocument()
 })
 
 test('a read-only day offers no overtime button', async () => {
@@ -135,7 +135,7 @@ test('a read-only day offers no overtime button', async () => {
   open()
   await siteSelect()
   expect(screen.getByText('وقت إضافي محسوب: 75 دقيقة')).toBeInTheDocument()
-  expect(screen.queryByRole('button', { name: 'اعتماد' })).toBeNull()
+  expect(screen.queryByRole('button', { name: 'استخدام الرقم' })).toBeNull()
 })
 
 test('choosing a leave type hides times and minutes', async () => {

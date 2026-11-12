@@ -344,24 +344,28 @@ final class AttendanceDays
             }
         }
 
+        // An engineer's or day laborer's minutes from the times (calculations §13, owner 2026-11-12), checked like typed ones. Single-day
+        // entry fills an empty value always; bulk only an unsent one, on a new or newly work day or a change of the deciding time: the
+        // arrival for the late minutes, the departure (or an arrival going between empty and set) for overtime. The site manager's is 0.
+        if (in_array($type, [EmployeeType::Engineer, EmployeeType::DayLaborer], true) && $site?->kind === SiteKind::Work->value) {
+            $was = $liveKind === SiteKind::Work->value;
+            $hm = fn (mixed $t) => $t === null ? null : substr((string) $t, 0, 5);
+            [$in, $out, $oldIn, $oldOut] = [$values['in_time'], $values['out_time'], $hm($live?->in_time), $hm($live?->out_time)];
+            $fill = fn (string $m, bool $changed) => $keepUnsent ? ! array_key_exists($m, $input) && (! $was || $changed) : $values[$m] === null;
+            $shift = EffectiveDays::fieldShift($employee, $date, $settings ?? $this->rules->all());
+            if ($fill('late_minutes', $in !== $oldIn)) {
+                $values['late_minutes'] = $in === null ? null : DayRules::lateMinutes($shift['start'], $in);
+            }
+            if ($fill('ot_minutes', $out !== $oldOut || ($in === null) !== ($oldIn === null))) {
+                // A departure before the arrival is refused as out_before_in; it gives no overtime to refuse as well.
+                $values['ot_minutes'] = $in === null || $out === null || $out < $in ? null
+                    : ($source === 'manager' ? 0 : DayRules::workerMinutes($shift['start'], $shift['end'], $in, $out)['ot']);
+            }
+        }
+
         $this->assertRules($type, $siteRule, $values);
         if ($dryRun) {
             return $live->version ?? 0;
-        }
-        // An engineer's or day laborer's minutes from the times (calculations §13, owner 2026-11-12), unless the write sends a number:
-        // on a new day, a change to a work day or a changed time. Not bound by the typing cap. The site manager's overtime waits for HR.
-        if (in_array($type, [EmployeeType::Engineer, EmployeeType::DayLaborer], true) && $site?->kind === SiteKind::Work->value) {
-            $was = $liveKind === SiteKind::Work->value;
-            $changed = fn (string $t) => ! $was || $values[$t] !== ($live->getAttribute($t) === null ? null : substr((string) $live->getAttribute($t), 0, 5));
-            $shift = EffectiveDays::fieldShift($employee, $date, $settings ?? $this->rules->all());
-            [$in, $out] = [$values['in_time'], $values['out_time']];
-            if (($input['late_minutes'] ?? null) === null && $changed('in_time')) {
-                $values['late_minutes'] = $in === null ? null : DayRules::lateMinutes($shift['start'], $in);
-            }
-            if (($input['ot_minutes'] ?? null) === null && ($changed('in_time') || $changed('out_time'))) {
-                $values['ot_minutes'] = $in === null || $out === null ? null
-                    : ($source === 'manager' ? 0 : DayRules::workerMinutes($shift['start'], $shift['end'], $in, $out)['ot']);
-            }
         }
 
         if ($isLeave && $type === EmployeeType::PermanentWorker) {

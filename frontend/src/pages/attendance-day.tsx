@@ -22,9 +22,8 @@ const OUTSIDE = ['outside_minutes', 'outside_amount']
 const TRANSPORT = ['full', 'half', 'none']
 // lateness is computed from the in time, overtime from the out time, so each hint sits under that time
 const HINT: Record<string, [hint: string, key: string]> = { in_time: ['late_minutes', 'attendance.day.hintLate'], out_time: ['ot_minutes', 'attendance.day.hintOt'] }
-// the minutes the server computes from the times when they go empty (engineers, day laborers): a changed time empties the ones it decides
+// the minutes the server computes on save when their box is empty (engineers, day laborers); a changed time empties the one it decides
 const COMPUTED = ['late_minutes', 'ot_minutes']
-const EMPTIES: Record<string, string[]> = { in_time: COMPUTED, out_time: ['ot_minutes'] }
 
 const AMOUNTS = ['outside_amount', 'advance_amount']
 /** Amounts: "500.000000" → "500" by string surgery (money never goes through a float). Every other field shows as typed. */
@@ -105,7 +104,7 @@ function DayForm({ day, sites, path, archived, loadErr, onDone, onReload }: { da
   const save = (e: React.MouseEvent<HTMLElement>) => !stopAtMissingPeriod(e.currentTarget) && run(() => send(path, { method: 'PUT', body: { version, site_id: form.site_id || null, ...Object.fromEntries(shown.map((f) => [f, toBody(f, form[f])])) } }))
   const clear = () => run(() => send(`${path}?version=${version}`, { method: 'DELETE' }))
   const setValue = (k: string, v: string) => {
-    if (v !== form[k]) for (const m of EMPTIES[k] ?? []) set(m, '')
+    if (HINT[k] && v !== form[k]) set(HINT[k][0], '')
     set(k, v)
   }
 
@@ -119,9 +118,8 @@ function DayForm({ day, sites, path, archived, loadErr, onDone, onReload }: { da
           {(p) => <Textarea {...p} value={form.note} maxLength={500} disabled={readOnly} onChange={(e) => set(f, e.target.value)} />}
         </Field>
       )
-    // the hints come from the stored times: a time changed in the form hides the ones it decides (overtime needs both) until it is typed back
-    const moved = (k: string) => (hhmm(form[k]) ?? '') !== (hhmm(day[k] as string | null) ?? '')
-    const hint = HINT[f] && !moved('in_time') && !(f === 'out_time' && moved('out_time')) ? day.hints[HINT[f][0]] : undefined
+    // the hints come from the stored times: a time changed in the form hides its own hint until it is typed back
+    const hint = HINT[f] && (hhmm(form[f]) ?? '') === (hhmm(day[f] as string | null) ?? '') ? day.hints[HINT[f][0]] : undefined
     // the overtime suggestion fills its box; Save stores it
     const fill = f === 'out_time' && !readOnly && shown.includes('ot_minutes') && (hint ?? 0) > 0 && String(hint) !== form.ot_minutes
     return (
@@ -131,7 +129,7 @@ function DayForm({ day, sites, path, archived, loadErr, onDone, onReload }: { da
         {hint != null && (
           <p className="flex items-center gap-2 text-[13px] text-muted-foreground">
             {t(HINT[f][1], { minutes: hint })}
-            {fill && <Button type="button" variant="outline" size="xs" onClick={() => set('ot_minutes', String(hint))}>{t('attendance.sheet.approveOt')}</Button>}
+            {fill && <Button type="button" variant="outline" size="xs" onClick={() => set('ot_minutes', String(hint))}>{t('attendance.day.useSuggested')}</Button>}
           </p>
         )}
       </div>
