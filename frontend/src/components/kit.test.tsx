@@ -364,6 +364,27 @@ test('DataList with `to` makes each title a link to its row', async () => {
   expect(screen.getByRole('link', { name: 'منى سعيد' })).toHaveAttribute('href', '/employees/2')
 })
 
+test('DataList with `to` clips each stretched link to its own row and rings the row, since Safari ignores position on a table row', () => {
+  const { rerender } = render(<MemoryRouter>{list({ to: (p) => `/employees/${p.id}`, actions: undefined })}</MemoryRouter>)
+  for (const row of screen.getAllByRole('row').slice(1)) {
+    expect(row).toHaveClass(
+      'relative',
+      '[clip-path:inset(0)]',
+      'has-[td:first-child>a:focus-visible]:outline-2',
+      'has-[td:first-child>a:focus-visible]:-outline-offset-2',
+      'has-[td:first-child>a:focus-visible]:outline-ring',
+    )
+    const link = within(row).getByRole('link')
+    expect(link).toHaveClass('after:absolute', 'after:inset-0')
+    expect(link).not.toHaveClass('focus-visible:after:outline-2')
+  }
+  rerender(<MemoryRouter>{list({ actions: undefined })}</MemoryRouter>)
+  for (const row of screen.getAllByRole('row').slice(1)) {
+    expect(row).not.toHaveClass('relative')
+    expect(row).not.toHaveClass('[clip-path:inset(0)]')
+  }
+})
+
 test('DataList hero is the last column under a visible header, end-aligned like the numbers', () => {
   render(list({ actions: undefined, hero: { header: 'الرصيد', cell: (p) => p.pay } }))
   const [head, first] = screen.getAllByRole('row')
