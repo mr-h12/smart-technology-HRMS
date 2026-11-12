@@ -18,6 +18,7 @@ const SettingsPage = page(() => import('@/pages/settings'), 'SettingsPage')
 const SiteDayPage = page(() => import('@/pages/site-day'), 'SiteDayPage')
 const WageProposalsPage = page(() => import('@/pages/wage-proposals'), 'WageProposalsPage')
 const TeamFaresPage = page(() => import('@/pages/team-fares'), 'TeamFaresPage')
+const PayrollPage = page(() => import('@/pages/payroll'), 'PayrollPage')
 const NotFoundPage = page(() => import('@/pages/pages'), 'NotFoundPage')
 
 function Home() {
@@ -46,6 +47,7 @@ export function AppRoutes() {
         <Route path="site-day" element={<SiteDayPage />} />
         <Route path="wage-proposals" element={nav('/wage-proposals', <WageProposalsPage />)} />
         <Route path="team-fares" element={<TeamFaresPage />} />
+        <Route path="payroll" element={nav('/payroll', <PayrollPage />)} />
         <Route path="settings" element={nav('/settings', <SettingsPage />)} />
         {/* old links, kept for one release */}
         <Route path="sites" element={<Navigate to="/settings?tab=sites" replace />} />

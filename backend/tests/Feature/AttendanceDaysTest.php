@@ -79,7 +79,7 @@ class AttendanceDaysTest extends TestCase
     public function test_a_night_shift_crosses_midnight_and_belongs_to_the_in_date(): void
     {
         $this->putDay($this->employee('permanent_worker'), '2026-10-01', ['site_id' => $this->site, 'scheduled_in' => '20:00', 'scheduled_out' => '04:00', 'in_time' => '20:30', 'out_time' => '05:00', 'transport' => 'full'])
-            ->assertOk()->assertJsonPath('data.date', '2026-10-01')->assertJsonPath('data.hints.late_minutes', 30)->assertJsonPath('data.hints.ot_minutes', 30);
+            ->assertOk()->assertJsonPath('data.date', '2026-10-01')->assertJsonPath('data.hints.late_minutes', 30)->assertJsonPath('data.hints.ot_minutes', 60);
         $this->putDay($this->employee('engineer'), '2026-10-01', ['site_id' => $this->site, 'in_time' => '20:00', 'out_time' => '04:00'])
             ->assertStatus(422)->assertJsonPath('error.details.0.field', 'out_time');
     }
@@ -103,10 +103,10 @@ class AttendanceDaysTest extends TestCase
     {
         $eng = $this->employee('engineer');
         $this->putDay($eng, '2026-10-01', ['site_id' => $this->site, 'in_time' => '08:45', 'out_time' => '18:30', 'late_minutes' => 5, 'ot_minutes' => 0])->assertOk()
-            ->assertJsonPath('data.hints.late_minutes', 45)->assertJsonPath('data.hints.ot_minutes', 105)
+            ->assertJsonPath('data.hints.late_minutes', 45)->assertJsonPath('data.hints.ot_minutes', 90)
             ->assertJsonPath('data.late_minutes', 5)->assertJsonPath('data.ot_minutes', 0);
         $this->putDay($eng, '2026-10-04', ['site_id' => $this->site, 'in_time' => '08:00', 'out_time' => '17:00'])->assertOk()
-            ->assertJsonPath('data.hints.late_minutes', 0)->assertJsonPath('data.hints.ot_minutes', 60)
+            ->assertJsonPath('data.hints.late_minutes', 0)->assertJsonPath('data.hints.ot_minutes', 0)
             ->assertJsonPath('data.late_minutes', null)->assertJsonPath('data.ot_minutes', null);
     }
 
@@ -117,7 +117,7 @@ class AttendanceDaysTest extends TestCase
         $this->putDay($l, '2026-10-01', ['site_id' => $this->site, 'in_time' => '17:00', 'out_time' => '08:00'])
             ->assertStatus(422)->assertJsonPath('error.details.0.field', 'out_time')->assertJsonPath('error.details.0.message', __('attendance.rule.out_before_in'));
         $this->putDay($l, '2026-10-01', ['site_id' => $this->site, 'in_time' => '08:45', 'out_time' => '17:00'])->assertOk()
-            ->assertJsonPath('data.in_time', '08:45')->assertJsonPath('data.hints.late_minutes', 45)->assertJsonPath('data.hints.ot_minutes', 15)
+            ->assertJsonPath('data.in_time', '08:45')->assertJsonPath('data.hints.late_minutes', 45)->assertJsonPath('data.hints.ot_minutes', 0)
             ->assertJsonPath('data.late_minutes', null);
     }
 

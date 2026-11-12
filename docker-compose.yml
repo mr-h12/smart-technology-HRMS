@@ -8,6 +8,7 @@ x-php: &php
   working_dir: /var/www/html
   volumes:
     - ./backend:/var/www/html
+    - ./docs:/var/www/docs:ro
   environment:
     DB_HOST: postgres
     DB_PORT: 5432

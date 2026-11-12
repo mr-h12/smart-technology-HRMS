@@ -1,10 +1,10 @@
 import * as React from 'react'
 import { cn } from '@/lib/utils'
 
-/** Lists use DataList; this is for matrices (attendance grid, fare matrix, permission matrix) and the day-sheet rows. */
-export function Table({ className, ...props }: React.ComponentProps<'table'>) {
+/** Lists use DataList; this is for matrices (attendance grid, fare matrix, permission matrix) and the day-sheet rows. `scroller` styles the scrolling box (e.g. scroll padding beside sticky columns). */
+export function Table({ className, scroller, ...props }: React.ComponentProps<'table'> & { scroller?: string }) {
   return (
-    <div className="relative w-full overflow-x-auto scrollbar-thin">
+    <div className={cn('relative w-full overflow-x-auto scrollbar-thin', scroller)}>
       <table className={cn('w-full caption-bottom text-table', className)} {...props} />
     </div>
   )

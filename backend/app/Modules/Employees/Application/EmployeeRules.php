@@ -12,8 +12,13 @@ use Illuminate\Validation\Rule;
 /** The employee validation rules, shared by the API and the master-data importer so both accept exactly the same input. */
 final class EmployeeRules
 {
+    private const AMOUNT = '\d{1,12}(\.\d{1,6})?';
+
     /** An amount as the API takes it: up to 12 digits and 6 decimals, as text so no float touches it. */
-    public const MONEY = 'regex:/^\d{1,12}(\.\d{1,6})?$/D';
+    public const MONEY = 'regex:/^'.self::AMOUNT.'$/D';
+
+    /** The same, below zero too (a payroll net override). */
+    public const SIGNED_MONEY = 'regex:/^-?'.self::AMOUNT.'$/D';
 
     /** A wage that must be above zero. */
     public const POSITIVE = 'not_regex:/^0+(\.0+)?$/D';

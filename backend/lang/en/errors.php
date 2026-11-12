@@ -37,6 +37,7 @@ return [
     'fare_period_locked' => 'This date is in a locked attendance period.',
     'dated_change_period_locked' => 'This change would alter a locked attendance period. Reopen the period first.',
     'type_change_not_period_start' => 'A type change must start on the first day of a period of the new type.',
+    'payroll_field_not_used' => ':attribute is not used for :type.',
     'employee_type' => [
         'office' => 'Office employee',
         'engineer' => 'Engineer',

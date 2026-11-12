@@ -37,6 +37,7 @@ return [
     'fare_period_locked' => 'هذا التاريخ داخل فترة حضور مقفلة.',
     'dated_change_period_locked' => 'هذا التغيير يمس فترة حضور مقفلة. أعد فتح الفترة أولًا.',
     'type_change_not_period_start' => 'يجب أن يبدأ تغيير النوع من أول يوم في فترة النوع الجديد.',
+    'payroll_field_not_used' => 'حقل :attribute لا يُستخدم لنوع الموظف :type.',
     'employee_type' => [
         'office' => 'موظف مثبت شركة',
         'engineer' => 'مهندس',

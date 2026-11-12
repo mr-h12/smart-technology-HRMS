@@ -195,7 +195,7 @@ The worker's **wage tier is chosen by which table the VLOOKUP points to** (e.g. 
 | 4 | Worker template `O5` | `= M5 + K5 − N5 + L5` **adds** lateness; المجمع subtracts it separately — inconsistent nets |
 | 5 | Engineers المجمع row 20 | Person-6's advances/deductions point to Person-7's sheet |
 | 6 | Engineer-2 `F37` | 666.67 EGP holiday bonus typed in a *minutes* column → paid 925.93 |
-| 7 | Engineer-1 rows 14–38 | Formulas replaced by pasted values; day cost 370.97 = 11,500/31 (another person's salary) |
+| 7 | Engineer-1 rows 14–38; Engineer-3 and Engineer-4 column J | Formulas replaced by pasted values; day cost 370.97 = 11,500/31 (another person's salary). Engineer-3 (23 cells) and Engineer-4 (19) also hold typed day money in J, rounded to 1 decimal: Engineer-1 J20, J35, J36, J37 (133.3, 266.7, 1,433.3, 1,433.3 against 133.333333, 266.666667, 1,433.333333 twice) pay 0.066667 less than the formula; Engineer-3 J8 (816.7 against 840 min × 14,000 ÷ 14,400 = 816.666667) pays 0.033333 more. Reason code `excel_7_pasted_values` |
 | 8 | الرئيسية, السلف | `#REF!` (deleted allowance column; days 26–31 refs) |
 | 9 | Fingerprint headers, worker dates | 1–12 Oct stored as Jan–Dec 10; mixed text/date cells |
 | 10 | Day-laborers المجمع `G245` | `SUBTOTAL(9, G5:G229)` stops 15 rows short of other columns |
@@ -205,6 +205,23 @@ The worker's **wage tier is chosen by which table the VLOOKUP points to** (e.g. 
 | 14 | Day-laborers المجمع rows 100, 227, 232, 238 | Read another worker's sheet (e.g. L100 Worker-7 → Worker-8's advances); row 119 is all `#REF!` |
 | 15 | Site names | Same site spelled differently across workbooks and inside one (سموحة الدولي/الدولى, العلمين/العالمين, فندق الشيراتون/الشراتون, trailing/double spaces). ENG ملخص المواقع misses الشيراتون (21 days), `#REF!` (33), اجازة (1) |
 | 16 | Fares | 30 of 99 residence × site pairs have different fares for different workers; the `بيانات` fare blocks are not referenced by any formula, and day-laborer transport is 0 for every row in October |
+| 17 | Both المجمع sheets: AutoFilter + `SUBTOTAL(9)` | The filter (`A3:I28` on column I; `A3:BF249` on column N) hides rows, and SUBTOTAL(9) leaves hidden rows out of the totals. Three hidden rows carry a net: field row 10 Worker-3 (10,500), day-laborer rows 17 Worker-31 (3,202.50) and 212 Worker-226 (4,661.25). I27 = 315,451 and N245 = 391,948 leave out 18,363.75 of nets. Reason code `excel_filtered_row` (provisional: the owner is asked whether these rows were paid) |
+| 18 | Worker-6 sheet, column O; المجمع G13 | O subtracts the day's late money (`…+I−L`), and G13 subtracts the same Σ L = 93.75 again: lateness is deducted twice. 18.75 of it is on days with a site (2026-10-08, 10-10, 10-12, 6.25 each); 75 is on 2026-10-21, a day with no site (#21). Reason code `excel_18_lateness_twice` |
+| 19 | Worker-17 sheet, O11 | The 2026-09-29 row (a site inside Alexandria) adds the next row's outside money (I12, 433.33), which row 12 also counts: المجمع D24 is 433.33 too high. Reason code `excel_19_next_row` |
+| 20 | Worker-8 and Worker-10 sheets, row 38 | A row past the period's last day, with no date, holds 350 outside money; Σ O counts it: 350 each, 700 in all. Reason code `excel_20_undated_row` |
+| 21 | Field sheets: dated rows with an empty site | The workbook was saved on 15 Oct, mid-period: rows with no site still carry times, minutes or money, and the sheet pays them. Engineer-4 J9 (2026-09-28, 480 outside minutes, typed 533.3); Worker-6 2026-10-18 → 10-24 (885.94 OT only: 960.94 of OT less the 75 that column O subtracts as lateness on 10-21; plus that 75 in the lateness column); Worker-7 2026-10-24 (618.75); Worker-8 2026-10-15 → 10-25 (4,056.25); Worker-10 2026-10-15 → 10-25 (3,850). In all 9,869.24 net. The system records a worked day only at a site, so these days are missing: paid by the salary, no extras. Reason code `excel_21_no_site_day` |
+| 22 | Worker-12 sheet, row 24 | 2026-10-12, a Friday leave row, has an arrival (08:00) and an empty departure: `J = IF(G−D > 0, G−D, 1−D+G)` reads the empty cell as midnight, 16 h worked, so M = 8 h OT and O = 480 min × 13,000 ÷ 14,400 × 1.5 = 650. Reason code `excel_22_empty_out_time` |
+| 23 | Day-laborers المجمع E28 (Worker-42) | The worker's sheet is shifted by one column: its wages total is in D25, but E28 reads C25 (empty), so the Excel pays 0 against 1,290 of days (3 × 430). Reason code `excel_23_shifted_sheet` |
+| 24 | Day-laborers المجمع row 148 (Worker-162) | The worker's sheet still holds 2026-09-16 → 09-30; the 1–15 Oct المجمع pays its 1,400 (4 days × 350). The worker has no October day. Reason code `excel_24_previous_period_sheet` |
+
+Labels in #7 and from #17 on are the October fixture's (`backend/tests/Fixtures/payroll/2026-10/`). Earlier rows used labels of their own; where the Excel-difference report (`docs/reports/2026-10-excel-differences.md`) names the same person:
+
+| This document | Fixture and report |
+|---|---|
+| Engineer-1 (#7), Engineer-2 (#6), Worker-2 (§8) | the same labels |
+| Person-7 (#5, the row Person-6's advances read) | Worker-12 (Person-6 is Worker-13) |
+| Worker-5, Worker-6 (§4.2, day-laborer sheets) | not the report's Worker-5, Worker-6, who are permanent workers; not mapped |
+| Worker-7, Worker-8 (#14, day laborers: row 100 reads the next worker's advances) | Worker-114, Worker-115; not the report's Worker-7, Worker-8, who are permanent workers |
 
 ## 7. Implied data model for the HRMS
 

@@ -18,7 +18,9 @@ use Illuminate\Database\Eloquent\Model;
 /**
  * Read model of live employees with their dated types and shifts, so other modules never query Employees' tables.
  * A row is {id: string, code: int, name_ar: string, name_en: ?string, department: ?string, hire_date: ?string, termination_date: ?string, archived: bool,
- * types: list<{type, effective_from}>, shifts: list<{effective_from, shift_start: ?HH:MM, shift_end: ?HH:MM}>, sites: list<{site_id, effective_from}>, crew: list<{date, site_id: ?string}>}.
+ * types: list<{type, effective_from}>, shifts: list<{effective_from, shift_start: ?HH:MM, shift_end: ?HH:MM}>,
+ * pays: list<{effective_from, salary: ?string, raise: string, insured_basic: ?string, daily_wage: ?string}> (as stored: a row may hold another type's fields; callers pick theirs),
+ * sites: list<{site_id, effective_from}>, crew: list<{date, site_id: ?string}>}.
  * Every method returning a set of employees leaves archived ones out (owner, 2026-11-11) unless the caller asks with withArchived();
  * the by-id reads (find, findMany, names) and hiredBetween are unchanged.
  */
@@ -245,6 +247,10 @@ final class EmployeeRoster
             ])->all()),
             'shifts' => array_values($e->payChanges->sortBy('effective_from')->map(fn (EmployeePayChange $p) => [
                 'effective_from' => (string) $p->effective_from, 'shift_start' => $hhmm($p->shift_start), 'shift_end' => $hhmm($p->shift_end),
+            ])->all()),
+            'pays' => array_values($e->payChanges->sortBy('effective_from')->map(fn (EmployeePayChange $p) => [
+                'effective_from' => (string) $p->effective_from, 'salary' => $p->salary, 'raise' => (string) $p->raise,
+                'insured_basic' => $p->insured_basic, 'daily_wage' => $p->daily_wage,
             ])->all()),
             'sites' => array_values($e->siteAssignments->sortBy('effective_from')->map(fn (EmployeeSiteAssignment $s) => [
                 'site_id' => (string) $s->site_id, 'effective_from' => (string) $s->effective_from,

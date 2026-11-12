@@ -20,6 +20,7 @@ use App\Modules\Identity\Presentation\CreateUserCommand;
 use App\Modules\Leave\Domain\LeaveRefused;
 use App\Modules\Leave\Domain\NoLeaveBalance;
 use App\Modules\Leave\Presentation\AlertAnniversaryCommand;
+use App\Modules\Payroll\Presentation\Console\ExcelDifferencesCommand;
 use App\Support\Database\ConcurrencyConflict;
 use App\Support\Http\ApiEnvelope;
 use Illuminate\Auth\AuthenticationException;
@@ -41,7 +42,7 @@ return Application::configure(basePath: dirname(__DIR__))
         apiPrefix: 'api/v1',
         commands: __DIR__.'/../routes/console.php',
     )
-    ->withCommands([CreateUserCommand::class, AlertMissingDaysCommand::class, ImportMasterDataCommand::class, AlertAnniversaryCommand::class, PruneLogsCommand::class])
+    ->withCommands([CreateUserCommand::class, AlertMissingDaysCommand::class, ImportMasterDataCommand::class, AlertAnniversaryCommand::class, PruneLogsCommand::class, ExcelDifferencesCommand::class])
     ->withMiddleware(function (Middleware $middleware): void {
         // Global, not api-group: unmatched routes (404) never enter the api group.
         $middleware->prepend(AddRequestId::class);

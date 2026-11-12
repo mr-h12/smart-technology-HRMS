@@ -48,7 +48,8 @@
     "leave": "Leave",
     "wageProposals": "Proposed wages",
     "teamFares": "Team transport",
-    "logs": "System logs"
+    "logs": "System logs",
+    "payroll": "Payroll"
   },
   "toggle": {
     "language": "Language",
@@ -373,7 +374,8 @@
       "holiday": "Official holidays",
       "employee_document": "Employee documents",
       "leave": "Leave",
-      "system_log": "System logs"
+      "system_log": "System logs",
+      "payroll": "Payroll"
     },
     "action": {
       "view": "View",
@@ -414,6 +416,10 @@
     },
     "system_log": {
       "view": "System logs: view"
+    },
+    "payroll": {
+      "view": "Payroll: view",
+      "manage": "Payroll: manage"
     }
   },
   "audit": {
@@ -470,7 +476,9 @@
       "attendance_locks": "Attendance locks",
       "official_holidays": "Official holidays",
       "notifications": "Notifications",
-      "employee_site_assignments": "Home sites"
+      "employee_site_assignments": "Home sites",
+      "payroll_entries": "Payroll inputs",
+      "payroll_overrides": "Payroll overrides"
     },
     "onBehalfOf": "on behalf of {{name}}"
   },
@@ -1186,5 +1194,84 @@
     "viewErrors": "View this request's errors",
     "viewRequest": "View the request",
     "clearRequestId": "Clear the request ID filter"
+  },
+  "payroll": {
+    "subtitle": "Each employee's pay for the period, computed from attendance, with HR's inputs and overrides.",
+    "notLocked": "Attendance for this period is not locked yet, so these numbers are a preview and may still change.",
+    "empty": "No employees of this group in the period.",
+    "flags": "Flags",
+    "total": "Total",
+    "cellLabel": "{{label}} - {{name}}",
+    "openDays": "Days of {{name}}",
+    "daysOf": "{{name}}: days of the period",
+    "days": "Days of the period",
+    "dayCost": "Day cost",
+    "overrides": "Overrides",
+    "overridden": "Overridden. Reason: {{reason}}",
+    "inputsChanged": "The inputs changed after your edit: check the override.",
+    "conflict": "Someone else just changed the inputs of {{name}}; the sheet was reloaded. Check it and try again.",
+    "unsaved": "Not saved yet: it saves when you leave the row or press Enter.",
+    "notSaved": "The inputs of {{name}} were not saved: {{message}}",
+    "minutes": "{{minutes}} min",
+    "component": {
+      "salary": "Salary",
+      "wages": "Daily wages",
+      "allowance": "Site allowance",
+      "transport": "Fare",
+      "travel": "Travel allowance",
+      "tower": "Tower transport",
+      "overtime": "Overtime",
+      "outside": "Outside Alexandria",
+      "bonus": "Bonus",
+      "lateness": "Lateness deduction",
+      "absence": "Absence deduction",
+      "unpaid_leave": "Unpaid leave",
+      "sick_cut": "Sick leave cut",
+      "not_employed": "Days not employed",
+      "deduction": "Deduction",
+      "negligence": "Negligence deduction",
+      "insurance_employee": "Social insurance (employee share)",
+      "income_tax": "Income tax",
+      "advances": "Advances",
+      "insurance_company": "Social insurance (company share)",
+      "insured_basic": "Insured basic",
+      "incentives": "Incentives",
+      "net": "Net pay"
+    },
+    "field": {
+      "lateness_exemption_minutes": "Lateness exemption (minutes)",
+      "travel_days": "Travel days",
+      "tower_days": "Tower days",
+      "ot_minutes": "Overtime minutes",
+      "deduction_reason": "Deduction reason",
+      "note": "Notes"
+    },
+    "flag": {
+      "missing": "Missing days",
+      "open_day": "Open days",
+      "early_departure": "Early departure",
+      "no_wage": "No wage",
+      "no_fare": "No fare",
+      "negative_net": "Negative net",
+      "leave_to_check": "Leave to check",
+      "leave_on_holiday": "Leave on an official holiday",
+      "inputs_changed": "Inputs changed"
+    },
+    "override": {
+      "title": "Override: {{label}} - {{name}}",
+      "revertTitle": "Revert to computed: {{label}} - {{name}}",
+      "body": "Type the amount that replaces the computed one. The reason is kept in the audit log.",
+      "revertBody": "The component returns to its computed value. The reason is kept in the audit log.",
+      "computed": "Computed value",
+      "current": "Current override",
+      "reasonWas": "Override reason",
+      "amount": "Override amount",
+      "reason": "Reason",
+      "save": "Save override",
+      "revert": "Revert to computed",
+      "amountRequired": "Enter the override amount.",
+      "reasonRequired": "Write the reason for the override.",
+      "revertReasonRequired": "Write the reason for the revert."
+    }
   }
 }

@@ -48,7 +48,8 @@
     "leave": "الإجازات",
     "wageProposals": "الأجور المقترحة",
     "teamFares": "مواصلات التيم",
-    "logs": "سجلات النظام"
+    "logs": "سجلات النظام",
+    "payroll": "المرتبات"
   },
   "toggle": {
     "language": "اللغة",
@@ -377,7 +378,8 @@
       "holiday": "الإجازات الرسمية",
       "employee_document": "مستندات الموظفين",
       "leave": "الإجازات",
-      "system_log": "سجلات النظام"
+      "system_log": "سجلات النظام",
+      "payroll": "المرتبات"
     },
     "action": {
       "view": "عرض",
@@ -418,6 +420,10 @@
     },
     "system_log": {
       "view": "سجلات النظام: عرض"
+    },
+    "payroll": {
+      "view": "المرتبات: عرض",
+      "manage": "المرتبات: إدارة"
     }
   },
   "audit": {
@@ -474,7 +480,9 @@
       "attendance_locks": "قفل الحضور",
       "official_holidays": "الإجازات الرسمية",
       "notifications": "الإشعارات",
-      "employee_site_assignments": "المواقع الأساسية"
+      "employee_site_assignments": "المواقع الأساسية",
+      "payroll_entries": "مدخلات المرتبات",
+      "payroll_overrides": "القيم البديلة في المرتبات"
     },
     "onBehalfOf": "نيابة عن {{name}}"
   },
@@ -1217,5 +1225,84 @@
     "viewErrors": "عرض أخطاء هذا الطلب",
     "viewRequest": "عرض الطلب",
     "clearRequestId": "إلغاء التصفية بمعرّف الطلب"
+  },
+  "payroll": {
+    "subtitle": "مرتب كل موظف عن الفترة، محسوبًا من الحضور، مع مدخلات الموارد البشرية والقيم البديلة.",
+    "notLocked": "لم يُقفل حضور هذه الفترة بعد، فالأرقام معاينة وقد تتغير.",
+    "empty": "لا يوجد موظفون من هذه المجموعة خلال الفترة.",
+    "flags": "التنبيهات",
+    "total": "الإجمالي",
+    "cellLabel": "{{label}} - {{name}}",
+    "openDays": "أيام {{name}}",
+    "daysOf": "أيام {{name}} في الفترة",
+    "days": "أيام الفترة",
+    "dayCost": "تكلفة اليوم",
+    "overrides": "القيم البديلة",
+    "overridden": "قيمة بديلة، السبب: {{reason}}",
+    "inputsChanged": "تغيّرت المدخلات بعد تعديلك، فراجع القيمة البديلة.",
+    "conflict": "عدّل مستخدم آخر مدخلات {{name}} للتو؛ أُعيد تحميل الكشف، راجع ثم أعد المحاولة.",
+    "unsaved": "لم يُحفظ بعد؛ يُحفظ عند مغادرة الصف أو الضغط على زر الإدخال.",
+    "notSaved": "لم تُحفظ مدخلات {{name}}: {{message}}",
+    "minutes": "{{minutes}} د",
+    "component": {
+      "salary": "المرتب",
+      "wages": "اليوميات",
+      "allowance": "البدل",
+      "transport": "المواصلات",
+      "travel": "بدل السفر",
+      "tower": "بدل انتقالات البرج",
+      "overtime": "الوقت الإضافي",
+      "outside": "خارج الإسكندرية",
+      "bonus": "المكافأة",
+      "lateness": "خصم التأخير",
+      "absence": "خصم الغياب",
+      "unpaid_leave": "إجازة بدون أجر",
+      "sick_cut": "خصم الإجازة المرضية",
+      "not_employed": "أيام خارج فترة العمل",
+      "deduction": "الخصم",
+      "negligence": "خصم الإهمال",
+      "insurance_employee": "التأمينات (حصة الموظف)",
+      "income_tax": "ضريبة كسب العمل",
+      "advances": "السلف",
+      "insurance_company": "التأمينات (حصة الشركة)",
+      "insured_basic": "الأساسي التأميني",
+      "incentives": "الحوافز",
+      "net": "صافي المرتب"
+    },
+    "field": {
+      "lateness_exemption_minutes": "الإعفاء من التأخير (دقيقة)",
+      "travel_days": "عدد أيام السفر",
+      "tower_days": "عدد أيام البرج",
+      "ot_minutes": "دقائق الوقت الإضافي",
+      "deduction_reason": "سبب الخصم",
+      "note": "ملاحظات"
+    },
+    "flag": {
+      "missing": "أيام غير مسجلة",
+      "open_day": "أيام مفتوحة",
+      "early_departure": "انصراف مبكر",
+      "no_wage": "بلا أجر",
+      "no_fare": "بلا مواصلات",
+      "negative_net": "صافٍ بالسالب",
+      "leave_to_check": "إجازة للمراجعة",
+      "leave_on_holiday": "إجازة في عطلة رسمية",
+      "inputs_changed": "تغيّرت المدخلات"
+    },
+    "override": {
+      "title": "قيمة بديلة: {{label}} - {{name}}",
+      "revertTitle": "إرجاع المحسوب: {{label}} - {{name}}",
+      "body": "اكتب القيمة التي تحل محل المحسوبة. يُحفظ السبب في سجل التدقيق.",
+      "revertBody": "يعود البند إلى قيمته المحسوبة. يُحفظ السبب في سجل التدقيق.",
+      "computed": "القيمة المحسوبة",
+      "current": "القيمة البديلة الحالية",
+      "reasonWas": "سبب القيمة البديلة",
+      "amount": "القيمة البديلة",
+      "reason": "السبب",
+      "save": "حفظ القيمة البديلة",
+      "revert": "إرجاع المحسوب",
+      "amountRequired": "اكتب القيمة البديلة.",
+      "reasonRequired": "اكتب سبب القيمة البديلة.",
+      "revertReasonRequired": "اكتب سبب الإرجاع."
+    }
   }
 }
