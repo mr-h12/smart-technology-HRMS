@@ -33,8 +33,14 @@ each engineer's page. Their own employee row could fall inside their reach, and 
 - Linking is audited as `UPDATED` on `employees`, with the old and new `user_id`.
 
 ## API
-Both routes answer with the employee in the `GET employees/{id}` shape, `site_manager` block included. Each runs in one
+POST and PUT answer with the employee in the `GET employees/{id}` shape, `site_manager` block included. Each runs in one
 transaction with the employee row locked: a refusal leaves no account, link, site change or assignment behind.
+
+### GET /api/v1/employees/site-manager-candidates
+The accounts the dialog offers to link: `data: [{id, name, email}]` by name. These are the manager candidates
+(`GET /api/v1/sites/manager-candidates`, which also returns `email` now) less those linked to a live employee, so POST's
+`user_id` accepts every one. Middleware: POST's, less `employee.scope`. The email tells namesakes apart and shows nothing new:
+every role holding `site.assign_manager` also holds `user.view`.
 
 ### POST /api/v1/employees/{employee}/site-manager
 Creates or links the account, then sets its team. Middleware: `permission:user.manage`, `permission:site.assign_manager`,
@@ -134,7 +140,8 @@ Archived means a termination date before today in Cairo (`2026-11-11-hide-archiv
   audited on `users` with `employee_id` and `reason` (`employee_archived`, or `employee_deleted` on delete) in the new values. The
   actor is the HR user who saved or deleted, or none for the job. HR's account reach is not checked, since the system acts. An
   inactive account is left as is, with no second audit row.
-- A deactivated account cannot sign in (`account_suspended`).
+- A deactivated account cannot sign in: 403 `account_suspended`, «تم تعطيل الحساب. يرجى التواصل مع إدارة الموارد البشرية.»
+  ("This account has been deactivated. Please contact HR.").
 - Clearing the termination date does not reactivate the account. Reactivate it by hand (`PATCH /api/v1/users/{id}/reactivate`)
   **after reactivating the employee**: an account reactivated while its employee is still archived is deactivated again by the
   next nightly run.
@@ -142,7 +149,10 @@ Archived means a termination date before today in Cairo (`2026-11-11-hide-archiv
 ## Screens
 HR and the Developer see «تعيين كمدير موقع» on an employee's page, and the account's email on a linked one. The same button
 opens one dialog that creates a new account (with sites and engineers) or links an existing site-manager account (keeping its
-sites), and on a linked employee becomes «مواقع ومهندسو مدير الموقع» to change the sites and add engineers (PUT).
+sites; it offers `GET employees/site-manager-candidates`, each with its email), and on a linked employee becomes
+«مواقع ومهندسو مدير الموقع» to change the sites and add engineers (PUT).
+
+After sign-in, an account holding `attendance.record` at own scope only (a site manager) lands on site attendance (`/site-day`).
 
 ## Tests
 `backend/tests/Feature/SiteManagerAccountTest.php`:
@@ -155,6 +165,10 @@ sites), and on a linked employee becomes «مواقع ومهندسو مدير ا
   engineer and roll back the new account.
 - Links: an employee is linked once; an archived employee is refused (409); an existing site-manager account is linked and keeps
   its sites; a linked, non-site-manager or inactive account is refused.
+- Candidates: the read offers the unlinked accounts by name with `id`, `name`, `email`, never a linked one; POST links each one
+  offered, which then leaves the list. A site manager, the CEO and a role lacking any one of the three permissions get 403;
+  without a session, 401. `ManagerScopeTest` checks the `email` on `sites/manager-candidates` and that every role holding
+  `site.assign_manager` also holds `user.view`.
 - PUT: replaces the sites (other managers kept, only changed sites audited), skips an engineer already assigned, answers 404 when
   unlinked and refuses an inactive account.
 - Read side: only HR and the Developer get the block (`null` when unlinked); `user_id` never appears; `PATCH` never sets the link.
@@ -181,8 +195,8 @@ Known when built; not scheduled.
 - The dialog lists at most 100 engineers.
 - Removing a site also removes the account's reach to that site's past days (`manager_sites` is undated, ADR 0004).
 - An archived site manager's engineers stay assigned to the deactivated account until HR reassigns them.
-- The manager candidates list (`GET /api/v1/sites/manager-candidates`) does not say which accounts are already linked; the server
-  refuses a linked one with 422 (`account_linked`).
+- The dialog no longer offers linked accounts, but its list is read when it opens: an account linked meanwhile is still offered,
+  and the server refuses it with 422 (`account_linked`), the last guard.
 - The engineer-manager picker on the engineer's own page still accepts any active account (review finding 13-E13, kept as debt by
   the owner).
 - `POST /api/v1/attendance/site-day/crew` does not refuse the site manager's own employee id specifically; the id is no longer
