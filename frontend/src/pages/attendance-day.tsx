@@ -10,7 +10,7 @@ import { Textarea } from '@/components/ui/input'
 import { Sheet, SheetContent, SheetFooter, SheetHeader, SheetTitle } from '@/components/ui/sheet'
 import { ApiError } from '@/lib/api'
 import { useAuth } from '@/lib/auth'
-import { DAY_VALUES as VALUES } from '@/lib/day-sheet'
+import { hhmm, DAY_VALUES as VALUES } from '@/lib/day-sheet'
 import { SITES, useApi, useSave } from '@/lib/query'
 
 type Day = Row & { fields: string[]; leave_day_fields: string[]; hints: Record<string, number>; period: { is_locked: boolean } | null }
@@ -22,6 +22,9 @@ const OUTSIDE = ['outside_minutes', 'outside_amount']
 const TRANSPORT = ['full', 'half', 'none']
 // lateness is computed from the in time, overtime from the out time, so each hint sits under that time
 const HINT: Record<string, [hint: string, key: string]> = { in_time: ['late_minutes', 'attendance.day.hintLate'], out_time: ['ot_minutes', 'attendance.day.hintOt'] }
+// the minutes the server computes from the times when they go empty (engineers, day laborers): a changed time empties the ones it decides
+const COMPUTED = ['late_minutes', 'ot_minutes']
+const EMPTIES: Record<string, string[]> = { in_time: COMPUTED, out_time: ['ot_minutes'] }
 
 const AMOUNTS = ['outside_amount', 'advance_amount']
 /** Amounts: "500.000000" → "500" by string surgery (money never goes through a float). Every other field shows as typed. */
@@ -101,6 +104,10 @@ function DayForm({ day, sites, path, archived, loadErr, onDone, onReload }: { da
   }
   const save = (e: React.MouseEvent<HTMLElement>) => !stopAtMissingPeriod(e.currentTarget) && run(() => send(path, { method: 'PUT', body: { version, site_id: form.site_id || null, ...Object.fromEntries(shown.map((f) => [f, toBody(f, form[f])])) } }))
   const clear = () => run(() => send(`${path}?version=${version}`, { method: 'DELETE' }))
+  const setValue = (k: string, v: string) => {
+    if (v !== form[k]) for (const m of EMPTIES[k] ?? []) set(m, '')
+    set(k, v)
+  }
 
   function field(f: string) {
     const label = t(`attendance.day.${f}`)
@@ -112,11 +119,21 @@ function DayForm({ day, sites, path, archived, loadErr, onDone, onReload }: { da
           {(p) => <Textarea {...p} value={form.note} maxLength={500} disabled={readOnly} onChange={(e) => set(f, e.target.value)} />}
         </Field>
       )
-    const hint = HINT[f] && day.hints[HINT[f][0]]
+    // the hints come from the stored times: a time changed in the form hides the ones it decides (overtime needs both) until it is typed back
+    const moved = (k: string) => (hhmm(form[k]) ?? '') !== (hhmm(day[k] as string | null) ?? '')
+    const hint = HINT[f] && !moved('in_time') && !(f === 'out_time' && moved('out_time')) ? day.hints[HINT[f][0]] : undefined
+    // the overtime suggestion fills its box; Save stores it
+    const fill = f === 'out_time' && !readOnly && shown.includes('ot_minutes') && (hint ?? 0) > 0 && String(hint) !== form.ot_minutes
     return (
       <div key={f} className="grid gap-1.5">
-        <TextField name={f} label={label} values={form} set={set} errs={errs} disabled={readOnly} {...(TIMES.includes(f) ? { type: 'time' } : { inputMode: MINUTES.includes(f) ? 'numeric' : 'decimal' })} />
-        {hint != null && <p className="text-[13px] text-muted-foreground">{t(HINT[f][1], { minutes: hint })}</p>}
+        <TextField name={f} label={label} values={form} set={setValue} errs={errs} disabled={readOnly} {...(COMPUTED.includes(f) && { placeholder: t('attendance.day.computedOnSave') })}
+          {...(TIMES.includes(f) ? { type: 'time' } : { inputMode: MINUTES.includes(f) ? 'numeric' : 'decimal' })} />
+        {hint != null && (
+          <p className="flex items-center gap-2 text-[13px] text-muted-foreground">
+            {t(HINT[f][1], { minutes: hint })}
+            {fill && <Button type="button" variant="outline" size="xs" onClick={() => set('ot_minutes', String(hint))}>{t('attendance.sheet.approveOt')}</Button>}
+          </p>
+        )}
       </div>
     )
   }

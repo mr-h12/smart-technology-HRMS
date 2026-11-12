@@ -98,7 +98,7 @@ class AttendanceImportTest extends TestCase
     {
         $this->upload('confirm', $this->edit($this->download(), [$this->code($this->eng) => ['2026-10-01' => 'Site-1']]))->assertOk()->assertJsonPath('data.applied', 1);
         $day = AttendanceDay::where(['employee_id' => $this->eng, 'date' => '2026-10-01'])->sole();
-        $this->assertSame(['08:00:00', '17:00:00'], [$day->in_time, $day->out_time]);
+        $this->assertSame(['08:00:00', '17:00:00', 0, 0], [$day->in_time, $day->out_time, $day->late_minutes, $day->ot_minutes]);
     }
 
     public function test_an_untouched_template_writes_nothing(): void
