@@ -23,7 +23,7 @@ import { USERS, useApi, useList, useSave } from '@/lib/query'
  * Another account's password, shown as typed. A type=password + new-password field gets Safari's generated strong password
  * in place of what the developer types, so the account got a password nobody knew.
  */
-const noGenerator = { type: 'text', dir: 'ltr', autoComplete: 'off', autoCapitalize: 'off', autoCorrect: 'off', spellCheck: false } as const
+export const noGenerator = { type: 'text', dir: 'ltr', autoComplete: 'off', autoCapitalize: 'off', autoCorrect: 'off', spellCheck: false } as const
 
 /** `roles` are the ones the signed-in user may give: the server leaves out any holding a permission they lack. */
 function AccountDialog({ account, roles, ...dialog }: { account?: Row; roles: Row[] } & Controlled) {

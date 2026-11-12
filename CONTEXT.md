@@ -5,7 +5,7 @@ HR and payroll for Smart Technology's office staff, site engineers, permanent si
 ## People
 
 **Employee** (موظف):
-Anyone the company pays, of any employee type. Most employees have no system account; a site manager can be both an employee and an account holder, and the account's permissions say nothing about their pay.
+Anyone the company pays, of any employee type. Most employees have no system account; a site manager can be both an employee and an account holder, linked one to one (at most one account per employee and one employee per account), and the link grants nothing on their pay.
 _Avoid_: staff member, worker (as the general term), user
 
 **Employee type**:
@@ -17,7 +17,7 @@ Office staff, engineers and permanent workers together: everyone paid a monthly 
 _Avoid_: permanent employees, مثبتين (alone; it is ambiguous)
 
 **Site manager** (مدير الموقع):
-An account holder who covers one or more sites and records attendance and absence for the people they reach on a date: the workers whose home site is one of their sites, and the engineers assigned to them. Office staff are in no site manager's reach. A site manager never sees or sets wages; HR owns them.
+An account holder who covers one or more sites and records attendance and absence for the people they reach on a date: the workers whose home site is one of their sites, and the engineers assigned to them. Office staff are in no site manager's reach. A site manager never sees or sets wages; HR owns them. A site manager never reaches their own employee record: HR records their attendance, leave and requests like anyone else's (owner, 2026-11-12).
 _Avoid_: team lead, مسؤول التيم (chosen 2026-11-03, dropped 2026-11-04), supervisor; manager or مدير alone only where the site is obvious
 
 **Fingerprint name**:
@@ -32,6 +32,7 @@ _Avoid_: الكود; code (in the UI)
 **Archive** (الأرشيف):
 The employees whose termination date has passed. The termination day itself is still worked, so an employee leaves the active list the day after. Reactivating an archived employee clears the termination date and reason, which counts the days since as employed again.
 Archived employees are hidden everywhere by default: in no list, search, picker, count or alert (owner, 2026-11-11). Only all-scope viewers reach them, through the Archive view of the employees list, on a read-only page whose only actions are Reactivate and correcting the termination date or reason; a site manager never reaches them. HR shows them on the period grid («إظهار من تركوا العمل») to finish their last days. The lock and payroll still include them.
+Archiving deactivates the employee's linked account: at once when the termination date saved has already passed, else at 00:05 Cairo on the day after it (owner, 2026-11-12). Reactivating the employee leaves the account inactive; it is reactivated by hand, after the employee.
 _Avoid_: inactive list, deleted (a deleted employee is gone from both lists)
 
 **View as** (عرض كـ):

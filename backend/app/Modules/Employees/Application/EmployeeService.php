@@ -21,8 +21,10 @@ use App\Modules\Employees\Infrastructure\Eloquent\EmployeePayChange;
 use App\Modules\Employees\Infrastructure\Eloquent\EmployeeSiteAssignment;
 use App\Modules\Employees\Infrastructure\Eloquent\EmployeeTypeChange;
 use App\Modules\Employees\Infrastructure\Eloquent\EmployeeWageProposal;
+use App\Modules\Identity\Application\Administration\UserAdministration;
 use App\Modules\Identity\Application\Rbac\AuthorizeAction;
 use App\Modules\Identity\Domain\Rbac\Scope;
+use App\Modules\Sites\Application\SiteService;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\ModelNotFoundException;
 use Illuminate\Database\UniqueConstraintViolationException;
@@ -35,7 +37,8 @@ use Illuminate\Validation\ValidationException;
 /** Employees and their dated type/pay history. Methods return arrays shaped for the API. */
 final class EmployeeService
 {
-    private const HIDDEN = ['created_by', 'updated_by', 'deleted_at'];
+    /** user_id: the account link reaches HR and the Developer only through show()'s site_manager block. */
+    private const HIDDEN = ['created_by', 'updated_by', 'deleted_at', 'user_id'];
 
     private const CURRENT_SITE = '(select s.site_id from employee_site_assignments s where s.employee_id = employees.id and s.deleted_at is null and s.effective_from <= ? order by s.effective_from desc limit 1)';
 
@@ -44,7 +47,11 @@ final class EmployeeService
     /** Coding standard §9: kept out of own-scoped (manager-facing) responses. */
     private const SENSITIVE = ['national_id', 'insurance_no', 'bank_account', 'hr_notes'];
 
-    public function __construct(private readonly AuthorizeAction $authorize) {}
+    public function __construct(
+        private readonly AuthorizeAction $authorize,
+        private readonly UserAdministration $users,
+        private readonly SiteService $sites,
+    ) {}
 
     /**
      * @param  array{type?: string, site_id?: string, search?: string, per_page?: int, archived?: bool}  $filters
@@ -169,6 +176,7 @@ final class EmployeeService
             'manager_assignments' => $managers,
             'current_site' => $site === null ? null : ['id' => $site['site_id'], 'name_ar' => $site['site_name_ar'], 'name_en' => $site['site_name_en']],
             'site_assignments' => $sites,
+            ...($this->seesAccounts() ? ['site_manager' => $e->user_id === null ? null : $this->siteManager((string) $e->user_id)] : []),
             'documents' => $e->documents->sortBy([
                 fn (EmployeeDocument $a, EmployeeDocument $b) => $kinds[$a->kind] <=> $kinds[$b->kind],
                 ['id', 'desc'], // UUIDv7: newest first
@@ -179,7 +187,8 @@ final class EmployeeService
     /**
      * An archived employee changes only its termination date and reason (reactivate or correct; owner, 2026-11-11), judged on changed
      * values because the profile form sends every identity field on each save. Setting or changing a termination date waits until the
-     * employee's open items are decided; clearing it never does.
+     * employee's open items are decided; clearing it never does. A termination date that archives the employee deactivates their
+     * linked account at once; clearing it does not reactivate the account.
      *
      * @param  array<string, mixed>  $data
      * @return array<string, mixed>
@@ -204,9 +213,23 @@ final class EmployeeService
             }
             $this->assertBank($employee->only(['pay_method', 'bank_account']));
             $employee->save();
+            if ($employee->wasChanged('termination_date')) {
+                $this->deactivateArchivedAccounts($id);
+            }
         });
 
         return $this->show($id);
+    }
+
+    /**
+     * Deactivates the account linked to each archived employee, or to $employeeId only (owner, 2026-11-12). The daily job sweeps them
+     * all, so a termination date that passes overnight, or a missed night, is caught up; an inactive account is left as is.
+     */
+    public function deactivateArchivedAccounts(?string $employeeId = null): void
+    {
+        Employee::archived()->whereNotNull('user_id')->when($employeeId !== null, fn (Builder $q) => $q->whereKey($employeeId))
+            ->orderBy('id')->get(['id', 'user_id'])
+            ->each(fn (Employee $e) => $this->users->deactivateForEmployee((string) $e->user_id, (string) $e->id, 'employee_archived'));
     }
 
     /**
@@ -267,9 +290,19 @@ final class EmployeeService
         return $this->show($id);
     }
 
+    /**
+     * Deleting a linked employee deactivates their account in the same transaction (owner, 2026-11-12); a refused delete (Leave's veto
+     * on open requests) leaves it active. Locked as makeSiteManager locks, so a link cannot land on a row being deleted.
+     */
     public function delete(string $id): void
     {
-        Employee::findOrFail($id)->delete();
+        DB::transaction(function () use ($id): void {
+            $employee = Employee::lockForUpdate()->findOrFail($id);
+            $employee->delete();
+            if ($employee->user_id !== null) {
+                $this->users->deactivateForEmployee((string) $employee->user_id, $id, 'employee_deleted');
+            }
+        });
     }
 
     /**
@@ -352,11 +385,55 @@ final class EmployeeService
      */
     public function assignManager(string $id, array $data): array
     {
-        $employee = Employee::findOrFail($id);
-        $this->assertFreeDate($employee->managerAssignments(), $data['effective_from']);
-        DB::transaction(function () use ($employee, $data): void {
-            $this->assertUnlocked($employee, $data['effective_from']);
-            $employee->managerAssignments()->create($data);
+        $this->addManagerAssignment(Employee::findOrFail($id), $data);
+
+        return $this->show($id);
+    }
+
+    /**
+     * HR or the Developer makes the employee a site manager in one step (owner, 2026-11-12): creates the account with the site-manager
+     * role, or links an existing site-manager account, then sets its sites and adds engineers. Any refusal leaves nothing behind.
+     *
+     * @param  array<string, mixed>  $data  user_id, or email and password; site_ids, engineer_ids, effective_from
+     * @return array<string, mixed>
+     */
+    public function makeSiteManager(string $id, array $data): array
+    {
+        try {
+            DB::transaction(function () use ($id, $data): void {
+                $employee = Employee::lockForUpdate()->findOrFail($id);
+                if ($employee->user_id !== null) {
+                    throw ValidationException::withMessages(['employee' => __('errors.already_site_manager')]);
+                }
+                $userId = isset($data['user_id']) ? $this->linkable((string) $data['user_id']) : (string) $this->users->create([
+                    'name' => $employee->name_ar, 'email' => $data['email'] ?? null, 'password' => $data['password'] ?? null, 'role_id' => $this->sites->managerRoleId(),
+                ])['id'];
+                $employee->update(['user_id' => $userId]);   // Audited: UPDATED on employees with the before/after link
+                $this->setTeam($employee, $userId, $data);
+            });
+        } catch (UniqueConstraintViolationException $e) {
+            // employees_user_id_unique: another request linked the same account meanwhile.
+            throw str_contains($e->getMessage(), 'employees_user_id_unique') ? ValidationException::withMessages(['user_id' => __('errors.account_linked')]) : $e;
+        }
+
+        return $this->show($id);
+    }
+
+    /**
+     * Changes a site manager's sites and adds engineers later, from the same dialog.
+     *
+     * @param  array<string, mixed>  $data  site_ids, engineer_ids, effective_from
+     * @return array<string, mixed>
+     */
+    public function updateSiteManager(string $id, array $data): array
+    {
+        DB::transaction(function () use ($id, $data): void {
+            $employee = Employee::lockForUpdate()->whereNotNull('user_id')->findOrFail($id);
+            $userId = (string) $employee->user_id;
+            if (! in_array($userId, $this->sites->managerCandidateIds(), true)) {
+                throw ValidationException::withMessages(['account' => __('errors.not_site_manager_account')]);
+            }
+            $this->setTeam($employee, $userId, $data);
         });
 
         return $this->show($id);
@@ -397,6 +474,82 @@ final class EmployeeService
         });
 
         return $this->show($id);
+    }
+
+    /** An existing account to link: a site-manager account linked to no other live employee (employees_user_id_unique is the last guard). */
+    private function linkable(string $userId): string
+    {
+        if (! in_array($userId, $this->sites->managerCandidateIds(), true)) {
+            throw ValidationException::withMessages(['user_id' => __('errors.not_site_manager_account')]);
+        }
+        if (Employee::where('user_id', $userId)->exists()) {
+            throw ValidationException::withMessages(['user_id' => __('errors.account_linked')]);
+        }
+
+        return $userId;
+    }
+
+    /**
+     * Sets the account's sites when site_ids is sent (absent keeps them), then assigns each ticked engineer to it from effective_from.
+     * It only adds: employee_manager_assignments has no end date, so an engineer leaves through a later assignment to someone else.
+     *
+     * @param  array<string, mixed>  $data
+     */
+    private function setTeam(Employee $manager, string $userId, array $data): void
+    {
+        if (isset($data['site_ids'])) {
+            $this->sites->setSitesOf($userId, $data['site_ids']);
+        }
+        $from = (string) ($data['effective_from'] ?? '');
+        foreach ($data['engineer_ids'] ?? [] as $engineerId) {
+            $engineer = Employee::with(['typeChanges', 'managerAssignments'])->findOrFail((string) $engineerId);
+            $type = EffectiveDated::at($engineer->typeChanges->map(fn ($t) => $this->row($t))->all(), $from)['type'] ?? null;
+            if (Employee::isArchived($engineer->termination_date) || $engineer->is($manager) || $type !== EmployeeType::Engineer->value) {
+                throw ValidationException::withMessages(['engineer_ids' => __('errors.not_an_engineer', ['name' => $engineer->name_ar])]);
+            }
+            $managers = $engineer->managerAssignments->map(fn (EmployeeManagerAssignment $m) => ['manager_id' => $m->manager_id, 'effective_from' => $m->effective_from])->all();
+            if ((EffectiveDated::at($managers, $from)['manager_id'] ?? null) === $userId) {
+                continue;
+            }
+            try {
+                $this->addManagerAssignment($engineer, ['manager_id' => $userId, 'effective_from' => $from]);
+            } catch (ValidationException $e) {
+                throw ValidationException::withMessages(['engineer_ids' => __('errors.engineer_refused', [
+                    'name' => $engineer->name_ar, 'reason' => collect($e->errors())->flatten()->first(),
+                ])]);
+            }
+        }
+    }
+
+    /** @param  array{manager_id: string, effective_from: string}  $data */
+    private function addManagerAssignment(Employee $employee, array $data): void
+    {
+        $this->assertFreeDate($employee->managerAssignments(), $data['effective_from']);
+        DB::transaction(function () use ($employee, $data): void {
+            $this->assertUnlocked($employee, $data['effective_from']);
+            $employee->managerAssignments()->create($data);
+        });
+    }
+
+    /** The signed-in user sees employees' accounts: user.view at `all` (HR and the Developer; never the CEO or a site manager). */
+    private function seesAccounts(): bool
+    {
+        $user = Auth::user();
+
+        return $user !== null && $this->authorize->decide($user, 'user.view')->allows(Scope::All);
+    }
+
+    /** @return array<string, mixed> the account's id, email, is_active and role, its sites, and the engineers it reaches today */
+    private function siteManager(string $userId): array
+    {
+        $today = self::today();
+        $engineers = EmployeeReach::ids($userId, $today)->whereRaw(Employee::TYPE_ON.' = ?', [$today, EmployeeType::Engineer->value])->orderBy('code')->pluck('id');
+
+        return [
+            ...Arr::only($this->users->show($userId), ['id', 'email', 'is_active', 'role']),
+            'site_ids' => $this->sites->idsManagedBy($userId),
+            'engineer_ids' => array_values($engineers->map(fn (mixed $id) => (string) $id)->all()),
+        ];
     }
 
     /**

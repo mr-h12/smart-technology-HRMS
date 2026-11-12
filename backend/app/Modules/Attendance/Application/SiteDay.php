@@ -346,7 +346,7 @@ final class SiteDay
     /** @return list<string> who is on $siteId's list on $date: its workers, and this manager's engineers */
     private function reachOn(string $siteId, string $date, string $managerId): array
     {
-        return array_map(fn (array $e) => (string) $e['id'], [...$this->roster->onSite($siteId, $date), ...$this->roster->engineersOf($managerId, $date)]);
+        return array_map(fn (array $e) => (string) $e['id'], [...$this->roster->onSite($siteId, $date, $managerId), ...$this->roster->engineersOf($managerId, $date)]);
     }
 
     /**
@@ -388,7 +388,7 @@ final class SiteDay
         $site = Site::findOrFail($siteId);
 
         $listed = [
-            ...array_map(fn (array $e) => [$e, 'workers'], $this->roster->onSite($siteId, $date)),
+            ...array_map(fn (array $e) => [$e, 'workers'], $this->roster->onSite($siteId, $date, $managerId)),
             ...array_map(fn (array $e) => [$e, 'engineers'], $this->roster->engineersOf($managerId, $date)),
         ];
         // Both lists hold only those employed on $date, so each has a type on it; one period read per type present.

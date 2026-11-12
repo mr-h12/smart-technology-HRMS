@@ -59,6 +59,11 @@ Route::middleware('auth')->group(function (): void {
             Route::post('{employee}/pay-changes', 'payChange')->middleware(['permission:employee.edit', 'employee.scope']);
             Route::post('{employee}/manager-assignments', 'assignManager')->middleware(['permission:employee.assign_manager', 'employee.scope']);
             Route::post('{employee}/site-assignments', 'assignSite')->middleware(['permission:employee.assign_site', 'employee.scope']);
+            // Make site manager (owner, 2026-11-12): POST creates or links the account, PUT changes its sites and adds engineers.
+            Route::post('{employee}/site-manager', 'makeSiteManager')
+                ->middleware(['permission:user.manage', 'permission:site.assign_manager', 'permission:employee.assign_manager', 'employee.scope']);
+            Route::put('{employee}/site-manager', 'updateSiteManager')
+                ->middleware(['permission:site.assign_manager', 'permission:employee.assign_manager', 'employee.scope']);
         });
     });
 

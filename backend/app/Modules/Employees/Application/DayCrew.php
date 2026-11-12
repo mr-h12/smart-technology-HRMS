@@ -36,14 +36,15 @@ final class DayCrew
     /**
      * The one day laborer employed on $date whose code is $search, or whose full name is (spaces collapsed, English case ignored):
      * a site manager adds someone they know, and never browses the company's laborers (owner, 2026-11-05). Two laborers with that
-     * full name are `ambiguous`, and the code tells them apart. Someone on or past their last day is never offered.
+     * full name are `ambiguous`, and the code tells them apart. Someone on or past their last day is never offered, nor the searching
+     * site manager's own record (owner, 2026-11-12).
      *
      * @return array{match: ?array{id: string, code: int, name_ar: string, name_en: ?string, site_id: ?string}, ambiguous: bool}
      */
-    public function find(string $search, string $date): array
+    public function find(string $search, string $date, string $managerId): array
     {
         $search = trim((string) preg_replace('/\s+/u', ' ', $search));
-        $rows = Employee::with(['typeChanges', 'siteAssignments', 'crewChanges'])
+        $rows = EmployeeReach::exceptOwn(Employee::with(['typeChanges', 'siteAssignments', 'crewChanges']), $managerId)
             ->whereRaw(Employee::TYPE_ON.' = ?', [$date, EmployeeType::DayLaborer->value])
             ->where(fn (Builder $q) => $q->whereNull('hire_date')->orWhere('hire_date', '<=', $date))
             ->where(fn (Builder $q) => $q->whereNull('termination_date')->orWhere('termination_date', '>', $date))

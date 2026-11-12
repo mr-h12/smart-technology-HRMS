@@ -149,6 +149,41 @@ final class SiteService
         return array_values(array_diff($this->holders->userIds('site.view.own'), $this->holders->userIds('site.view.all')));
     }
 
+    /**
+     * The role a new site-manager account gets: the one live role holding site.view.own without site.view.all, the rule
+     * managerCandidateIds() applies to accounts, so an account given it is a candidate.
+     * ponytail: one site-manager role today; accept a role_id from the caller when a second exists.
+     */
+    public function managerRoleId(): string
+    {
+        $ids = array_values(array_diff($this->holders->roleIds('site.view.own'), $this->holders->roleIds('site.view.all')));
+        if (count($ids) !== 1) {
+            throw ValidationException::withMessages(['role' => __('errors.site_manager_role')]);
+        }
+
+        return $ids[0];
+    }
+
+    /**
+     * Makes $siteIds the sites $managerId manages. Each added or removed site goes through setManagers, which keeps its other
+     * managers and audits it; the changed sites are locked in id order first, so two calls cannot deadlock. A deleted site is left as is.
+     *
+     * @param  list<string>  $siteIds
+     */
+    public function setSitesOf(string $managerId, array $siteIds): void
+    {
+        DB::transaction(function () use ($managerId, $siteIds): void {
+            $current = $this->idsManagedBy($managerId);
+            $changed = array_values(array_unique([...array_diff($siteIds, $current), ...array_diff($current, $siteIds)]));
+            foreach (Site::whereKey($changed)->orderBy('id')->lockForUpdate()->get() as $site) {
+                $managers = array_values($site->managers()->pluck('users.id')->map(fn (mixed $id) => (string) $id)->all());
+                $this->setManagers((string) $site->id, in_array((string) $site->id, $siteIds, true)
+                    ? [...$managers, $managerId]
+                    : array_values(array_diff($managers, [$managerId])));
+            }
+        });
+    }
+
     /** @return list<string> the sites the user manages (P1: undated, so the current set on any date) */
     public function idsManagedBy(string $managerId): array
     {

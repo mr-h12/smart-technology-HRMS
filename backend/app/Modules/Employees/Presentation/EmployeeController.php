@@ -106,6 +106,40 @@ final class EmployeeController
         return ApiEnvelope::single($request, $this->employees->assignManager($employee, $data), 201);
     }
 
+    /** The account's own field rules (email, password) stay in UserAdministration; a role_id sent is ignored. */
+    public function makeSiteManager(Request $request, string $employee): JsonResponse
+    {
+        $data = $request->validate([
+            'user_id' => ['sometimes', 'uuid'],
+            'email' => ['required_without:user_id'],
+            'password' => ['required_without:user_id'],
+            ...self::siteManagerTeam(),
+        ]);
+
+        return ApiEnvelope::single($request, $this->employees->makeSiteManager($employee, $data), 201);
+    }
+
+    public function updateSiteManager(Request $request, string $employee): JsonResponse
+    {
+        return ApiEnvelope::single($request, $this->employees->updateSiteManager($employee, $request->validate(self::siteManagerTeam())));
+    }
+
+    /**
+     * Inactive work sites pass, so a site the account already covers does not fail the save.
+     *
+     * @return array<string, list<mixed>>
+     */
+    private static function siteManagerTeam(): array
+    {
+        return [
+            'site_ids' => ['sometimes', 'array'],
+            'site_ids.*' => ['uuid', 'distinct', Rule::exists('sites', 'id')->where('kind', SiteKind::Work->value)->whereNull('deleted_at')],
+            'engineer_ids' => ['sometimes', 'array'],
+            'engineer_ids.*' => ['uuid', 'distinct', Rule::exists('employees', 'id')->whereNull('deleted_at')],
+            'effective_from' => ['required_with:engineer_ids', 'nullable', 'date_format:Y-m-d'],
+        ];
+    }
+
     public function assignSite(Request $request, string $employee): JsonResponse
     {
         $data = $request->validate([

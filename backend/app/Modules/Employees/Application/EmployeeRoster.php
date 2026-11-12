@@ -113,14 +113,17 @@ final class EmployeeRoster
         return $this->rows($this->employedAs([$type], $from, $to, $managedBy));
     }
 
-    /** @return list<array<string, mixed>> the workers employed on $date whose site on $date (that day's crew change, else the home site) is $siteId, by code */
-    public function onSite(string $siteId, string $date): array
+    /**
+     * @return list<array<string, mixed>> the workers employed on $date whose site on $date (that day's crew change, else the home site) is $siteId
+     *                                    and whom $managedBy reaches then (never their own record), by code
+     */
+    public function onSite(string $siteId, string $date, string $managedBy): array
     {
-        return $this->rows($this->employees()->with(self::RELATIONS)
+        return $this->rows(EmployeeReach::apply($this->employees()->with(self::RELATIONS)
             ->where(fn (Builder $q) => $q->whereRaw(self::EMPLOYED_AS, [EmployeeType::PermanentWorker->value, $date, $date])
                 ->orWhereRaw(self::EMPLOYED_AS, [EmployeeType::DayLaborer->value, $date, $date]))
             ->whereRaw(Employee::SITE_ON.' = ?', [$date, $date, $date, $siteId])
-            ->orderBy('code'));
+            ->orderBy('code'), $managedBy, $date));
     }
 
     /** @return list<string> the office staff whose site on $date is $siteId; that site only lists them there (owner, 2026-11-08) */

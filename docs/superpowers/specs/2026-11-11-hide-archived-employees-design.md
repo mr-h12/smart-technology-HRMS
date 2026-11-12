@@ -32,7 +32,7 @@ An archived employee has left the company. Today the archive is only a view of t
 - No archive flag, archive endpoint or archive permission.
 - Review debt stays debt: M1 (a termination date inside a locked period) and 13-E8 (termination before hire, optional reason) are not fixed here.
 - No delete button in the UI. If archived rows were used to bury duplicates, that is separate work (the owner has not said which case he saw).
-- No account-to-employee link: a site manager who left keeps a working login until the Developer deactivates it.
+- ~~No account-to-employee link: a site manager who left keeps a working login until the Developer deactivates it.~~ Closed 2026-11-12: archiving deactivates the linked account (`docs/superpowers/specs/2026-11-12-site-manager-accounts-design.md`).
 - Rehire with a gap (a second employment window) is not modelled.
 
 ## Anti-goals

@@ -38,6 +38,12 @@ return [
     'dated_change_period_locked' => 'This change would alter a locked attendance period. Reopen the period first.',
     'type_change_not_period_start' => 'A type change must start on the first day of a period of the new type.',
     'payroll_field_not_used' => ':attribute is not used for :type.',
+    'already_site_manager' => 'This employee already has a site manager account.',
+    'site_manager_role' => 'The site manager role cannot be chosen: exactly one role must see only its own sites. Ask the developer to review the roles.',
+    'not_site_manager_account' => 'This account is not an active site manager account.',
+    'account_linked' => 'This account is already linked to another employee.',
+    'not_an_engineer' => ':name cannot be assigned to this site manager: they must be an engineer on the effective date, not archived, and not the site manager themself.',
+    'engineer_refused' => 'Engineer :name could not be assigned to this site manager: :reason',
     'employee_type' => [
         'office' => 'Office employee',
         'engineer' => 'Engineer',
