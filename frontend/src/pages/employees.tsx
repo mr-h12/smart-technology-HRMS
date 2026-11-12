@@ -28,6 +28,7 @@ import { cn } from '@/lib/utils'
 import { RESIDENCES, USERS, useApi, useList, useSave, WORK_SITES } from '@/lib/query'
 import { noGenerator } from './console'
 import { EmployeeAttendance } from './employee-attendance'
+import { ManualHrForms } from './manual-hr-forms'
 import { CertificateDocuments } from './hr-forms'
 import { Documents } from './employee-documents'
 import { Leave } from './employee-leave'
@@ -437,7 +438,7 @@ function EmployeeForm({ emp, loadErr }: { emp?: Row; loadErr?: unknown }) {
 
   const worker = WORKERS.includes(emp.current_type)
   const sited = SITED.includes(emp.current_type)
-  const tabs = TABS.filter(([v]) => (v !== 'manager' || !worker) && (v !== 'site' || sited) && (v !== 'leave' || (can('leave.view') && emp.current_type !== 'day_laborer')) && (v !== 'documents' || can('employee_document.view') || can('hr_forms.view')) && (v !== 'attendance' || can('attendance.view')))
+  const tabs = TABS.filter(([v]) => (v !== 'manager' || !worker) && (v !== 'site' || sited) && (v !== 'leave' || (can('leave.view') && emp.current_type !== 'day_laborer')) && (v !== 'documents' || can('employee_document.view') || can('hr_forms.view') || can('hr_forms.generate')) && (v !== 'attendance' || can('attendance.view')))
   const tab = tabs.some(([v]) => v === params.get('tab')) ? params.get('tab')! : 'profile'
   return (
     <div className="mx-auto max-w-5xl space-y-6">
@@ -521,6 +522,7 @@ function EmployeeForm({ emp, loadErr }: { emp?: Row; loadErr?: unknown }) {
             documents: <>
               {can('employee_document.view') && <Documents emp={emp} readOnly={archived} />}
               {can('hr_forms.view') && <CertificateDocuments key={String(emp.id)} employee={String(emp.id)} />}
+              {(can('hr_forms.view') || can('hr_forms.generate')) && <ManualHrForms key={`manual-${emp.id}`} employee={emp} />}
             </>,
             leave: <Leave emp={emp} initialYear={params.get('year')} readOnly={archived} />,
             attendance: <EmployeeAttendance emp={emp} readOnly={archived} />,

@@ -1322,6 +1322,21 @@
     }
   },
   "hrForms": {
+    "manual": {
+      "title": "نماذج للطباعة",
+      "late_permit": "إذن تأخير",
+      "notice": "الطباعة فقط. لا تغيّر الحضور أو الإجازات أو مدخلات الرواتب أو حالة الموظف أو أي سجلات أخرى.",
+      "fields": {
+        "addressee": "مقدم لسيادتكم",
+        "permit_date": "تاريخ الإذن",
+        "start_time": "من الساعة",
+        "end_time": "إلى الساعة",
+        "reason": "الأسباب",
+        "responsible_manager": "المدير المسؤول",
+        "issued_on": "تاريخ التحرير",
+        "job_title": "المسمى الوظيفي"
+      }
+    },
     "leaveRequest": "نموذج طلب إجازة",
     "notificationMethod": "طريقة التبليغ",
     "managerOpinion": "رأي مدير القسم",

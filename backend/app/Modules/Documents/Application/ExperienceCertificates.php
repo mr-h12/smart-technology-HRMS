@@ -139,7 +139,9 @@ final class ExperienceCertificates
     {
         return DB::transaction(function () use ($id, $form, $approver): stdClass {
             $export = $this->find($id, lock: true);
-            if ($export->form_type !== $form || ($approver !== null && $export->approved_by !== $approver) || $export->stage !== (AttendanceRequestForms::isUnsignedOnly($form) ? 'unsigned' : 'signed') || $export->status !== 'failed') {
+            $stage = AttendanceRequestForms::isUnsignedOnly($form) || isset(ManualFormDefinitions::all()[$form]) ? 'unsigned' : 'signed';
+            if ($export->form_type !== $form || $export->stage !== $stage || $export->status !== 'failed'
+                || ($approver !== null && $export->approved_by !== $approver)) {
                 throw new ConcurrencyConflict;
             }
             DB::table('hr_form_exports')->where('id', $id)->update([

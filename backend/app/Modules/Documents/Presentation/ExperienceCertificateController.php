@@ -6,6 +6,7 @@ namespace App\Modules\Documents\Presentation;
 
 use App\Modules\Documents\Application\AttendanceRequestForms;
 use App\Modules\Documents\Application\ExperienceCertificates;
+use App\Modules\Documents\Application\ManualFormDefinitions;
 use App\Modules\Documents\Application\RenderHrForm;
 use App\Modules\Employees\Application\EmployeeService;
 use App\Modules\Identity\Presentation\RequestScope;
@@ -52,7 +53,10 @@ final class ExperienceCertificateController
     {
         $this->employees->show($employee, RequestScope::ownerId($request));
 
-        return self::list($request, $this->certificates->history($employee, $request->query('form_type') === 'experience_certificate' ? 'experience_certificate' : null, $this->advances->canViewPay($request->user())));
+        $type = $request->query('form_type');
+        $form = is_string($type) && ($type === 'experience_certificate' || isset(ManualFormDefinitions::all()[$type])) ? $type : null;
+
+        return self::list($request, $this->certificates->history($employee, $form, $this->advances->canViewPay($request->user())));
     }
 
     public function awaitingApproval(Request $request): JsonResponse

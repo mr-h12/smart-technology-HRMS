@@ -1291,6 +1291,21 @@
     }
   },
   "hrForms": {
+    "manual": {
+      "title": "Print-only forms",
+      "late_permit": "Late Arrival Permit",
+      "notice": "Printing only. Attendance, leave, payroll inputs, employee status and other records are unaffected.",
+      "fields": {
+        "addressee": "Addressed to",
+        "permit_date": "Permit date",
+        "start_time": "From time",
+        "end_time": "To time",
+        "reason": "Reason",
+        "responsible_manager": "Responsible manager",
+        "issued_on": "Issue date",
+        "job_title": "Job title"
+      }
+    },
     "leaveRequest": "Leave request PDF",
     "notificationMethod": "Notification method",
     "managerOpinion": "Department manager’s opinion",

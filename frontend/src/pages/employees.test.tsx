@@ -1144,3 +1144,41 @@ test('the documents tab needs employee_document.view', async () => {
   renderWithAuth(<EmployeeDetailRoute id="e1" tab="documents" />, ['employee.view.all', 'employee_document.view.all'], { router: false })
   expect(await screen.findByRole('tab', { name: 'المستندات' })).toHaveAttribute('aria-selected', 'true')
 })
+
+test.each([true, false])('late permit in the employee file respects generate permission (%s)', async (canGenerate) => {
+  const generate = vi.fn(() => json(202, { data: { id: 'export1' } }))
+  mockFetch({
+    'GET /api/v1/employees/e1': () => json(200, { data: { ...emp, code: 7, department: 'قسم الاختبار' } }),
+    'GET /api/v1/residences': residences,
+    'GET /api/v1/hr-manual-form-definitions': () => json(200, { data: { forms: [{
+      type: 'late_permit', fields: [{ name: 'addressee', input: 'text', required: true, max: 160 }],
+    }] } }),
+    'GET /api/v1/employees/e1/hr-form-exports': () => json(200, { data: [], meta: { pagination } }),
+    'GET /api/v1/employees/e1/hr-forms/experience-certificate/defaults': () => json(200, { data: { praise: '' } }),
+    'POST /api/v1/employees/e1/hr-forms/manual/late_permit': generate,
+  })
+  renderWithAuth(<EmployeeDetailRoute id="e1" tab="documents" />, [
+    'employee.view.all', 'hr_forms.view.all', ...(canGenerate ? ['hr_forms.generate.all'] : []),
+  ], { router: false })
+
+  const heading = await screen.findByRole('heading', { name: 'إذن تأخير' })
+  const section = within(heading.closest('section')!)
+  expect(section.getByText(/الطباعة فقط/)).toBeInTheDocument()
+  if (!canGenerate) {
+    expect(section.queryByRole('button', { name: 'إنشاء الملف' })).toBeNull()
+    return
+  }
+  expect(section.getByLabelText('الاسم')).toHaveValue(emp.name_ar)
+  expect(section.getByLabelText('الرقم الوظيفي')).toHaveValue('7')
+  expect(section.getByLabelText('القسم')).toHaveValue('قسم الاختبار')
+  const addressee = section.getByLabelText('مقدم لسيادتكم')
+  expect(addressee).toBeRequired()
+  const action = section.getByRole('button', { name: 'إنشاء الملف' })
+  await user.click(action)
+  expect(generate).not.toHaveBeenCalled()
+  await user.type(addressee, 'مدير الاختبار')
+  await user.click(action)
+  await waitFor(() => expect(generate).toHaveBeenCalledOnce())
+  const sent = vi.mocked(fetch).mock.calls.find(([url, opts]) => String(url).endsWith('/manual/late_permit') && opts?.method === 'POST')
+  expect(JSON.parse(String(sent?.[1]?.body))).toEqual({ addressee: 'مدير الاختبار', idempotency_key: expect.any(String) })
+})

@@ -114,7 +114,7 @@ export function CertificateDocuments({ employee }: { employee: string }) {
   )
 }
 
-function ExportPages({ page, total, setPage }: { page: number; total: number; setPage: (page: number) => void }) {
+export function ExportPages({ page, total, setPage }: { page: number; total: number; setPage: (page: number) => void }) {
   const { t } = useTranslation()
   if (page === 1 && total <= 25) return null
   return (

@@ -5,6 +5,7 @@ declare(strict_types=1);
 use App\Modules\Documents\Application\AttendanceRequestForms;
 use App\Modules\Documents\Application\ExperienceCertificates;
 use App\Modules\Documents\Application\LeaveRequestForms;
+use App\Modules\Documents\Application\ManualHrForms;
 use App\Modules\Documents\Application\RenderHrForm;
 use App\Modules\Documents\Application\SignatureImages;
 use App\Modules\Employees\Application\EmployeeService;
@@ -25,6 +26,7 @@ $app->make(Kernel::class)->bootstrap();
 $leave = getenv('HRMS_SMOKE_FORM') === 'leave-request';
 $advance = getenv('HRMS_SMOKE_FORM') === 'advance-request';
 $overtime = getenv('HRMS_SMOKE_FORM') === 'overtime-request';
+$latePermit = getenv('HRMS_SMOKE_FORM') === 'late-permit';
 try {
     if ($argv[1] === 'setup') {
         $employee = app(EmployeeService::class)->create([
@@ -42,6 +44,12 @@ try {
                 'job_title' => 'مهندسة اختبار', 'reason' => 'سبب تجريبي',
                 ...($advance ? ['repayment_method' => 'cash', 'previous_advance' => false, 'finance_remarks' => 'ملاحظات تجريبية'] : []),
             ], null, $advance ? 'advance' : 'overtime');
+        } elseif ($latePermit) {
+            Auth::setUser($hr);
+            $row = app(ManualHrForms::class)->create('late_permit', $employee, $hr->id, (string) Str::uuid7(), [
+                'addressee' => 'مدير الاختبار', 'permit_date' => '2026-11-16', 'start_time' => '09:00', 'end_time' => '11:00',
+                'reason' => 'موعد طبي', 'job_title' => 'مهندسة اختبار', 'responsible_manager' => 'مسؤول القسم', 'issued_on' => '2026-11-15',
+            ], null);
         } elseif ($leave) {
             $requests = app(LeaveRequests::class);
             $from = now('Africa/Cairo')->next('Monday')->toDateString();

@@ -9,9 +9,11 @@ use App\Modules\Attendance\Presentation\SiteDayCrewController;
 use App\Modules\Audit\Presentation\AuditLogController;
 use App\Modules\Audit\Presentation\ErrorLogController;
 use App\Modules\Audit\Presentation\RequestLogController;
+use App\Modules\Documents\Application\ManualFormDefinitions;
 use App\Modules\Documents\Presentation\AttendanceRequestFormController;
 use App\Modules\Documents\Presentation\ExperienceCertificateController;
 use App\Modules\Documents\Presentation\LeaveRequestFormController;
+use App\Modules\Documents\Presentation\ManualHrFormController;
 use App\Modules\Documents\Presentation\SignatureController;
 use App\Modules\Employees\Presentation\EmployeeController;
 use App\Modules\Employees\Presentation\EmployeeDocumentController;
@@ -54,6 +56,13 @@ Route::middleware('auth')->group(function (): void {
         ->whereUuid('employee')->middleware(['permission:hr_forms.generate', 'employee.scope']);
     Route::post('employees/{employee}/hr-forms/experience-certificate', [ExperienceCertificateController::class, 'store'])
         ->whereUuid('employee')->middleware(['permission:hr_forms.generate', 'employee.scope']);
+    Route::get('hr-manual-form-definitions', [ManualHrFormController::class, 'definitions'])
+        ->middleware('permission:hr_forms.view,hr_forms.generate');
+    Route::post('employees/{employee}/hr-forms/manual/{form}', [ManualHrFormController::class, 'store'])
+        ->whereUuid('employee')->whereIn('form', array_keys(ManualFormDefinitions::all()))
+        ->middleware(['permission:hr_forms.generate', 'employee.scope']);
+    Route::post('hr-form-exports/{export}/retry-manual/{form}', [ManualHrFormController::class, 'retry'])
+        ->whereUuid('export')->whereIn('form', array_keys(ManualFormDefinitions::all()))->middleware('permission:hr_forms.generate');
     Route::get('employees/{employee}/hr-form-exports', [ExperienceCertificateController::class, 'history'])
         ->whereUuid('employee')->middleware(['permission:hr_forms.view', 'employee.scope']);
     Route::get('hr-form-exports/awaiting-approval', [ExperienceCertificateController::class, 'awaitingApproval'])
