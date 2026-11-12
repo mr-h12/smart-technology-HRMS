@@ -444,7 +444,7 @@ function EmployeeForm({ emp, loadErr }: { emp?: Row; loadErr?: unknown }) {
       <ErrorBanner err={loadErr} shown={[]} />
       <Card className="flex flex-col gap-4 p-5 sm:flex-row sm:flex-wrap sm:items-center">
         <UserAvatar name={emp.name_ar} size="xl" />
-        <div className="min-w-0 flex-1 space-y-1">
+        <div className="min-w-48 flex-1 space-y-1">
           <h1 className="text-page-title">{emp.name_ar}</h1>
           {emp.name_en && <p className="text-sm text-muted-foreground">{emp.name_en}</p>}
           {emp.code != null && (
@@ -728,7 +728,7 @@ function SiteManagerFields({ f, empId, linked }: { f: FormApi; empId: string; li
   )
 }
 
-/** A checkbox list of `list`'s rows in a box that scrolls on its own; the `fixed` ids show ticked and cannot be unticked. */
+/** A checkbox list of `list`'s rows in a box that scrolls on its own past five touch-size rows; the `fixed` ids show ticked and cannot be unticked. */
 function Ticks({ name, label, list, f, fixed = [], hint }: { name: string; label: string; list: { rows: Row[]; loading: boolean }; f: FormApi; fixed?: string[]; hint?: string }) {
   const { t } = useTranslation()
   const on: string[] = f.values[name]
@@ -736,12 +736,12 @@ function Ticks({ name, label, list, f, fixed = [], hint }: { name: string; label
   return (
     <fieldset className="min-w-0 space-y-1.5" aria-describedby={[hint && `${name}-hint`, err && `${name}-err`].filter(Boolean).join(' ') || undefined}>
       <legend className="mb-1.5 text-[13px] font-medium">{label}</legend>
-      <div className="max-h-56 overflow-y-auto overscroll-contain rounded-lg border p-1 scrollbar-thin">
+      <div className="max-h-60 overflow-y-auto overscroll-contain rounded-lg border p-1 scrollbar-thin">
         {list.loading ? (
           <TableSkeleton rows={2} />
         ) : list.rows.length ? (
           list.rows.map((r) => (
-            <label key={r.id} className="flex min-h-tap items-center gap-3 rounded-md px-2 text-sm hover:bg-muted">
+            <label key={r.id} className="flex min-h-tap items-center gap-3 rounded-md px-2 text-sm has-enabled:hover:bg-muted has-disabled:cursor-not-allowed has-disabled:text-muted-foreground">
               <input type="checkbox" checked={fixed.includes(r.id) || on.includes(r.id)} disabled={fixed.includes(r.id)} onChange={(e) => f.set(name, e.target.checked ? [...on, r.id] : on.filter((id) => id !== r.id))} />
               {r.name_ar}
             </label>

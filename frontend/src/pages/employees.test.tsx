@@ -1061,6 +1061,9 @@ test('editing starts from the current sites and engineers, keeps an inactive sit
   const current = await within(dialog).findByRole('checkbox', { name: 'مهندس أول' })
   expect(current).toBeChecked()
   expect(current).toBeDisabled()
+  // the fixed row reads as disabled and takes no hover fill
+  expect(current.closest('label')).toHaveClass('has-disabled:cursor-not-allowed', 'has-disabled:text-muted-foreground', 'has-enabled:hover:bg-muted')
+  expect(current.closest('label')).not.toHaveClass('hover:bg-muted')
   await user.click(within(dialog).getByRole('checkbox', { name: 'موقع ب' }))
   await user.click(within(dialog).getByRole('button', { name: 'حفظ' }))
   await waitFor(() => expect(put).toHaveBeenCalledTimes(1))
