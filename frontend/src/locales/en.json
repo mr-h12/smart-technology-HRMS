@@ -1312,14 +1312,18 @@
         "warning_incident": "Incident",
         "warning_period": "Dates or duration cited",
         "warning_prior_occurrence": "Prior-occurrence statement",
-        "warning_explanation_request": "Request for explanation"
+        "warning_explanation_request": "Request for explanation",
+        "mission_date": "Mission date",
+        "mission_reason": "Reason for the mission",
+        "department_manager": "Department manager"
       },
       "early_leave_request": "Early Departure Request",
       "resignation": "Resignation",
       "warning_notice": "Warning notice",
       "notices": {
         "warning_notice": "Printing only. This creates no disciplinary record, deduction or payroll input and makes no changes to employee records."
-      }
+      },
+      "mission_permit": "Mission Permit"
     },
     "leaveRequest": "Leave request PDF",
     "notificationMethod": "Notification method",

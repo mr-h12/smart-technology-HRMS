@@ -30,6 +30,7 @@ $latePermit = getenv('HRMS_SMOKE_FORM') === 'late-permit';
 $earlyLeave = getenv('HRMS_SMOKE_FORM') === 'early-leave-request';
 $resignation = getenv('HRMS_SMOKE_FORM') === 'resignation';
 $warningNotice = getenv('HRMS_SMOKE_FORM') === 'warning-notice';
+$missionPermit = getenv('HRMS_SMOKE_FORM') === 'mission-permit';
 try {
     if ($argv[1] === 'setup') {
         $employee = app(EmployeeService::class)->create([
@@ -47,6 +48,14 @@ try {
                 'job_title' => 'مهندسة اختبار', 'reason' => 'سبب تجريبي',
                 ...($advance ? ['repayment_method' => 'cash', 'previous_advance' => false, 'finance_remarks' => 'ملاحظات تجريبية'] : []),
             ], null, $advance ? 'advance' : 'overtime');
+        } elseif ($missionPermit) {
+            Auth::setUser($hr);
+            $row = app(ManualHrForms::class)->create('mission_permit', $employee, $hr->id, (string) Str::uuid7(), [
+                'job_title' => 'مهندسة اختبار',
+                'mission_date' => '2026-11-15',
+                'mission_reason' => 'متابعة موقع الاختبار.',
+                'department_manager' => 'مدير الاختبار',
+            ], null);
         } elseif ($warningNotice) {
             Auth::setUser($hr);
             $row = app(ManualHrForms::class)->create('warning_notice', $employee, $hr->id, (string) Str::uuid7(), [

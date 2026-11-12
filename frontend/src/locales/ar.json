@@ -1343,14 +1343,18 @@
         "warning_incident": "الواقعة",
         "warning_period": "التواريخ أو المدة المذكورة",
         "warning_prior_occurrence": "بيان التكرار السابق",
-        "warning_explanation_request": "طلب التوضيح"
+        "warning_explanation_request": "طلب التوضيح",
+        "mission_date": "تاريخ المأمورية",
+        "mission_reason": "سبب المأمورية",
+        "department_manager": "مدير القسم"
       },
       "early_leave_request": "طلب انصراف باكرًا",
       "resignation": "استقالة",
       "warning_notice": "نموذج إنذار",
       "notices": {
         "warning_notice": "الطباعة فقط. لا تنشئ سجلًا تأديبيًا أو خصمًا أو مدخلًا للرواتب ولا تغيّر سجلات الموظف."
-      }
+      },
+      "mission_permit": "إذن مأمورية"
     },
     "leaveRequest": "نموذج طلب إجازة",
     "notificationMethod": "طريقة التبليغ",

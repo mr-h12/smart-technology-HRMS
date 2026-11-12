@@ -52,6 +52,15 @@ final class ManualFormDefinitions
                     'warning_explanation_request' => ['input' => 'textarea', 'rules' => ['required', 'string', 'max:200']],
                 ],
             ],
+            'mission_permit' => [
+                'view' => 'hr-forms.mission-permit',
+                'fields' => [
+                    'job_title' => ['input' => 'text', 'rules' => ['required', 'string', 'max:160']],
+                    'mission_date' => ['input' => 'date', 'rules' => ['required', 'date_format:Y-m-d']],
+                    'mission_reason' => ['input' => 'textarea', 'rules' => ['required', 'string', 'max:500']],
+                    'department_manager' => ['input' => 'text', 'rules' => ['required', 'string', 'max:160']],
+                ],
+            ],
         ];
     }
 }
