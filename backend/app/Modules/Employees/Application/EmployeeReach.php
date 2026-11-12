@@ -28,7 +28,7 @@ final class EmployeeReach
     public static function apply(Builder $employees, string $managerId, string $date): Builder
     {
         // ponytail: correlated subqueries; a reach view if manager lists pass ~1,000
-        return $employees->archived(false)->whereRaw('employees.user_id is distinct from ?', [$managerId])->whereRaw(
+        return self::exceptOwn($employees->archived(false), $managerId)->whereRaw(
             'case '.Employee::TYPE_ON.' when ? then '.self::ENGINEER.' when ? then '.self::WORKER.' when ? then '.self::WORKER.' else false end',
             [
                 $date,
@@ -37,6 +37,17 @@ final class EmployeeReach
                 EmployeeType::DayLaborer->value, $managerId, $date, $date, $date,
             ],
         );
+    }
+
+    /**
+     * Leaves out the employee linked to $userId's account, for the searches that look past the reach (the crew search).
+     *
+     * @param  Builder<Employee>  $employees
+     * @return Builder<Employee>
+     */
+    public static function exceptOwn(Builder $employees, string $userId): Builder
+    {
+        return $employees->whereRaw('employees.user_id is distinct from ?', [$userId]);
     }
 
     /** @return Builder<Employee> the ids of the employees $managerId reaches on $date, as a whereIn subquery */

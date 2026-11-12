@@ -36,7 +36,7 @@ final class SiteDayCrew
     public function search(string $siteId, string $search, string $managerId): array
     {
         $mine = $this->mySites($siteId, $managerId);
-        $found = $this->crew->find($search, EffectiveDays::today());
+        $found = $this->crew->find($search, EffectiveDays::today(), $managerId);
         $m = $found['match'];
         if ($m === null) {
             return ['match' => null, 'ambiguous' => $found['ambiguous']];

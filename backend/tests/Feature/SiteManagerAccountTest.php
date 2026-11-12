@@ -7,6 +7,7 @@ use App\Modules\Identity\Application\Administration\RoleAdministration;
 use App\Modules\Identity\Infrastructure\Eloquent\Permission;
 use App\Modules\Identity\Infrastructure\Eloquent\Role;
 use App\Modules\Identity\Infrastructure\Eloquent\User;
+use App\Modules\Notifications\Application\Notifier;
 use Illuminate\Console\Scheduling\Schedule;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\DB;
@@ -379,5 +380,65 @@ class SiteManagerAccountTest extends TestCase
         $this->assertSame(['5 0 * * *', 'Africa/Cairo'], [$event?->expression, $event?->timezone]);
         $event->run($this->app);
         $this->assertFalse($this->isActive($userId));
+    }
+
+    /**
+     * A site manager homed at one of their own sites, and a co-worker there.
+     *
+     * @return array{0: string, 1: string, 2: string, 3: User} site, the site manager's record, the co-worker, the account
+     */
+    private function siteManagerAtOwnSite(string $type): array
+    {
+        $site = $this->workSite();
+        [$self, $other] = [$this->employee($type), $this->employee($type)];
+        $this->homeSite($self, $site, '2026-01-01');
+        $this->homeSite($other, $site, '2026-01-01');
+
+        return [$site, $self, $other, User::findOrFail($this->make($self, $this->body(['site_ids' => [$site]]))->assertCreated()->json('data.site_manager.id'))];
+    }
+
+    public function test_a_site_manager_never_lists_their_own_row_on_the_site_day(): void
+    {
+        [$site, $self, $worker, $manager] = $this->siteManagerAtOwnSite('permanent_worker');
+        $this->putDay($self, '2026-08-10', ['site_id' => $site])->assertOk();   // HR records it
+        $this->assertContains($self, $this->getJson('/api/v1/attendance/sheet?group=permanent_worker&date=2026-08-10')->assertOk()->json('data.rows.*.employee.id'));
+        $this->assertContains($self, $this->getJson("/api/v1/attendance/grid?group=all&date=2026-08-10&site_id={$site}")->assertOk()->json('data.*.employee.id'));
+
+        $this->actingAs($manager, 'api');
+        $this->assertSame([$worker], $this->getJson("/api/v1/attendance/site-day?site_id={$site}&date=2026-08-10")->assertOk()->json('data.rows.*.employee.id'));
+        $this->postJson('/api/v1/attendance/site-day', ['site_id' => $site, 'date' => '2026-08-10', 'rows' => [['employee_id' => $self, 'site_id' => $site, 'in_time' => '08:00']]])
+            ->assertNotFound();
+    }
+
+    public function test_a_site_manager_never_finds_their_own_record_on_their_other_lists(): void
+    {
+        $this->leaveTypes();
+        [, $self, $worker, $manager] = $this->siteManagerAtOwnSite('permanent_worker');
+        foreach ([$self, $worker] as $id) {   // HR files their leave; a notification names each
+            $this->postJson('/api/v1/leave/requests', ['employee_id' => $id, 'kind' => 'annual', 'from_date' => '2026-08-20', 'to_date' => '2026-08-20'])->assertCreated();
+            app(Notifier::class)->notifyOnce((string) $manager->id, 'leave_decided', '2026-08-10', ['employee_id' => $id], $id);
+        }
+
+        $this->actingAs($manager, 'api');
+        $lists = [
+            'employees' => $this->getJson('/api/v1/employees')->assertOk()->json('data.*.id'),
+            'leave requests' => $this->getJson('/api/v1/leave/requests')->assertOk()->json('data.*.employee.id'),
+            'leave balances' => $this->getJson('/api/v1/leave/balances')->assertOk()->json('data.*.id'),
+            'team fares' => $this->getJson('/api/v1/team-fares')->assertOk()->json('data.rows.*.employee_id'),
+            'notifications' => array_values(array_filter($this->getJson('/api/v1/notifications')->assertOk()->json('data.*.employee.id'))),
+        ];
+        $this->assertSame(array_fill_keys(array_keys($lists), [$worker]), $lists);
+        $this->assertSame(1, $this->getJson('/api/v1/employees/summary')->assertOk()->json('data.permanent_worker'));
+    }
+
+    public function test_crew_search_never_finds_the_site_managers_own_record(): void
+    {
+        [$site, $self, $laborer, $manager] = $this->siteManagerAtOwnSite('day_laborer');
+        $this->actingAs($manager, 'api');
+        $search = fn (string $q) => $this->getJson('/api/v1/attendance/site-day/laborers?'.http_build_query(['site_id' => $site, 'search' => $q]))->assertOk();
+
+        $search('Laborer-2')->assertJsonPath('data.match.id', $laborer);
+        $search('Laborer-1')->assertJsonPath('data.match', null)->assertJsonPath('data.ambiguous', false);
+        $this->assertSame([$laborer], $this->getJson("/api/v1/attendance/site-day?site_id={$site}")->assertOk()->json('data.rows.*.employee.id'));
     }
 }
