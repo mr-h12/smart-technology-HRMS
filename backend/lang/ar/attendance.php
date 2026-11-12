@@ -60,6 +60,7 @@ return [
         'duplicate_row' => 'هذا الموظف مكرر في الملف.',
         'code_name_mismatch' => 'تم تغيير الرقم الوظيفي أو الاسم بعد تنزيل هذا الملف. يرجى تنزيل قالب جديد.',
     ],
+    'workbook_max_days' => 'المدة :max يومًا على الأكثر.',
     // The site workbook's own text: the file is Arabic whatever the request language (calculations §14 W1).
     'workbook' => [
         'type' => [
@@ -68,5 +69,11 @@ return [
             'day_laborer' => 'يومية',
             'office' => 'موظف مكتب',
         ],
+        'columns' => ['الاسم', 'الحالة', 'حضور', 'انصراف', 'سلفة', 'ملاحظات', 'الرقم القومي', 'الموبايل', 'محل الإقامة', 'الأجر المقترح'],
+        // Keyed by PHP's date('w'): 0 is Sunday.
+        'weekday' => ['الأحد', 'الاثنين', 'الثلاثاء', 'الأربعاء', 'الخميس', 'الجمعة', 'السبت'],
+        'title' => 'موقع :site — :day',
+        'prompt_title' => 'إضافة',
+        'prompt' => 'اختار الاسم من القايمة، أو اكتب اسم عامل يومية جديد وبياناته',
     ],
 ];
