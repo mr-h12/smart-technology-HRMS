@@ -117,21 +117,36 @@ final class UserAdministration
     {
         return DB::transaction(function () use ($id, $active): array {
             $user = $this->target($id);
-            if ($user->is_active === $active) {
-                return $this->row($user);
-            }
-            $user->fill($active ? ['is_active' => true, 'failed_login_attempts' => 0, 'locked_until' => null] : ['is_active' => false]);
-            $changed = $user->getDirty();
-            $old = array_intersect_key($user->getOriginal(), $changed);
-            $user->save();
-            AuditLog::record($active ? IdentityAuditEvents::USER_ACTIVATED : IdentityAuditEvents::USER_DEACTIVATED, 'users', (string) $user->id, $old, $changed);
-            if (! $active) {
-                $user->revokeSessions();
-                RoleAdministration::assertRoleManagerRemains('is_active');
-            }
+            $this->applyActive($user, $active);
 
             return $this->row($user);
         });
+    }
+
+    /**
+     * The linked employee is archived, so the account stops (owner, 2026-11-12). The system acts on HR's employee save or the nightly
+     * sweep, so the caller's reach is not checked. An inactive account is left as is; reactivating it stays a manual setActive.
+     */
+    public function deactivateForArchivedEmployee(string $userId, string $employeeId): void
+    {
+        DB::transaction(fn () => $this->applyActive(User::findOrFail($userId), false, ['employee_id' => $employeeId, 'reason' => 'employee_archived']));
+    }
+
+    /** @param  array<string, string>  $why  added to the audit row's new values */
+    private function applyActive(User $user, bool $active, array $why = []): void
+    {
+        if ($user->is_active === $active) {
+            return;
+        }
+        $user->fill($active ? ['is_active' => true, 'failed_login_attempts' => 0, 'locked_until' => null] : ['is_active' => false]);
+        $changed = $user->getDirty();
+        $old = array_intersect_key($user->getOriginal(), $changed);
+        $user->save();
+        AuditLog::record($active ? IdentityAuditEvents::USER_ACTIVATED : IdentityAuditEvents::USER_DEACTIVATED, 'users', (string) $user->id, $old, [...$changed, ...$why]);
+        if (! $active) {
+            $user->revokeSessions();
+            RoleAdministration::assertRoleManagerRemains('is_active');
+        }
     }
 
     public function setPassword(string $id, #[SensitiveParameter] string $password): void

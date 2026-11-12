@@ -2,9 +2,12 @@
 
 namespace Tests\Feature;
 
+use App\Modules\Employees\Application\EmployeeService;
+use App\Modules\Identity\Application\Administration\RoleAdministration;
 use App\Modules\Identity\Infrastructure\Eloquent\Permission;
 use App\Modules\Identity\Infrastructure\Eloquent\Role;
 use App\Modules\Identity\Infrastructure\Eloquent\User;
+use Illuminate\Console\Scheduling\Schedule;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Testing\TestResponse;
@@ -25,6 +28,7 @@ class SiteManagerAccountTest extends TestCase
     {
         parent::setUp();
         $this->cairo('2026-08-10 10:00');
+        $this->makeUser('developer'); // a deactivation or grant change needs a role manager to remain, as in every deployment
         $this->signIn('hr');
     }
 
@@ -285,5 +289,95 @@ class SiteManagerAccountTest extends TestCase
             $this->assertArrayNotHasKey('user_id', $row);
         }
         $this->getJson("/api/v1/employees/{$first}")->assertNotFound();
+    }
+
+    /** @return list<array<string, mixed>> the new_values of the account's USER_DEACTIVATED audit rows */
+    private function deactivations(string $userId): array
+    {
+        return DB::table('audit_log')->where(['event' => 'USER_DEACTIVATED', 'entity_id' => $userId])->pluck('new_values')
+            ->map(fn (mixed $v) => json_decode((string) $v, true))->all();
+    }
+
+    private function isActive(string $userId): bool
+    {
+        return (bool) DB::table('users')->where('id', $userId)->value('is_active');
+    }
+
+    public function test_a_past_termination_date_deactivates_the_linked_account_at_once(): void
+    {
+        $e = $this->employee('engineer');
+        $userId = (string) $this->make($e, $this->body())->assertCreated()->json('data.site_manager.id');
+        $token = $this->postJson('/api/v1/auth/login', ['email' => self::EMAIL, 'password' => self::PASSWORD])->assertCreated()->json('data.token');
+        $this->app['auth']->forgetGuards();
+        $hr = $this->signIn('hr');
+
+        $this->patchJson("/api/v1/employees/{$e}", ['termination_date' => '2026-08-09'])->assertOk()->assertJsonPath('data.archived', true);
+        $this->assertFalse($this->isActive($userId));
+        $this->assertSame(0, DB::table('user_sessions')->where('user_id', $userId)->whereNull('deleted_at')->count());
+        $this->assertEquals([['is_active' => false, 'employee_id' => $e, 'reason' => 'employee_archived']], $this->deactivations($userId));
+        $this->assertSame($hr->id, DB::table('audit_log')->where(['event' => 'USER_DEACTIVATED', 'entity_id' => $userId])->value('user_id'));
+
+        // Reactivating the employee does not reactivate the account (owner, 2026-11-12).
+        $this->patchJson("/api/v1/employees/{$e}", ['termination_date' => null])->assertOk()->assertJsonPath('data.archived', false);
+        $this->assertFalse($this->isActive($userId));
+
+        $this->app['auth']->forgetGuards();
+        $this->withToken($token)->getJson('/api/v1/auth/me')->assertUnauthorized();
+        $this->flushHeaders();
+        $this->postJson('/api/v1/auth/login', ['email' => self::EMAIL, 'password' => self::PASSWORD])
+            ->assertStatus(403)->assertJsonPath('error.code', 'account_suspended');
+    }
+
+    public function test_a_termination_date_of_today_deactivates_the_account_the_next_night(): void
+    {
+        $e = $this->employee('engineer');
+        $userId = (string) $this->make($e, $this->body())->assertCreated()->json('data.site_manager.id');
+        $this->patchJson("/api/v1/employees/{$e}", ['termination_date' => '2026-08-10'])->assertOk();
+        $this->assertTrue($this->isActive($userId));
+
+        $this->cairo('2026-08-11 00:05');
+        app(EmployeeService::class)->deactivateArchivedAccounts();
+        $this->assertFalse($this->isActive($userId));
+        app(EmployeeService::class)->deactivateArchivedAccounts();
+        $this->assertEquals([['is_active' => false, 'employee_id' => $e, 'reason' => 'employee_archived']], $this->deactivations($userId));
+    }
+
+    public function test_hr_save_deactivates_an_account_outside_hr_reach(): void
+    {
+        $e = $this->employee('engineer');
+        $userId = (string) $this->make($e, $this->body())->assertCreated()->json('data.site_manager.id');
+        $role = Role::where('slug', 'manager')->firstOrFail();
+        $grants = [...$role->permissions()->pluck('permissions.id')->all(), Permission::where(['resource' => 'system_log', 'action' => 'view', 'scope' => 'all'])->value('id')];
+        app(RoleAdministration::class)->syncPermissions((string) $role->id, array_map('strval', $grants));
+        $this->patchJson("/api/v1/users/{$userId}/deactivate")->assertForbidden()->assertJsonPath('error.code', 'account_out_of_reach');
+
+        $this->patchJson("/api/v1/employees/{$e}", ['termination_date' => '2026-08-01'])->assertOk();
+        $this->assertFalse($this->isActive($userId));
+    }
+
+    public function test_an_unlinked_archived_employee_and_a_linked_active_one_are_untouched(): void
+    {
+        $active = $this->employee('engineer');
+        $userId = (string) $this->make($active, $this->body())->assertCreated()->json('data.site_manager.id');
+        $other = $this->makeUser('manager');
+        $left = $this->employee('engineer');
+        $this->patchJson("/api/v1/employees/{$left}", ['termination_date' => '2026-08-01'])->assertOk();
+
+        app(EmployeeService::class)->deactivateArchivedAccounts();
+        $this->assertTrue($this->isActive($userId));
+        $this->assertTrue($this->isActive((string) $other->id));
+        $this->assertSame(0, DB::table('audit_log')->where('event', 'USER_DEACTIVATED')->count());
+    }
+
+    public function test_the_sweep_runs_daily_at_00_05_cairo(): void
+    {
+        $e = $this->employee('engineer');
+        $userId = (string) $this->make($e, $this->body())->assertCreated()->json('data.site_manager.id');
+        DB::table('employees')->where('id', $e)->update(['termination_date' => '2026-08-01']);
+
+        $event = collect(app(Schedule::class)->events())->first(fn ($e) => $e->description === 'employees:deactivate-archived-accounts');
+        $this->assertSame(['5 0 * * *', 'Africa/Cairo'], [$event?->expression, $event?->timezone]);
+        $event->run($this->app);
+        $this->assertFalse($this->isActive($userId));
     }
 }

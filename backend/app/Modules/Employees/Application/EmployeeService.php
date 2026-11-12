@@ -187,7 +187,8 @@ final class EmployeeService
     /**
      * An archived employee changes only its termination date and reason (reactivate or correct; owner, 2026-11-11), judged on changed
      * values because the profile form sends every identity field on each save. Setting or changing a termination date waits until the
-     * employee's open items are decided; clearing it never does.
+     * employee's open items are decided; clearing it never does. A termination date that archives the employee deactivates their
+     * linked account at once; clearing it does not reactivate the account.
      *
      * @param  array<string, mixed>  $data
      * @return array<string, mixed>
@@ -212,9 +213,23 @@ final class EmployeeService
             }
             $this->assertBank($employee->only(['pay_method', 'bank_account']));
             $employee->save();
+            if ($employee->wasChanged('termination_date')) {
+                $this->deactivateArchivedAccounts($id);
+            }
         });
 
         return $this->show($id);
+    }
+
+    /**
+     * Deactivates the account linked to each archived employee, or to $employeeId only (owner, 2026-11-12). The daily job sweeps them
+     * all, so a termination date that passes overnight, or a missed night, is caught up; an inactive account is left as is.
+     */
+    public function deactivateArchivedAccounts(?string $employeeId = null): void
+    {
+        Employee::archived()->whereNotNull('user_id')->when($employeeId !== null, fn (Builder $q) => $q->whereKey($employeeId))
+            ->orderBy('id')->get(['id', 'user_id'])
+            ->each(fn (Employee $e) => $this->users->deactivateForArchivedEmployee((string) $e->user_id, (string) $e->id));
     }
 
     /**
