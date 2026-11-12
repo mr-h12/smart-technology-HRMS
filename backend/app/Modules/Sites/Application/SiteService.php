@@ -137,7 +137,7 @@ final class SiteService
     }
 
     /**
-     * The email tells two namesakes apart; every role holding site.assign_manager also holds user.view (ManagerScopeTest).
+     * The email tells two namesakes apart; every seeded role holding site.assign_manager also holds user.view (ManagerScopeTest).
      *
      * @return list<array{id: string, name: string, email: string}> the active accounts a site can have as its managers
      */

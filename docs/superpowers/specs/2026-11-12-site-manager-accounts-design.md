@@ -38,9 +38,9 @@ transaction with the employee row locked: a refusal leaves no account, link, sit
 
 ### GET /api/v1/employees/site-manager-candidates
 The accounts the dialog offers to link: `data: [{id, name, email}]` by name. These are the manager candidates
-(`GET /api/v1/sites/manager-candidates`, which also returns `email` now) less those linked to a live employee, so POST's
+(`GET /api/v1/sites/manager-candidates`, whose rows are `{id, name, email}` too) less those linked to a live employee, so POST's
 `user_id` accepts every one. Middleware: POST's, less `employee.scope`. The email tells namesakes apart and shows nothing new:
-every role holding `site.assign_manager` also holds `user.view`.
+every seeded role holding `site.assign_manager` also holds `user.view`.
 
 ### POST /api/v1/employees/{employee}/site-manager
 Creates or links the account, then sets its team. Middleware: `permission:user.manage`, `permission:site.assign_manager`,
@@ -152,6 +152,9 @@ opens one dialog that creates a new account (with sites and engineers) or links 
 sites; it offers `GET employees/site-manager-candidates`, each with its email), and on a linked employee becomes
 «مواقع ومهندسو مدير الموقع» to change the sites and add engineers (PUT).
 
+Wherever an account is chosen, its email shows beside its name: the dialog's select (which also shows the chosen account's email
+in full below it), Settings → Sites «مديرو الموقع», the Team fares chips and the Fares tab filter.
+
 After sign-in, an account holding `attendance.record` at own scope only (a site manager) lands on site attendance (`/site-day`).
 
 ## Tests
@@ -167,7 +170,7 @@ After sign-in, an account holding `attendance.record` at own scope only (a site 
   its sites; a linked, non-site-manager or inactive account is refused.
 - Candidates: the read offers the unlinked accounts by name with `id`, `name`, `email`, never a linked one; POST links each one
   offered, which then leaves the list. A site manager, the CEO and a role lacking any one of the three permissions get 403;
-  without a session, 401. `ManagerScopeTest` checks the `email` on `sites/manager-candidates` and that every role holding
+  without a session, 401. `ManagerScopeTest` checks the `email` on `sites/manager-candidates` and that every seeded role holding
   `site.assign_manager` also holds `user.view`.
 - PUT: replaces the sites (other managers kept, only changed sites audited), skips an engineer already assigned, answers 404 when
   unlinked and refuses an inactive account.
