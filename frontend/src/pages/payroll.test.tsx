@@ -131,8 +131,8 @@ test.each([
     await user.tab({ shift: true })
     expect(el).toHaveFocus()
   }],
-  ['a browser selecting after the focus handlers, before React re-renders (Chromium, Safari)', (el: HTMLInputElement) => act(() => { el.focus(); el.select() })],
-  ['a browser selecting before the focus handlers (Firefox)', (el: HTMLInputElement) => act(() => { el.select(); el.focus() })],
+  ['a browser selecting after the focus handlers, before React re-renders', (el: HTMLInputElement) => act(() => { el.focus(); el.select() })],
+  ['a browser selecting before the focus handlers (Chromium, most likely)', (el: HTMLInputElement) => act(() => { el.select(); el.focus() })],
 ])('a stored amount reached by keyboard (%s) is replaced by what HR types', async (_, reach) => {
   const put = vi.fn((_url: string, _init?: RequestInit) => json(200, { data: { ...lines[0], days } }))
   mockFetch({ ...routes, [`PUT ${BASE}/employees/e1/entry`]: put })
@@ -160,7 +160,7 @@ test('a control reached by keyboard is brought into view, and a press does not m
   const overtime = within(rowOf('Engineer-2')).getByRole('button', { name: /^الوقت الإضافي - Engineer-2/ })
   expect(overtime).toHaveFocus()
   expect(reveal).toHaveBeenCalledOnce()
-  expect(reveal.mock.contexts[0]).toBe(overtime)
+  expect(reveal.mock.contexts[0]).toBe(overtime.closest('td')) // the cell: its padding holds the focus ring, and a message under an input is wider than it
   expect(reveal).toHaveBeenCalledWith({ block: 'nearest', inline: 'nearest' })
 })
 
@@ -280,7 +280,7 @@ test('a refused field shows its message on its cell, takes the focus from the fi
   expect(toast.error).not.toHaveBeenCalled()
 })
 
-test('a refusal takes the focus from the page, never from a control HR has moved to', async () => {
+test('a refusal takes the focus from the page; from a control HR has moved to, it does not, and a toast says it', async () => {
   const put = vi.fn(reasonRequired)
   mockFetch({ ...routes, [`PUT ${BASE}/employees/e2/entry`]: put })
   open()
@@ -289,12 +289,15 @@ test('a refusal takes the focus from the page, never from a control HR has moved
   await user.type(screen.getByRole('textbox', { name: 'الخصم - Engineer-2' }), '75')
   await user.click(document.body) // leaving the row for no control saves it
   await waitFor(() => expect(reason).toHaveFocus())
+  expect(toast.error).not.toHaveBeenCalled() // the focused field shows the message
   const elsewhere = screen.getByRole('textbox', { name: 'الخصم - Engineer-1' })
   await user.click(elsewhere) // leaving it for another row's cell saves it again
   await waitFor(() => expect(put).toHaveBeenCalledTimes(2))
   await waitFor(() => expect(reason).not.toHaveAttribute('readonly')) // the second refusal has landed
   expect(reason).toHaveAttribute('aria-invalid', 'true')
   expect(elsewhere).toHaveFocus()
+  // its cell may be under a pinned column or past the edge, so the refusal is also a toast
+  expect(toast.error).toHaveBeenCalledWith('لم تُحفظ مدخلات Engineer-2: حقل سبب الخصم مطلوب.')
 })
 
 test('a refusal\'s message goes once the typing it refused is undone and the row is left', async () => {

@@ -132,17 +132,20 @@ export function PayrollPage() {
                 {cols.map((col) => <TableHead key={col.join(':')} className={cn('min-w-24 whitespace-normal', !TEXTS.includes(col[1]) && 'text-end', col[1] === 'net' && cn(PIN_END, 'bg-secondary'))}>{colLabel(t, col)}</TableHead>)}
               </TableRow>
             </TableHeader>
-            {/* Keyboard (or script) focus, either direction: a field's text is selected whole once its cell shows the value to edit
-                (the input's onFocus runs first), so typing replaces a stored amount whatever order the browser selects in; and the
-                control is brought inside the scroll padding, clear of the pinned columns and the box edges, instantly, before the
-                browser's own focus scroll, which leaves a control already inside the box where it is, even under a pinned column.
+            {/* Keyboard (or script) focus, either direction:
+                - the input's onFocus has just swapped its cell to the value to edit, which drops a select-all the browser made
+                  (Chromium most likely makes it before the focus handlers); this select() selects that value whole, so typing
+                  replaces a stored amount whatever order the browser selects in;
+                - the control's cell (its padding holds the focus ring; a message under an input can be wider than the input) is
+                  brought inside the scroll padding, clear of the pinned columns and the box edges, which the browser's own focus
+                  scroll does not do for a control already inside the box. Instant, so it cannot race that scroll.
                 A mouse or touch press focuses within its own mousedown, so `pressed` lasts that long: the caret goes where HR pressed,
                 and the table does not move under the pointer. */}
             <TableBody onMouseDown={() => { pressed.current = true; setTimeout(() => { pressed.current = false }) }}
               onFocus={(e) => {
                 if (pressed.current) return
                 if (e.target instanceof HTMLInputElement) e.target.select()
-                e.target.scrollIntoView({ block: 'nearest', inline: 'nearest' })
+                e.target.closest('td')?.scrollIntoView({ block: 'nearest', inline: 'nearest' })
               }}>
               {sheet.lines.map((line) => (
                 <LineRow key={`${path}|${line.employee.id}`} line={line} cols={cols} group={group} path={path!} editable={editable}
@@ -224,18 +227,21 @@ function LineRow({ line, cols, group, path, editable, onOpen, onOverride }: { li
       toast.success(t('common.saved'))
       done = true
     } catch (e) {
+      const message = e instanceof ApiError && e.details.length ? e.details.map((d) => d.message).join(' ') : e instanceof Error ? e.message : String(e)
       if (e instanceof ApiError && e.status === 409) {
         toast.error(t('payroll.conflict', { name }))
         done = true
       } else if (alive.current && e instanceof ApiError && e.details.some((d) => d.field && fields.includes(d.field))) {
         flushSync(() => setErrs(toErrs(e)))
         // the first refused field may sit under a pinned column or past the edge: when HR is still on this row (or on no control),
-        // it takes the focus, which brings it into view and reads its message; a control HR has moved to keeps the focus
+        // it takes the focus, which brings it into view and reads its message; a control HR has moved to (another row, the panel,
+        // a dialog) keeps the focus, and the refusal is also a toast
         const at = document.activeElement
         if (at === document.body || row.current?.contains(at)) row.current?.querySelector<HTMLElement>('[aria-invalid="true"]')?.focus()
+        else toast.error(t('payroll.notSaved', { name, message }))
       }
       // the row is gone (another group or period, another page) or no cell of it is named: the refusal as a toast, naming the employee
-      else toast.error(t('payroll.notSaved', { name, message: e instanceof ApiError && e.details.length ? e.details.map((d) => d.message).join(' ') : e instanceof Error ? e.message : String(e) }))
+      else toast.error(t('payroll.notSaved', { name, message }))
     } finally {
       // useSave has started the refetch; the typing stays on screen until it lands, so the row never flashes the old values
       await qc.invalidateQueries({ queryKey: queryKey(path) }, { cancelRefetch: false })
@@ -263,7 +269,7 @@ function LineRow({ line, cols, group, path, editable, onOpen, onOverride }: { li
           <Input aria-label={label} value={display(key)} readOnly={busy} dir={text ? 'auto' : 'ltr'} inputMode={text ? undefined : COUNTS.includes(key) ? 'numeric' : 'decimal'} maxLength={text ? 500 : undefined}
             aria-invalid={!!errs[key] || undefined} aria-describedby={[errs[key] && errId, typed(key) && unsavedId].filter(Boolean).join(' ') || undefined}
             className={cn(text ? 'w-44' : 'w-28 text-end', typed(key) && 'border-primary')}
-            // the cell swaps to the value to edit now, not after the event: a browser's select-all on keyboard focus must land on it
+            // the cell swaps to the value to edit inside the event, so the table body's select(), which runs next, selects that value
             onChange={(e) => change(key, e.target.value)} onFocus={() => flushSync(() => setFocused(key))} onBlur={() => setFocused(undefined)} onKeyDown={(e) => e.key === 'Enter' && void commit()} />
           {errs[key] && <p id={errId} className="mt-1 max-w-44 text-xs whitespace-normal text-destructive">{errs[key]}</p>}
         </TableCell>
