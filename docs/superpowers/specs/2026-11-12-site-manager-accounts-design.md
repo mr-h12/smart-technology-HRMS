@@ -120,17 +120,20 @@ applied in:
 
 HR's screens do not change: the site manager's row is on the day sheet and the period grid like anyone's.
 
-## Archiving deactivates the account
+## Archiving or deleting deactivates the account
 Archived means a termination date before today in Cairo (`2026-11-11-hide-archived-employees-design.md`).
 - **At once:** a `PATCH employees/{id}` that changes the termination date and leaves the employee archived deactivates the linked
   account in the same transaction.
 - **Overnight:** the scheduled job `employees:deactivate-archived-accounts` (`backend/routes/console.php`, a `Schedule::call`,
   no queue) runs daily at 00:05 Africa/Cairo and deactivates the account of every archived linked employee. It catches a
   termination date that passes later, and makes up a missed night. Replay command: `backend/CLAUDE.md`.
-- Both go through `UserAdministration::deactivateForArchivedEmployee`: `is_active` false, sessions revoked, `USER_DEACTIVATED`
-  audited on `users` with `employee_id` and `reason: employee_archived` in the new values. The actor is the HR user who saved, or
-  none for the job. HR's account reach is not checked, since the system acts. An inactive account is left as is, with no second
-  audit row.
+- **On delete:** a `DELETE employees/{id}` deactivates the linked account in the same transaction, with the employee row locked.
+  A refused delete (Leave's veto on open requests) leaves the account active. Without it, the partial unique index would free a
+  still-active account for another employee.
+- All three go through `UserAdministration::deactivateForEmployee`: `is_active` false, sessions revoked, `USER_DEACTIVATED`
+  audited on `users` with `employee_id` and `reason` (`employee_archived`, or `employee_deleted` on delete) in the new values. The
+  actor is the HR user who saved or deleted, or none for the job. HR's account reach is not checked, since the system acts. An
+  inactive account is left as is, with no second audit row.
 - A deactivated account cannot sign in (`account_suspended`).
 - Clearing the termination date does not reactivate the account. Reactivate it by hand (`PATCH /api/v1/users/{id}/reactivate`)
   **after reactivating the employee**: an account reactivated while its employee is still archived is deactivated again by the
@@ -159,6 +162,9 @@ sites), and on a linked employee becomes «مواقع ومهندسو مدير ا
   reactivate, sign-in is refused; a date of today waits for the night and a second sweep writes nothing; HR's save deactivates an
   account outside HR's reach; an unlinked archived employee and a linked active one are untouched; the schedule is `5 0 * * *`
   Africa/Cairo.
+- Delete: deleting a linked employee deactivates at once (sessions revoked, audit row with `employee_deleted` and HR as the actor,
+  the account cannot be linked again, sign-in is refused); deleting an unlinked employee changes no account; a delete refused for
+  open leave requests leaves the account active; deleting an archived site manager's record writes no second audit row.
 - Own record: the site day (list and write), the employees list, leave requests and balances, team fares, notifications, the
   summary count and the crew search.
 
@@ -181,3 +187,6 @@ Known when built; not scheduled.
   the owner).
 - `POST /api/v1/attendance/site-day/crew` does not refuse the site manager's own employee id specifically; the id is no longer
   shown to them anywhere.
+- The account's name is the employee's Arabic name at link time; renaming the employee does not rename the account.
+- Edit mode starts from the profile as loaded with the page: a concurrent change to the account's sites by someone else is
+  overwritten on save.

@@ -382,6 +382,64 @@ class SiteManagerAccountTest extends TestCase
         $this->assertFalse($this->isActive($userId));
     }
 
+    public function test_deleting_a_linked_employee_deactivates_the_account_at_once(): void
+    {
+        $e = $this->employee('engineer');
+        $userId = (string) $this->make($e, $this->body())->assertCreated()->json('data.site_manager.id');
+        $token = $this->postJson('/api/v1/auth/login', ['email' => self::EMAIL, 'password' => self::PASSWORD])->assertCreated()->json('data.token');
+        $this->app['auth']->forgetGuards();
+        $hr = $this->signIn('hr');
+
+        $this->deleteJson("/api/v1/employees/{$e}")->assertNoContent();
+        $this->assertFalse($this->isActive($userId));
+        $this->assertSame(0, DB::table('user_sessions')->where('user_id', $userId)->whereNull('deleted_at')->count());
+        $this->assertEquals([['is_active' => false, 'employee_id' => $e, 'reason' => 'employee_deleted']], $this->deactivations($userId));
+        $this->assertSame($hr->id, DB::table('audit_log')->where(['event' => 'USER_DEACTIVATED', 'entity_id' => $userId])->value('user_id'));
+        // The partial unique index frees the account once its employee is deleted; being inactive, it cannot be linked again.
+        $this->assertRefused($this->make($this->employee('engineer'), ['user_id' => $userId]), 'user_id', 'not_site_manager_account');
+
+        $this->app['auth']->forgetGuards();
+        $this->withToken($token)->getJson('/api/v1/auth/me')->assertUnauthorized();
+        $this->flushHeaders();
+        $this->postJson('/api/v1/auth/login', ['email' => self::EMAIL, 'password' => self::PASSWORD])
+            ->assertStatus(403)->assertJsonPath('error.code', 'account_suspended');
+    }
+
+    public function test_deleting_an_unlinked_employee_changes_no_account(): void
+    {
+        $userId = (string) $this->make($this->employee('engineer'), $this->body())->assertCreated()->json('data.site_manager.id');
+        $other = $this->makeUser('manager');
+
+        $this->deleteJson("/api/v1/employees/{$this->employee('engineer')}")->assertNoContent();
+        $this->assertTrue($this->isActive($userId));
+        $this->assertTrue($this->isActive((string) $other->id));
+        $this->assertSame(0, DB::table('audit_log')->where('event', 'USER_DEACTIVATED')->count());
+    }
+
+    public function test_a_refused_delete_leaves_the_account_active(): void
+    {
+        $this->leaveTypes();
+        $e = $this->employee('engineer');
+        $userId = (string) $this->make($e, $this->body())->assertCreated()->json('data.site_manager.id');
+        $this->postJson('/api/v1/leave/requests', ['employee_id' => $e, 'kind' => 'annual', 'from_date' => '2026-08-20', 'to_date' => '2026-08-20'])->assertCreated();
+
+        $this->deleteJson("/api/v1/employees/{$e}")->assertStatus(409)->assertJsonPath('error.code', 'leave_employee_has_open_requests');
+        $this->assertNull(DB::table('employees')->where('id', $e)->value('deleted_at'));
+        $this->assertTrue($this->isActive($userId));
+        $this->assertSame(0, DB::table('audit_log')->where('event', 'USER_DEACTIVATED')->count());
+    }
+
+    public function test_deleting_an_archived_site_managers_record_writes_no_second_deactivation(): void
+    {
+        $e = $this->employee('engineer');
+        $userId = (string) $this->make($e, $this->body())->assertCreated()->json('data.site_manager.id');
+        $this->patchJson("/api/v1/employees/{$e}", ['termination_date' => '2026-08-01'])->assertOk();
+
+        $this->deleteJson("/api/v1/employees/{$e}")->assertNoContent();
+        $this->assertFalse($this->isActive($userId));
+        $this->assertEquals([['is_active' => false, 'employee_id' => $e, 'reason' => 'employee_archived']], $this->deactivations($userId));
+    }
+
     /**
      * A site manager homed at one of their own sites, and a co-worker there.
      *

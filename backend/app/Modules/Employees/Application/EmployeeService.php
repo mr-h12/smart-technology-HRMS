@@ -229,7 +229,7 @@ final class EmployeeService
     {
         Employee::archived()->whereNotNull('user_id')->when($employeeId !== null, fn (Builder $q) => $q->whereKey($employeeId))
             ->orderBy('id')->get(['id', 'user_id'])
-            ->each(fn (Employee $e) => $this->users->deactivateForArchivedEmployee((string) $e->user_id, (string) $e->id));
+            ->each(fn (Employee $e) => $this->users->deactivateForEmployee((string) $e->user_id, (string) $e->id, 'employee_archived'));
     }
 
     /**
@@ -290,9 +290,19 @@ final class EmployeeService
         return $this->show($id);
     }
 
+    /**
+     * Deleting a linked employee deactivates their account in the same transaction (owner, 2026-11-12); a refused delete (Leave's veto
+     * on open requests) leaves it active. Locked as makeSiteManager locks, so a link cannot land on a row being deleted.
+     */
     public function delete(string $id): void
     {
-        Employee::findOrFail($id)->delete();
+        DB::transaction(function () use ($id): void {
+            $employee = Employee::lockForUpdate()->findOrFail($id);
+            $employee->delete();
+            if ($employee->user_id !== null) {
+                $this->users->deactivateForEmployee((string) $employee->user_id, $id, 'employee_deleted');
+            }
+        });
     }
 
     /**

@@ -124,12 +124,15 @@ final class UserAdministration
     }
 
     /**
-     * The linked employee is archived, so the account stops (owner, 2026-11-12). The system acts on HR's employee save or the nightly
-     * sweep, so the caller's reach is not checked. An inactive account is left as is; reactivating it stays a manual setActive.
+     * The linked employee is archived or deleted, so the account stops (owner, 2026-11-12). The system acts on HR's employee save or
+     * delete, or the nightly sweep, so the caller's reach is not checked. An inactive account is left as is; reactivating it stays a
+     * manual setActive.
+     *
+     * @param  'employee_archived'|'employee_deleted'  $reason
      */
-    public function deactivateForArchivedEmployee(string $userId, string $employeeId): void
+    public function deactivateForEmployee(string $userId, string $employeeId, string $reason): void
     {
-        DB::transaction(fn () => $this->applyActive(User::findOrFail($userId), false, ['employee_id' => $employeeId, 'reason' => 'employee_archived']));
+        DB::transaction(fn () => $this->applyActive(User::findOrFail($userId), false, ['employee_id' => $employeeId, 'reason' => $reason]));
     }
 
     /** @param  array<string, string>  $why  added to the audit row's new values */
