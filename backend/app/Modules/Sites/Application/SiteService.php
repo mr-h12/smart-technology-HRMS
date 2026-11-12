@@ -136,11 +136,15 @@ final class SiteService
         return $this->show($id);
     }
 
-    /** @return list<array{id: string, name: string}> the active accounts a site can have as its managers */
+    /**
+     * The email tells two namesakes apart; every role holding site.assign_manager also holds user.view (ManagerScopeTest).
+     *
+     * @return list<array{id: string, name: string, email: string}> the active accounts a site can have as its managers
+     */
     public function managerCandidates(): array
     {
-        return array_values(User::whereIn('id', $this->managerCandidateIds())->orderBy('name')->get(['id', 'name'])
-            ->map(fn (User $u) => ['id' => (string) $u->id, 'name' => $u->name])->all());
+        return array_values(User::whereIn('id', $this->managerCandidateIds())->orderBy('name')->get(['id', 'name', 'email'])
+            ->map(fn (User $u) => ['id' => (string) $u->id, 'name' => $u->name, 'email' => $u->email])->all());
     }
 
     /** @return list<string> */
