@@ -104,13 +104,21 @@ final class RenderHrForm implements ShouldQueue
             'font' => self::asset('ibm-plex-sans-arabic-arabic-600-normal.woff2', 'font/woff2'),
             'boldFont' => self::asset('ibm-plex-sans-arabic-arabic-700-normal.woff2', 'font/woff2'),
         ];
-        if ($export->form_type === AdvanceRequestForms::FORM) {
+        if ($export->form_type === AttendanceRequestForms::ADVANCE) {
             return view('hr-forms.advance-request', [
                 ...$common, 'plainPaper' => true,
                 'requestDate' => ArabicFormDate::format($snapshot['request_date']),
                 'hireDate' => $snapshot['hire_date'] === null ? null : ArabicFormDate::format($snapshot['hire_date']),
                 'amount' => bcround($snapshot['amount'], 2),
                 'salary' => $snapshot['salary'] === null ? null : bcround($snapshot['salary'], 2),
+            ])->render();
+        }
+        if ($export->form_type === AttendanceRequestForms::OVERTIME) {
+            return view('hr-forms.overtime-request', [
+                ...$common, 'plainPaper' => true,
+                'workDate' => ArabicFormDate::format($snapshot['request_date']),
+                'checkout' => substr($snapshot['checkout_time'], 0, 5),
+                'duration' => ArabicServiceDuration::hoursAndMinutes($snapshot['minutes']),
             ])->render();
         }
         if ($export->form_type === LeaveRequestForms::FORM) {

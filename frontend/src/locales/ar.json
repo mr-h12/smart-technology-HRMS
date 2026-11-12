@@ -1359,7 +1359,10 @@
     "previousAdvance": "سلفة سابقة",
     "yes": "نعم",
     "no": "لا",
-    "financeRemarks": "ملاحظات المالية"
+    "financeRemarks": "ملاحظات المالية",
+    "overtimeRequest": "نموذج طلب عمل إضافي",
+    "overtimeReason": "سبب العمل الإضافي",
+    "printOnly": "الطباعة لا تغيّر الحضور أو مدخلات الرواتب أو الطلب."
   },
   "attendanceRequests": {
     "paperDateOptional": "تاريخ القرار الورقي (اختياري)",

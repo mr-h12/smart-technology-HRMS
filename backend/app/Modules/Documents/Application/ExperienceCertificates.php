@@ -139,7 +139,7 @@ final class ExperienceCertificates
     {
         return DB::transaction(function () use ($id, $form, $approver): stdClass {
             $export = $this->find($id, lock: true);
-            if ($export->form_type !== $form || ($approver !== null && $export->approved_by !== $approver) || $export->stage !== ($form === AdvanceRequestForms::FORM ? 'unsigned' : 'signed') || $export->status !== 'failed') {
+            if ($export->form_type !== $form || ($approver !== null && $export->approved_by !== $approver) || $export->stage !== (AttendanceRequestForms::isUnsignedOnly($form) ? 'unsigned' : 'signed') || $export->status !== 'failed') {
                 throw new ConcurrencyConflict;
             }
             DB::table('hr_form_exports')->where('id', $id)->update([
@@ -155,7 +155,7 @@ final class ExperienceCertificates
     {
         return DB::table('hr_form_exports')->where('employee_id', $employee)->whereNull('deleted_at')
             ->when($form !== null, fn ($query) => $query->where('form_type', $form))
-            ->when(! $includePay, fn ($query) => $query->where('form_type', '!=', AdvanceRequestForms::FORM))
+            ->when(! $includePay, fn ($query) => $query->where('form_type', '!=', AttendanceRequestForms::ADVANCE))
             ->orderByDesc('created_at')->orderByDesc('id')->paginate(25);
     }
 

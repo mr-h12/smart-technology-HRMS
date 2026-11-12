@@ -2,7 +2,7 @@
 
 declare(strict_types=1);
 
-use App\Modules\Documents\Application\AdvanceRequestForms;
+use App\Modules\Documents\Application\AttendanceRequestForms;
 use App\Modules\Documents\Application\ExperienceCertificates;
 use App\Modules\Documents\Application\LeaveRequestForms;
 use App\Modules\Documents\Application\RenderHrForm;
@@ -24,6 +24,7 @@ $app = require __DIR__.'/../../bootstrap/app.php';
 $app->make(Kernel::class)->bootstrap();
 $leave = getenv('HRMS_SMOKE_FORM') === 'leave-request';
 $advance = getenv('HRMS_SMOKE_FORM') === 'advance-request';
+$overtime = getenv('HRMS_SMOKE_FORM') === 'overtime-request';
 try {
     if ($argv[1] === 'setup') {
         $employee = app(EmployeeService::class)->create([
@@ -31,15 +32,16 @@ try {
             'hire_date' => '2022-01-01', 'salary' => '9000', 'national_id' => '12345678901234', 'department' => 'اختبار',
         ])['id'];
         $hr = User::create(['name' => 'hr', 'email' => 'hr@synthetic.test', 'password' => Str::random(24), 'role_id' => Role::where('slug', 'hr')->value('id'), 'is_active' => true]);
-        if ($advance) {
+        if ($advance || $overtime) {
             $id = (string) Str::uuid7();
             $site = Site::create(['name_ar' => 'موقع تجريبي', 'kind' => 'work']);
             DB::table('attendance_requests')->insert(['id' => $id, 'employee_id' => $employee, 'site_id' => $site->id,
-                'date' => now('Africa/Cairo')->toDateString(), 'type' => 'advance', 'amount' => '250.5', 'requested_by' => $hr->id]);
-            $row = app(AdvanceRequestForms::class)->create($id, $hr->id, (string) Str::uuid7(), [
-                'job_title' => 'مهندسة اختبار', 'reason' => 'سبب تجريبي', 'repayment_method' => 'cash',
-                'previous_advance' => false, 'finance_remarks' => 'ملاحظات تجريبية',
-            ], null);
+                'date' => now('Africa/Cairo')->toDateString(), 'type' => $advance ? 'advance' : 'overtime', 'requested_by' => $hr->id,
+                ...($advance ? ['amount' => '250.5'] : ['minutes' => 95, 'in_time' => '09:00', 'out_time' => '17:35'])]);
+            $row = app(AttendanceRequestForms::class)->create($id, $hr->id, (string) Str::uuid7(), [
+                'job_title' => 'مهندسة اختبار', 'reason' => 'سبب تجريبي',
+                ...($advance ? ['repayment_method' => 'cash', 'previous_advance' => false, 'finance_remarks' => 'ملاحظات تجريبية'] : []),
+            ], null, $advance ? 'advance' : 'overtime');
         } elseif ($leave) {
             $requests = app(LeaveRequests::class);
             $from = now('Africa/Cairo')->next('Monday')->toDateString();

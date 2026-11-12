@@ -1,28 +1,17 @@
 @extends('hr-forms.layout')
 
 @section('form-css')
-    main { margin: 8mm; padding: 4mm 8mm 8mm; border: 1px solid; font-size: 11pt; line-height: 1.5; }
-    h1 { font-size: 19pt; margin-bottom: 3mm; }
-    .advance { width: 100%; table-layout: fixed; border-collapse: collapse; }
-    .advance th, .advance td { padding: 1mm 2mm; overflow-wrap: anywhere; }
-    .advance-details th, .advance-details td { border: 1px solid #333; }
-    .advance th { width: 24%; text-align: start; }
-    .advance th:last-child { text-align: left; }
-    .advance td { text-align: center; }
-    .advance .free { text-align: start; white-space: pre-wrap; }
-    .advance .fill { border-bottom: 1px dotted; }
-    .block-title { background-color: #dedede; print-color-adjust: exact; font-weight: 700; text-align: center; border-block: 1px solid; padding: 1mm; margin: 3mm 0 1mm; }
+    @include('hr-forms.attendance-request-css')
     .pair { display: flex; justify-content: space-between; gap: 3mm; padding: 1mm 2mm; }
     .pair [lang=en] { text-align: left; }
     .box { width: 3mm; height: 3mm; border: 1px solid; display: inline-block; vertical-align: middle; text-align: center; line-height: 2.6mm; }
     .hand { display: inline-block; width: 34mm; border-bottom: 1px dotted; }
     .paper-signatures { break-inside: avoid; }
-    bdi { white-space: nowrap; }
 @endsection
 
 @section('document')
 <h1>طلب سلفة <span lang="en" dir="ltr">/ Advance Request</span></h1>
-<table class="advance advance-details">
+<table class="request-table request-table-details">
     <tr><th>التاريخ</th><td>{{ $requestDate['weekday'] }} الموافق <bdi>{{ $requestDate['date'] }}</bdi></td><th lang="en" dir="ltr">Date</th></tr>
     <tr><th>الاسم</th><td>{{ $snapshot['name_ar'] }} @if (!empty($snapshot['name_en'])) / <bdi>{{ $snapshot['name_en'] }}</bdi> @endif</td><th lang="en" dir="ltr">Name</th></tr>
     <tr><th>رقم الموظف</th><td><bdi>{{ $snapshot['code'] }}</bdi></td><th lang="en" dir="ltr">Employee No.</th></tr>
@@ -45,7 +34,7 @@
 <div class="pair"><span>التوقيع <span class="hand"></span></span><span lang="en" dir="ltr">Signature <span class="hand"></span></span></div>
 <div class="pair"><span>التاريخ: ____ / ____ / ____</span><span lang="en" dir="ltr">Date: ____ / ____ / ____</span></div>
 <div class="block-title">قسم الشؤون المالية والإدارية / <span lang="en" dir="ltr">Finance &amp; Administration</span></div>
-<table class="advance">
+<table class="request-table">
     <tr><th>راتب الموظف</th><td>@if ($salary === null) غير متاح / <span lang="en" dir="ltr">Unavailable</span> @else <bdi>{{ $salary }}</bdi> @endif</td><th lang="en" dir="ltr">Employee Salary</th></tr>
     <tr><th>تاريخ التعيين</th><td>@if ($hireDate) {{ $hireDate['weekday'] }} الموافق <bdi>{{ $hireDate['date'] }}</bdi> @else — @endif</td><th lang="en" dir="ltr">Hiring Date</th></tr>
     <tr><th>هل توجد سلفة سابقة؟</th><td>{{ $snapshot['previous_advance'] ? 'نعم / Yes' : 'لا / No' }}</td><th lang="en" dir="ltr">Any Previous Loan?</th></tr>

@@ -12,7 +12,7 @@ import { Dialog, DialogBody, DialogContent, DialogFooter, DialogHeader, DialogTi
 import { Input, Textarea } from '@/components/ui/input'
 import { useApi, useList, useSave } from '@/lib/query'
 import { useAuth } from '@/lib/auth'
-import { AdvanceRequestPdf } from './advance-request-pdf'
+import { AttendanceRequestPdf } from './attendance-request-pdf'
 
 type RequestRow = {
   id: string
@@ -153,7 +153,7 @@ function RequestDialog({ row, value, close }: { row: RequestRow; value: string |
               <div><dt>{t('attendanceRequests.paperDate')}</dt><dd><bdi>{row.paper_decision_date ?? '—'}</bdi></dd></div>
             </dl>
           )}
-          {row.type === 'advance' && row.employee && can('employee.view.all') && (can('hr_forms.generate') || can('hr_forms.view')) && <AdvanceRequestPdf id={row.id} />}
+          {row.employee && (row.type === 'overtime' || can('employee.view.all')) && (can('hr_forms.generate') || can('hr_forms.view')) && <AttendanceRequestPdf id={row.id} type={row.type} />}
           {refusing && (
             <label className="grid gap-1">
               {t('attendanceRequests.refusalReason')}

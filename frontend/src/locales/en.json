@@ -1328,7 +1328,10 @@
     "previousAdvance": "Previous advance",
     "yes": "Yes",
     "no": "No",
-    "financeRemarks": "Finance remarks"
+    "financeRemarks": "Finance remarks",
+    "overtimeRequest": "Overtime request PDF",
+    "overtimeReason": "Reason for overtime",
+    "printOnly": "Printing does not change attendance, payroll inputs, or the request."
   },
   "attendanceRequests": {
     "paperDateOptional": "Paper decision date (optional)",

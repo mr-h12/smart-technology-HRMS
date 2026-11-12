@@ -6,6 +6,7 @@ mkdir -p "$output"
 image="${HRMS_PDF_IMAGE:-hrms-php-forms}"
 form="${HRMS_SMOKE_FORM:-experience-certificate}"
 case "$form" in
+  overtime-request) phrases=('سارة مثال للاختبار' 'طلب عمل إضافي' 'Overtime Request' 'Checkout Time' '17:35' 'ساعة واحدة');;
   advance-request) phrases=('سارة مثال للاختبار' 'طلب سلفة' 'Employee Salary' '9000.00' '250.50' 'General Manager');;
   leave-request) phrases=('سارة مثال للاختبار' 'نموذج طلب إجازة' 'توقيع مدير الشركة');;
   experience-certificate) phrases=('سارة مثال للاختبار' 'شهادة خبرة' 'الشركة');;
@@ -29,7 +30,7 @@ unsigned=$(docker exec "$app" php tests/Smoke/render-hr-form.php setup)
 docker exec "$app" php artisan queue:work redis --queue=pdf --once --tries=3 -v
 docker exec "$app" php tests/Smoke/render-hr-form.php export "$unsigned" > "$output/unsigned.pdf"
 pdfs=("$output/unsigned.pdf")
-if [[ "$form" != advance-request ]]; then
+if [[ "$form" != advance-request && "$form" != overtime-request ]]; then
   signed=$(docker exec "$app" php tests/Smoke/render-hr-form.php approve "$unsigned")
   docker exec "$app" php artisan queue:work redis --queue=pdf --once --tries=3 -v
   docker exec "$app" php tests/Smoke/render-hr-form.php export "$signed" > "$output/signed.pdf"

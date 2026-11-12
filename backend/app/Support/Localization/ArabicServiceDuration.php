@@ -30,6 +30,14 @@ final class ArabicServiceDuration
         : self::part($count, 'يوم واحد', 'يومان', 'أيام', 'يومًا');
     }
 
+    public static function hoursAndMinutes(int $minutes): string
+    {
+        return implode(' و', array_filter([
+            self::part(intdiv($minutes, 60), 'ساعة واحدة', 'ساعتان', 'ساعات', 'ساعة'),
+            self::part($minutes % 60, 'دقيقة واحدة', 'دقيقتان', 'دقائق', 'دقيقة'),
+        ]));
+    }
+
     private static function part(int $count, string $singular, string $dual, string $plural, string $accusative): string
     {
         return match (true) {

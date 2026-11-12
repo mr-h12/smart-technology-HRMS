@@ -9,9 +9,11 @@ import { download } from './hr-forms'
 
 type Export = { id: string; serial_number: number; status: 'pending' | 'ready' | 'failed' }
 
-export function AdvanceRequestPdf({ id }: { id: string }) {
+export function AttendanceRequestPdf({ id, type }: { id: string; type: 'advance' | 'overtime' }) {
   const { t } = useTranslation()
   const { can } = useAuth()
+  const advance = type === 'advance'
+  const form = `${type}-request`
   const path = `/attendance/requests/${id}/hr-form-exports`
   const { data, err, reload } = useApi<{ exports: Export[] }>(can('hr_forms.view') ? path : null, { fresh: true })
   const save = useSave()
@@ -34,22 +36,24 @@ export function AdvanceRequestPdf({ id }: { id: string }) {
   const generate = (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault()
     const data = Object.fromEntries(new FormData(event.currentTarget))
-    const body = { ...data, previous_advance: data.previous_advance === 'yes' }
+    const body = advance ? { ...data, previous_advance: data.previous_advance === 'yes' } : data
     const key = JSON.stringify(body)
     void run(async () => {
       if (request.current?.body !== key) request.current = { body: key, key: crypto.randomUUID() }
-      await save(`/attendance/requests/${id}/hr-forms/advance-request`, { body: { ...body, idempotency_key: request.current.key } }, [path])
+      await save(`/attendance/requests/${id}/hr-forms/${form}`, { body: { ...body, idempotency_key: request.current.key } }, [path])
       request.current = undefined
     })
   }
 
   return (
     <section className="space-y-3 border-t pt-3">
-      <h3 className="font-semibold">{t('hrForms.advanceRequest')}</h3>
+      <h3 className="font-semibold">{t(advance ? 'hrForms.advanceRequest' : 'hrForms.overtimeRequest')}</h3>
+      {!advance && <p className="text-sm text-muted-foreground">{t('hrForms.printOnly')}</p>}
       <ErrorBanner err={error ?? err} shown={[]} />
       {can('hr_forms.generate') && (
         <form className="grid gap-3 sm:grid-cols-2" onSubmit={generate}>
           <label className="grid gap-1">{t('hrForms.jobTitle')}<Input name="job_title" maxLength={160} required disabled={busy} /></label>
+          {advance && <>
           <label className="grid gap-1">{t('hrForms.repaymentMethod')}
             <select className="min-h-tap rounded-md border bg-background px-2" name="repayment_method" required disabled={busy} defaultValue="">
               <option value="" disabled>{t('hrForms.repaymentMethod')}</option>
@@ -65,8 +69,9 @@ export function AdvanceRequestPdf({ id }: { id: string }) {
               <option value="no">{t('hrForms.no')}</option>
             </select>
           </label>
-          <label className="grid gap-1">{t('hrForms.advanceReason')}<Textarea name="reason" maxLength={300} required disabled={busy} /></label>
-          <label className="grid gap-1 sm:col-span-2">{t('hrForms.financeRemarks')}<Textarea name="finance_remarks" maxLength={300} disabled={busy} /></label>
+          </>}
+          <label className="grid gap-1">{t(advance ? 'hrForms.advanceReason' : 'hrForms.overtimeReason')}<Textarea name="reason" maxLength={300} required disabled={busy} /></label>
+          {advance && <label className="grid gap-1 sm:col-span-2">{t('hrForms.financeRemarks')}<Textarea name="finance_remarks" maxLength={300} disabled={busy} /></label>}
           <Button disabled={busy} className="sm:col-span-2">{t(data?.exports.length ? 'hrForms.regenerate' : 'hrForms.generate')}</Button>
         </form>
       )}
@@ -74,8 +79,8 @@ export function AdvanceRequestPdf({ id }: { id: string }) {
         {data?.exports.map((row) => (
           <li key={row.id} className="flex flex-wrap items-center gap-2 rounded border p-2">
             <span className="me-auto">{t('hrForms.serial', { serial: row.serial_number })} · {t(`hrForms.${row.status}`)}</span>
-            {row.status === 'ready' && <Button type="button" variant="outline" onClick={() => void download(row.id, String(row.serial_number), 'unsigned', 'advance-request').catch(setError)}>{t('hrForms.download')}</Button>}
-            {row.status === 'failed' && can('hr_forms.generate') && <Button disabled={busy} onClick={() => void run(() => save(`/hr-form-exports/${row.id}/retry-advance-request`, {}, [path]))}>{t('hrForms.retry')}</Button>}
+            {row.status === 'ready' && <Button type="button" variant="outline" onClick={() => void download(row.id, String(row.serial_number), 'unsigned', form).catch(setError)}>{t('hrForms.download')}</Button>}
+            {row.status === 'failed' && can('hr_forms.generate') && <Button disabled={busy} onClick={() => void run(() => save(`/hr-form-exports/${row.id}/retry-${form}`, {}, [path]))}>{t('hrForms.retry')}</Button>}
           </li>
         ))}
       </ul>
