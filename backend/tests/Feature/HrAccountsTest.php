@@ -8,7 +8,7 @@ use Illuminate\Support\Facades\DB;
 use Illuminate\Testing\TestResponse;
 use Tests\TestCase;
 
-/** HR manages HR and team-lead accounts, never one whose role holds an `.all` grant HR lacks (owner, 2026-11-08, R22). */
+/** HR manages HR and site-manager accounts, never one whose role holds an `.all` grant HR lacks (owner, 2026-11-08, R22). */
 class HrAccountsTest extends TestCase
 {
     use RefreshDatabase;
@@ -24,7 +24,7 @@ class HrAccountsTest extends TestCase
             ->assertJsonPath('error.message', __('identity.refusal.account_out_of_reach'));
     }
 
-    public function test_hr_creates_a_team_lead_account(): void
+    public function test_hr_creates_a_site_manager_account(): void
     {
         $this->signIn('hr');
         $id = $this->postJson('/api/v1/users', ['name' => 'منى', 'email' => 'mona@smart.test', 'password' => 'abcd1234', 'role_id' => $this->roleId('manager')])
@@ -89,7 +89,7 @@ class HrAccountsTest extends TestCase
         $this->assertSame([true], collect($this->getJson('/api/v1/users')->json('data'))->pluck('manageable')->unique()->values()->all());
     }
 
-    public function test_a_team_lead_without_user_manage_is_refused(): void
+    public function test_a_site_manager_without_user_manage_is_refused(): void
     {
         $this->signIn('manager');
         $this->postJson('/api/v1/users', ['name' => 'x', 'email' => 'x@smart.test', 'password' => 'abcd1234', 'role_id' => $this->roleId('manager')])

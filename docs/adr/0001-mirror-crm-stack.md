@@ -15,5 +15,5 @@ The frontend keeps the HRMS demo's look (Tailwind 4, shadcn/Radix, the shared to
 
 ## Consequences
 - `NUMERIC(18,6)` also covers the "no intermediate rounding" rule needed to match the Excel results.
-- The CRM's login (bearer session, lockout, device list) is reused, but without self-service password change: only the Developer role sets passwords.
+- The CRM's login (bearer session, lockout, device list) is reused, but without self-service password change: only the Developer role sets passwords. 2026-11-08 (R22): HR also creates accounts and sets passwords, within its reach.
 - 2026-11-02 (UI refresh, owner decision 1): the dark theme's accent is orange (`#fb923c`, navy text 8.46:1), no longer the CRM's indigo (`#818cf8`). Light is the default theme and the one HR sees, and one accent hue keeps the same button the same colour in both themes. The other tokens still match the CRM's.

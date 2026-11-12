@@ -187,7 +187,7 @@ final class UserAdministration
 
     /**
      * No escalation (owner, 2026-11-08, R22): without role.manage, user.manage reaches only accounts and roles whose role
-     * holds no `.all` grant the actor lacks. Today that is HR over HR and team leads, never the CEO or the Developer.
+     * holds no `.all` grant the actor lacks. Today that is HR over HR and site managers, never the CEO or the Developer.
      */
     private function manageable(string $roleId): bool
     {

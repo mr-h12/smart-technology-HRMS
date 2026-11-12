@@ -23,7 +23,7 @@ Mirror the CRM (github.com/mr-h12/smart-technology-CRM, see `docs/adr/0001-mirro
 - Office staff attendance comes from the fingerprint import and HR, not from managers.
 - HR can view and edit everything managers enter. Every manager action notifies HR: instantly for requests, warnings and edits to past days; in a daily digest for routine attendance.
 - Approval flow: manager → HR → (HR chooses) CEO. Escalation is HR's per-request decision, not a rule.
-- The Developer and HR create accounts and set or change passwords (R22, owner 2026-11-08). HR manages only accounts whose role holds no `.all` permission HR lacks (today: HR and team-lead accounts, not the Developer or the CEO); the rule is by permission, not role name. There is no self-service password reset or change.
+- The Developer and HR create accounts and set or change passwords (R22, owner 2026-11-08). HR manages only accounts whose role holds no `.all` permission HR lacks (today: HR and site-manager accounts, not the Developer or the CEO); the rule is by permission, not role name. There is no self-service password reset or change.
 - Roles and permissions are data (CRM-style `resource.action.scope`), editable from the developer console. Check permissions by name, never by role name.
 
 ## Domain
