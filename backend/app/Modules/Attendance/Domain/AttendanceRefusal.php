@@ -32,11 +32,13 @@ enum AttendanceRefusal: string
     case CrewOnOtherSite = 'crew_on_other_site';
     case CrewHasDay = 'crew_has_day';
     case CrewMovedHasDay = 'crew_moved_has_day';
+    // the site workbook's confirm (W15): the stored days changed since the preview
+    case PreviewStale = 'preview_stale';
 
     public function status(): int
     {
         return match ($this) {
-            self::PeriodAlreadyLocked, self::LeaveDaysBlocked => 409,
+            self::PeriodAlreadyLocked, self::LeaveDaysBlocked, self::PreviewStale => 409,
             self::PeriodLocked => 423,
             self::FutureDate, self::EmployeeNotActive, self::MissingDaysUnconfirmed, self::PeriodNotLocked, self::LeaveTypeMissing,
             self::TemplateMismatch, self::UnreadableFile, self::TooManyRows, self::SiteNotInReach, self::LeaveNeedsRequest,

@@ -121,10 +121,18 @@ final class AttendanceController
         $this->assertAllScope($request);
         /** @var UploadedFile $file */
         $file = $request->validate(['file' => self::FILE])['file'];
-        $user = $request->user();
-        $mayCreate = $user !== null && app(AuthorizeAction::class)->decide($user, 'employee.create')->allows(Scope::All);
 
-        return ApiEnvelope::single($request, $this->workbookImport->preview($file->getPathname(), $mayCreate));
+        return ApiEnvelope::single($request, $this->workbookImport->preview($file->getPathname(), $this->mayCreateEmployees($request)));
+    }
+
+    /** The site workbook's confirm (calculations §14 W13, W15): the same file, the preview's token and a keep or replace per conflict. HR only. */
+    public function siteWorkbookConfirm(Request $request): JsonResponse
+    {
+        $this->assertAllScope($request);
+        /** @var array{file: UploadedFile, token: string, choices?: array<string, string>} $q */
+        $q = $request->validate(['file' => self::FILE, 'token' => ['required', 'string'], 'choices' => ['sometimes', 'array'], 'choices.*' => ['in:keep,replace']]);
+
+        return ApiEnvelope::single($request, $this->workbookImport->confirm($q['file']->getPathname(), $q['token'], $q['choices'] ?? [], $this->mayCreateEmployees($request)));
     }
 
     /** The import's preview: the template's rule (P34), view and edit with the narrower scope. Nothing is saved, the upload included. */
@@ -205,6 +213,14 @@ final class AttendanceController
         if (RequestScope::narrowestOwnerId($request, 'attendance.view', 'attendance.edit') !== null) {
             throw AuthorizationRefused::of('attendance.edit');
         }
+    }
+
+    /** Spec «Endpoints and permissions»: a site workbook row creates a new day laborer only for a caller holding employee.create at all scope (W5). */
+    private function mayCreateEmployees(Request $request): bool
+    {
+        $user = $request->user();
+
+        return $user !== null && app(AuthorizeAction::class)->decide($user, 'employee.create')->allows(Scope::All);
     }
 
     /** @return array<string, array<mixed>> */
