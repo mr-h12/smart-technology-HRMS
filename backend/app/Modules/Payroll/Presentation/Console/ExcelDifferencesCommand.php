@@ -39,12 +39,12 @@ final class ExcelDifferencesCommand extends Command
     private const REASONS = [
         'excel_6_bonus_in_minutes' => ['مكافأة في عمود الدقائق (خطأ الإكسل 6)', 'مبلغ مكافأة مكتوب في عمود دقائق خارج الإسكندرية في صف بلا تاريخ، فحسبه الإكسل دقائق بسعر الدقيقة. النظام لا يحتسبه.'],
         'excel_7_pasted_values' => ['قيم مكتوبة بدل المعادلة (خطأ الإكسل 7)', 'خلايا مال اليوم (J) قيم مكتوبة مقرّبة بدل المعادلة؛ النظام يحسب من الدقائق.'],
-        'grace_field' => ['سماح 15 دقيقة للتأخير (§0a)', 'النظام يخصم التأخير بعد سماح 15 دقيقة في اليوم لكل الأنواع (قرار 2026-11-03)؛ الإكسل يخصمه من أول دقيقة.'],
-        'ot_shift_end' => ['الإضافي من نهاية الموعد (سؤال 20)', 'النظام يحسب الإضافي من الانصراف بعد نهاية الموعد (المالك، 2026-11-09)؛ الإكسل يحسبه ساعات العمل ناقص 8 ساعات.'],
-        'absence_monthly_field' => ['خصم الغياب (R21)', 'النظام يخصم يوم أجر عن كل يوم غياب (غ) للمهندسين والعمال المثبتين (المالك، 2026-11-09)؛ عمود الغياب في المجمع صفر.'],
-        'transport_permanent' => ['مواصلات العمال المثبتين (§3)', 'النظام يصرف الأجرة كاملة أو نصفها عن كل يوم عمل بموقع؛ الإكسل يكتب مبلغًا يوميًا بجوار الجدول ولا يضيفه إلى الصافي. الأجرة لكل عامل وموقع هي المبلغ الأكثر تكرارًا في ذلك العمود.'],
-        'per_worker_table' => ['تسعير من جدول العامل (§8)', 'النظام يحمل يومية واحدة لكل عامل وقاعدة بدل واحدة لكل موقع؛ الإكسل سعّر هذا اليوم بغيرهما من جداول المواصلات.'],
-        'excel_filtered_row' => ['صف يخفيه فلتر المجمع (خطأ الإكسل 17)', 'إجمالي المجمع SUBTOTAL(9) لا يعدّ الصفوف التي يخفيها الفلتر، والنظام يصرف صاحب الصف. (حكم مؤقت حتى يؤكد المالك أنه صُرف.)'],
+        'grace_field' => ['سماح 15 دقيقة للتأخير', 'النظام يخصم التأخير بعد سماح 15 دقيقة في اليوم لكل الأنواع (قرار 2026-11-03)؛ الإكسل يخصمه من أول دقيقة.'],
+        'ot_shift_end' => ['الإضافي من نهاية الموعد', 'النظام يحسب الإضافي من الانصراف بعد نهاية الموعد (المالك، 2026-11-09)؛ الإكسل يحسبه ساعات العمل ناقص 8 ساعات.'],
+        'absence_monthly_field' => ['خصم أيام الغياب للمهندسين والعمال المثبتين', 'النظام يخصم يوم أجر عن كل يوم غياب (غ) للمهندسين والعمال المثبتين (المالك، 2026-11-09)؛ عمود الغياب في المجمع صفر.'],
+        'transport_permanent' => ['مواصلات العمال المثبتين', 'النظام يصرف الأجرة كاملة أو نصفها عن كل يوم عمل بموقع؛ الإكسل يكتب مبلغًا يوميًا بجوار الجدول ولا يضيفه إلى الصافي. الأجرة لكل عامل وموقع هي المبلغ الأكثر تكرارًا في ذلك العمود.'],
+        'per_worker_table' => ['تسعير اليوم من جدول العامل', 'النظام يحمل يومية واحدة لكل عامل وقاعدة بدل واحدة لكل موقع؛ الإكسل سعّر هذا اليوم بغيرهما من جداول ورقة «المواصلات».'],
+        'excel_filtered_row' => ['صف يخفيه فلتر المجمع (خطأ الإكسل 17)', 'إجمالي المجمع SUBTOTAL(9) لا يعدّ الصفوف التي يخفيها الفلتر، والنظام يصرف صاحب الصف فيدخل صافيه في إجمالي النظام. (حكم مؤقت حتى يؤكد المالك أنه صُرف.)'],
         'excel_18_lateness_twice' => ['التأخير مخصوم مرتين (خطأ الإكسل 18)', 'عمود O في ورقة العامل يطرح غرامة التأخير L، ثم يطرحها المجمع مرة ثانية في عمود التأخير.'],
         'excel_19_next_row' => ['معادلة تقرأ الصف التالي (خطأ الإكسل 19)', 'عمود O في ورقة العامل يجمع مبلغ خارج الإسكندرية من الصف التالي، فيُحسب المبلغ مرتين.'],
         'excel_20_undated_row' => ['صف بلا تاريخ (خطأ الإكسل 20)', 'صف بعد آخر يوم في الفترة يحمل مبلغًا يدخل في مجموع الإضافي؛ لا يوم في النظام يقابله.'],
@@ -52,7 +52,19 @@ final class ExcelDifferencesCommand extends Command
         'excel_22_empty_out_time' => ['خانة انصراف فارغة (خطأ الإكسل 22)', 'معادلة ساعات العمل في ورقة العامل تعدّ الانصراف الفارغ منتصف الليل، فتعطي حضور 08:00 ست عشرة ساعة عمل منها 8 ساعات إضافي.'],
         'excel_23_shifted_sheet' => ['ورقة مزاحة (خطأ الإكسل 23)', 'المجمع يقرأ خلية فارغة لأن أعمدة ورقة العامل مزاحة، فيصرف 0 عن أيام مسجلة.'],
         'excel_24_previous_period_sheet' => ['ورقة الفترة السابقة (خطأ الإكسل 24)', 'ورقة العامل ما زالت تحمل أيام الفترة السابقة، وصرفها المجمع في هذه الفترة.'],
-        'money_six_decimals' => ['المبالغ بست خانات عشرية', 'النظام يخزن كل مبلغ بست خانات عشرية (NUMERIC(18,6))؛ المبلغ في الإكسل معادلة بكسور أطول.'],
+        'stored_amount_six_decimals' => ['مبلغ يومي مخزن بست خانات عشرية', 'النظام يخزن المبلغ المكتوب لكل يوم بست خانات عشرية؛ الإكسل يحمله معادلة بكسر لا ينتهي، فيختلف مجموع الأيام في الخانة السادسة.'],
+    ];
+
+    /** What a workbook's section says beyond its differences: information, not an expected line. */
+    private const NOTES = [
+        'office' => [
+            'للعلم، وليس فرقًا في الجدول: أُعيد حساب من تركوا العمل (Person-1 وPerson-2 وPerson-3) بأيام الغياب المكتوبة في الإكسل (العمود Y). في التشغيل الفعلي يخصم النظام الأيام التي بعد تاريخ ترك العمل أيامًا خارج الخدمة، كل يوم ÷ 30 من المرتب، وقد يختلف المبلغ عن الإكسل:',
+            '',
+            '- Person-1: آخر يوم عمل 1 أكتوبر (ملاحظة الإكسل)، فبعده 30 يومًا: يخصم النظام 30 × 14000 ÷ 30 = 14,000.00، وخصم الإكسل 24 يومًا = 11,200.00.',
+            '- Person-2: آخر يوم عمل 13 أكتوبر، فبعده 18 يومًا: يخصم النظام 18 × 10000 ÷ 30 = 6,000.00، وخصم الإكسل 12 يومًا = 4,000.00.',
+            '- Person-3: ملاحظة الإكسل «آخر يوم عمل 12 أكتوبر + 9 أيام من رصيد الإجازات»، والملف لا يحدد تاريخ ترك العمل. إن كان 12 أكتوبر فبعده 19 يومًا: يخصم النظام 19 × 11000 ÷ 30 = 6,966.67؛ وإن امتد بأيام الإجازة التسعة تأخر التاريخ وقلّ الخصم. خصم الإكسل 22 يومًا = 8,066.67.',
+            '',
+        ],
     ];
 
     public function handle(): int
@@ -79,6 +91,8 @@ final class ExcelDifferencesCommand extends Command
             return is_string($name) && $name !== '' ? $name : $m[0];
         }, $report);
         $out = $dir.'/2026-10-excel-differences-client.md';
+        touch($out);
+        chmod($out, 0600);
         file_put_contents($out, $copy);
         $this->info("Wrote the client copy to {$out}.");
 
@@ -90,13 +104,15 @@ final class ExcelDifferencesCommand extends Command
     {
         $differences = self::json('expected-differences');
         $md = ['# فروق مرتبات أكتوبر 2026 بين النظام وملفات الإكسل', '',
-            'كل فرق بين ما يحسبه النظام وما صرفه الإكسل لكل شخص، بسببه. «الفرق» هو أثره على الصافي: النظام ناقص الإكسل. الأسماء رموز (Engineer-N، Worker-N، Person-N، Site-N)؛ نسخة العميل بالأسماء خارج المستودع.',
+            'كل فرق بين ما يحسبه النظام وما صرفه الإكسل لكل شخص، بسببه. «الفرق» هو أثره على الصافي: النظام ناقص الإكسل؛ وفي صف يخفيه الفلتر هو أثره على الإجمالي. الأسماء رموز (Engineer-N، Worker-N، Person-N، Site-N)؛ نسخة العميل بالأسماء خارج المستودع.',
             '', 'يُولَّد من ملفات `backend/tests/Fixtures/payroll/2026-10/` بالأمر `php artisan payroll:excel-differences > docs/reports/2026-10-excel-differences.md`، ويثبت `PayrollOctoberTest` أن النظام يعطي هذه الفروق بالضبط.', ''];
         $used = [];
+        $shown = 0;
         foreach (self::WORKBOOKS as $file => $title) {
             $f = self::json($file);
             $people = array_column($f['people'], null, 'label');
             $rows = array_values(array_filter($differences, fn (array $d) => isset($people[$d['label']])));
+            $shown += count($rows);
 
             $excelTotal = '0';
             foreach ($people as $p) {
@@ -109,8 +125,11 @@ final class ExcelDifferencesCommand extends Command
             foreach ($rows as $d) {
                 $amount = Decimal::of($d['amount'], 'amount');
                 $byReason[$d['reason']] = [($byReason[$d['reason']][0] ?? 0) + 1, bcadd($byReason[$d['reason']][1] ?? '0', $amount, 6)];
-                $key = "{$d['label']}|{$d['component']}";
-                $byComponent[$key] = bcadd($byComponent[$key] ?? '0', $amount, 6);
+                if ($d['component'] !== 'net') { // a person's net moves by their other lines; a hidden row's net line moves only the total
+                    foreach (["{$d['label']}|{$d['component']}", "{$d['label']}|net"] as $key) {
+                        $byComponent[$key] = bcadd($byComponent[$key] ?? '0', $amount, 6);
+                    }
+                }
                 $used[$d['reason']] = true;
             }
             $systemTotal = array_reduce(array_column($byReason, 1), fn (string $t, string $a) => bcadd($t, $a, 6), $excelTotal);
@@ -122,17 +141,20 @@ final class ExcelDifferencesCommand extends Command
             }
             array_push($md, '| **إجمالي النظام** | | **'.self::money($systemTotal).'** |', '');
             if ($rows === []) {
-                array_push($md, 'لا فروق: النظام يعطي ما صرفه الإكسل لكل شخص.', '');
-
-                continue;
+                array_push($md, 'لا فروق في هذه الإعادة: النظام يعطي ما صرفه الإكسل لكل شخص بمدخلات الإكسل نفسها.', '');
+            } else {
+                array_push($md, '| الشخص | البند | الإكسل | النظام | الفرق | السبب |', '|---|---|---:|---:|---:|---|');
+                foreach ($rows as $d) {
+                    [$excel, $system] = self::values($people[$d['label']], $d['component'], $byComponent["{$d['label']}|{$d['component']}"] ?? '0');
+                    $md[] = "| {$d['label']} | ".(self::COMPONENTS[$d['component']] ?? $d['component']).' | '.self::money($excel).' | '.self::money($system)
+                        .' | '.self::difference(Decimal::of($d['amount'], 'amount')).' | '.self::reason($d['reason'])[0].': '.$d['note'].' |';
+                }
+                $md[] = '';
             }
-            array_push($md, '| الشخص | البند | الإكسل | النظام | الفرق | السبب |', '|---|---|---:|---:|---:|---|');
-            foreach ($rows as $d) {
-                [$excel, $system] = self::values($people[$d['label']], $d['component'], $byComponent["{$d['label']}|{$d['component']}"]);
-                $md[] = "| {$d['label']} | ".(self::COMPONENTS[$d['component']] ?? $d['component']).' | '.self::money($excel).' | '.self::money($system)
-                    .' | '.self::difference(Decimal::of($d['amount'], 'amount')).' | '.self::reason($d['reason'])[0].': '.$d['note'].' |';
-            }
-            $md[] = '';
+            array_push($md, ...self::NOTES[$file] ?? []);
+        }
+        if ($shown !== count($differences)) {
+            throw new RuntimeException('An expected difference names a person in none of the three workbooks.');
         }
 
         array_push($md, '## الأسباب', '');
@@ -146,7 +168,7 @@ final class ExcelDifferencesCommand extends Command
 
     /**
      * The Excel's value of the person's component and the system's (= Excel + the differences, by the component's sign in the net).
-     * A row the AutoFilter hides counts 0 in the Excel total; the system pays its net.
+     * The net (a row the AutoFilter hides) moves by the person's other lines; its own line is what the Excel total leaves out.
      *
      * @param  array<string, mixed>  $person
      * @param  numeric-string  $difference
@@ -154,11 +176,8 @@ final class ExcelDifferencesCommand extends Command
      */
     private static function values(array $person, string $component, string $difference): array
     {
-        if ($component === 'net') {
-            return ['0', $difference];
-        }
         $excel = self::six($person['excel'][$component] ?? null);
-        $sign = $component === 'extra' ? 1 : Component::from($component)->sign();
+        $sign = in_array($component, ['extra', 'net'], true) ? 1 : Component::from($component)->sign();
 
         return [$excel, bcadd($excel, bcmul((string) $sign, $difference, 6), 6)];
     }

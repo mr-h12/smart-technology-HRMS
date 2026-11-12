@@ -100,9 +100,7 @@ class PayrollOctoberTest extends TestCase
     {
         $this->assertSame(0, Artisan::call('payroll:excel-differences'));
         $committed = base_path('../docs/reports/2026-10-excel-differences.md');
-        if (! is_file($committed)) {
-            $this->markTestSkipped('docs/ is not mounted beside backend/: run from the repository root to compare the committed report.');
-        }
+        $this->assertFileExists($committed, 'docs/ must be mounted beside backend/, read-only: compose ./docs:/var/www/docs:ro, or docker run -v "$WT/docs:/var/www/docs:ro".');
         $this->assertSame(file_get_contents($committed), Artisan::output(),
             'Regenerate it: php artisan payroll:excel-differences > docs/reports/2026-10-excel-differences.md');
     }
@@ -116,6 +114,7 @@ class PayrollOctoberTest extends TestCase
 
         $this->assertSame(0, Artisan::call('payroll:excel-differences', ['--names' => "{$dir}/map.json"]));
         $copy = (string) file_get_contents("{$dir}/2026-10-excel-differences-client.md");
+        $this->assertSame(0600, fileperms("{$dir}/2026-10-excel-differences-client.md") & 0777, 'The copy with names is readable by its owner only.');
         array_map(unlink(...), glob("{$dir}/*") ?: []);
         rmdir($dir);
         $this->assertStringContainsString('| Name One | المواصلات |', $copy);
@@ -133,6 +132,16 @@ class PayrollOctoberTest extends TestCase
         }
     }
 
+    public function test_every_expected_line_names_a_person_of_the_three_workbooks(): void
+    {
+        $labels = [];
+        foreach (['field', 'day-laborers', 'office'] as $workbook) {
+            $labels = [...$labels, ...array_column(self::fixture($workbook)['people'], 'label')];
+        }
+
+        $this->assertSame([], array_values(array_diff(array_column(self::fixture('expected-differences'), 'label'), $labels)));
+    }
+
     /**
      * Every per-person difference is the sum of its expected lines, and no expected line is left over; then the workbook total.
      *
@@ -145,9 +154,14 @@ class PayrollOctoberTest extends TestCase
         $this->assertEqualsCanonicalizing(array_keys($people), array_keys($system), 'Every person of the workbook is on the sheet.');
 
         $actual = [];
+        $netDiffs = [];
         $total = '0';
         foreach ($people as $label => $p) {
             $excel = $p['excel'] ?? [];
+            $netDiff = bcsub($system[$label]['net'], self::six($excel['net'] ?? null), 6);
+            if (bccomp($netDiff, '0', 6) !== 0) {
+                $netDiffs[$label] = $netDiff;
+            }
             foreach (self::asExcel($p['type'], $system[$label]) as $component => [$amount, $sign]) {
                 $diff = bcmul((string) $sign, bcsub($amount, self::six($excel[$component] ?? null), 6), 6);
                 if (bccomp($diff, '0', 6) !== 0) {
@@ -162,17 +176,25 @@ class PayrollOctoberTest extends TestCase
         }
 
         $expected = [];
+        $byPerson = [];
         $explained = '0';
         foreach (self::fixture('expected-differences') as $d) {
             if (isset($people[$d['label']])) {
                 $key = "{$d['label']}|{$d['component']}";
                 $expected[$key] = bcadd($expected[$key] ?? '0', $d['amount'], 6);
                 $explained = bcadd($explained, $d['amount'], 6);
+                if ($d['component'] !== 'net') {   // a hidden row's net line moves the total, not the person's net
+                    $byPerson[$d['label']] = bcadd($byPerson[$d['label']] ?? '0', $d['amount'], 6);
+                }
             }
         }
         ksort($actual);
         ksort($expected);
         $this->assertSame($expected, $actual, 'Each difference from the Excel is explained by expected-differences.json, and nothing more.');
+        $byPerson = array_filter($byPerson, fn (string $a) => bccomp($a, '0', 6) !== 0);
+        ksort($byPerson);
+        ksort($netDiffs);
+        $this->assertSame($byPerson, $netDiffs, 'Each person: system net − Excel net = Σ their expected lines.');
 
         if ($excelTotal !== null) {
             $this->assertSame($excelTotal, bcround($total, 0), 'The Excel total is its المجمع total, to the pound.');

@@ -4,7 +4,7 @@ Every number the system computes, in plain formulas. Source: the client's Excel 
 Values in **bold** are settings (editable, with an effective date). ⚠️ marks a point still open with the client (also listed in `docs/client-questions.md`).
 
 **Applies everywhere**
-- No intermediate rounding, as in the Excel. Values are stored as `NUMERIC(18,6)`; screens and PDFs show 2 decimals.
+- No intermediate rounding, as in the Excel. Values are stored as `NUMERIC(18,6)`; screens and PDFs show 2 decimals. An amount typed per day (such as outside money) is stored at 6 decimals too, so where the Excel holds a formula with endless decimals the sum of days can differ in the sixth decimal (`stored_amount_six_decimals` in the October regression).
 - HR can override any computed value below. The override needs a reason, is highlighted, is audit-logged, and survives recomputation; if its inputs change later, the screen warns "inputs changed after your edit". HR can revert to the computed value.
 
 ## 0. Base rates (used everywhere)
