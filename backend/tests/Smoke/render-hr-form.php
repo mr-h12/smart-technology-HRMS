@@ -2,6 +2,7 @@
 
 declare(strict_types=1);
 
+use App\Modules\Documents\Application\AdvanceRequestForms;
 use App\Modules\Documents\Application\ExperienceCertificates;
 use App\Modules\Documents\Application\LeaveRequestForms;
 use App\Modules\Documents\Application\RenderHrForm;
@@ -10,6 +11,7 @@ use App\Modules\Employees\Application\EmployeeService;
 use App\Modules\Identity\Infrastructure\Eloquent\Role;
 use App\Modules\Identity\Infrastructure\Eloquent\User;
 use App\Modules\Leave\Application\LeaveRequests;
+use App\Modules\Sites\Infrastructure\Eloquent\Site;
 use Illuminate\Contracts\Console\Kernel;
 use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\Auth;
@@ -21,6 +23,7 @@ require __DIR__.'/../../vendor/autoload.php';
 $app = require __DIR__.'/../../bootstrap/app.php';
 $app->make(Kernel::class)->bootstrap();
 $leave = getenv('HRMS_SMOKE_FORM') === 'leave-request';
+$advance = getenv('HRMS_SMOKE_FORM') === 'advance-request';
 try {
     if ($argv[1] === 'setup') {
         $employee = app(EmployeeService::class)->create([
@@ -28,7 +31,16 @@ try {
             'hire_date' => '2022-01-01', 'salary' => '9000', 'national_id' => '12345678901234', 'department' => 'اختبار',
         ])['id'];
         $hr = User::create(['name' => 'hr', 'email' => 'hr@synthetic.test', 'password' => Str::random(24), 'role_id' => Role::where('slug', 'hr')->value('id'), 'is_active' => true]);
-        if ($leave) {
+        if ($advance) {
+            $id = (string) Str::uuid7();
+            $site = Site::create(['name_ar' => 'موقع تجريبي', 'kind' => 'work']);
+            DB::table('attendance_requests')->insert(['id' => $id, 'employee_id' => $employee, 'site_id' => $site->id,
+                'date' => now('Africa/Cairo')->toDateString(), 'type' => 'advance', 'amount' => '250.5', 'requested_by' => $hr->id]);
+            $row = app(AdvanceRequestForms::class)->create($id, $hr->id, (string) Str::uuid7(), [
+                'job_title' => 'مهندسة اختبار', 'reason' => 'سبب تجريبي', 'repayment_method' => 'cash',
+                'previous_advance' => false, 'finance_remarks' => 'ملاحظات تجريبية',
+            ], null);
+        } elseif ($leave) {
             $requests = app(LeaveRequests::class);
             $from = now('Africa/Cairo')->next('Monday')->toDateString();
             $request = $requests->submit(['employee_id' => $employee, 'kind' => 'annual', 'from_date' => $from, 'to_date' => $from, 'note' => 'سبب تجريبي'], $hr->id, null);

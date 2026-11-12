@@ -54,4 +54,8 @@ return [
         'permanent_worker' => 'عامل مثبت',
         'day_laborer' => 'عامل باليومية',
     ],
+    'advance_paper_date_type' => 'تاريخ القرار الورقي متاح فقط عند البت في طلب سلفة.',
+    'advance_paper_date_future' => 'لا يمكن أن يكون تاريخ القرار الورقي بعد اليوم بتوقيت القاهرة.',
+    'advance_paper_date_before_request' => 'لا يمكن أن يسبق تاريخ القرار الورقي تاريخ الطلب.',
+    'advance_paper_date_pending' => 'أدخل تاريخ القرار الورقي عند قبول طلب السلفة أو رفضه.',
 ];

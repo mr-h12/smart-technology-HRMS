@@ -6,6 +6,7 @@ mkdir -p "$output"
 image="${HRMS_PDF_IMAGE:-hrms-php-forms}"
 form="${HRMS_SMOKE_FORM:-experience-certificate}"
 case "$form" in
+  advance-request) phrases=('سارة مثال للاختبار' 'طلب سلفة' 'Employee Salary' '9000.00' '250.50' 'General Manager');;
   leave-request) phrases=('سارة مثال للاختبار' 'نموذج طلب إجازة' 'توقيع مدير الشركة');;
   experience-certificate) phrases=('سارة مثال للاختبار' 'شهادة خبرة' 'الشركة');;
   *) printf 'Unknown form: %s\n' "$form" >&2; exit 1;;
@@ -27,10 +28,14 @@ docker exec "$app" php artisan migrate --force -q
 unsigned=$(docker exec "$app" php tests/Smoke/render-hr-form.php setup)
 docker exec "$app" php artisan queue:work redis --queue=pdf --once --tries=3 -v
 docker exec "$app" php tests/Smoke/render-hr-form.php export "$unsigned" > "$output/unsigned.pdf"
-signed=$(docker exec "$app" php tests/Smoke/render-hr-form.php approve "$unsigned")
-docker exec "$app" php artisan queue:work redis --queue=pdf --once --tries=3 -v
-docker exec "$app" php tests/Smoke/render-hr-form.php export "$signed" > "$output/signed.pdf"
-for pdf in "$output/unsigned.pdf" "$output/signed.pdf"; do
+pdfs=("$output/unsigned.pdf")
+if [[ "$form" != advance-request ]]; then
+  signed=$(docker exec "$app" php tests/Smoke/render-hr-form.php approve "$unsigned")
+  docker exec "$app" php artisan queue:work redis --queue=pdf --once --tries=3 -v
+  docker exec "$app" php tests/Smoke/render-hr-form.php export "$signed" > "$output/signed.pdf"
+  pdfs+=("$output/signed.pdf")
+fi
+for pdf in "${pdfs[@]}"; do
   text=$("$pdftotext" -enc UTF-8 "$pdf" -)
   if ! grep -Eq '[0-9]{2}/[0-9]{2}/[0-9]{4}' <<< "$text" || grep -Eq '[0-9]{4}-[0-9]{2}-[0-9]{2}' <<< "$text"; then
     printf 'Unexpected date format in %s\n' "$pdf" >&2
@@ -38,10 +43,10 @@ for pdf in "$output/unsigned.pdf" "$output/signed.pdf"; do
   fi
   for phrase in "${phrases[@]}"; do
     if ! grep -Fq -- "$phrase" <<< "$text"; then
-      printf 'Expected Arabic text missing from %s: %s\n' "$pdf" "$phrase" >&2
+      printf 'Expected text missing from %s: %s\n' "$pdf" "$phrase" >&2
       exit 1
     fi
   done
 done
-echo 'Arabic text extraction verified for both PDFs.'
+echo 'PDF text extraction verified.'
 docker exec "$db" psql -U hrms -d hrms_test -c 'select stage, serial_number, status, size_bytes from hr_form_exports order by stage;'

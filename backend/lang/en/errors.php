@@ -54,4 +54,8 @@ return [
         'permanent_worker' => 'Permanent worker',
         'day_laborer' => 'Day laborer',
     ],
+    'advance_paper_date_type' => 'Only an advance decision can include a paper decision date.',
+    'advance_paper_date_future' => 'The paper decision date cannot be after today in Cairo.',
+    'advance_paper_date_before_request' => 'The paper decision date cannot be before the request date.',
+    'advance_paper_date_pending' => 'Enter the paper decision date when approving or refusing the advance.',
 ];

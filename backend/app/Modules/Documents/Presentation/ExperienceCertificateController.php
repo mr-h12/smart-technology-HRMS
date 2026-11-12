@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Modules\Documents\Presentation;
 
+use App\Modules\Documents\Application\AdvanceRequestForms;
 use App\Modules\Documents\Application\ExperienceCertificates;
 use App\Modules\Documents\Application\RenderHrForm;
 use App\Modules\Employees\Application\EmployeeService;
@@ -18,7 +19,7 @@ use Symfony\Component\HttpFoundation\StreamedResponse;
 
 final class ExperienceCertificateController
 {
-    public function __construct(private readonly ExperienceCertificates $certificates, private readonly EmployeeService $employees) {}
+    public function __construct(private readonly ExperienceCertificates $certificates, private readonly EmployeeService $employees, private readonly AdvanceRequestForms $advances) {}
 
     public function defaults(Request $request, string $employee): JsonResponse
     {
@@ -51,7 +52,7 @@ final class ExperienceCertificateController
     {
         $this->employees->show($employee, RequestScope::ownerId($request));
 
-        return self::list($request, $this->certificates->history($employee, $request->query('form_type') === 'experience_certificate' ? 'experience_certificate' : null));
+        return self::list($request, $this->certificates->history($employee, $request->query('form_type') === 'experience_certificate' ? 'experience_certificate' : null, $this->advances->canViewPay($request->user())));
     }
 
     public function awaitingApproval(Request $request): JsonResponse
@@ -113,6 +114,7 @@ final class ExperienceCertificateController
     private function scoped(Request $request, string $export): stdClass
     {
         $row = $this->certificates->find($export);
+        abort_if($row->form_type === AdvanceRequestForms::FORM && ! $this->advances->canViewPay($request->user()), 403);
         $scope = RequestScope::ownerId($request);
         abort_if($scope !== null && ($row->employee_id === null || ! $this->employees->isManagedBy((string) $row->employee_id, $scope)), 404);
 

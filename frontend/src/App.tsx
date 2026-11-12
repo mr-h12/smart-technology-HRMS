@@ -15,6 +15,7 @@ const EmployeeRoute = page(() => import('@/pages/employees'), 'EmployeeRoute')
 const LogsPage = page(() => import('@/pages/logs'), 'LogsPage')
 const LeavePage = page(() => import('@/pages/leave'), 'LeavePage')
 const SettingsPage = page(() => import('@/pages/settings'), 'SettingsPage')
+const AttendanceRequestsPage = page(() => import('@/pages/attendance-requests'), 'AttendanceRequestsPage')
 const SiteDayPage = page(() => import('@/pages/site-day'), 'SiteDayPage')
 const WageProposalsPage = page(() => import('@/pages/wage-proposals'), 'WageProposalsPage')
 const TeamFaresPage = page(() => import('@/pages/team-fares'), 'TeamFaresPage')
@@ -46,6 +47,7 @@ export function AppRoutes() {
         <Route path="employees/:id" element={<EmployeeRoute />} />
         <Route path="attendance" element={<AttendancePage />} />
         <Route path="leave" element={<LeavePage />} />
+        <Route path="attendance-requests" element={nav('/attendance-requests', <AttendanceRequestsPage />)} />
         <Route path="site-day" element={<SiteDayPage />} />
         <Route path="wage-proposals" element={nav('/wage-proposals', <WageProposalsPage />)} />
         <Route path="hr-form-approvals" element={nav('/hr-form-approvals', <FormApprovalsPage />)} />

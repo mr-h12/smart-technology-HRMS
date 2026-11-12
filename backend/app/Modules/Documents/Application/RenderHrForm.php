@@ -100,10 +100,19 @@ final class RenderHrForm implements ShouldQueue
 
         $common = [
             'snapshot' => $snapshot, 'serial' => $export->serial_number, 'signature' => $signature,
-            'feminine' => $snapshot['gender'] === 'female',
+            'feminine' => ($snapshot['gender'] ?? null) === 'female',
             'font' => self::asset('ibm-plex-sans-arabic-arabic-600-normal.woff2', 'font/woff2'),
             'boldFont' => self::asset('ibm-plex-sans-arabic-arabic-700-normal.woff2', 'font/woff2'),
         ];
+        if ($export->form_type === AdvanceRequestForms::FORM) {
+            return view('hr-forms.advance-request', [
+                ...$common, 'plainPaper' => true,
+                'requestDate' => ArabicFormDate::format($snapshot['request_date']),
+                'hireDate' => $snapshot['hire_date'] === null ? null : ArabicFormDate::format($snapshot['hire_date']),
+                'amount' => bcround($snapshot['amount'], 2),
+                'salary' => $snapshot['salary'] === null ? null : bcround($snapshot['salary'], 2),
+            ])->render();
+        }
         if ($export->form_type === LeaveRequestForms::FORM) {
             $remaining = $snapshot['balance']['remaining'] ?? null;
 

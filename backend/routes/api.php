@@ -2,12 +2,14 @@
 
 use App\Modules\Attendance\Presentation\AttendanceController;
 use App\Modules\Attendance\Presentation\AttendanceLockController;
+use App\Modules\Attendance\Presentation\AttendanceRequestController;
 use App\Modules\Attendance\Presentation\HolidayController;
 use App\Modules\Attendance\Presentation\SiteDayController;
 use App\Modules\Attendance\Presentation\SiteDayCrewController;
 use App\Modules\Audit\Presentation\AuditLogController;
 use App\Modules\Audit\Presentation\ErrorLogController;
 use App\Modules\Audit\Presentation\RequestLogController;
+use App\Modules\Documents\Presentation\AdvanceRequestFormController;
 use App\Modules\Documents\Presentation\ExperienceCertificateController;
 use App\Modules\Documents\Presentation\LeaveRequestFormController;
 use App\Modules\Documents\Presentation\SignatureController;
@@ -74,6 +76,20 @@ Route::middleware('auth')->group(function (): void {
         ->whereUuid('export')->middleware('permission:hr_forms.approve_leave_request');
     Route::post('hr-form-exports/{export}/retry-leave-request', [LeaveRequestFormController::class, 'retry'])
         ->whereUuid('export')->middleware('permission:hr_forms.approve_leave_request');
+
+    Route::prefix('attendance/requests')->controller(AttendanceRequestController::class)->middleware('permission:attendance_request.decide')->whereUuid('id')->group(function (): void {
+        Route::get('/', 'index');
+        Route::get('{id}', 'show');
+        Route::post('{id}/approve', 'approve');
+        Route::post('{id}/refuse', 'refuse');
+    });
+
+    Route::post('attendance/requests/{id}/hr-forms/advance-request', [AdvanceRequestFormController::class, 'store'])
+        ->whereUuid('id')->middleware('permission:hr_forms.generate');
+    Route::get('attendance/requests/{id}/hr-form-exports', [AdvanceRequestFormController::class, 'index'])
+        ->whereUuid('id')->middleware('permission:hr_forms.view');
+    Route::post('hr-form-exports/{export}/retry-advance-request', [AdvanceRequestFormController::class, 'retry'])
+        ->whereUuid('export')->middleware('permission:hr_forms.generate');
 
     Route::prefix('employees/wage-proposals')->controller(WageProposalController::class)->whereUuid('proposal')->group(function (): void {
         Route::get('/', 'index')->middleware('permission:employee.approve_wage');
