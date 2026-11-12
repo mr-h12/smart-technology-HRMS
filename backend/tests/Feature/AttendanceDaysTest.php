@@ -110,6 +110,18 @@ class AttendanceDaysTest extends TestCase
             ->assertJsonPath('data.late_minutes', 0)->assertJsonPath('data.ot_minutes', 0);
     }
 
+    public function test_single_day_entry_fills_an_empty_minutes_box_from_the_times_changed_or_not(): void
+    {
+        $eng = $this->employee('engineer');
+        AttendanceDay::create(['employee_id' => $eng, 'date' => '2026-10-01', 'site_id' => $this->site, 'in_time' => '08:40', 'out_time' => '18:30', 'source' => 'entered', 'version' => 1]);   // an old day
+        $this->putDay($eng, '2026-10-01', ['version' => 1, 'site_id' => $this->site, 'in_time' => '08:40', 'out_time' => '18:30'])->assertOk()
+            ->assertJsonPath('data.late_minutes', 40)->assertJsonPath('data.ot_minutes', 90);
+        $this->putDay($eng, '2026-10-01', ['version' => 2, 'site_id' => $this->site, 'in_time' => '08:40', 'out_time' => '18:30'])->assertOk()
+            ->assertJsonPath('data.version', 2)->assertJsonPath('data.late_minutes', 40);   // a time edited and typed back erases nothing
+        $this->putDay($eng, '2026-10-01', ['version' => 2, 'site_id' => $this->site, 'in_time' => '08:40', 'out_time' => '18:30', 'ot_minutes' => 0])->assertOk()
+            ->assertJsonPath('data.ot_minutes', 0);
+    }
+
     public function test_a_day_laborer_stores_times_in_order_and_gets_hints(): void
     {
         $l = $this->employee('day_laborer');

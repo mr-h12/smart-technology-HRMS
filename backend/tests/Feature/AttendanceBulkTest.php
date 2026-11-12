@@ -147,7 +147,58 @@ class AttendanceBulkTest extends TestCase
         $this->day($e)->assertJsonPath('data.late_minutes', 5)->assertJsonPath('data.ot_minutes', 30);
 
         $this->bulk([['employee_id' => $e, 'version' => 1, 'site_id' => $this->site, 'in_time' => '09:00']])->assertOk();
-        $this->day($e)->assertJsonPath('data.late_minutes', 60)->assertJsonPath('data.ot_minutes', 0);
+        $this->day($e)->assertJsonPath('data.late_minutes', 60)->assertJsonPath('data.ot_minutes', 30);   // overtime follows the departure only
+    }
+
+    public function test_a_row_that_sends_an_empty_minutes_value_stores_it_as_sent(): void
+    {
+        $e = $this->employee('engineer');
+        AttendanceDay::create(['employee_id' => $e, 'date' => self::DATE, 'site_id' => $this->site, 'in_time' => '08:00', 'out_time' => '17:00', 'source' => 'entered', 'version' => 1]);   // an old day
+        $this->bulk([['employee_id' => $e, 'version' => 1, 'site_id' => $this->site, 'in_time' => '08:40', 'out_time' => '18:30']])->assertOk();
+        $this->day($e)->assertJsonPath('data.late_minutes', 40)->assertJsonPath('data.ot_minutes', 90);
+
+        $this->bulk([['employee_id' => $e, 'version' => 2, 'site_id' => $this->site, 'in_time' => '08:00', 'out_time' => '17:00', 'late_minutes' => null, 'ot_minutes' => null]])->assertOk();   // the sheet's Undo
+        $this->day($e)->assertJsonPath('data.late_minutes', null)->assertJsonPath('data.ot_minutes', null);
+    }
+
+    public function test_overtime_follows_an_arrival_only_when_it_goes_between_empty_and_set(): void
+    {
+        $e = $this->employee('engineer');
+        $this->bulk([['employee_id' => $e, 'site_id' => $this->site, 'in_time' => null, 'out_time' => '18:30']])->assertOk();
+        $this->day($e)->assertJsonPath('data.late_minutes', null)->assertJsonPath('data.ot_minutes', null);
+        $this->bulk([['employee_id' => $e, 'version' => 1, 'site_id' => $this->site, 'in_time' => '08:40']])->assertOk();
+        $this->day($e)->assertJsonPath('data.late_minutes', 40)->assertJsonPath('data.ot_minutes', 90);
+        $this->bulk([['employee_id' => $e, 'version' => 2, 'site_id' => $this->site, 'in_time' => null]])->assertOk();   // clearing the arrival empties both
+        $this->day($e)->assertJsonPath('data.late_minutes', null)->assertJsonPath('data.ot_minutes', null);
+    }
+
+    public function test_a_leave_day_or_a_cleared_day_becoming_a_work_day_gets_its_minutes(): void
+    {
+        [$a, $b] = [$this->employee('engineer'), $this->employee('day_laborer')];
+        $this->putDay($a, self::DATE, ['site_id' => $this->leave['sick']])->assertOk();
+        $this->bulk([['employee_id' => $a, 'version' => 1, 'site_id' => $this->site, 'in_time' => '08:40']])->assertOk();
+        $this->day($a)->assertJsonPath('data.late_minutes', 40)->assertJsonPath('data.ot_minutes', 0);
+
+        $this->bulk([['employee_id' => $b, 'site_id' => $this->site, 'in_time' => '08:40', 'out_time' => '18:30']])->assertOk();
+        $this->bulk([['employee_id' => $b, 'version' => 1, 'clear' => true]])->assertOk();
+        $this->bulk([['employee_id' => $b, 'site_id' => $this->site, 'in_time' => '08:40', 'out_time' => '18:30']])->assertOk();
+        $this->day($b)->assertJsonPath('data.late_minutes', 40)->assertJsonPath('data.ot_minutes', 90);
+    }
+
+    public function test_the_employees_own_shift_gives_the_minutes(): void
+    {
+        $e = $this->employee('engineer', '2026-01-01', ['shift_start' => '07:00', 'shift_end' => '15:00']);
+        $this->bulk([['employee_id' => $e, 'site_id' => $this->site, 'in_time' => '07:30', 'out_time' => '16:00']])->assertOk();
+        $this->day($e)->assertJsonPath('data.late_minutes', 30)->assertJsonPath('data.ot_minutes', 60);
+    }
+
+    public function test_a_computed_value_above_the_bound_refuses_the_write(): void
+    {
+        $e = $this->employee('engineer', '2026-01-01', ['shift_start' => '06:00', 'shift_end' => '14:00']);
+        $this->bulk([['employee_id' => $e, 'site_id' => $this->site, 'in_time' => '22:30', 'out_time' => '23:00']])
+            ->assertStatus(422)->assertJsonPath('error.details.0.field', 'rows.0.late_minutes')->assertJsonPath('error.details.0.message', __('attendance.rule.out_of_bounds'));
+        $this->putDay($e, self::DATE, ['site_id' => $this->site, 'in_time' => '22:30'])->assertStatus(422)->assertJsonPath('error.details.0.field', 'late_minutes');
+        $this->assertSame(0, AttendanceDay::where('employee_id', $e)->count());
     }
 
     public function test_a_write_that_changes_no_time_keeps_the_stored_minutes(): void
@@ -158,7 +209,7 @@ class AttendanceBulkTest extends TestCase
         $this->bulk([['employee_id' => $e, 'version' => 1, 'site_id' => $this->site, 'in_time' => '08:40', 'note' => 'n']])->assertOk();
         $this->day($e)->assertJsonPath('data.late_minutes', 5)->assertJsonPath('data.ot_minutes', 60);
         $this->putDay($e, self::DATE, ['version' => 2, 'site_id' => $this->site, 'in_time' => '08:40', 'out_time' => '18:30', 'late_minutes' => 7])->assertOk()
-            ->assertJsonPath('data.late_minutes', 7)->assertJsonPath('data.ot_minutes', null);   // single-day entry stores what it is sent
+            ->assertJsonPath('data.late_minutes', 7)->assertJsonPath('data.ot_minutes', 90);   // single-day entry fills an empty value from the times
     }
 
     public function test_a_day_without_a_departure_stores_no_overtime_and_a_permanent_worker_no_minutes(): void
@@ -291,7 +342,7 @@ class AttendanceBulkTest extends TestCase
 
         $this->bulk([['employee_id' => $eng, 'version' => 1, 'site_id' => $this->site, 'in_time' => '08:00', 'advance_amount' => '500']])->assertOk()->assertJsonPath('data.0.version', 1);
         $this->bulk([['employee_id' => $eng, 'version' => 1, 'site_id' => $this->site]])->assertOk()->assertJsonPath('data.0.version', 1);   // the kept values are the stored ones
-        $this->putDay($eng, self::DATE, ['version' => 1, 'site_id' => $this->site, 'in_time' => '08:00', 'late_minutes' => 0, 'advance_amount' => '500.000000'])->assertOk()->assertJsonPath('data.version', 1);   // the late minutes the first write stored
+        $this->putDay($eng, self::DATE, ['version' => 1, 'site_id' => $this->site, 'in_time' => '08:00', 'advance_amount' => '500.000000'])->assertOk()->assertJsonPath('data.version', 1);
         $this->assertSame($audits, DB::table('audit_log')->count());
     }
 

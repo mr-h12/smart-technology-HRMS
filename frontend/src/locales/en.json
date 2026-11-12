@@ -658,6 +658,7 @@
       "hintLate": "Computed lateness: {{minutes}} min",
       "hintOt": "Computed overtime: {{minutes}} min",
       "computedOnSave": "Computed from the time on save",
+      "useSuggested": "Use this",
       "derivedNote": "This day was set automatically ({{type}}). Choose a site if the employee worked.",
       "missingNote": "This day is not recorded yet.",
       "lockedNote": "The period is locked; its days cannot be edited.",

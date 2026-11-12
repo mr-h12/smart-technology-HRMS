@@ -94,7 +94,7 @@ Each day records: site, arrival and departure, OT minutes, late minutes, minutes
   Overtime starts at the **shift end**, not after 8 h worked (owner, 2026-11-09, client question 20): shift 09:00–16:00,
   departure 17:30 → 90 OT minutes suggested.
   Since 2026-11-12 every write stores these minutes (owner, §13): the late minutes whenever the arrival changes, the
-  overtime when HR writes the times. A departure the site manager writes stores overtime 0 until HR clicks «اعتماد» on the
+  overtime when HR writes the departure. A departure the site manager writes stores overtime 0 until HR clicks «اعتماد» on the
   day sheet. HR may type other minutes. Payroll reads only the stored minutes. Payroll takes the day's scheduled in and out
   from the same shift (the employee's, else the field shift), for engineers and day laborers, only for the early-departure flag.
 
@@ -141,12 +141,13 @@ Applies to engineers, permanent workers and day laborers recorded on the site ma
 | Arrival | Required on a present day. A departure without an arrival, or before it, is refused. |
 | Late minutes (engineers, day laborers) | **Raw**: max(0, arrival − shift start), with no grace. §0a subtracts the 15-minute grace once at payroll. Stored by every write, not only this screen, and recomputed whenever the arrival changes, even over a number HR typed (owner, 2026-11-12, §13). Permanent workers' lateness comes from `scheduled_in` and the arrival at payroll (§3). |
 | Early departure | Not a stored field: payroll reads it from the departure and the shift end (`scheduled_out` for permanent workers). |
-| Overtime | Departure after the shift end is shown as a difference only. Engineers' and day laborers' `ot_minutes` are stored as **0** until HR approves the overtime, and reset to 0 only when a time changes. HR's day sheet shows the suggested minutes with «اعتماد», which stores them; a departure HR writes stores the overtime at once (owner, 2026-11-12, §13). |
+| Overtime | Departure after the shift end is shown as a difference only. Engineers' and day laborers' `ot_minutes` are stored as **0** until HR approves the overtime, and reset to 0 only when the departure changes. HR's day sheet shows the suggested minutes with «اعتماد», which stores them; a departure HR writes stores the overtime at once (owner, 2026-11-12, §13). |
 | Missing departure | A field day with an arrival and no departure is **open** (office days never are). The site manager cannot save a later day for that person until it is completed. After the yesterday window (`manager_yesterday_until`, 12:00) the site manager may still enter the **departure only**, until the period is locked: the arrival and the status stay, the late minutes stay as stored, and HR hears of each such save at once (owner, 2026-11-05). A day HR recorded, or one outside the site manager's reach that day, is HR's to complete. HR gets the count of open days in the 21:00 alert. Locking a period is refused while any field day in it is open (since 2026-11-04), so a period locked since then has none; an arrival-only day left in a period locked before that rule never blocks a later save. Payroll reads every field work day with an arrival and no departure as open, whatever the lock: it pays it as a worked day with no overtime (it has no departure yet) and flags it `open_day`: a day laborer's wage, site allowance, fare and lateness; an engineer's or permanent worker's transport, outside-Alexandria pay and lateness. |
 
 **Who changes a day**
 - A day HR recorded, imported or materialized, or one an approved leave request wrote (sick included, even over a sick day the site manager wrote first), is read-only for the site manager.
 - The site manager clears only their own days, at the site they are working on or on one of their leave types (absent, sick, rest, other).
+- HR's «اعتماد» of the overtime is an HR write: the day becomes HR's (source `entered`), so the site manager can no longer change it (owner, 2026-11-12).
 
 Worked example (shift 09:00–16:00, grace 15): arrival 09:25 → 25 late minutes stored, 10 chargeable at payroll; departure 15:00 → 60 minutes early; departure 17:00 → 60 minutes after hours, overtime 0 stored until HR clicks «اعتماد», which stores 60 (had HR written the 17:00 departure, 60 would be stored at once).
 
@@ -284,14 +285,17 @@ What the day sheet (كشف اليوم) shows for one group and date, then how it
   the row does not send (a sent empty time stays empty). Re-marking a present day, or moving it to another work site, fills
   nothing. A default that would end before it starts (a shift crossing midnight) is not filled for engineers and day laborers;
   a permanent worker's day may cross midnight. Office rows and leave days get none. Single-day entry stores what it sends.
-- Late and overtime minutes (engineers and day laborers at a work site; owner, 2026-11-12). Every write (the sheet, single-day
-  entry, the import, the site manager's day) stores late = max(0, arrival − shift start), with no grace, when the day is new,
-  becomes a work day or its arrival changes; and overtime = max(0, departure − shift end) when the day is new, becomes a work
-  day or either time changes. Without an arrival the late minutes are empty; without both times the overtime is. A site
-  manager's write stores overtime 0 (HR approves it, §2b). A number the write sends is stored as sent. Otherwise unchanged
-  times change nothing: bulk keeps the stored minutes (P28), single-day entry stores what it sends. The shift is the
-  employee's own, else the field shift, as for the hints. A computed value is not held to the 960-minute typing bound.
-  Present on a new day therefore stores 0 and 0. Days stored before 2026-11-12 keep their minutes until a time is edited.
+- Late and overtime minutes (engineers and day laborers at a work site; owner, 2026-11-12): late = max(0, arrival − shift
+  start), with no grace, empty without an arrival; overtime = max(0, departure − shift end), empty without both times, and 0
+  when the site manager writes it (HR approves it, §2b). The shift is the employee's own, else the field shift, as for the hints.
+  - Single-day entry stores the number it is sent; an empty value is always filled from the times, changed or not (the editor's
+    empty box says «تُحسب من الوقت عند الحفظ»), so saving an old day with an empty box fills it.
+  - A bulk write (the sheet, the import, the site manager's day) stores a value the row sends, even empty (the sheet's Undo). A
+    value it does not send is filled when the day is new or becomes a work day; after that the late minutes follow a change of
+    the arrival, and the overtime a change of the departure or an arrival going between empty and set. Otherwise P28 keeps the
+    stored minutes. Present on a new day therefore stores 0 and 0.
+  - A filled value is checked like a typed one: above the 960-minute bound the write is refused (`out_of_bounds` on that field).
+  - Days stored before 2026-11-12 keep their minutes until a time is edited or the day is saved in the editor.
 - A date is off (tinted on the strip and the grid) when it is the group's weekly off or an official holiday (§2a), whatever
   the days stored on it.
 
