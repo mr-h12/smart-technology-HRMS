@@ -58,8 +58,7 @@ final class XlsxAttendanceReader
     /**
      * The site workbook (W2): every visible sheet below its two head rows, $timeColumns (0-based) read as times from row 3 (W8), and
      * `lists` rows 1–3 only, all head rows so D2 and D3 read alike (the site and range; the name list is rebuilt from the database),
-     * whatever its visibility. Other
-     * hidden sheets are skipped. Rows are keyed by Excel row number, blank rows left out.
+     * whatever its visibility. Other hidden sheets are skipped. Rows are keyed by Excel row number, blank rows left out.
      *
      * @param  list<int>  $timeColumns
      * @return list<array{name: string, visible: bool, rows: array<int, list<?string>>}>

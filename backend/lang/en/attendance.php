@@ -26,6 +26,7 @@ return [
         'crew_on_other_site' => 'This day laborer is on another site manager\'s site; ask HR to move them.',
         'crew_has_day' => 'They have a day recorded today; clear it first, then remove them from today\'s crew.',
         'crew_moved_has_day' => 'They have a day recorded today at their other site; clear it there first, then move them.',
+        'preview_stale' => 'The stored attendance changed after the preview. Preview the file again.',
     ],
     'rule' => [
         'field_not_allowed' => 'This field does not apply to this day.',
@@ -65,6 +66,7 @@ return [
         'bad_time' => 'Not a valid time; write it like 08:30.',
         'bad_amount' => 'The amount must be a number above zero.',
         'note_too_long' => 'The note is longer than 500 characters.',
+        'choice_required' => 'A day is already recorded at another site; choose keep or replace.',
     ],
     'workbook_max_days' => 'The range is at most :max days.',
 ];

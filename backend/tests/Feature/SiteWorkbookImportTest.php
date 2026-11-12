@@ -22,7 +22,7 @@ use Tests\AttendanceFixtures;
 use Tests\TestCase;
 use Tests\XlsxFiles;
 
-/** The site workbook's preview (calculations §14 W2–W15; spec docs/superpowers/specs/2026-11-12-site-workbook-design.md «Preview»). */
+/** The site workbook's preview and confirm (calculations §14 W2–W15; spec docs/superpowers/specs/2026-11-12-site-workbook-design.md «Preview, confirm and the token»). */
 class SiteWorkbookImportTest extends TestCase
 {
     use AttendanceFixtures;
@@ -216,16 +216,20 @@ class SiteWorkbookImportTest extends TestCase
         $this->assertSame([['09:00', '16:00', 60], ['09:05', '17:00', 65]], array_map(fn (array $c) => [$c['to']['in_time'], $c['to']['out_time'], $c['to']['late_minutes']], $data['changes']));
     }
 
-    /** W13: a day stored at another work site is a conflict, shown replaced by the file's row. */
+    /** W13: a day stored at another work site is a conflict, shown replaced by the file's row; one the write refuses is an error, not a conflict to choose on. */
     public function test_a_conflict_is_shown_replaced(): void
     {
-        $laborer = $this->homed('day_laborer', $this->site);
-        $this->putDay($laborer, '2026-11-07', ['site_id' => $this->other, 'in_time' => '08:00', 'out_time' => '16:00'])->assertOk();
+        [$laborer, $refused] = [$this->homed('day_laborer', $this->site), $this->homed('day_laborer', $this->site)];
+        foreach ([$laborer, $refused] as $id) {
+            $this->putDay($id, '2026-11-07', ['site_id' => $this->other, 'in_time' => '08:00', 'out_time' => '16:00'])->assertOk();
+        }
         $path = $this->download();
 
-        $data = $this->preview($this->fill($path, [self::SAT => [[$this->entry($laborer), 'حاضر', '08:00', '17:00']]]))->assertOk()->json('data');
+        $data = $this->preview($this->fill($path, [self::SAT => [[$this->entry($laborer), 'حاضر', '08:00', '17:00'], [$this->entry($refused), 'حاضر', '17:00', '08:00']]]))
+            ->assertOk()->json('data');
 
         $this->assertSame(1, $data['summary']['conflicts']);
+        $this->assertSame([[$this->entry($refused), 'out_before_in']], array_map(fn (array $e) => [$e['name'], $e['error']], $data['errors']));
         $change = $data['changes'][0];
         $this->assertSame(["{$laborer}/2026-11-07", 'Site-T'], [$change['key'], $change['conflict_site']]);
         $this->assertSame(['site' => 'Site-T', 'in_time' => '08:00', 'out_time' => '16:00', 'late_minutes' => 0, 'ot_minutes' => 0, 'advance_amount' => null, 'note' => null], $change['from']);
@@ -330,6 +334,15 @@ class SiteWorkbookImportTest extends TestCase
         $this->preview($file)->assertStatus(422)->assertJsonPath('error.code', 'template_mismatch');
     }
 
+    /** W1, W2: 31 days is the longest range a file may give. */
+    public function test_a_31_day_range_is_accepted(): void
+    {
+        $laborer = $this->homed('day_laborer', $this->site);
+        $file = $this->rewrite($this->download(), fn (string $name, array $rows) => $name === 'lists' ? $this->setCell($rows, 3, 3, '2026-12-07') : $this->rows($name, $rows, $laborer));
+
+        $this->preview($file)->assertOk()->assertJsonPath('data.to', '2026-12-07')->assertJsonPath('data.summary.changes', 1);
+    }
+
     /** W2, W12: a site made inactive since the download is no file error; the write refuses each row at it. */
     public function test_a_site_made_inactive_since_the_download_refuses_its_rows(): void
     {
@@ -378,17 +391,17 @@ class SiteWorkbookImportTest extends TestCase
         Notification::assertNothingSent();
     }
 
-    /** W15: the token covers the stored days the preview read, so a day changed since gives another token. */
+    /** W15: the token covers the stored days the preview read, so a day changed since gives another token, even at the same site. */
     public function test_the_token_covers_the_stored_days_it_read(): void
     {
         $laborer = $this->homed('day_laborer', $this->site);
-        $path = $this->download();
-        $file = fn () => $this->fill($path, [self::SAT => [[$this->entry($laborer), 'حاضر']]]);
-        $token = fn () => $this->preview($file())->assertOk()->json('data.token');
+        $this->putDay($laborer, '2026-11-07', ['site_id' => $this->site, 'in_time' => '08:00', 'out_time' => '16:00'])->assertOk();
+        $file = $this->fill($this->download(), [self::SAT => [[$this->entry($laborer), 'حاضر']]]);
+        $token = fn () => $this->preview($file)->assertOk()->json('data.token');
 
         $first = $token();
         $this->assertSame($first, $token());
-        $this->putDay($laborer, '2026-11-07', ['site_id' => $this->leave['sick']])->assertOk();
+        DB::table('attendance_days')->where(['employee_id' => $laborer, 'date' => '2026-11-07'])->increment('version');   // the version alone
         $this->assertNotSame($first, $token());
     }
 
@@ -404,6 +417,150 @@ class SiteWorkbookImportTest extends TestCase
             $this->preview($file)->assertStatus(403)->assertJsonPath('error.code', 'permission_denied');
             $this->postJson('/api/v1/attendance/site-workbook/preview')->assertStatus(403)->assertJsonPath('error.code', 'permission_denied');
         }
+    }
+
+    /** W14: the confirm stores the day at the file's site as `imported`; nobody's home site, crew or manager changes. */
+    public function test_confirm_stores_the_day_here_and_moves_nobody(): void
+    {
+        $worker = $this->homed('permanent_worker', $this->other);
+        $engineer = $this->assign($this->employee('engineer'), $this->managerOf($this->other));
+        $file = $this->fill($this->download(), [self::SAT => [[$this->entry($worker), 'حاضر', '08:30', '18:00'], [$this->entry($engineer), 'حاضر', '08:30', '18:00']]]);
+        $tables = ['employee_site_assignments', 'day_crew_changes', 'employee_manager_assignments'];
+        $before = array_map(fn (string $t) => DB::table($t)->orderBy('id')->get()->all(), $tables);
+
+        $this->confirm($file)->assertOk()
+            ->assertJsonPath('data', ['applied' => 2, 'unchanged' => 0, 'kept' => 0, 'advances_total' => '0.000000', 'new_laborers' => [], 'errors' => []]);
+
+        $days = DB::table('attendance_days')->get()->keyBy('employee_id');
+        $this->assertCount(2, $days);
+        $this->assertSame([$this->site, 'imported', '08:30:00', '18:00:00', null, null], $this->stored($days[$worker]));
+        $this->assertSame([$this->site, 'imported', '08:30:00', '18:00:00', 30, 60], $this->stored($days[$engineer]));
+        $this->assertEquals($before, array_map(fn (string $t) => DB::table($t)->orderBy('id')->get()->all(), $tables));
+    }
+
+    /** W13: keep writes nothing, replace overwrites the same day, no choice is choice_required; a choice for a row that is no conflict is ignored. */
+    public function test_keep_replace_and_no_choice(): void
+    {
+        [$kept, $replaced, $unchosen, $plain] = array_map(fn () => $this->homed('day_laborer', $this->site), range(1, 4));
+        foreach ([$kept, $replaced, $unchosen] as $id) {
+            $this->putDay($id, '2026-11-07', ['site_id' => $this->other, 'in_time' => '08:00', 'out_time' => '16:00'])->assertOk();
+        }
+        $before = DB::table('attendance_days')->get()->keyBy('employee_id');
+        $file = $this->fill($this->download(), [self::SAT => array_map(fn (string $id) => [$this->entry($id), 'حاضر', '08:00', '17:00'], [$kept, $replaced, $unchosen, $plain])]);
+
+        $data = $this->confirm($file, ["{$kept}/2026-11-07" => 'keep', "{$replaced}/2026-11-07" => 'replace', "{$plain}/2026-11-07" => 'keep'])->assertOk()->json('data');
+
+        $this->assertSame([2, 0, 1], [$data['applied'], $data['unchanged'], $data['kept']]);
+        $this->assertSame([[$this->entry($unchosen), 'choice_required']], array_map(fn (array $e) => [$e['name'], $e['error']], $data['errors']));
+        $this->assertStringNotContainsString('attendance.', $data['errors'][0]['message']);
+        $after = DB::table('attendance_days')->get()->keyBy('employee_id');
+        $this->assertEquals([$before[$kept], $before[$unchosen]], [$after[$kept], $after[$unchosen]]);
+        $this->assertSame([$before[$replaced]->id, $this->site, $before[$replaced]->version + 1], [$after[$replaced]->id, $after[$replaced]->site_id, $after[$replaced]->version]);
+        $this->assertSame($this->site, $after[$plain]->site_id);
+    }
+
+    /** W11: HR's confirm approves the overtime the times give, over a site manager's day stored with 0 and the same times. */
+    public function test_confirm_approves_overtime_over_a_site_managers_day(): void
+    {
+        $laborer = $this->homed('day_laborer', $this->site);
+        app(AttendanceDays::class)->bulk('2026-11-07', [['employee_id' => $laborer, 'version' => null, 'site_id' => $this->site, 'in_time' => '08:00', 'out_time' => '18:00']], (string) $this->manager->id, 'manager');
+        $day = fn () => DB::table('attendance_days')->where(['employee_id' => $laborer, 'date' => '2026-11-07'])->first(['ot_minutes', 'source']);
+        $this->assertEquals((object) ['ot_minutes' => 0, 'source' => 'manager'], $day());
+
+        $this->confirm($this->fill($this->download(), [self::SAT => [[$this->entry($laborer), 'حاضر', '08:00', '18:00']]]))->assertOk()->assertJsonPath('data.applied', 1);
+
+        $this->assertEquals((object) ['ot_minutes' => 60, 'source' => 'imported'], $day());
+    }
+
+    /** W9: the advance is stored; the total is the sum on the rows the confirm saved, not on a kept or a refused row. */
+    public function test_the_advance_is_stored(): void
+    {
+        [$a, $b, $c, $kept] = array_map(fn () => $this->homed('day_laborer', $this->site), range(1, 4));
+        $this->putDay($kept, '2026-11-07', ['site_id' => $this->other, 'in_time' => '08:00', 'out_time' => '16:00'])->assertOk();
+        $file = $this->fill($this->download(), [
+            self::SAT => [[$this->entry($a), 'حاضر', '', '', '500'], [$this->entry($b), 'حاضر', '', '', '200'], [$this->entry($kept), 'حاضر', '', '', '300']],
+            self::FRI => [[$this->entry($c), 'حاضر', '', '', '900']],
+        ]);
+
+        $this->confirm($file, ["{$kept}/2026-11-07" => 'keep'])->assertOk()
+            ->assertJsonPath('data.advances_total', '700.000000')->assertJsonPath('data.applied', 2)->assertJsonPath('data.kept', 1);
+
+        $this->assertSame('500.000000', DB::table('attendance_days')->where(['employee_id' => $a, 'date' => '2026-11-07'])->value('advance_amount'));
+    }
+
+    /** W15: a stored day changed after the preview gives another token: 409 preview_stale, and nothing is saved. */
+    public function test_a_day_changed_after_the_preview_is_409_and_saves_nothing(): void
+    {
+        [$a, $b] = [$this->homed('day_laborer', $this->site), $this->homed('day_laborer', $this->site)];
+        $file = $this->fill($this->download(), [self::SAT => [[$this->entry($a), 'حاضر'], [$this->entry($b), 'حاضر']]]);
+        $token = $this->preview($file)->assertOk()->json('data.token');
+        $this->putDay($a, '2026-11-07', ['site_id' => $this->leave['sick']])->assertOk();
+        [$days, $audits] = [DB::table('attendance_days')->orderBy('id')->get()->all(), DB::table('audit_log')->count()];
+
+        $this->confirm($file, [], $token)->assertStatus(409)->assertJsonPath('error.code', 'preview_stale')
+            ->assertJsonPath('error.message', 'تغيّر الحضور المسجّل بعد المعاينة. اعرض المعاينة مرة أخرى.');
+
+        $this->assertEquals([$days, $audits], [DB::table('attendance_days')->orderBy('id')->get()->all(), DB::table('audit_log')->count()]);
+    }
+
+    /** W15: the first confirm made the days imported, so the same file again changes nothing; its advances are still the total. */
+    public function test_uploading_the_same_file_again_saves_nothing(): void
+    {
+        $laborer = $this->homed('day_laborer', $this->site);
+        $file = $this->fill($this->download(), [self::SAT => [[$this->entry($laborer), 'حاضر', '08:00', '17:00', '500']]]);
+        $this->confirm($file)->assertOk()->assertJsonPath('data.applied', 1);
+        [$days, $audits] = [DB::table('attendance_days')->get()->all(), DB::table('audit_log')->count()];
+
+        $this->confirm($file)->assertOk()
+            ->assertJsonPath('data', ['applied' => 0, 'unchanged' => 1, 'kept' => 0, 'advances_total' => '500.000000', 'new_laborers' => [], 'errors' => []]);
+
+        $this->assertEquals([$days, $audits], [DB::table('attendance_days')->get()->all(), DB::table('audit_log')->count()]);
+    }
+
+    /** W12: a row refused by the write path or the guard is listed; the file's other rows are saved. */
+    public function test_a_refused_row_does_not_stop_the_others(): void
+    {
+        $office = $this->homed('office', $this->site);      // created first, so written first (employee_id order)
+        $laborer = $this->homed('day_laborer', $this->site);
+        $later = $this->homed('day_laborer', $this->site);
+        $file = $this->fill($this->download(), [
+            self::SAT => [[$this->entry($office), 'حاضر', '', '', '100'], [$this->entry($laborer), 'حاضر']],
+            self::FRI => [[$this->entry($later), 'حاضر']],
+        ]);
+
+        $data = $this->confirm($file)->assertOk()->json('data');
+
+        $this->assertSame(1, $data['applied']);
+        $this->assertSame([['2026-11-07', 'field_not_allowed'], ['2026-11-13', 'future_date']], array_map(fn (array $e) => [$e['date'], $e['error']], $data['errors']));
+        $this->assertSame([$laborer], DB::table('attendance_days')->pluck('employee_id')->all());
+    }
+
+    /** Spec «Endpoints»: the token is required and a choice is keep or replace (422 validation_failed); nothing is written. */
+    public function test_confirm_validates_token_and_choices(): void
+    {
+        $laborer = $this->homed('day_laborer', $this->site);
+        $file = $this->fill($this->download(), [self::SAT => [[$this->entry($laborer), 'حاضر']]]);
+        $token = $this->preview($file)->assertOk()->json('data.token');
+
+        $this->post('/api/v1/attendance/site-workbook/confirm', ['file' => $file], ['Accept' => 'application/json'])
+            ->assertStatus(422)->assertJsonPath('error.code', 'validation_failed');
+        $this->confirm($file, ["{$laborer}/2026-11-07" => 'maybe'], $token)->assertStatus(422)->assertJsonPath('error.code', 'validation_failed');
+
+        $this->assertSame(0, DB::table('attendance_days')->count());
+    }
+
+    /** Spec «Security notes»: own scope on either attendance permission is 403 on the confirm, and nothing is written. */
+    public function test_an_own_scope_caller_gets_403_on_the_confirm(): void
+    {
+        $laborer = $this->homed('day_laborer', $this->site);
+        $file = $this->fill($this->download(), [self::SAT => [[$this->entry($laborer), 'حاضر']]]);
+        $token = $this->preview($file)->assertOk()->json('data.token');
+
+        foreach ([$this->userWith('own', 'own'), $this->userWith('all', 'own'), $this->userWith('own', 'all'), $this->manager] as $caller) {
+            $this->actingAs($caller, 'api');
+            $this->confirm($file, [], $token)->assertStatus(403)->assertJsonPath('error.code', 'permission_denied');
+        }
+        $this->assertSame(0, DB::table('attendance_days')->count());
     }
 
     /** An employee of $type employed from 2026-01-01 whose home site is $siteId (office: their dated site). */
@@ -486,5 +643,23 @@ class SiteWorkbookImportTest extends TestCase
     private function preview(UploadedFile $file, string $locale = 'ar'): TestResponse
     {
         return $this->post('/api/v1/attendance/site-workbook/preview', ['file' => $file], ['Accept' => 'application/json', 'Accept-Language' => $locale]);
+    }
+
+    /**
+     * Confirms the file with these choices and the token, by default the one a preview gives now.
+     *
+     * @param  array<string, string>  $choices
+     */
+    private function confirm(UploadedFile $file, array $choices = [], ?string $token = null): TestResponse
+    {
+        $token ??= (string) $this->preview($file)->assertOk()->json('data.token');
+
+        return $this->post('/api/v1/attendance/site-workbook/confirm', ['file' => $file, 'token' => $token, 'choices' => $choices], ['Accept' => 'application/json', 'Accept-Language' => 'ar']);
+    }
+
+    /** @return list<mixed> a stored day's site, source, times, late and overtime minutes */
+    private function stored(object $day): array
+    {
+        return [$day->site_id, $day->source, $day->in_time, $day->out_time, $day->late_minutes, $day->ot_minutes];
     }
 }

@@ -28,13 +28,14 @@ use Illuminate\Support\Str;
 /**
  * The site workbook's import (ملف الموقع, calculations §14 W2–W17): HR's upload of a SiteWorkbookTemplate file. Each row names someone
  * from the file's name list and is written through AttendanceDays::writeCell as HR (no owner), source `imported`, at the file's site.
- * The preview runs those writes and rolls them back (W15), so the late and overtime minutes it shows are what the write path stores.
+ * The preview runs those writes and rolls them back (W15), so the late and overtime minutes it shows are what the write path stores;
+ * the confirm runs the same writes and commits them.
  *
  * @phpstan-type At array{sheet: string, row: int, date: string, name: ?string}
  * @phpstan-type RowError array{sheet: string, row: int, date: string, name: ?string, error: string, message: string}
  * @phpstan-type Input array{version: ?int, site_id: ?string, in_time?: string, out_time?: string, ot_minutes?: int, advance_amount?: numeric-string, note?: string}
  * @phpstan-type Write array{at: At, employee: array<string, mixed>, date: string, type: ?EmployeeType, input: Input, key: string, live: ?AttendanceDay, conflict: bool}
- * @phpstan-type Plan array{site: array{id: string, name_ar: string, name_en: ?string}, from: string, to: string, rows: int, token: string, conflicts: int, writes: list<Write>, errors: list<RowError>}
+ * @phpstan-type Plan array{site: array{id: string, name_ar: string, name_en: ?string}, from: string, to: string, rows: int, token: string, writes: list<Write>, errors: list<RowError>}
  */
 final class SiteWorkbookImport
 {
@@ -42,7 +43,7 @@ final class SiteWorkbookImport
     public const MAX_ROWS = 2000;
 
     /** The row codes this import gives itself (attendance.import.*); the others are the write path's and the day rules'. */
-    private const OWN_CODES = ['name_required', 'status_required', 'unknown_employee', 'duplicate_row', 'unknown_status', 'bad_time', 'bad_amount', 'note_too_long'];
+    private const OWN_CODES = ['name_required', 'status_required', 'unknown_employee', 'duplicate_row', 'unknown_status', 'bad_time', 'bad_amount', 'note_too_long', 'choice_required'];
 
     public function __construct(
         private readonly SiteWorkbookTemplate $template,
@@ -77,11 +78,32 @@ final class SiteWorkbookImport
             'token' => $plan['token'],
             'summary' => [
                 'rows' => $plan['rows'], 'changes' => count($result['changes']), 'unchanged' => $result['unchanged'], 'errors' => count($result['errors']),
-                'conflicts' => $plan['conflicts'], 'new_laborers' => 0, 'advances_total' => $result['advances_total'],
+                'conflicts' => $result['conflicts'], 'new_laborers' => 0, 'advances_total' => $result['advances_total'],
             ],
             'changes' => $result['changes'],
             'new_laborers' => [],
             'errors' => $result['errors'],
+        ];
+    }
+
+    /**
+     * W13, W15: the preview's writes, committed in one transaction, if the stored days are still those the preview read (its token);
+     * else nothing is saved. $choices is keep or replace by conflict key. $mayCreate is for new day laborers (W5), not built yet.
+     *
+     * @param  array<string, string>  $choices
+     * @return array{applied: int, unchanged: int, kept: int, advances_total: string, new_laborers: list<array<string, mixed>>, errors: list<RowError>}
+     */
+    public function confirm(string $path, string $token, array $choices, bool $mayCreate): array
+    {
+        $plan = $this->plan($path);
+        if (! hash_equals($plan['token'], $token)) {
+            throw AttendanceRefused::because(AttendanceRefusal::PreviewStale);
+        }
+        $result = DB::transaction(fn () => $this->apply($plan, $choices));
+
+        return [
+            'applied' => count($result['changes']), 'unchanged' => $result['unchanged'], 'kept' => $result['kept'],
+            'advances_total' => $result['advances_total'], 'new_laborers' => [], 'errors' => $result['errors'],
         ];
     }
 
@@ -183,7 +205,6 @@ final class SiteWorkbookImport
             'to' => $to,
             'rows' => count($rows),
             'token' => hash('sha256', implode("\n", $reads)),
-            'conflicts' => count(array_filter($planned, fn (array $w) => $w['conflict'])),
             'writes' => $planned,
             'errors' => $errors,
         ];
@@ -191,11 +212,12 @@ final class SiteWorkbookImport
 
     /**
      * W12, W13, W15: each planned row written as HR, each in its own savepoint, then read back; the caller owns the transaction.
-     * $choices (keep or replace by conflict key) is the confirm's; null is the preview, which replaces every conflict.
+     * $choices (keep or replace by conflict key) is the confirm's; null is the preview, which replaces every conflict. `conflicts`
+     * counts the conflict rows in `changes`, the ones the screen asks about; `advances_total` sums the rows saved or unchanged.
      *
      * @param  Plan  $plan
      * @param  array<string, string>|null  $choices
-     * @return array{changes: list<array<string, mixed>>, unchanged: int, errors: list<RowError>, advances_total: string}
+     * @return array{changes: list<array<string, mixed>>, unchanged: int, kept: int, conflicts: int, errors: list<RowError>, advances_total: string}
      */
     private function apply(array $plan, ?array $choices): array
     {
@@ -204,8 +226,21 @@ final class SiteWorkbookImport
         $changes = [];
         $errors = $plan['errors'];
         $unchanged = 0;
+        $kept = 0;
+        $conflicts = 0;
         $total = bcadd('0', '0', Precision::MONEY_SCALE);
         foreach ($plan['writes'] as $w) {
+            // W13: a conflict is written only on `replace`; `keep` writes nothing; no choice is refused. Other rows ignore $choices.
+            $choice = $choices === null || ! $w['conflict'] ? 'replace' : ($choices[$w['key']] ?? null);
+            if ($choice !== 'replace') {
+                if ($choice === 'keep') {
+                    $kept++;
+                } else {
+                    $errors[] = self::error($w['at'], 'choice_required');
+                }
+
+                continue;
+            }
             try {
                 $this->writes->writeCell($w['employee'], $w['date'], $w['input'], null, 'imported');
             } catch (AttendanceRefused|ConcurrencyConflict|DayRulesViolated $e) {
@@ -221,6 +256,7 @@ final class SiteWorkbookImport
                 continue;
             }
             $from = $w['live'] === null ? null : self::day($w['live'], $names, $present);
+            $conflicts += (int) $w['conflict'];
             $changes[] = [
                 'key' => $w['key'], 'sheet' => $w['at']['sheet'], 'row' => $w['at']['row'], 'date' => $w['date'],
                 'employee_id' => (string) $w['employee']['id'], 'code' => (int) $w['employee']['code'], 'name_ar' => $w['employee']['name_ar'],
@@ -234,7 +270,7 @@ final class SiteWorkbookImport
         usort($changes, $inSheetOrder);
         usort($errors, $inSheetOrder);
 
-        return ['changes' => $changes, 'unchanged' => $unchanged, 'errors' => $errors, 'advances_total' => $total];
+        return ['changes' => $changes, 'unchanged' => $unchanged, 'kept' => $kept, 'conflicts' => $conflicts, 'errors' => $errors, 'advances_total' => $total];
     }
 
     /**
