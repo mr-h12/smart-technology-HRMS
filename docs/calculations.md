@@ -6,6 +6,8 @@ Values in **bold** are settings (editable, with an effective date). ⚠️ marks
 **Applies everywhere**
 - No intermediate rounding, as in the Excel. Values are stored as `NUMERIC(18,6)`; screens and PDFs show 2 decimals. An amount typed per day (such as outside money) is stored at 6 decimals too, so where the Excel holds a formula with endless decimals the sum of days can differ in the sixth decimal (`stored_amount_six_decimals` in the October regression).
 - HR can override any computed value below. The override needs a reason, is highlighted, is audit-logged, and survives recomputation; if its inputs change later, the screen warns "inputs changed after your edit". HR can revert to the computed value.
+- On the payroll sheet a component has one live override: a second is refused (409), so changing one is a revert and a new override, both audited. The final net is HR's net override if there is one; else the computed net moved by each override's change, added for a paid component and subtracted for a deducted one.
+- A net below 0 is shown as computed and flagged `negative_net`, never clipped, for every employee type; the flag is checked on the final net, after the overrides.
 
 ## 0. Base rates (used everywhere)
 For a monthly salary `S` (basic + raise):
@@ -17,6 +19,8 @@ For a monthly salary `S` (basic + raise):
 | Minute rate | Hour rate ÷ 60 | 0.625 |
 
 For a day laborer, the day rate is the worker's own daily wage (section 4), not S ÷ 30.
+
+Payroll reads S or the daily wage from the pay row in force on each day, and only the wage fields of the type held that day (monthly staff: salary + raise; a day laborer: the daily wage), since an imported pay row may hold the other type's fields. A day with no such wage (no pay row in force, or no salary or daily wage on it) counts its wage as 0 and is flagged `no_wage`: any employed day of monthly staff, a worked day of a day laborer.
 
 The divisor is always **30**, in every month (February and 31-day months included), and the periods are: office a calendar month, engineers and permanent workers the 26th → the 25th, day laborers 1–15 and 16 → the end. Both match every October formula (R26, 2026-11-06); the few Excel cells that divide by 31 are pasted values (`excel-system-analysis.md` error #7).
 
@@ -54,15 +58,16 @@ lateness deduction      = chargeable late minutes × wage ÷ divisor × multipli
 - Shift **09:00–17:00** by default, with a per-employee override. Weekly off **Friday + Saturday**.
 - Daily late minutes = max(0, check-in − shift start − **15 grace**)
 - If an approved late permission covers that day, its late minutes = 0
-- Net late minutes = Σ daily late − exemption (entered by HR)
-- Lateness deduction = net late minutes × minute rate × **1** (the office multiplier, §0a)
+- Net late minutes = Σ daily late − exemption (entered by HR), never below 0
+- Lateness deduction = net late minutes × minute rate × **1** (the office multiplier, §0a). Each late minute costs its own day's salary, so the exemption waives the same share of every late minute: deduction = Σ daily lateness money × net late minutes ÷ Σ daily late minutes.
 - The import flags missing punches and early leave (check-out before shift end); HR confirms or edits each flag.
 - Office lateness from in time: max(0, in − shift start − **15** grace), where shift start is **09:00** (`office_shift_start`) or the pay-row override. It is shown as a minutes hint; the fingerprint import fills the same fields in Release 2.
 
 **Additions**
 - Overtime = OT minutes × minute rate × **1.5**. OT minutes are suggested from check-out − shift end; HR confirms.
 - Travel allowance = travel days × day rate
-- Tower transport = tower days × day rate ÷ 4
+- Tower transport = tower days × day rate ÷ 4. The 4 is a constant in code, not a setting. ⚠️ (client question 27)
+- OT minutes, travel days and tower days are HR's period totals, with no date: when the salary changes inside the month, their minute and day rates come from the month's salary (each day's salary over the month, §10).
 - Bonus = entered by HR
 
 **Deductions**
@@ -70,7 +75,7 @@ lateness deduction      = chargeable late minutes × wage ÷ divisor × multipli
 - Social insurance (employee share) = entered by HR; blank = 0 (section 5)
 - Income tax = entered by HR; blank = 0
 - Advance installment = section 6
-- Negligence deduction = entered by HR
+- Negligence deduction = entered by HR. Office has no general deduction: the negligence deduction is HR's only deduction for office staff, as in the net below. ⚠️ (client question 26)
 
 **Net**
 ```
@@ -88,7 +93,8 @@ Each day records: site, arrival and departure, OT minutes, late minutes, minutes
   sets in Settings at rollout; until then the setting holds **08:00–17:00** (migration `2026_11_02_000001_set_field_shift_end`).
   Overtime starts at the **shift end**, not after 8 h worked (owner, 2026-11-09, client question 20): shift 09:00–16:00,
   departure 17:30 → 90 OT minutes suggested.
-  HR confirms by entering the minutes; payroll reads only the stored minutes.
+  HR confirms by entering the minutes; payroll reads only the stored minutes. Payroll takes the day's scheduled in and out
+  from the same shift (the employee's, else the field shift), for engineers and day laborers, only for the early-departure flag.
 
 - Day extra = OT min × minute rate × **1.5** − chargeable late min × minute rate × **1.5** (the engineer multiplier, §0a) + outside-Alex min × minute rate
 - Day cost = day rate + day extra (used for site costing, section 8)
@@ -97,6 +103,7 @@ Each day records: site, arrival and departure, OT minutes, late minutes, minutes
 - Deduction (الخصم) = penalty entered by HR with a reason
 - Transport = the engineer's per-worker fare override in force for the day's site, in full, for every day worked at a work site; none on a leave day or without an override (owner, 2026-11-09). There is no half fare for engineers.
 - Net = salary + Σ day extra + Σ transport − absence − deduction − insurance − tax − advance installments
+- Engineers and permanent workers have no bonus input: HR pays a bonus by an override. ⚠️ (client question 24)
 
 Outside-Alex minutes are paid at ×1, with no multiplier, as in the Excel.
 
@@ -132,7 +139,7 @@ Applies to engineers, permanent workers and day laborers recorded on the site ma
 | Late minutes (engineers, day laborers) | **Raw**: max(0, arrival − shift start), with no grace. §0a subtracts the 15-minute grace once at payroll. Recomputed only when the arrival changes. Permanent workers' lateness comes from `scheduled_in` and the arrival at payroll (§3). |
 | Early departure | Not a stored field: payroll reads it from the departure and the shift end (`scheduled_out` for permanent workers). |
 | Overtime | Departure after the shift end is shown as a difference only. Engineers' and day laborers' `ot_minutes` are stored as **0** until HR approves the overtime (Slice 3), and reset to 0 only when a time changes. |
-| Missing departure | A field day with an arrival and no departure is **open** (office days never are). The site manager cannot save a later day for that person until it is completed. After the yesterday window (`manager_yesterday_until`, 12:00) the site manager may still enter the **departure only**, until the period is locked: the arrival and the status stay, the late minutes stay as stored, and HR hears of each such save at once (owner, 2026-11-05). A day HR recorded, or one outside the site manager's reach that day, is HR's to complete. An open day in a locked period never blocks. HR gets the count of open days in the 21:00 alert. Locking a period is refused while any field day in it is open, and payroll counts no open day. |
+| Missing departure | A field day with an arrival and no departure is **open** (office days never are). The site manager cannot save a later day for that person until it is completed. After the yesterday window (`manager_yesterday_until`, 12:00) the site manager may still enter the **departure only**, until the period is locked: the arrival and the status stay, the late minutes stay as stored, and HR hears of each such save at once (owner, 2026-11-05). A day HR recorded, or one outside the site manager's reach that day, is HR's to complete. An open day in a locked period never blocks. HR gets the count of open days in the 21:00 alert. Locking a period is refused while any field day in it is open, so a locked period's payroll has no open day. In an open period's preview, payroll pays an open day as a worked day with no overtime (it has no departure yet) and flags it `open_day`: a day laborer's wage, site allowance, fare and lateness; an engineer's or permanent worker's transport, outside-Alexandria pay and lateness. |
 
 **Who changes a day**
 - A day HR recorded, imported or materialized, or one an approved leave request wrote (sick included, even over a sick day the site manager wrote first), is read-only for the site manager.
@@ -143,15 +150,16 @@ Worked example (shift 09:00–16:00, grace 15): arrival 09:25 → 25 late minute
 ## 3. Permanent workers (عمال مثبتين): 26th → 25th
 Each day records: scheduled in/out (default: the field shift, §2b), actual in/out, site, outside-Alex money, transport (full / half / none), advance. Weekly off **Friday**.
 
-- Scheduled in/out are stored on each day; they default to the field shift setting (`worker_shift_start`/`worker_shift_end`: **09:00–16:00** once HR sets it, §2b; seeded **08:00–17:00**) or the pay-row override. Late minutes = max(0, actual in − scheduled in); OT minutes = max(0, actual out − scheduled out), as below. Both are shown as hints.
+- Scheduled in/out are stored on each day; they default to the field shift setting (`worker_shift_start`/`worker_shift_end`: **09:00–16:00** once HR sets it, §2b; seeded **08:00–17:00**) or the pay-row override. Late minutes = max(0, actual in − scheduled in); OT minutes = max(0, actual out − scheduled out), as below. Both are shown as hints. Payroll reads a day without stored scheduled times at the same default.
 - Late minutes do not wrap around midnight (owner, 2026-11-09, client question 14): scheduled 00:00 with arrival 23:50 the day before gives 1,430 late minutes; scheduled 23:50 with arrival 00:10 gives 0. HR overrides the rare case with a reason.
+  The same family, by the rules below: scheduled 00:00–08:00, arrival 23:50, departure 08:00 also gives 1,440 OT minutes; scheduled 20:00–04:00, arrival 00:30, departure 05:00 gives 0 late and 0 OT minutes, with a false early-departure flag of 1,380 minutes; scheduled 23:50–08:00, arrival 00:10, departure 08:00 gives a false early-departure flag of 1,440 minutes (flags only, no money). HR overrides these days with a reason. ⚠️ (client question 28)
 
 - Hours worked = actual out − actual in. If out is earlier than in, the shift crossed midnight: add 24 h.
 - Late hours = actual in − scheduled in (if positive)
 - Lateness money = chargeable late minutes × minute rate × **2** (the permanent-worker multiplier, §0a; the Excel charged late hours × hour rate × 2, with no grace)
-- OT minutes = max(0, actual out − scheduled out), overtime starting at the shift end (owner, 2026-11-09, client question 20). A time earlier than the day's in time is the next day (+24 h): actual out against actual in, scheduled out against scheduled in. The Excel used max(0, hours worked − 8 h); the two agree only when the worker arrived at the scheduled time of an 8-hour shift, so every other October day is an Excel-difference line.
+- OT minutes = max(0, actual out − scheduled out), overtime starting at the shift end (owner, 2026-11-09, client question 20). A time earlier than the day's in time is the next day (+24 h): actual out against actual in, scheduled out against scheduled in. The Excel used max(0, hours worked − 8 h); the two agree only when the worker arrived at the scheduled time of an 8-hour shift, so every other October day is an Excel-difference line. A day whose stored scheduled times equal its actual times gives 0 OT minutes. ⚠️ (client question 25)
 - OT money = OT minutes × minute rate × **1.5** + outside-Alex money
-- Transport = fare (section 4 fare rule; HR sets every fare) for full, fare ÷ 2 for half. HR picks per day for now (1c), the manager later; default full, including on a missing or future work day. A leave day stores none.
+- Transport = fare (section 4 fare rule; HR sets every fare) for full, fare ÷ 2 for half. HR picks per day for now (1c), the manager later. The attendance grid shows full by default, including on a missing or future work day, but payroll pays transport only on a recorded work day (an open one included): a missing or future day, which only an open period's preview has, pays none. A leave day stores none.
 - Day cost = day rate + OT money (site costing)
 - Absence and early departure: as for engineers (§2; R21, R25, owner 2026-11-09).
 - Net = salary + Σ OT money + Σ transport − Σ lateness − absence − deduction − insurance − tax − advance installments
@@ -167,7 +175,7 @@ Each day records a site, arrival and departure (§2 defaults and hints), OT and 
 |---|---|
 | Daily wage | the worker's daily wage. 0 on non-work days (Friday, absent غ, rest) |
 | Allowance (بدل) | the site's allowance rule: a share of the wage (e.g. Alex Apparel = wage × 0.25, Nestlé Sharm = wage × 2) or a fixed amount. Most sites 0 |
-| Transport | fare: the worker's override for that site if set, else the residence × site fare, else 0 (no fare, or no residence). Engineers get transport only from an override, never the residence × site fare (owner default, 2026-11-05). HR sets every fare (the residence × site default, plus per-worker overrides); the team lead reads their own team's fares. ⚠️ the October Excel pays 0 transport to every day laborer: the October fixture runs with no day-laborer fares, and the difference goes in the Excel-difference report. |
+| Transport | fare: the worker's override for that site if set, else the residence × site fare, else 0 (no fare, or no residence). Engineers get transport only from an override, never the residence × site fare (owner default, 2026-11-05). HR sets every fare (the residence × site default, plus per-worker overrides); the team lead reads their own team's fares. Payroll flags `no_fare` when a worked day finds no fare (a permanent worker's day only when its transport is not none, §3); an engineer without an override gets 0 and no flag. ⚠️ the October Excel pays 0 transport to every day laborer: the October fixture runs with no day-laborer fares, and the difference goes in the Excel-difference report. |
 | OT money | OT min × (wage ÷ 8 ÷ 60) × **1.5** |
 | Lateness | chargeable late min × wage ÷ 480 × **2** (the day-laborer multiplier, §0a) |
 | Day total | wage + allowance + transport + OT − lateness |
@@ -225,6 +233,7 @@ Spec: `docs/superpowers/specs/2026-11-03-leave-design.md`. Attendance is the led
 - Annual and casual leave are paid in full for monthly staff, like the weekly off.
 - Sick leave is paid at **100%** of the day rate (`sick_leave_pay_percent`); below 100, each sick day deducts (100 − %) × day rate. ⚠️ (L1, client question 8; the Excel pays it in full)
 - Unpaid leave deducts one day rate per day, like absence (غ), but is reported as unpaid leave.
+- Rest (راحة) and other (أخرى) leave days are paid for monthly staff, since no rule names them, and flagged `leave_to_check:<code>` for HR.
 
 ## 8. Site labor cost (ملخص المواقع)
 For each site and period:
@@ -241,6 +250,8 @@ Day cost comes from the engineer (section 2), permanent worker (section 3) or da
 
 ## 10. New hires, leavers, changes and end of service
 - Days not employed in a period (before hire, after leaving) → absence deduction over **30** days (section 1). HR can edit.
+  - For monthly staff each not-employed day deducts one day rate of the salary on the nearest employed day (the one before it, or the period's first employed day when none is before it), so it takes back what the period pays. The deduction never exceeds the salary. ⚠️ (client question 23: the Excel typed a leaver's absence days by hand, column Y, and the two can differ.)
+  - The insured basic is the one on the pay row in force on the last day of the period that the employee holds the type. Incentives = the period's salary (before the not-employed deduction) − the insured basic.
 - A salary change splits the period at its effective date; each part uses its own day rate.
 - A type change starts on the first day of a period of the new type. ⚠️ (R32) When that day does not start a period of the old type (engineers or permanent workers ↔ office or day laborers; office → day laborer on the 16th), the old type's last period ends the day before, and its remaining days are not employed (first bullet). This is the default until the owner answers.
 - End-of-service bonus suggestion = **0.5** month × years of service × last total wage (basic + incentives). HR edits it. ⚠️ Are fractions of a year counted? Which wage is the base? (The client's form drops the extra months.)

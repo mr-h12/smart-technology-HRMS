@@ -179,6 +179,16 @@ The pay lost for a full day absent (غ). Separate from lateness: a lateness mult
 A value HR types in place of one the system computed, with a reason.
 _Avoid_: manual edit, adjustment
 
+**Payroll sheet** (المرتبات):
+One group's payroll for one period: a line per employee who holds the group's type on some day of the period (leavers included), with each component's computed value, payroll override and final value, the net, the flags and a totals row; each line opens to its days. It is computed on read from attendance and the payroll entries, and stays editable after the attendance lock until payroll close exists.
+_Avoid_: payroll run, payslip (that is one employee's PDF)
+
+**Payroll entry** (مدخلات المرتبات):
+HR's inputs for one employee in one period, the values payroll cannot compute: a bonus (office, day laborers); a deduction with its reason (field types); office's negligence deduction, lateness exemption, travel and tower days, overtime minutes and advances; the insurance shares and income tax (monthly staff); a note. A type takes only its own fields; blank counts as 0.
+
+**Payroll override** (قيمة بديلة):
+An override of one component of one employee's line on the payroll sheet, the net included. It keeps the computed value it replaced, so the line shows "inputs changed" when that value moves later; HR reverts it with a reason. A component has one live payroll override; a net override replaces the net, any other moves the net by its change.
+
 **Period** (فترة):
 One payroll cycle for one employee type: calendar month, 26th → 25th, or half month. A closed period is read-only.
 _Avoid_: month (for non-office types), payroll run

@@ -84,8 +84,9 @@ Smart Technology runs HR and payroll today on 6 hand-built Excel workbooks (anal
    - The configurable multipliers above.
    - Known Excel bugs fixed in the engine (e.g., raises included in net), and an **Excel-difference report** (employee, amount, reason) the client signs off: one Arabic document for October 2026, generated from the regression test (owner, 2026-11-09).
    - HR override on every computed value.
+   - **Status: built** (PR B, branch `claude/payroll-engines`, 2026-11-12; spec `docs/superpowers/specs/2026-11-09-payroll-engines-design.md`): the three engines; the payroll sheet per group and period, computed on read, with HR's entry and overrides (API `/api/v1/payroll`, page «المرتبات», permissions `payroll.view.all` and `payroll.manage.all`); the fields of item 4; the October 2026 regression and `docs/reports/2026-10-excel-differences.md`. Not built: the advances ledger (item 3: until then the advances are those logged on attendance days, or typed on an office entry, deducted in full), payroll close and its read-only period (item 5: the sheet stays editable after the attendance lock), payout (item 6), the payslip PDF (item 7), the historical archive (item 8), the fingerprint import (item 1, on hold) and site-costing screens.
 3. **Advances/loans ledger**: amount, installments, repayment, balance.
-4. **Social insurance + income tax**: manual HR fields (permanent only).
+4. **Social insurance + income tax**: manual HR fields (permanent only). Built with item 2: HR's entry for monthly staff holds the employee share, the company share and income tax; blank = 0.
 5. **Period close**: HR closes → CEO approves → lock / HR reopen.
 6. **Payout**: paid flag + how received.
 7. **Payslip PDF** (template: مفردات مرتب).
@@ -255,6 +256,7 @@ Answers before Release 2 item 2. Formulas: `docs/calculations.md`; spec: `docs/s
 - **Absence (R21):** غ days deduct days × salary ÷ 30 for every monthly type; a day laborer earns no wage that day.
 - **Early departure / half day (R25):** no automatic deduction for any field type; payroll flags the minutes and HR deducts by hand with a reason.
 - **Engineers' transport:** the per-worker fare override, in full, on every day worked at a work site; none without an override.
+- **Wage approval in a locked period (owner, 2026-11-11):** HR's approval of a site manager's proposed wage (`DayCrew::decide`) writes the daily wage from the hire date (else the proposal's date) even when that date falls in a locked attendance period, although M1 refuses other dated changes there. Accepted as built: no lock check, no code change (`docs/client-questions.md` question 21).
 
 ### Hidden archived employees: owner decisions of 2026-11-11
 An archived employee (termination date before today in Cairo) has left the company. Spec: `docs/superpowers/specs/2026-11-11-hide-archived-employees-design.md`.

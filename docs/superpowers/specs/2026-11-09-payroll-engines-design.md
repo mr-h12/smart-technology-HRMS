@@ -1,6 +1,6 @@
 # Payroll engines (Release 2 item 2)
 
-Date: 2026-11-09. Status: approved by the owner on 2026-11-09.
+Date: 2026-11-09. Status: approved by the owner on 2026-11-09. Amended 2026-11-12 to what was built; each amendment says so.
 Formulas: `docs/calculations.md` §0–§6, §10 (the spec for every number; this document does not restate them).
 Owner decisions behind it: `docs/hrms-module-plan.md` § Payroll engines: owner decisions of 2026-11-09.
 
@@ -102,11 +102,16 @@ Settings by date ┘   payroll_entries (HR inputs)  ─────────�
 | Table | Purpose | Key columns |
 |---|---|---|
 | `payroll_entries` | HR's per-period inputs | employee, group, period_start; bonus, deduction, deduction_reason, negligence, lateness_exemption_minutes, travel_days, tower_days, ot_minutes, advances, insurance_employee, insurance_company, income_tax (all nullable `NUMERIC(18,6)` or integer minutes/days; blank = 0); note; version |
-| `payroll_overrides` | HR's replacement of one computed component | employee, group, period_start, component, amount, reason (required), computed_at_override, created_by; soft delete = revert |
+| `payroll_overrides` | HR's replacement of one computed component | employee, group, period_start, component, amount, reason (required), computed_at_override, created_by; soft delete = revert, with a required `revert_reason` |
 
 - One row per (employee, group, period_start), created on HR's first edit. Fields a type does not use are refused for that
   type (insurance and tax for day laborers; negligence, exemption, travel and tower days, `ot_minutes` and `advances`
   outside office).
+  Amended 2026-11-12, as built: also bonus for engineers and permanent workers, and `deduction` with its reason for office,
+  whose net has the negligence deduction and no general one (`calculations.md` §1). A value in a field the type does not use,
+  or in an unknown key, is a 422, never ignored (null passes); an array or object in any field is a 422.
+- One live override per (employee, group, period_start, component), a partial unique index (amended 2026-11-12): a second
+  POST is a 409; HR changes an override by reverting it and overriding again, two audited writes.
 - **Office overtime and advances live on the entry** (my call). An office day stores only in and out times
   (`DayRules::FIELDS['office']`), and the Excel types both as period totals (columns W and M). HR types the period's
   approved OT minutes and advances on the entry; the fingerprint import (item 1) will later suggest the OT minutes, and the
@@ -133,7 +138,7 @@ Every line carries the components its type uses, each with: computed value, over
 | bonus | ✓ | | | ✓ |
 | lateness | ✓ | ✓ | ✓ | ✓ |
 | absence, unpaid leave, sick-pay cut, not-employed days | ✓ | ✓ | ✓ | (no wage that day) |
-| deduction / negligence | ✓ | ✓ | ✓ | ✓ |
+| deduction (office: negligence, amended 2026-11-12) | ✓ | ✓ | ✓ | ✓ |
 | insurance employee, income tax | ✓ | ✓ | ✓ | |
 | insurance company (cost, not in net) | ✓ | ✓ | ✓ | |
 | advances | ✓ | ✓ | ✓ | ✓ |
@@ -178,6 +183,42 @@ leave days on a holiday, an override whose inputs changed, and imported history 
 - Frontend: «المرتبات» page with the group and period pickers the attendance pages already use; a table in the shape of the
   Excel المجمع (one row per employee, a column per component, totals row), editable input cells, a highlighted overridden
   cell with its reason on hover, and a side panel with the per-day breakdown. Arabic and English keys.
+  Amended 2026-11-12: inputs and overrides stay editable while the period's attendance is locked. The attendance lock
+  freezes the days; payroll close (item 5), not in this build, is what makes a period read-only.
+
+**Requests and responses, as built (amended 2026-11-12).** Paths are under `/api/v1/payroll/{group}/{period_start}`;
+`group` is an employee type and `period_start` the first day of one of its periods, else 422 on that field (as the
+attendance pages). Every answer uses the response envelope; money is a decimal string with 6 decimals.
+
+| Method, path | Permission | Body | Success | Errors besides 401/403 |
+|---|---|---|---|---|
+| `GET /` | `payroll.view` | | 200 `{lines, totals, locked}` | |
+| `GET /employees/{employee}` | `payroll.view` | | 200 the line + `days` | 404 |
+| `PUT /employees/{employee}/entry` | `payroll.manage` | `{version, …the type's fields, note}` | 200 the line + `days` | 404; 422 per field; 409 `concurrency_conflict` |
+| `POST /employees/{employee}/overrides` | `payroll.manage` | `{component, amount, reason}` | 201 the line + `days` | 404; 422 per field; 409 `concurrency_conflict` (a live override exists) |
+| `DELETE /employees/{employee}/overrides/{override}` | `payroll.manage` | `{reason}` | 200 the line + `days` | 404 (no such live override); 422 `reason` |
+
+- 404: `{employee}` or `{override}` is not a UUID, or the employee holds the group's type on no day of the period. The body
+  is validated first, so a bad body for such an employee is a 422.
+- A line: `employee {id, code, name_ar, name_en}`; `components`, each `{computed, override, final}` with `override`
+  `{id, amount, reason, inputs_changed}` or null; `entry` (`version` and every entry field, null when blank); `flags`.
+  `days`, one per calendar day of the period in date order: `{date, state, leave_code, site_id, parts, day_cost, flags}`,
+  `state` one of `work`, `leave`, `missing`, `not_employed`, `open`, `future`. `totals`: per component, the sum of the
+  final values. `locked`: whether the period's attendance is locked.
+- Flags: `missing`, `open_day`, `early_departure`, `no_wage`, `no_fare`, `leave_to_check`, `negative_net`,
+  `inputs_changed`. A day's flag may carry a value (`early_departure:<minutes>`, `leave_to_check:<code>`); a line's carries
+  the name only.
+- The sheet GET is not paginated: one sheet is one document with a totals row, as `GET /api/v1/attendance/sheet`.
+- Entry body, PUT semantics: a field left out is cleared. `version` is the entry's as read, null while it has none; a stale
+  one is a 409. Amounts are decimal strings ≥ 0 with at most 6 decimals; minutes and days JSON integers ≥ 0; `note` and
+  `deduction_reason` at most 500 characters; a non-zero `deduction` needs a `deduction_reason`. Fields per type, besides
+  `note`: office `bonus, negligence, lateness_exemption_minutes, travel_days, tower_days, ot_minutes, advances,
+  insurance_employee, insurance_company, income_tax`; engineers and permanent workers `deduction, deduction_reason,
+  insurance_employee, insurance_company, income_tax`; day laborers `bonus, deduction, deduction_reason`.
+- Override body: `component` is one of the line's components (else 422); `amount` a decimal string ≥ 0, negative only for
+  `net` (only a net override may be negative: every other component is an amount the net formula adds or deducts);
+  `reason` is required. A net override replaces the net; any other moves the final net by its change. Revert body:
+  `reason`, required.
 
 ## October 2026 regression and the Excel-difference report
 
@@ -186,16 +227,22 @@ leave days on a holiday, an override whose inputs changed, and imported history 
   Person-N as in the analysis doc), type, salary or wage, raise, insured basic, the daily rows (site label, times, minutes,
   advances) and the Excel's own per-person results (the المجمع columns). No names, national IDs or phone numbers.
   The label → name map stays in the owner's checkout.
+  Amended 2026-11-12, as built: every المجمع row is kept, and each person carries `in_excel_total`, because the Excel totals are
+  SUBTOTAL(9) under an AutoFilter that hides rows, three of them paid (analysis §6 #17). Work sites are labels `Site-N` (leave
+  day-types keep their code); the real site names go to the map.
 - **Test:** seeds the fixture, runs the engines for engineers + permanent workers (26 Sep → 25 Oct) and day laborers
-  (1–15 Oct) through the API, and compares each person's components with the Excel's. Every difference must match a
+  (1–15 Oct) through the API (amended 2026-11-12: it reads each sheet through `GET /api/v1/payroll/{group}/{period_start}`),
+  and compares each person's components with the Excel's. Every difference must match a
   line in `expected-differences.json` (label, component, amount, reason code). An unexplained difference, or an expected one
   that no longer occurs, fails. The fixtures are never edited to make a test pass.
 - **Targets:** engineers + permanent workers net **315,451**, day laborers net **391,948** (1–15 Oct). The test asserts:
   system total = Excel total + Σ expected differences, per workbook. These two are the build-failing gates (`CLAUDE.md`).
+  The Excel total is Σ net over the rows with `in_excel_total` (amended 2026-11-12).
 - **Office** (my call): the office workbook holds only per-person totals (late minutes already net of grace, R18, and
   taken from a 26 Sep → 25 Oct fingerprint sheet, not calendar October), so it has no days to seed. The office engine takes
   period totals from the assembler, and its regression runs at engine level on the workbook's totals, with the same
-  expected-differences file (#2 raise). It is a test, not a named fixture gate.
+  expected-differences file (#2 raise). It is a test, not a named fixture gate. Amended 2026-11-12: the office fixture
+  holds only those totals, no fingerprint days.
 - **Day-laborer wage and allowance in the fixture** (my call): each worker gets the daily wage on most of their October
   days as one pay row, and each site gets the allowance rule that most worker-days there used. Every day priced otherwise
   in the Excel (a per-worker tier table, a ×2 / ×3 Nestlé table) is an expected difference with reason "per-worker table"
@@ -204,7 +251,10 @@ leave days on a holiday, an override whose inputs changed, and imported history 
   reading another person's sheet, #6 bonus typed as minutes, #7 pasted values, #10 short SUBTOTAL), and each decision that
   moves money: 15-minute grace for field types (§0a), permanent-worker lateness in minutes (§3), overtime from the shift end
   (question 20), absence for monthly field types (R21), permanent-worker transport (§3), per-worker wage or allowance tables
-  that differ from the system's one wage and site rule (analysis §8).
+  that differ from the system's one wage and site rule (analysis §8). Amended 2026-11-12, as built: also
+  `excel_filtered_row` (a row the AutoFilter hides: the system pays it, the Excel total leaves it out),
+  `stored_amount_six_decimals` (a typed day amount stored at 6 decimals, `calculations.md` "Applies everywhere"), and one
+  code for each Excel error the build found (analysis §6 #18–#24).
 - **Report:** a command renders the comparison as an Arabic Markdown document, `docs/reports/2026-10-excel-differences.md`,
   with labels (committed). Run in the owner's checkout with the name map, it writes the client copy with names outside the
   repository; that copy is what the client signs (question 13).
