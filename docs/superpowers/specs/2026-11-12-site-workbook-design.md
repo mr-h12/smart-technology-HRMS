@@ -225,6 +225,8 @@ The file is Arabic whatever the request language. No `versions` sheet.
   order) whose name differs from the first row's is `national_id_name_mismatch`.
 - `new_laborer_not_allowed` is checked once the row is known to create a laborer.
 - After resolution, the same employee (or the same new national ID) twice on one sheet: the second row is `duplicate_row`.
+- Columns G–J filled on a row whose name is an entry of the list are ignored, with no error: the person exists, and those
+  columns describe a new day laborer only (controller, 2026-11-12).
 
 ## Creating a new day laborer (W5)
 - Through `Employees/Application/DayCrew::propose` (L139-150), widened to take `national_id`, `residence_id` and a nullable wage.
@@ -234,6 +236,8 @@ The file is Arabic whatever the request language. No `versions` sheet.
   `SiteDayCrew::propose`, `Attendance/Application/SiteDayCrew.php:97-111`, which the import does not call).
 - Mobile: `EmployeeRules::MOBILE` (`^01[0125]\d{8}$`), else `bad_mobile`. Residence: a residence's name, else
   `unknown_residence`. Proposed wage: the money format of the day (`^\d{1,12}(\.\d{1,6})?$`) and above 0, else `bad_amount`.
+- Rows of one new laborer that disagree on mobile, residence or proposed wage are not refused: for each field the first
+  non-blank value in date order wins. The name must still match (`national_id_name_mismatch`) (controller, 2026-11-12).
 - Calling an Employees application class from Attendance is what `SiteDayCrew` already does; deptrac checks layers only, and the
   coding standard (§3.2) forbids writing another module's tables, not calling its use cases.
 
@@ -248,7 +252,8 @@ Each row is one `AttendanceDays::writeCell($employee, $date, $input, ownerId: nu
 - `ot_minutes`: for an engineer or day laborer at the work site whose row gives both times, the overtime those times give against
   the employee's shift, else the field shift (`EffectiveDays::fieldShift`, `DayRules::workerMinutes`: what the write path itself
   uses, L355-362).
-- `advance_amount` and `note`: only when given (advance in the money format and above 0, else `bad_amount`).
+- `advance_amount` and `note`: only when given (advance in the money format and above 0, else `bad_amount`; a note longer than
+  the day's 500 characters, `AttendanceDays::FORMAT` L46, is `note_too_long`, controller 2026-11-12).
 
 Nothing else is sent; the late minutes follow the arrival in the write path. The write path's refusals keep their codes (W12),
 and a row whose write changes nothing writes nothing (no version, no audit row).
@@ -360,6 +365,7 @@ Row (listed in `errors`; the other rows go on):
 | `bad_time` | a time that is not `H:MM`, `HH:MM` or an Excel time | new |
 | `times_need_both` | one time without the other | existing code (day rules), new check for every type |
 | `bad_amount` | an advance or proposed wage not a positive amount | new |
+| `note_too_long` | a note longer than 500 characters | new |
 | `bad_mobile` | a mobile failing the mobile rule | new |
 | `unknown_residence` | a residence that is no residence's name | new |
 | `choice_required` | confirm: a conflict with no choice | new |
@@ -447,11 +453,6 @@ every conflict has a choice, and the set-all control; `preview_stale`; locale pa
 ## Open
 **For the owner (the only open item):** the new laborer's gender. Built default: male, shown in the preview, changed by HR on the
 employee's page. The alternative is one more dropdown column (ذكر/أنثى), which changes the approved layout.
-
-**Not settled by the notes** (to settle in the plan before building; no default is chosen here):
-- Columns G–J filled on a row whose name is in the list: ignored or refused.
-- A new laborer whose rows disagree on mobile, residence or proposed wage: which row wins, or a refusal.
-- A note longer than the day's 500-character limit (`AttendanceDays::FORMAT`, L33-47): the code that refuses it.
 
 ## Known limits
 - A file with a new laborer holds the lock `EmployeeCodes::issueNext` takes on `employees`
