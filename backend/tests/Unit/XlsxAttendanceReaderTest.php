@@ -44,23 +44,45 @@ class XlsxAttendanceReaderTest extends TestCase
         ], (new XlsxAttendanceReader)->sheets($path, 2000, []));
     }
 
+    public function test_a_visible_lists_is_still_read_as_lists_to_row_3(): void
+    {
+        $path = $this->xlsx([['A', true, [['title']]], ['lists', true, [['l1'], ['l2'], ['l3'], ['l4'], ['l5']]]]);
+
+        $this->assertSame(
+            ['name' => 'lists', 'visible' => true, 'rows' => [1 => ['l1'], 2 => ['l2'], 3 => ['l3']]],
+            (new XlsxAttendanceReader)->sheets($path, 2, [])[1],
+        );
+    }
+
+    public function test_lists_reads_the_range_dates_alike(): void
+    {
+        $date = new NumericCell(46333);   // 2026-11-07 retyped as a General number
+        $path = $this->xlsx([['A', true, [['title']]], ['lists', false, [['x', '', '', 'site'], ['', '', '', $date], ['', '', '', $date]]]]);
+
+        $this->assertSame([2 => [null, null, null, '2026-11-07'], 3 => [null, null, null, '2026-11-07']], array_slice((new XlsxAttendanceReader)->sheets($path, 2000, [])[1]['rows'], 1, null, true));
+    }
+
     public function test_time_columns_read_what_excel_makes_of_a_typed_time(): void
     {
+        $negative = new DateInterval('PT8H5M');
+        $negative->invert = 1;
         $rows = [['title'], ['head']];
         foreach ([
             new NumericCell(0.375),
             new DateTimeCell(new DateTimeImmutable('2026-11-07 09:30'), new Style(format: 'h:mm')),
             new DateIntervalCell(new DateInterval('PT8H5M'), new Style(format: '[h]:mm')),
             '٩:٠٥',
+            new DateIntervalCell($negative, new Style(format: '[h]:mm')),
         ] as $time) {
-            $rows[] = ['name', 'حاضر', $time, '', new NumericCell(500)];
+            $rows[] = ['name', 'حاضر', $time, '', new NumericCell(0.5)];
         }
         $path = $this->xlsx([['A', true, $rows], ['lists', false, [['x']]]]);
 
         $read = (new XlsxAttendanceReader)->sheets($path, 2000, [2, 3])[0]['rows'];
 
-        $this->assertSame(['09:00', '09:30', '08:05', '9:05'], array_map(fn (array $cells) => $cells[2], array_slice($read, 2)));
-        $this->assertSame(['500', '500', '500', '500'], array_map(fn (array $cells) => $cells[4], array_slice($read, 2)));   // W8: not a time column
+        // A negative duration is not a time: it reads as before, and the import refuses it.
+        $this->assertSame(['09:00', '09:30', '08:05', '9:05', '0 08:05:00'], array_map(fn (array $cells) => $cells[2], array_slice($read, 2)));
+        $this->assertSame(['0.5', '0.5', '0.5', '0.5', '0.5'], array_map(fn (array $cells) => $cells[4], array_slice($read, 2)));   // W8: only the named columns are times
     }
 
     public function test_the_row_cap_counts_rows_below_the_two_head_rows(): void
