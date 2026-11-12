@@ -56,6 +56,11 @@ const FROM = { md: 'sm:max-md:hidden', lg: 'sm:max-lg:hidden', xl: 'sm:max-xl:hi
 const CELL = 'px-4 py-3 align-middle sm:whitespace-nowrap sm:first:ps-5 sm:last:pe-5 max-sm:p-0'
 // below sm a row is a card: [title | actions] / [status] / [label … value]*
 const CARD = 'max-sm:grid max-sm:grid-cols-[minmax(0,1fr)_auto] max-sm:items-center max-sm:gap-x-3 max-sm:gap-y-2 max-sm:px-4 max-sm:py-3'
+// Safari computes `position` on a table row to `static`, so every stretched link would cover the whole table (the last row
+// taking every click); clip-path keeps each one inside its own row. The focus ring sits on the row for the same reason.
+// ponytail: the clip also cuts anything a cell draws past its row (menus are portaled), and in Safari a row scrolled
+// sideways opens only from the part first in view; drop the clip once Safari honours `relative` on a table row.
+const LINK_ROW = 'relative [clip-path:inset(0)] has-[td:first-child>a:focus-visible]:outline-2 has-[td:first-child>a:focus-visible]:-outline-offset-2 has-[td:first-child>a:focus-visible]:outline-ring'
 
 /**
  * A list as a table from 640 px up and as one card per row below it (rule 19): one render, switched by CSS. Cards are
@@ -95,10 +100,10 @@ export function DataList<T>({ label, rows, rowKey, title, fields = [], status, a
           </TableHeader>
           <TableBody role="rowgroup" className="max-sm:block">
             {rows.map((r, i) => (
-              <TableRow role="row" key={rowKey(r)} aria-current={current?.(r) || undefined} className={cn(CARD, to && 'relative', current?.(r) && 'bg-accent hover:bg-accent')}>
+              <TableRow role="row" key={rowKey(r)} aria-current={current?.(r) || undefined} className={cn(CARD, to && LINK_ROW, current?.(r) && 'bg-accent hover:bg-accent')}>
                 <td role="cell" className={cn(CELL, 'sm:whitespace-normal max-sm:col-start-1 max-sm:row-start-1 max-sm:font-medium')}>
                   {to ? (
-                    <Link to={to(r)} state={state?.(r, i)} className="outline-none after:absolute after:inset-0 hover:underline focus-visible:after:outline-2 focus-visible:after:-outline-offset-2 focus-visible:after:outline-ring">
+                    <Link to={to(r)} state={state?.(r, i)} className="outline-none after:absolute after:inset-0 hover:underline">
                       {title.cell(r)}
                     </Link>
                   ) : (
