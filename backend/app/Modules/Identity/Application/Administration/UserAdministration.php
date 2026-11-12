@@ -5,15 +5,20 @@ declare(strict_types=1);
 namespace App\Modules\Identity\Application\Administration;
 
 use App\Modules\Audit\Infrastructure\AuditLog;
+use App\Modules\Identity\Application\Rbac\AuthorizeAction;
 use App\Modules\Identity\Domain\Authentication\IdentityAuditEvents;
 use App\Modules\Identity\Domain\Authentication\IdleTimeout;
 use App\Modules\Identity\Domain\Authentication\ViewAsEnding;
+use App\Modules\Identity\Domain\Rbac\AuthorizationRefused;
+use App\Modules\Identity\Infrastructure\Eloquent\Role;
 use App\Modules\Identity\Infrastructure\Eloquent\User;
 use App\Modules\Identity\Infrastructure\Eloquent\UserSession;
+use App\Modules\Identity\Infrastructure\RolePermissions;
 use App\Support\Http\Paginates;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Support\Arr;
+use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Validator;
 use Illuminate\Validation\Rule;
@@ -24,6 +29,8 @@ use SensitiveParameter;
 final class UserAdministration
 {
     use Paginates;
+
+    public function __construct(private readonly AuthorizeAction $authorize) {}
 
     /**
      * @param  array<string, mixed>  $filters
@@ -50,6 +57,7 @@ final class UserAdministration
     public function create(array $data): array
     {
         $v = Validator::make(self::normalised($data), self::rules())->validate();
+        $this->assertManageable($v['role_id']);
 
         return DB::transaction(function () use ($v): array {
             $user = User::create([...$v, 'is_active' => true]);
@@ -67,15 +75,26 @@ final class UserAdministration
         return $this->row(User::findOrFail($id));
     }
 
+    /** @return list<array{id: string, slug: string, name: string, name_ar: string}> the roles the signed-in user may give an account */
+    public function assignableRoles(): array
+    {
+        return array_values(Role::orderBy('id')->get()
+            ->filter(fn (Role $r) => $this->manageable((string) $r->id))
+            ->map(fn (Role $r) => self::role($r))->all());
+    }
+
     /**
      * @param  array<string, mixed>  $data  name, email, role_id
      * @return array<string, mixed>
      */
     public function update(string $id, array $data): array
     {
-        $user = User::findOrFail($id);
+        $user = $this->target($id);
         $rules = array_map(fn (array $r) => ['sometimes', ...$r], Arr::except(self::rules($id), 'password'));
         $v = Validator::make(self::normalised($data), $rules)->validate();
+        if (isset($v['role_id'])) {
+            $this->assertManageable($v['role_id']);
+        }
 
         return DB::transaction(function () use ($user, $v): array {
             $user->fill($v);
@@ -97,7 +116,7 @@ final class UserAdministration
     public function setActive(string $id, bool $active): array
     {
         return DB::transaction(function () use ($id, $active): array {
-            $user = User::findOrFail($id);
+            $user = $this->target($id);
             if ($user->is_active === $active) {
                 return $this->row($user);
             }
@@ -120,7 +139,7 @@ final class UserAdministration
         Validator::make(['password' => $password], Arr::only(self::rules(), 'password'))->validate();
 
         DB::transaction(function () use ($id, $password): void {
-            $user = User::findOrFail($id);
+            $user = $this->target($id);
             $user->update(['password' => $password, 'failed_login_attempts' => 0, 'locked_until' => null]);
             $user->revokeSessions();
             AuditLog::record(IdentityAuditEvents::PASSWORD_SET, 'users', (string) $user->id);
@@ -130,7 +149,7 @@ final class UserAdministration
     /** @return list<array<string, mixed>> live sessions, newest activity first */
     public function sessions(string $id): array
     {
-        return array_values(User::findOrFail($id)->sessions()
+        return array_values($this->target($id)->sessions()
             ->where('last_activity_at', '>=', now()->subHours(IdleTimeout::HOURS))
             ->orderByDesc('last_activity_at')->orderByDesc('id')->get()
             ->map(function (UserSession $s): array {
@@ -143,10 +162,48 @@ final class UserAdministration
     public function terminateSession(string $userId, string $sessionId): void
     {
         DB::transaction(function () use ($userId, $sessionId): void {
+            $this->target($userId);
             $session = UserSession::whereKey($sessionId)->where('user_id', $userId)->firstOrFail();
             $session->impersonator_id === null ? $session->delete() : $session->endViewAs(ViewAsEnding::Revoked);
             AuditLog::record(IdentityAuditEvents::ADMIN_SESSION_TERMINATED, 'users', $userId, ['session_id' => $sessionId]);
         });
+    }
+
+    /** The account to act on, refused when it is out of the signed-in user's reach. */
+    private function target(string $id): User
+    {
+        $user = User::findOrFail($id);
+        $this->assertManageable((string) $user->role_id);
+
+        return $user;
+    }
+
+    private function assertManageable(string $roleId): void
+    {
+        if (! $this->manageable($roleId)) {
+            throw AuthorizationRefused::outOfReach();
+        }
+    }
+
+    /**
+     * No escalation (owner, 2026-11-08, R22): without role.manage, user.manage reaches only accounts and roles whose role
+     * holds no `.all` grant the actor lacks. Today that is HR over HR and site managers, never the CEO or the Developer.
+     */
+    private function manageable(string $roleId): bool
+    {
+        $actor = Auth::user();
+        if ($actor === null) {
+            return true; // the console command: whoever runs it already holds the server
+        }
+        if (! $this->authorize->decide($actor, 'user.manage')->granted()) {
+            return false;
+        }
+        if ($this->authorize->decide($actor, 'role.manage')->granted()) {
+            return true;
+        }
+        $held = $this->authorize->permissionsOf($actor);
+
+        return array_diff(array_filter(RolePermissions::of($roleId), fn (string $t) => str_ends_with($t, '.all')), $held) === [];
     }
 
     /**
@@ -182,7 +239,14 @@ final class UserAdministration
 
         return [
             ...Arr::only($m->toArray(), ['id', 'name', 'email', 'is_active', 'locked_until', 'failed_login_attempts', 'created_at']),
-            'role' => $role === null ? null : ['id' => (string) $role->id, 'slug' => $role->slug, 'name' => $role->name, 'name_ar' => $role->name_ar],
+            'role' => $role === null ? null : self::role($role),
+            'manageable' => $this->manageable((string) $m->role_id),
         ];
+    }
+
+    /** @return array{id: string, slug: string, name: string, name_ar: string} */
+    private static function role(Role $role): array
+    {
+        return ['id' => (string) $role->id, 'slug' => $role->slug, 'name' => $role->name, 'name_ar' => $role->name_ar];
     }
 }

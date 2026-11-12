@@ -25,15 +25,12 @@ import { USERS, useApi, useList, useSave } from '@/lib/query'
  */
 const noGenerator = { type: 'text', dir: 'ltr', autoComplete: 'off', autoCapitalize: 'off', autoCorrect: 'off', spellCheck: false } as const
 
-/** Without role.view the role list is not loaded, so the field stays locked to the account's current role. */
+/** `roles` are the ones the signed-in user may give: the server leaves out any holding a permission they lack. */
 function AccountDialog({ account, roles, ...dialog }: { account?: Row; roles: Row[] } & Controlled) {
   const { t } = useTranslation()
   const send = useSave()
-  const { can } = useAuth()
   const roleName = useRoleName()
-  const pick = can('role.view')
   const label = t(account ? 'common.edit' : 'console.addAccount')
-  const options = pick ? roles : account?.role ? [account.role] : []
   return (
     <FormDialog
       {...dialog}
@@ -48,7 +45,7 @@ function AccountDialog({ account, roles, ...dialog }: { account?: Row; roles: Ro
         <>
           <TextField name="name" label={t('console.name')} {...f} />
           <TextField name="email" label={t('auth.email')} type="email" dir="ltr" {...f} />
-          <SelectField name="role_id" label={t('console.role')} blank={pick} disabled={!pick} options={options.map((r) => [r.id, roleName(r)])} {...f} />
+          <SelectField name="role_id" label={t('console.role')} blank options={roles.map((r) => [r.id, roleName(r)])} {...f} />
           {!account && <TextField name="password" label={t('auth.password')} {...noGenerator} {...f} />}
         </>
       )}
@@ -152,11 +149,10 @@ export function AccountsPage() {
   const roleName = useRoleName()
   const manage = can('user.manage')
   const impersonate = can('user.impersonate')
-  const viewRoles = can('role.view')
   // ponytail: one 100-account page; there are a handful of accounts
   const { rows, err, loading } = useList(USERS)
   const send = useSave()
-  const { data: roles = [], err: rolesErr } = useApi<Row[]>(manage && viewRoles ? '/roles' : null)
+  const { data: roles = [], err: rolesErr } = useApi<Row[]>(manage ? '/users/assignable-roles' : null)
   const [actErr, setActErr] = useState<unknown>()
   const [dlg, setDlg] = useState<{ type: 'add' } | { type: 'edit' | 'password' | 'sessions' | 'viewAs'; row: Row }>()
   const close = { open: true, onOpenChange: () => setDlg(undefined) }
@@ -170,7 +166,7 @@ export function AccountsPage() {
       <PageHeader
         title={t('page.accounts')}
         description={t('console.accountsSubtitle')}
-        action={manage && viewRoles ? { label: t('console.addAccount'), icon: UserPlus, onClick: () => setDlg({ type: 'add' }) } : undefined}
+        action={manage ? { label: t('console.addAccount'), icon: UserPlus, onClick: () => setDlg({ type: 'add' }) } : undefined}
       />
       <ErrorBanner err={err ?? rolesErr ?? actErr} shown={[]} />
       <Card className="overflow-hidden">
@@ -204,7 +200,7 @@ export function AccountsPage() {
           actions={manage || impersonate ? (u) => (
             <RowActions
               items={[
-                ...(manage ? [
+                ...(manage && u.manageable ? [ // false on an account whose role holds a permission the signed-in user lacks
                   { label: t('common.edit'), onSelect: () => setDlg({ type: 'edit', row: u }) },
                   { label: t('console.setPassword'), onSelect: () => setDlg({ type: 'password', row: u }) },
                   { label: t(u.is_active ? 'console.deactivate' : 'console.reactivate'), onSelect: () => toggle(u), destructive: u.is_active },

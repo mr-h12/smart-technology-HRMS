@@ -20,7 +20,7 @@ const perms = [
   return { id: ids[key] ?? `p-${key}`, resource, action, scope, key }
 })
 const role = { id: 'r1', slug: 'manager', name: 'Manager', name_ar: 'مدير', permissions: ['employee.view.own', 'site.view.own'], users_count: 2 }
-const account = { id: 'u2', name: 'سارة', email: 'sara@smart.test', is_active: true, locked_until: null, failed_login_attempts: 0, role: { id: 'r1', slug: 'manager', name: 'Manager', name_ar: 'مدير' } }
+const account = { id: 'u2', name: 'سارة', email: 'sara@smart.test', is_active: true, locked_until: null, failed_login_attempts: 0, manageable: true, role: { id: 'r1', slug: 'manager', name: 'Manager', name_ar: 'مدير' } }
 
 beforeEach(() => localStorage.clear())
 afterEach(() => {
@@ -125,7 +125,7 @@ test('an action outside the known list still gets a column, after the known ones
 })
 
 test('account create shows a server field error under its field', async () => {
-  mockFetch({ 'GET /api/v1/users': () => json(200, { data: [], meta: { pagination } }), 'GET /api/v1/roles': () => json(200, { data: [role] }),
+  mockFetch({ 'GET /api/v1/users': () => json(200, { data: [], meta: { pagination } }), 'GET /api/v1/users/assignable-roles': () => json(200, { data: [role] }),
     'POST /api/v1/users': () => json(422, { error: { code: 'validation_failed', message: 'x', details: [{ field: 'email', code: 'invalid', message: 'البريد مستخدم' }] } }) })
   renderWithAuth(<AccountsPage />, ['user.view.all', 'user.manage.all', 'role.view.all'])
   // open create dialog, fill, save
@@ -141,7 +141,7 @@ test('account create shows a server field error under its field', async () => {
 })
 
 test('without user.manage there are no account actions', async () => {
-  mockFetch({ 'GET /api/v1/users': () => json(200, { data: [account], meta: { pagination } }), 'GET /api/v1/roles': () => json(200, { data: [role] }) })
+  mockFetch({ 'GET /api/v1/users': () => json(200, { data: [account], meta: { pagination } }), 'GET /api/v1/users/assignable-roles': () => json(200, { data: [role] }) })
   renderWithAuth(<AccountsPage />, ['user.view.all'])
   expect(await screen.findByText(account.email)).toBeInTheDocument()
   expect(screen.queryByRole('button', { name: 'إضافة حساب' })).toBeNull()
@@ -149,7 +149,7 @@ test('without user.manage there are no account actions', async () => {
 })
 
 test('the accounts table shows role, status and locked badges', async () => {
-  mockFetch({ 'GET /api/v1/users': () => json(200, { data: [{ ...account, locked_until: '2999-01-01T00:00:00Z' }], meta: { pagination } }), 'GET /api/v1/roles': () => json(200, { data: [role] }) })
+  mockFetch({ 'GET /api/v1/users': () => json(200, { data: [{ ...account, locked_until: '2999-01-01T00:00:00Z' }], meta: { pagination } }), 'GET /api/v1/users/assignable-roles': () => json(200, { data: [role] }) })
   renderWithAuth(<AccountsPage />, ['user.view.all'])
   const row = await screen.findByRole('row', { name: /سارة/ })
   expect(within(row).getByText('مدير')).toBeInTheDocument()
@@ -159,7 +159,7 @@ test('the accounts table shows role, status and locked badges', async () => {
 
 test('the row menu deactivates an account', async () => {
   const deactivate = vi.fn(() => json(200, { data: { ...account, is_active: false } }))
-  mockFetch({ 'GET /api/v1/users': () => json(200, { data: [account], meta: { pagination } }), 'GET /api/v1/roles': () => json(200, { data: [role] }),
+  mockFetch({ 'GET /api/v1/users': () => json(200, { data: [account], meta: { pagination } }), 'GET /api/v1/users/assignable-roles': () => json(200, { data: [role] }),
     'PATCH /api/v1/users/u2/deactivate': deactivate })
   renderWithAuth(<AccountsPage />, ['user.view.all', 'user.manage.all'])
   const row = await screen.findByRole('row', { name: /سارة/ })
@@ -170,7 +170,7 @@ test('the row menu deactivates an account', async () => {
 
 test('the row menu sets a new password', async () => {
   const put = vi.fn(() => json(200, { data: {} }))
-  mockFetch({ 'GET /api/v1/users': () => json(200, { data: [account], meta: { pagination } }), 'GET /api/v1/roles': () => json(200, { data: [role] }),
+  mockFetch({ 'GET /api/v1/users': () => json(200, { data: [account], meta: { pagination } }), 'GET /api/v1/users/assignable-roles': () => json(200, { data: [role] }),
     'PUT /api/v1/users/u2/password': put })
   renderWithAuth(<AccountsPage />, ['user.view.all', 'user.manage.all'])
   const row = await screen.findByRole('row', { name: /سارة/ })
@@ -186,26 +186,28 @@ test('the row menu sets a new password', async () => {
   expect(JSON.parse((put.mock.calls[0] as unknown as [string, RequestInit])[1].body as string)).toEqual({ password: 'newpass123' })
 })
 
-test('without role.view the roles list is not fetched and the role field is locked to the current role', async () => {
+test('HR gets the roles it may give without role.view, and no account actions on an account out of reach', async () => {
   const roles = vi.fn(() => json(403, { error: { code: 'forbidden', message: 'ممنوع' } }))
-  const patch = vi.fn(() => json(200, { data: account }))
-  mockFetch({ 'GET /api/v1/users': () => json(200, { data: [account], meta: { pagination } }), 'GET /api/v1/roles': roles, 'PATCH /api/v1/users/u2': patch })
+  const ceo = { ...account, id: 'u4', name: 'خالد', email: 'ceo@smart.test', manageable: false, role: { id: 'r4', slug: 'ceo', name: 'CEO', name_ar: 'المدير التنفيذي' } }
+  const hr = { id: 'r2', slug: 'hr', name: 'HR', name_ar: 'الموارد البشرية' }
+  mockFetch({ 'GET /api/v1/users': () => json(200, { data: [account, ceo], meta: { pagination } }), 'GET /api/v1/roles': roles,
+    'GET /api/v1/users/assignable-roles': () => json(200, { data: [role, hr] }) })
   renderWithAuth(<AccountsPage />, ['user.view.all', 'user.manage.all'])
-  const row = await screen.findByRole('row', { name: /سارة/ })
+  expect(within(await screen.findByRole('row', { name: /خالد/ })).queryByRole('button')).toBeNull()
   expect(roles).not.toHaveBeenCalled()
-  expect(screen.queryByRole('alert')).toBeNull()
-  expect(screen.queryByRole('button', { name: 'إضافة حساب' })).toBeNull()
-  await user.click(within(row).getByRole('button', { name: 'الإجراءات' }))
+  await user.click(within(screen.getByRole('row', { name: /سارة/ })).getByRole('button', { name: 'الإجراءات' }))
   await user.click(await screen.findByRole('menuitem', { name: 'تعديل' }))
   const select = screen.getByLabelText('الدور')
-  expect(select).toBeDisabled()
+  expect(select).toBeEnabled()
   expect(select).toHaveDisplayValue('مدير')
-  await user.click(screen.getByRole('button', { name: 'حفظ' }))
-  expect(JSON.parse((patch.mock.calls[0] as unknown as [string, RequestInit])[1].body as string)).toEqual({ name: 'سارة', email: 'sara@smart.test', role_id: 'r1' })
+  expect(within(select).getAllByRole('option').map((o) => o.textContent).filter(Boolean)).toEqual(['مدير', 'الموارد البشرية'])
+  await user.keyboard('{Escape}')
+  await user.click(screen.getByRole('button', { name: 'إضافة حساب' }))
+  expect(within(screen.getByLabelText('الدور')).queryByRole('option', { name: 'المدير التنفيذي' })).toBeNull()
 })
 
 test('closing a dialog opened from the row menu leaves the page clickable', async () => {
-  mockFetch({ 'GET /api/v1/users': () => json(200, { data: [account], meta: { pagination } }), 'GET /api/v1/roles': () => json(200, { data: [role] }),
+  mockFetch({ 'GET /api/v1/users': () => json(200, { data: [account], meta: { pagination } }), 'GET /api/v1/users/assignable-roles': () => json(200, { data: [role] }),
     'GET /api/v1/users/u2/sessions': () => json(200, { data: [] }) })
   renderWithAuth(<AccountsPage />, ['user.view.all', 'user.manage.all', 'role.view.all'])
   const row = await screen.findByRole('row', { name: /سارة/ })
@@ -237,7 +239,7 @@ test('saving an account refreshes the account lookup the audit filter shares', a
   const usersGets = () => vi.mocked(fetch).mock.calls.filter(([u, i]) => String(u).startsWith('/api/v1/users?') && (i?.method ?? 'GET') === 'GET').length
   mockFetch({
     'GET /api/v1/users': () => json(200, { data: users, meta: { pagination } }),
-    'GET /api/v1/roles': () => json(200, { data: [role] }),
+    'GET /api/v1/users/assignable-roles': () => json(200, { data: [role] }),
     'GET /api/v1/audit-log': () => json(200, { data: [], meta: { pagination } }),
     'POST /api/v1/users': () => { users.push({ ...account, id: 'u9', name: 'نور' }); return json(201, { data: {} }) },
   })
@@ -260,7 +262,7 @@ test('saving an account refreshes the account lookup the audit filter shares', a
 })
 
 test('Add account is the solid header action and opens the create dialog', async () => {
-  mockFetch({ 'GET /api/v1/users': () => json(200, { data: [account], meta: { pagination } }), 'GET /api/v1/roles': () => json(200, { data: [role] }) })
+  mockFetch({ 'GET /api/v1/users': () => json(200, { data: [account], meta: { pagination } }), 'GET /api/v1/users/assignable-roles': () => json(200, { data: [role] }) })
   renderWithAuth(<AccountsPage />, ['user.view.all', 'user.manage.all', 'role.view.all'])
   const add = await screen.findByRole('button', { name: 'إضافة حساب' })
   expect(add).toHaveClass('bg-primary')
@@ -398,7 +400,7 @@ const menuOf = async (name: RegExp) => {
 }
 
 test('View as shows with user.impersonate only on active accounts other than the signed-in one', async () => {
-  mockFetch({ 'GET /api/v1/users': () => json(200, { data: accounts, meta: { pagination } }), 'GET /api/v1/roles': () => json(200, { data: [role] }) })
+  mockFetch({ 'GET /api/v1/users': () => json(200, { data: accounts, meta: { pagination } }), 'GET /api/v1/users/assignable-roles': () => json(200, { data: [role] }) })
   renderWithAuth(<AccountsPage />, ['user.view.all', 'user.manage.all', 'user.impersonate.all'])
   expect(within(await menuOf(/سارة/)).getByRole('menuitem', { name: 'عرض كـ' })).toBeInTheDocument()
   await user.keyboard('{Escape}')
@@ -408,7 +410,7 @@ test('View as shows with user.impersonate only on active accounts other than the
 })
 
 test('without user.impersonate there is no View as', async () => {
-  mockFetch({ 'GET /api/v1/users': () => json(200, { data: accounts, meta: { pagination } }), 'GET /api/v1/roles': () => json(200, { data: [role] }) })
+  mockFetch({ 'GET /api/v1/users': () => json(200, { data: accounts, meta: { pagination } }), 'GET /api/v1/users/assignable-roles': () => json(200, { data: [role] }) })
   renderWithAuth(<AccountsPage />, ['user.view.all', 'user.manage.all'])
   expect(within(await menuOf(/سارة/)).queryByRole('menuitem', { name: 'عرض كـ' })).toBeNull()
 })

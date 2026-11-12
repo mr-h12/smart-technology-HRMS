@@ -168,6 +168,7 @@ Route::middleware('auth')->group(function (): void {
     Route::prefix('users')->controller(UserController::class)->group(function (): void {
         Route::get('/', 'index')->middleware('permission:user.view');
         Route::post('/', 'store')->middleware('permission:user.manage');
+        Route::get('assignable-roles', 'assignableRoles')->middleware('permission:user.manage');
         Route::middleware([])->whereUuid(['user', 'session'])->group(function (): void {
             Route::get('{user}', 'show')->middleware('permission:user.view');
             Route::patch('{user}', 'update')->middleware('permission:user.manage');
