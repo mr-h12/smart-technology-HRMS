@@ -69,7 +69,8 @@ export const navAbilities = (path: string) => NAV.flatMap((g) => g.items).find((
 
 /** The first page the user may open; the fallback is the 1a landing page. */
 export const homePath = (can: (ability: string) => boolean) =>
-  NAV.flatMap((g) => g.items).find((n) => n.abilities.some(can))?.path ?? '/employees'
+  // a site manager's daily job is recording their sites' attendance, so they start there
+  can('attendance.record.own') && !can('attendance.record.all') ? '/site-day' : (NAV.flatMap((g) => g.items).find((n) => n.abilities.some(can))?.path ?? '/employees')
 
 export function LanguageToggle() {
   const { t, i18n } = useTranslation()
