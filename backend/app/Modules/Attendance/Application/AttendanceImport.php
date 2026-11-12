@@ -177,15 +177,19 @@ final class AttendanceImport
             $this->writes->writeCell($c['employee'], $c['date'], $c['input'], $ownerId, 'imported', $dryRun);
 
             return null;
-        } catch (AttendanceRefused $e) {
-            return self::error(...$at, error: $e->reason->value, message: (string) __('attendance.refusal.'.$e->reason->value, $e->params));
-        } catch (ConcurrencyConflict) {
-            return self::error(...$at, error: ConcurrencyConflict::CODE, message: ConcurrencyConflict::message());
-        } catch (DayRulesViolated $e) {
-            $code = $e->violations[0]['code'];
-
-            return self::error(...$at, error: $code, message: (string) __('attendance.rule.'.$code));
+        } catch (AttendanceRefused|ConcurrencyConflict|DayRulesViolated $e) {
+            return self::error(...$at, ...self::reason($e));
         }
+    }
+
+    /** @return array{error: string, message: string} a refused write as an import error, the message in the request language */
+    public static function reason(AttendanceRefused|ConcurrencyConflict|DayRulesViolated $e): array
+    {
+        return match (true) {
+            $e instanceof AttendanceRefused => ['error' => $e->reason->value, 'message' => (string) __('attendance.refusal.'.$e->reason->value, $e->params)],
+            $e instanceof ConcurrencyConflict => ['error' => ConcurrencyConflict::CODE, 'message' => ConcurrencyConflict::message()],
+            default => ['error' => $e->violations[0]['code'], 'message' => (string) __('attendance.rule.'.$e->violations[0]['code'])],
+        };
     }
 
     /**
@@ -196,7 +200,7 @@ final class AttendanceImport
      *
      * @return array{array<string, array{site_id: ?string, leave_code: ?string, name: string}>, array<array-key, string>, array<array-key, list<string>>}
      */
-    private function choices(EmployeeType $g): array
+    public function choices(EmployeeType $g): array
     {
         $en = app()->getLocale() === 'en';
         $present = (string) __('attendance.template.present');
@@ -284,7 +288,7 @@ final class AttendanceImport
         return $letters;
     }
 
-    private static function key(string $name): string
+    public static function key(string $name): string
     {
         return mb_strtolower(XlsxAttendanceReader::text($name) ?? '');
     }
