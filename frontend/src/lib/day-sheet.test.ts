@@ -173,6 +173,12 @@ test('bulkRows time leaves out a row whose given values already match', () => {
   expect(bulkRows({ kind: 'time', in_time: '08:00', out_time: '17:00' }, [same, other], leaveTypeId).rows).toEqual([{ employee_id: 'e2', version: 3, site_id: 'S1', in_time: '08:00', out_time: '17:00' }])
 })
 
+test('bulkRows time carries approved overtime minutes, unless they are already stored', () => {
+  const r = row(1, { day: stored({ site_id: 'S1', in_time: '08:00:00', out_time: '18:00:00', ot_minutes: 0 }) })
+  const same = row(2, { day: stored({ site_id: 'S1', in_time: '08:00:00', out_time: '18:00:00', ot_minutes: 75 }) })
+  expect(bulkRows({ kind: 'time', ot_minutes: 75 }, [r, same], leaveTypeId).rows).toEqual([{ employee_id: 'e1', version: 3, site_id: 'S1', ot_minutes: 75 }])
+})
+
 test('bulkRows time writes the office in-time with site_id null', () => {
   const a = row(1, { type: 'office' })
   const same = row(2, { type: 'office', day: stored({ site_id: null, in_time: '09:20:00' }) })

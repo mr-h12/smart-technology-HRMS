@@ -6,7 +6,6 @@ namespace App\Modules\Attendance\Application;
 
 use App\Modules\Attendance\Domain\AttendanceRefusal;
 use App\Modules\Attendance\Domain\AttendanceRefused;
-use App\Modules\Attendance\Domain\DayRules;
 use App\Modules\Attendance\Domain\Employment;
 use App\Modules\Attendance\Domain\ManagerWindow;
 use App\Modules\Attendance\Domain\Period;
@@ -176,7 +175,7 @@ final class SiteDay
                 }
                 $out[] = $clear
                     ? ['employee_id' => $e['id'], 'version' => $row['version'], 'clear' => true]
-                    : ['employee_id' => $e['id'], 'version' => $row['version'] ?? null, 'site_id' => $target, ...$this->values($e, $date, $row, $stored, $target === $siteId, $settings)];
+                    : ['employee_id' => $e['id'], 'version' => $row['version'] ?? null, 'site_id' => $target, ...$this->values($row, $target === $siteId)];
             }
             if ($refused !== []) {
                 throw AttendanceRefused::because($refused[0][0], $refused[0][1], array_column($refused, 2));
@@ -351,35 +350,15 @@ final class SiteDay
     }
 
     /**
-     * @param  array<string, mixed>  $e
      * @param  array<string, mixed>  $row
-     * @param  array<string, mixed>  $stored  the day as read
-     * @param  array<string, string>  $settings
      * @return array<string, mixed> what the row stores besides the site. A note is written only when the row sends one, so HR's note
-     *                              stays (P28 keeps an unsent field); a leave day sends no times.
+     *                              stays (P28 keeps an unsent field); a leave day sends no times. The minutes come from AttendanceDays.
      */
-    private function values(array $e, string $date, array $row, array $stored, bool $work, array $settings): array
+    private function values(array $row, bool $work): array
     {
         $note = array_key_exists('note', $row) ? ['note' => $row['note']] : [];
-        if (! $work) {
-            return $note;
-        }
-        $in = $row['in_time'] ?? null;
-        $outTime = $row['out_time'] ?? null;
-        $values = ['in_time' => $in, 'out_time' => $outTime, ...$note];
-        $type = Employment::typeOn($e, $date);
-        if ($type === EmployeeType::Engineer || $type === EmployeeType::DayLaborer) {
-            $was = $stored['state'] === 'stored' && $stored['site_id'] !== null && $stored['leave_code'] === null;
-            if (! $was || $stored['in_time'] !== $in) {
-                $start = EffectiveDays::fieldShift($e, $date, $settings)['start'];
-                $values['late_minutes'] = $in === null ? null : DayRules::lateMinutes($start, $in);
-            }
-            if (! $was || $stored['in_time'] !== $in || $stored['out_time'] !== $outTime) {
-                $values['ot_minutes'] = $in !== null && $outTime !== null ? 0 : null;
-            }
-        }
 
-        return $values;
+        return $work ? ['in_time' => $row['in_time'] ?? null, 'out_time' => $row['out_time'] ?? null, ...$note] : $note;
     }
 
     /** @param  array<string, string>  $settings */

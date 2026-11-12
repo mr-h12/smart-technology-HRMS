@@ -374,6 +374,40 @@ class SiteDaySaveTest extends TestCase
         $this->assertSame(90, $this->stored($this->l1)->late_minutes);
     }
 
+    public function test_a_site_managers_overtime_is_stored_as_0_until_hr_approves_it(): void
+    {
+        $this->cairo('2026-10-22 19:00');
+        $this->actingAs($this->m, 'api');
+        $this->save($this->s1, [$this->work($this->e1, '08:00', '18:30')])->assertOk();
+        $this->assertSame([0, 0], [$this->stored($this->e1)->late_minutes, $this->stored($this->e1)->ot_minutes]);
+
+        $this->signIn('hr');
+        $this->postJson('/api/v1/attendance/days/bulk', ['date' => '2026-10-22', 'rows' => [['employee_id' => $this->e1, 'version' => 1, 'site_id' => $this->s1, 'ot_minutes' => 90]]])->assertOk();
+        $this->assertSame([0, 90, 'entered'], [$this->stored($this->e1)->late_minutes, $this->stored($this->e1)->ot_minutes, $this->stored($this->e1)->source]);   // now HR's day
+    }
+
+    public function test_hrs_arrival_only_edit_of_a_managers_day_leaves_its_overtime_unapproved(): void
+    {
+        $this->cairo('2026-10-22 19:00');
+        $this->actingAs($this->m, 'api');
+        $this->save($this->s1, [$this->work($this->e1, '08:00', '18:30')])->assertOk();
+
+        $this->signIn('hr');
+        $this->postJson('/api/v1/attendance/days/bulk', ['date' => '2026-10-22', 'rows' => [['employee_id' => $this->e1, 'version' => 1, 'site_id' => $this->s1, 'in_time' => '08:20']]])->assertOk();
+        $this->assertSame([20, 0], [$this->stored($this->e1)->late_minutes, $this->stored($this->e1)->ot_minutes]);
+    }
+
+    public function test_a_departure_only_save_after_the_window_keeps_the_late_minutes_and_stores_overtime_0(): void
+    {
+        $this->actingAs($this->m, 'api');
+        $this->cairo('2026-10-20 09:00');
+        $this->save($this->s1, [$this->work($this->e1, '08:10')], '2026-10-20')->assertOk();
+        $this->cairo('2026-10-22 13:00');
+        $this->save($this->s1, [$this->work($this->e1, '08:10', '18:30', 1)], '2026-10-20')->assertOk();
+        $day = DB::table('attendance_days')->where(['employee_id' => $this->e1, 'date' => '2026-10-20'])->first();
+        $this->assertSame(['18:30:00', 10, 0], [$day?->out_time, $day?->late_minutes, $day?->ot_minutes]);
+    }
+
     public function test_hr_and_ceo_cannot_save(): void
     {
         $this->save($this->s1, [$this->work($this->w1, '08:00')])->assertForbidden();

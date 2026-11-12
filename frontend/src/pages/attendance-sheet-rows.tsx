@@ -129,16 +129,33 @@ export function SheetRows({ rows, allIds, group, editable, date, sites, selected
     </DropdownMenu>
   )
   /**
-   * A row's times, each placed by `cell`: office rows the in-time, present field rows arrival and departure with the server's late/OT
-   * hints; boxes while the day is editable, plain text otherwise. Keyed by the stored times, so a refetch never wipes typing.
+   * A row's times, each placed by `cell`: office rows the in-time, present field rows arrival and departure with their late/OT minutes;
+   * boxes while the day is editable, plain text otherwise. Keyed by the stored times, so a refetch never wipes typing.
+   * Engineers and day laborers show their stored minutes (an old day with none stored, the server's hint); overtime the times suggest
+   * but nobody stored is «غير معتمد», with «اعتماد» to store it. Permanent workers show the hints (their minutes come from the times at payroll).
    */
   const times = (r: SheetRow, cell: (field: TimeField, node: ReactNode) => ReactNode) => {
     const fields: TimeField[] = isOfficeRow(r) ? ['in_time'] : status(r) === 'present' ? ['in_time', 'out_time'] : []
     if (!fields.length) return null
-    const late = r.hints.late_minutes ?? 0
-    const over = r.hints.ot_minutes ?? 0
-    const hint = (f: TimeField) => (isOfficeRow(r) ? undefined : f === 'in_time' ? (late > 0 ? t('attendance.sheet.lateBy', { minutes: late }) : undefined) : over > 0 ? t('attendance.sheet.overBy', { minutes: over }) : undefined)
-    if (!writable(r)) return fields.map((f) => cell(f, <><span className="text-sm">{formatTime(r.day[f], lang)}</span><Hint text={hint(f)} /></>))
+    const stores = r.employee.type === 'engineer' || r.employee.type === 'day_laborer'
+    const late = stores && r.day.late_minutes != null ? Number(r.day.late_minutes) : (r.hints.late_minutes ?? 0)
+    const over = stores ? Number(r.day.ot_minutes ?? 0) : (r.hints.ot_minutes ?? 0)
+    const suggested = stores && !over ? (r.hints.ot_minutes ?? 0) : 0
+    const approve = t('attendance.sheet.approveOt')
+    const hint = (f: TimeField) => (isOfficeRow(r) ? null
+      : f === 'in_time' ? late > 0 && <Hint text={t('attendance.sheet.lateBy', { minutes: late })} />
+      : over > 0 ? <Hint text={t('attendance.sheet.overBy', { minutes: over })} />
+      : suggested > 0 && (
+        <Hint text={t('attendance.sheet.overUnapproved', { minutes: suggested })}>
+          {writable(r) && (
+            <Button type="button" variant="outline" size="xs" className="ms-1" disabled={pending.has(r.employee.id)} aria-label={t('attendance.sheet.rowAction', { action: approve, name: name(r) })}
+              onClick={() => onApply({ kind: 'time', ot_minutes: suggested }, r, t('attendance.sheet.actionOn', { action: approve, name: name(r) }))}>
+              {approve}
+            </Button>
+          )}
+        </Hint>
+      ))
+    if (!writable(r)) return fields.map((f) => cell(f, <><span className="text-sm">{formatTime(r.day[f], lang)}</span>{hint(f)}</>))
     return (
       <TimeCells key={`${r.employee.id}/${r.day.in_time}/${r.day.out_time}`} cell={cell} disabled={pending.has(r.employee.id)}
         cells={fields.map((f) => ({ field: f, was: hhmm(r.day[f]) ?? '', label: t('attendance.sheet.rowAction', { action: t(`attendance.day.${f}`), name: name(r) }), hint: hint(f) }))}
@@ -353,9 +370,9 @@ export const selectOnFocus = {
   onMouseUp: (e: MouseEvent) => e.preventDefault(),
 }
 
-/** A server late/OT hint under a time, in the warning tone. */
-function Hint({ text }: { text?: string }) {
-  return text ? <p className="mt-1 flex items-center gap-1 text-xs text-warning"><Clock className="size-3.5 shrink-0" aria-hidden />{text}</p> : null
+/** Late/OT minutes under a time, in the warning tone; `children` sit after the text (the overtime «اعتماد»). */
+function Hint({ text, children }: { text: string; children?: ReactNode }) {
+  return <p className="mt-1 flex items-center gap-1 text-xs text-warning"><Clock className="size-3.5 shrink-0" aria-hidden />{text}{children}</p>
 }
 
 /**
@@ -365,7 +382,7 @@ function Hint({ text }: { text?: string }) {
  * time, so typing replaces it. `cell` places each box (a table cell, a card slot).
  */
 function TimeCells({ cells, disabled, onCommit, cell }: {
-  cells: { field: TimeField; was: string; label: string; hint?: string }[]
+  cells: { field: TimeField; was: string; label: string; hint?: ReactNode }[]
   disabled: boolean
   /** Resolves truthy once written; a refused write puts the stored times back, so a later blur does not send them again. */
   onCommit: (times: Partial<Record<TimeField, string>>) => Promise<unknown>
@@ -389,12 +406,15 @@ function TimeCells({ cells, disabled, onCommit, cell }: {
     setDraft(next)
     if (Object.keys(out).length) void onCommit(out).then((written) => { if (!written) setDraft(stored()) })
   }
+  // the hint sits outside the box: moving to its «اعتماد» leaves the pair, so a typed time is written first
   return cells.map((c, i) => cell(c.field, (
-    <div ref={(el) => { boxes.current[i] = el }} onBlur={(e) => { if (!boxes.current.some((b) => b?.contains(e.relatedTarget))) done() }}
-      onKeyDown={(e) => { if (e.key === 'Escape') setDraft(stored()); else if (e.key === 'Enter' && e.target instanceof HTMLInputElement) e.target.blur() }}>
-      <TimeInput value={draft[c.field].v} label={c.label} aria-label={c.label} quietHint disabled={disabled} {...selectOnFocus}
-        onChange={(v, needs) => setDraft((d) => ({ ...d, [c.field]: { v, needs } }))} />
-      <Hint text={c.hint} />
-    </div>
+    <>
+      <div ref={(el) => { boxes.current[i] = el }} onBlur={(e) => { if (!boxes.current.some((b) => b?.contains(e.relatedTarget))) done() }}
+        onKeyDown={(e) => { if (e.key === 'Escape') setDraft(stored()); else if (e.key === 'Enter' && e.target instanceof HTMLInputElement) e.target.blur() }}>
+        <TimeInput value={draft[c.field].v} label={c.label} aria-label={c.label} quietHint disabled={disabled} {...selectOnFocus}
+          onChange={(v, needs) => setDraft((d) => ({ ...d, [c.field]: { v, needs } }))} />
+      </div>
+      {c.hint}
+    </>
   )))
 }

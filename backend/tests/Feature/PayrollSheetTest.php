@@ -174,6 +174,16 @@ class PayrollSheetTest extends TestCase
         $this->assertSame('25.000000', $this->sheet()->employee($p, $id)['components']['transport']['final']);
     }
 
+    public function test_a_day_typed_only_through_the_day_sheet_costs_its_lateness_and_overtime(): void
+    {
+        $id = $this->employee('engineer');
+        $this->postJson('/api/v1/attendance/days/bulk', ['date' => '2026-10-01', 'rows' => [['employee_id' => $id, 'site_id' => $this->site, 'in_time' => '08:40', 'out_time' => '18:30']]])->assertOk();
+
+        $line = $this->sheet()->employee($this->engineers(), $id);
+        $this->assertSame('23.437500', $line['components']['lateness']['final']);   // (40 − 15) × 0.625 × 1.5
+        $this->assertSame('84.375000', $line['components']['overtime']['final']);   // 90 × 0.625 × 1.5
+    }
+
     public function test_day_laborer_days_take_the_site_allowance_the_fare_and_the_shift(): void
     {
         $residence = $this->residenceWithFare('40');

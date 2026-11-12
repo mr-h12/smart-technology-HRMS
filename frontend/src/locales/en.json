@@ -657,6 +657,8 @@
       "note": "Note",
       "hintLate": "Computed lateness: {{minutes}} min",
       "hintOt": "Computed overtime: {{minutes}} min",
+      "computedOnSave": "Computed from the time on save",
+      "useSuggested": "Use this",
       "derivedNote": "This day was set automatically ({{type}}). Choose a site if the employee worked.",
       "missingNote": "This day is not recorded yet.",
       "lockedNote": "The period is locked; its days cannot be edited.",
@@ -761,6 +763,8 @@
       "search": "Search by name or employee ID",
       "found": "{{shown}} of {{total}}",
       "overBy": "OT {{minutes}} min",
+      "overUnapproved": "OT {{minutes}} min, not approved",
+      "approveOt": "Approve",
       "times": {
         "title": "Edit times",
         "selected": "{{count}} selected. A blank box changes nothing.",
