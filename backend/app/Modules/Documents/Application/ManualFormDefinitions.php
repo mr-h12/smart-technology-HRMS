@@ -34,6 +34,12 @@ final class ManualFormDefinitions
                     'issued_on' => ['input' => 'date', 'rules' => ['required', 'date_format:Y-m-d']],
                 ],
             ],
+            'resignation' => [
+                'view' => 'hr-forms.resignation',
+                'fields' => [
+                    'confirm_declarations' => ['input' => 'checkbox', 'rules' => ['required', 'accepted']],
+                ],
+            ],
         ];
     }
 }

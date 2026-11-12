@@ -1219,3 +1219,31 @@ test('selects the early departure request in the employee file and submits its s
   const sent = vi.mocked(fetch).mock.calls.find(([url, opts]) => String(url).endsWith('/manual/early_leave_request') && opts?.method === 'POST')
   expect(JSON.parse(String(sent?.[1]?.body))).toEqual({ ...schedule, idempotency_key: expect.any(String) })
 })
+
+test('requires confirmation of the resignation declarations in the employee file', async () => {
+  const generate = vi.fn(() => json(202, { data: { id: 'export1' } }))
+  mockFetch({
+    'GET /api/v1/employees/e1': () => json(200, { data: emp }),
+    'GET /api/v1/residences': residences,
+    'GET /api/v1/hr-manual-form-definitions': () => json(200, { data: { forms: [
+      { type: 'resignation', fields: [{ name: 'confirm_declarations', input: 'checkbox', required: true, max: null }] },
+    ] } }),
+    'POST /api/v1/employees/e1/hr-forms/manual/resignation': generate,
+  })
+  renderWithAuth(<EmployeeDetailRoute id="e1" tab="documents" />, [
+    'employee.view.all', 'hr_forms.generate.all',
+  ], { router: false })
+
+  const heading = await screen.findByRole('heading', { name: 'استقالة' })
+  const section = within(heading.closest('section')!)
+  expect(section.getByText(/الطباعة فقط/)).toBeInTheDocument()
+  const confirm = section.getByRole('checkbox', { name: /أؤكد أن الموظف/ })
+  const action = section.getByRole('button', { name: 'إنشاء الملف' })
+  await user.click(action)
+  expect(generate).not.toHaveBeenCalled()
+  await user.click(confirm)
+  await user.click(action)
+  await waitFor(() => expect(generate).toHaveBeenCalledOnce())
+  const sent = vi.mocked(fetch).mock.calls.find(([url, opts]) => String(url).endsWith('/manual/resignation') && opts?.method === 'POST')
+  expect(JSON.parse(String(sent?.[1]?.body))).toEqual({ confirm_declarations: 'on', idempotency_key: expect.any(String) })
+})

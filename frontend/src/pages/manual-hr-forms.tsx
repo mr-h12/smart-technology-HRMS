@@ -7,7 +7,7 @@ import { useAuth } from '@/lib/auth'
 import { useApi, useList, useSave } from '@/lib/query'
 import { download, ExportPages } from './hr-forms'
 
-type Field = { name: string; input: 'text' | 'date' | 'time' | 'textarea'; required: boolean; max: number | null }
+type Field = { name: string; input: 'text' | 'date' | 'time' | 'textarea' | 'checkbox'; required: boolean; max: number | null }
 type Definition = { type: string; fields: Field[] }
 
 export function ManualHrForms({ employee }: { employee: Row }) {
@@ -79,6 +79,14 @@ function ManualForm({ form, employee }: { form: Definition; employee: Row }) {
           <label className="grid gap-1">{t('employee.department')}<Input readOnly value={employee.department ?? ''} /></label>
           {form.fields.map(({ name, input, required, max }) => {
             const props = { name, required, maxLength: max ?? undefined, disabled: busy }
+            if (input === 'checkbox') {
+              return (
+                <label key={name} className="flex items-start gap-2 sm:col-span-2">
+                  <input type="checkbox" name={name} required={required} disabled={busy} className="mt-1 size-4 shrink-0" />
+                  <span>{t(`hrForms.manual.fields.${name}`)}</span>
+                </label>
+              )
+            }
             return (
               <label key={name} className={`grid gap-1${input === 'textarea' ? ' sm:col-span-2' : ''}`}>
                 {t(`hrForms.manual.fields.${name}`)}

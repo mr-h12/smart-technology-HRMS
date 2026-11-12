@@ -28,6 +28,7 @@ $advance = getenv('HRMS_SMOKE_FORM') === 'advance-request';
 $overtime = getenv('HRMS_SMOKE_FORM') === 'overtime-request';
 $latePermit = getenv('HRMS_SMOKE_FORM') === 'late-permit';
 $earlyLeave = getenv('HRMS_SMOKE_FORM') === 'early-leave-request';
+$resignation = getenv('HRMS_SMOKE_FORM') === 'resignation';
 try {
     if ($argv[1] === 'setup') {
         $employee = app(EmployeeService::class)->create([
@@ -45,6 +46,11 @@ try {
                 'job_title' => 'مهندسة اختبار', 'reason' => 'سبب تجريبي',
                 ...($advance ? ['repayment_method' => 'cash', 'previous_advance' => false, 'finance_remarks' => 'ملاحظات تجريبية'] : []),
             ], null, $advance ? 'advance' : 'overtime');
+        } elseif ($resignation) {
+            Auth::setUser($hr);
+            $row = app(ManualHrForms::class)->create('resignation', $employee, $hr->id, (string) Str::uuid7(), [
+                'confirm_declarations' => 'on',
+            ], null);
         } elseif ($earlyLeave) {
             Auth::setUser($hr);
             $row = app(ManualHrForms::class)->create('early_leave_request', $employee, $hr->id, (string) Str::uuid7(), [

@@ -1306,9 +1306,11 @@
         "job_title": "Job title",
         "regular_start": "Regular start time",
         "regular_end": "Regular end time",
-        "requested_end": "Requested departure time"
+        "requested_end": "Requested departure time",
+        "confirm_declarations": "I confirm that the employee has undertaken to hand over their assigned duties and has received their employment documents and all financial dues, as stated in the form."
       },
-      "early_leave_request": "Early Departure Request"
+      "early_leave_request": "Early Departure Request",
+      "resignation": "Resignation"
     },
     "leaveRequest": "Leave request PDF",
     "notificationMethod": "Notification method",
