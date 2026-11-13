@@ -111,7 +111,6 @@ class SiteWorkbookTemplateTest extends TestCase
         $this->homeSite($elsewhere, $other, '2026-01-01');
         $this->employee('office', '2026-01-01', ['name_ar' => 'Office-none']);
         $own = $this->employee('engineer', '2026-01-01', ['name_ar' => 'Manager-self']);
-        DB::table('employees')->where('id', $own)->update(['user_id' => $this->manager->id]);
 
         $entries = array_column($this->names(), 'entry');
 
