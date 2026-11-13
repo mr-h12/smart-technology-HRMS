@@ -66,6 +66,7 @@ return [
         'bad_time' => 'Not a valid time; write it like 08:30.',
         'bad_amount' => 'The amount must be a number above zero.',
         'note_too_long' => 'The note is longer than 500 characters.',
+        'name_too_long' => 'The name is longer than 255 characters.',
         'choice_required' => 'A day is already recorded at another site; choose keep or replace.',
         'national_id_required' => 'A new day laborer needs a 14-digit national ID.',
         'national_id_taken' => 'This national ID belongs to someone who is not on this file\'s list.',
