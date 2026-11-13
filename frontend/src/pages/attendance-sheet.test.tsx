@@ -1306,6 +1306,18 @@ test('Details in the ⋯ menu opens the day editor', async () => {
   expect(await screen.findByRole('dialog', { name: 'يوم 2026-10-18 — Engineer-1' })).toBeInTheDocument()
 })
 
+test('Present keeps a recorded current site when the prior site differs', async () => {
+  const bulk = bulkOk()
+  mockFetch({ ...routes,
+    'GET /api/v1/attendance/sheet': () => sheet([row(2, 'Engineer-2', { state: 'stored', source: 'entered', version: 1, site_id: 's2' }, { last_site_id: 's1' })]),
+    'POST /api/v1/attendance/days/bulk': bulk,
+  })
+  edit()
+  const tbl = await table()
+  await user.click(within(tbl).getByRole('button', { name: 'حاضر Engineer-2' }))
+  expect(bulk).not.toHaveBeenCalled()
+})
+
 test('Present looks pressed on a row already present, like a badge', async () => {
   mockFetch(routes)
   edit()

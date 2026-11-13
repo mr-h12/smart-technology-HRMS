@@ -26,7 +26,10 @@ final class SiteDayController
     public function store(Request $request): JsonResponse
     {
         /** @var array{site_id: string, date: string, rows: list<array<string, mixed>>} $body */
-        $body = $request->validate(SiteDay::FORMAT);
+        $body = $request->validate(SiteDay::FORMAT, [
+            'paper_decision_date.missing' => __('errors.advance_paper_date_pending'),
+            'rows.*.paper_decision_date.missing' => __('errors.advance_paper_date_pending'),
+        ]);
 
         return ApiEnvelope::single($request, $this->siteDay->save($body, (string) $request->user()?->getAuthIdentifier()));
     }

@@ -24,6 +24,16 @@ class ViewAsTest extends TestCase
         return $this->withToken($token)->postJson('/api/v1/auth/view-as', ['user_id' => $userId, 'reason' => $reason]);
     }
 
+    public function test_view_as_blocks_all_signature_routes(): void
+    {
+        $ceo = $this->makeUser('ceo');
+        $view = $this->start($this->token($this->makeUser('developer')), $ceo->id)->assertCreated()->json('data.token');
+
+        $this->withToken($view)->getJson('/api/v1/me/hr-signature')->assertForbidden();
+        $this->withToken($view)->getJson('/api/v1/me/hr-signature/file')->assertForbidden();
+        $this->withToken($view)->postJson('/api/v1/me/hr-signature', [])->assertForbidden();
+    }
+
     private function me(string $token): TestResponse
     {
         return $this->withToken($token)->getJson('/api/v1/auth/me');

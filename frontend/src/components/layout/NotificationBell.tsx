@@ -21,9 +21,19 @@ type LeaveRequested = Base & { type: 'leave_requested'; data: RequestData; emplo
 type LeaveEscalated = Base & { type: 'leave_escalated'; data: RequestData; employee: Named }
 type LeaveDecided = Base & { type: 'leave_decided'; data: RequestData & { status: 'approved' | 'refused' }; employee: Named }
 type LeaveCancelled = Base & { type: 'leave_cancelled'; data: RequestData; employee: Named }
-type WageProposed = Base & { type: 'wage_proposed'; data: { employee_id: string; daily_wage: string; site_name_ar: string; site_name_en: string | null }; employee: Named }
+type WageProposed = Base & { type: 'wage_proposed'; data: { employee_id: string; site_name_ar: string; site_name_en: string | null }; employee: Named }
 type PastEdit = Base & { type: 'attendance_past_edit'; data: { employee_id: string; date: string; out_time: string; site_name_ar: string; site_name_en: string | null; group: string; period_start: string }; employee: Named }
-type Notification = MissingDays | LeaveAnniversary | LeaveRequested | LeaveEscalated | LeaveDecided | LeaveCancelled | WageProposed | PastEdit
+type AttendanceRequestCreated = Base & { type: 'attendance_request_created'; data: { request_id: string; kind: string; status: string; site_id: string } }
+type AttendanceRequestDecided = Base & { type: 'attendance_request_decided'; data: AttendanceRequestCreated['data'] }
+type PeriodAlert = Base & { data: { employee_type: string; period_start: string; period_end: string; site_id: string }; employee: Named }
+type PeriodSigned = PeriodAlert & { type: 'attendance_period_signed' }
+type PeriodReturned = PeriodAlert & { type: 'attendance_period_returned' }
+type Digest = Base & { type: 'attendance_manager_digest'; data: { managers: { manager_id: string; manager_name: string; days: number }[] } }
+type Skipped = Base & { type: 'attendance_skipped_days'; data: {
+  sites: { site_id: string; name_ar: string; name_en: string | null; missing: number }[]
+  engineers: { manager_id: string; manager_name: string; missing: number }[]
+} }
+type Notification = MissingDays | LeaveAnniversary | LeaveRequested | LeaveEscalated | LeaveDecided | LeaveCancelled | WageProposed | PastEdit | AttendanceRequestCreated | AttendanceRequestDecided | PeriodSigned | PeriodReturned | Digest | Skipped
 
 /** One clickable line: what it says, the muted line under it, and where it opens (null: it only marks the notification read). */
 type Line = { key: string; text: ReactNode; detail: string; to: string | null }
@@ -78,18 +88,55 @@ const VIEWS: { [K in Notification['type']]: (n: Extract<Notification, { type: K 
     lines: [{
       key: n.id,
       text: named('notifications.wageProposed', n.employee, ctx),
-      detail: ctx.t('notifications.wageProposed.detail', { amount: n.data.daily_wage, site: ctx.lang === 'en' ? n.data.site_name_en || n.data.site_name_ar : n.data.site_name_ar }),
+      detail: ctx.lang === 'en' ? n.data.site_name_en || n.data.site_name_ar : n.data.site_name_ar,
       to: n.ref ? `/wage-proposals?proposal=${n.ref}` : '/wage-proposals',
     }],
   }),
   // a departure the site manager entered after the yesterday window: an edit to a past day, which HR can correct (owner, 2026-11-05)
+  attendance_request_created: (n, { t }) => ({
+    lines: [{
+      key: n.id,
+      text: t('attendanceRequests.newNotification'),
+      detail: t(`attendanceRequests.type.${n.data.kind}`),
+      to: `/attendance-requests?${new URLSearchParams({ request: n.data.request_id })}`,
+    }],
+  }),
+  attendance_request_decided: (n, { t }) => ({
+    lines: [{
+      key: n.id,
+      text: t(`attendanceRequests.type.${n.data.kind}`),
+      detail: t(n.data.kind === 'advance' && n.data.status === 'approved' ? 'attendanceRequests.paid' : `attendanceRequests.status.${n.data.status}`),
+      to: `/site-day?${new URLSearchParams({ site: n.data.site_id, date: n.date })}`,
+    }],
+  }),
+  attendance_period_signed: (n, { t, lang }) => ({
+    lines: [{ key: n.id, text: t('sitePeriod.signedAlert'), detail: n.employee ? localName(n.employee, lang) : n.data.period_start,
+      to: `/attendance?${new URLSearchParams({ tab: 'grid', group: n.data.employee_type, period: n.data.period_start })}` }],
+  }),
+  attendance_period_returned: (n, { t, lang }) => ({
+    lines: [{ key: n.id, text: t('sitePeriod.returnedAlert'), detail: n.employee ? localName(n.employee, lang) : n.data.period_start,
+      to: `/site-day?${new URLSearchParams({ tab: 'period', site: n.data.site_id, at: n.data.period_end })}` }],
+  }),
+  attendance_manager_digest: (n, { t }) => ({
+    title: t('sitePeriod.digest'),
+    lines: n.data.managers.map((m) => ({ key: m.manager_id, text: m.manager_name, detail: t('sitePeriod.recorded', { count: m.days }), to: null })),
+  }),
+  attendance_skipped_days: (n, { t, lang }) => ({
+    title: t('sitePeriod.skipped'),
+    lines: [
+      ...n.data.sites.map((s) => ({ key: s.site_id, text: localName(s, lang), detail: t('sitePeriod.skippedCount', { count: s.missing }),
+        to: `/attendance?${new URLSearchParams({ tab: 'sheet', group: 'all', date: n.date })}` })),
+      ...n.data.engineers.map((m) => ({ key: m.manager_id, text: m.manager_name, detail: t('sitePeriod.skippedCount', { count: m.missing }),
+        to: `/attendance?${new URLSearchParams({ tab: 'sheet', group: 'engineer', date: n.date })}` })),
+    ],
+  }),
   attendance_past_edit: (n, ctx) => ({
     lines: [{
       key: n.id,
       text: n.employee
         ? <Trans i18nKey="notifications.pastEdit.line" values={{ date: n.data.date }} components={{ name: <bdi>{localName(n.employee, ctx.lang)}</bdi>, code: <bdi dir="ltr">{n.employee.code}</bdi> }} />
         : ctx.t('notifications.pastEdit.unknown', { date: n.data.date }),
-      detail: ctx.t('notifications.pastEdit.detail', { time: formatTime(n.data.out_time, ctx.lang), site: ctx.lang === 'en' ? n.data.site_name_en || n.data.site_name_ar : n.data.site_name_ar }),
+      detail: n.data.out_time ? ctx.t('notifications.pastEdit.detail', { time: formatTime(n.data.out_time, ctx.lang), site: ctx.lang === 'en' ? n.data.site_name_en || n.data.site_name_ar : n.data.site_name_ar }) : (ctx.lang === 'en' ? n.data.site_name_en || n.data.site_name_ar : n.data.site_name_ar),
       to: `/attendance?${new URLSearchParams({ group: n.data.group, period: n.data.period_start, tab: 'grid' })}`,
     }],
   }),

@@ -1,3 +1,4 @@
+import type { Signoff } from './site-period'
 import { CalendarCheck, FileSpreadsheet, ListChecks, Lock, LockOpen, Users } from 'lucide-react'
 import { useId, useState } from 'react'
 import { useTranslation } from 'react-i18next'
@@ -39,7 +40,7 @@ type Period = { group: string; start: string; end: string; prev_start: string; n
 /** `POST /attendance/locks`: the period header plus what a re-lock changed and the leave days on a holiday. */
 type Locked = Period & { holidays_removed: string[]; holidays_added: string[]; leave_on_holidays: (Row & { date: string; leave_code: string })[] }
 export type Day = { date: string; state: 'not_employed' | 'stored' | 'derived' | 'future' | 'missing'; source?: string | null; site_id: string | null; leave_code: string | null }
-type GridRow = { employee: Row; days: Day[] }
+type GridRow = { employee: Row; days: Day[]; signoffs?: Signoff[] }
 
 /** A day's state label and look, shared with the employee's attendance tab. */
 export const STATE_KEY: Partial<Record<Day['state'], string>> = { missing: 'attendance.state.missing', future: 'attendance.state.future', not_employed: 'attendance.state.notEmployed' }
@@ -253,6 +254,8 @@ function showToday(table: HTMLTableElement | null) {
 /** One page of the period grid: a sticky employee column, then one button per day; a column is off when some row's day is derived. */
 function Grid({ group, start, site, search, withArchived, onOpenDay }: { group: string; start: string; site: string; search: string; withArchived: boolean; onOpenDay: (employee: Row, date: string) => void }) {
   const { t, i18n } = useTranslation()
+  const { can } = useAuth()
+  const [returning, setReturning] = useState<{ signoff: Signoff; name: string }>()
   const [page, setPage] = useState(1)
   const { rows, total, err, loading } = useList(`/attendance/grid?${new URLSearchParams({ group, period_start: start, ...(site && { site_id: site }), ...(search && { search }), ...(withArchived && { with_archived: '1' }), page: String(page), per_page: String(PER_PAGE) })}`)
   const { data: sites = [], loading: sitesLoading } = useApi<Row[]>(SITES)
@@ -290,7 +293,7 @@ function Grid({ group, start, site, search, withArchived, onOpenDay }: { group: 
           </TableRow>
         </TableHeader>
         <TableBody className="[&_tr:last-child>td]:border-b-0">
-          {grid.map(({ employee, days }) => (
+          {grid.map(({ employee, days, signoffs }) => (
             <TableRow key={employee.id}>
               <TableCell className="sticky start-0 z-10 border-b bg-card">
                 <span className="flex items-center gap-2">
@@ -298,6 +301,18 @@ function Grid({ group, start, site, search, withArchived, onOpenDay }: { group: 
                   <bdi>{localName(employee, i18n.language)}</bdi>
                   {employee.archived === true && <StatusBadge variant="neutral" dot={false} label={t('attendance.leftMark')} />}
                 </span>
+                {signoffs?.map((signoff) => (
+                  <div key={signoff.id} className="mt-1 flex flex-wrap items-center gap-1">
+                    <StatusBadge variant={signoff.status === 'signed' ? 'success' : 'neutral'} label={t(`sitePeriod.${signoff.status}`)} />
+                    {group === 'all' && <bdi className="text-xs" dir="ltr">{signoff.period_start} – {signoff.period_end}</bdi>}
+                    {signoff.status === 'signed' && can('attendance.lock') && (
+                      <Button type="button" size="sm" variant="ghost" onClick={() => setReturning({ signoff, name: localName(employee, i18n.language) })}>
+                        {t('sitePeriod.return')}
+                      </Button>
+                    )}
+                    {signoff.return_note && <p className="whitespace-normal break-words text-xs">{signoff.return_note}</p>}
+                  </div>
+                ))}
               </TableCell>
               {days.map((d) => {
                 const text = label(d)
@@ -323,6 +338,7 @@ function Grid({ group, start, site, search, withArchived, onOpenDay }: { group: 
           </span>
         ))}
       </div>
+      {returning && <ReturnSignoff signoff={returning.signoff} name={returning.name} close={() => setReturning(undefined)} />}
       <Pagination page={page} pageSize={PER_PAGE} total={total} onPageChange={setPage} />
     </>
   )
@@ -334,6 +350,47 @@ function Grid({ group, start, site, search, withArchived, onOpenDay }: { group: 
  * Lock waits while the list loads, and stays off if it fails, since what the lock would confirm is then unknown.
  * A lock that changed holidays, or found leave on one, stays open on those lists so HR reviews them.
  */
+function ReturnSignoff({ signoff, name, close }: { signoff: Signoff; name: string; close: () => void }) {
+  const { t } = useTranslation()
+  const save = useSave()
+  const [note, setNote] = useState('')
+  const [busy, setBusy] = useState(false)
+  const [error, setError] = useState<unknown>()
+
+  async function send() {
+    setBusy(true)
+    setError(undefined)
+    try {
+      await save(`/attendance/signoffs/${signoff.id}/return`, { body: { note: note.trim(), version: signoff.version } }, ['/attendance'])
+      close()
+    } catch (error) {
+      setError(error)
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  return (
+    <Dialog open onOpenChange={(open) => { if (!open && !busy) close() }}>
+      <DialogContent>
+        <DialogHeader>
+          <DialogTitle>{t('sitePeriod.return')}</DialogTitle>
+          <DialogDescription>{name} · <bdi dir="ltr">{signoff.period_start} – {signoff.period_end}</bdi></DialogDescription>
+        </DialogHeader>
+        <form onSubmit={(event) => { event.preventDefault(); if (note.trim() && !busy) void send() }}>
+          <DialogBody>
+            <ErrorBanner err={error} shown={[]} />
+            <label className="grid gap-2 text-sm">{t('sitePeriod.note')}
+              <Textarea value={note} maxLength={500} required disabled={busy} onChange={(event) => setNote(event.target.value)} />
+            </label>
+          </DialogBody>
+          <DialogFooter><Button type="submit" disabled={!note.trim() || busy}>{t('sitePeriod.return')}</Button></DialogFooter>
+        </form>
+      </DialogContent>
+    </Dialog>
+  )
+}
+
 function LockDialog({ period, onClose }: { period: Period; onClose: () => void }) {
   const { t, i18n } = useTranslation()
   const send = useSave()

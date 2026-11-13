@@ -1,5 +1,11 @@
 {
+  "pageError": {
+    "title": "This page could not load",
+    "body": "Reload the page or open another page from the menu.",
+    "reload": "Reload page"
+  },
   "common": {
+    "saving": "Saving…",
     "all": "All",
     "close": "Close",
     "save": "Save",
@@ -27,6 +33,7 @@
     "product": "Human resources"
   },
   "nav": {
+    "attendanceRequests": "Attendance requests",
     "main": "Main navigation",
     "open": "Open menu",
     "employees": "Employees",
@@ -70,6 +77,11 @@
   },
   "skip": "Skip to content",
   "employee": {
+    "linkAccount": "Link account",
+    "changeAccount": "Change linked account",
+    "linkAccountHint": "Choose the account for this employee. Choose “No account” to remove the link.",
+    "account": "User account",
+    "noAccount": "No account",
     "add": "Add employee",
     "search": "Search name or ID",
     "allTypes": "All types",
@@ -298,6 +310,8 @@
     "endViewAs": "Return to my account"
   },
   "console": {
+    "manualBackupTitle": "Backups are manual",
+    "manualBackupBody": "Back up the database and files before updating the system.",
     "addAccount": "Add account",
     "name": "Name",
     "role": "Role",
@@ -345,6 +359,7 @@
     "user": {
       "view": "User accounts: view",
       "manage": "User accounts: manage",
+      "manage_staff": "HR and site manager accounts: create and set passwords",
       "impersonate": "User accounts: view as"
     },
     "role": {
@@ -364,6 +379,7 @@
       "manage": "Business rules: manage"
     },
     "resource": {
+      "attendance_request": "Attendance requests",
       "employee": "Employees",
       "site": "Sites",
       "user": "User accounts",
@@ -459,6 +475,8 @@
       "VIEW_AS_ENDED": "Stopped viewing as an account"
     },
     "entity": {
+      "attendance_signoffs": "Attendance submissions",
+      "attendance_requests": "Attendance requests",
       "employees": "Employees",
       "employee_type_changes": "Employee type changes",
       "employee_pay_changes": "Pay changes",
@@ -748,6 +766,16 @@
       "matched": "{{count}} matched",
       "unknown": "Not on this sheet: {{ids}}",
       "capped": "Only the first {{max}} IDs were used",
+      "message": {
+        "title": "Paste site message",
+        "hint": "Select the site and paste one employee per line, for example 12 09:00 16:00 or 12 absent. Review before saving for",
+        "site": "Work site",
+        "label": "Attendance message",
+        "invalid": "Check these lines for an unknown employee ID, a duplicate, or an invalid time: {{lines}}",
+        "preview": "Attendance preview",
+        "replaces": "Replaces existing status",
+        "save": "Save {{count}} rows"
+      },
       "paste": {
         "button": "Paste IDs",
         "title": "Paste employee IDs",
@@ -978,8 +1006,7 @@
     },
     "wageProposed": {
       "line": "Proposed daily wage for <name/> (<code/>)",
-      "unknown": "Proposed daily wage for a day laborer",
-      "detail": "{{amount}} · {{site}}"
+      "unknown": "Proposed daily wage for a day laborer"
     },
     "leaveCancelled": {
       "line": "Leave request for <name/> (<code/>) cancelled",
@@ -1000,6 +1027,34 @@
     "choosePeriod": "Choose AM or PM.",
     "noPeriod": "No AM or PM chosen",
     "invalid": "Invalid time."
+  },
+  "sitePeriod": {
+    "workspace": "Attendance view",
+    "day": "Daily attendance",
+    "tab": "Period review",
+    "current": "Current period",
+    "previous": "Previous period",
+    "marked": "Recorded: {{count}}",
+    "missing": "Missing: {{count}}",
+    "open": "Missing checkout: {{count}}",
+    "pending": "Pending requests: {{count}}",
+    "signed": "Submitted",
+    "returned": "Returned for correction",
+    "submit": "Submit to HR",
+    "resubmit": "Resubmit to HR",
+    "note": "Correction note",
+    "return": "Return to site manager",
+    "locked": "Locked by HR",
+    "notDue": "You can submit on the last day of the period.",
+    "empty": "No employees for this period.",
+    "correctDays": "Open a day to correct",
+    "saveFirst": "Save your attendance changes before submitting.",
+    "signedAlert": "Attendance submitted",
+    "returnedAlert": "Attendance returned for correction",
+    "digest": "Site attendance digest",
+    "recorded": "{{count}} recorded days",
+    "skipped": "Missing site attendance",
+    "skippedCount": "{{count}} missing days"
   },
   "siteDay": {
     "rows": "People at the site",
@@ -1035,6 +1090,7 @@
       "noCheckout": "No check-out: {{count}}"
     },
     "why": {
+      "signed": "Submitted to HR",
       "locked": "The period is locked",
       "window": "The time to edit this day has passed",
       "hr_day": "HR recorded it; only HR changes it",
@@ -1072,6 +1128,8 @@
     "lateCount": "Late: {{count}}",
     "openDay": "Open {{date}} and enter the departure",
     "backToToday": "Back to today",
+    "datePicker": "Attendance date",
+    "yesterday": "Yesterday",
     "likeYesterday": "Like yesterday ({{count}})",
     "addNote": "Add a note",
     "noteShown": "Note: {{note}}",
@@ -1353,5 +1411,151 @@
       "reasonRequired": "Write the reason for the override.",
       "revertReasonRequired": "Write the reason for the revert."
     }
+  },
+  "attendanceRequests": {
+    "paperDateOptional": "Paper decision date (optional)",
+    "systemDecisionTime": "System decision time",
+    "paperDate": "Paper decision date",
+    "title": "Attendance requests",
+    "description": "Review overtime and record paper decisions for advances.",
+    "statusLabel": "Status",
+    "typeLabel": "Request type",
+    "status": {
+      "pending": "Pending",
+      "approved": "Approved",
+      "refused": "Refused",
+      "all": "All"
+    },
+    "type": {
+      "overtime": "Overtime",
+      "advance": "Advance"
+    },
+    "minutes": "{{count}} min",
+    "date": "Date",
+    "value": "Requested",
+    "amount": "Advance amount",
+    "reference": "Request reference",
+    "previous": "Previous",
+    "next": "Next",
+    "empty": "No attendance requests",
+    "print": "Print advance form",
+    "advanceForm": "Advance request form",
+    "requestAdvance": "Request advance",
+    "saveBeforePrint": "Save the day to record the request and print the form.",
+    "paperApproval": "Check that the signed paper matches revision {{version}}. Recording approval marks the advance as paid.",
+    "recordPaper": "Record paper approval",
+    "paid": "Paid",
+    "approve": "Approve overtime",
+    "refuse": "Refuse request",
+    "refusalReason": "Reason for refusal",
+    "back": "Back",
+    "invalidAmount": "Enter a positive advance amount with up to six decimal places.",
+    "newNotification": "New attendance request",
+    "paper": {
+      "department": "Department",
+      "job": "Job title",
+      "reason": "Reason for advance",
+      "repayment": "Repayment method: receipts, cash, or salary deduction",
+      "employeeSignature": "Employee signature and date",
+      "departmentSignature": "Department head recommendation, signature and date",
+      "finance": "Finance and administration: salary, hire date, prior advances and remarks",
+      "director": "General manager: approved / refused, signature and date"
+    }
+  },
+  "hrForms": {
+    "manual": {
+      "title": "Print-only forms",
+      "early_leave_request": "Early Departure Request",
+      "warning_notice": "Warning notice",
+      "resignation": "Resignation",
+      "mission_permit": "Mission Permit",
+      "leave_permit": "Departure Permit",
+      "late_permit": "Late Arrival Permit",
+      "notice": "Printing only. Attendance, leave, payroll inputs, employee status and other records are unaffected.",
+      "end_of_service": "End-of-Service Gratuity",
+      "job_offer": "Job Offer",
+      "sim_receipt": "SIM Receipt",
+      "notices": {
+        "end_of_service": "Printing only. This creates no payroll input, payment, or ledger entry and does not end employment or change employee status.",
+        "job_offer": "Printing only. This creates no employee, contract, or pay record.",
+        "sim_receipt": "Printing only. This creates no custody or asset record and leaves employee records unchanged.",
+        "warning_notice": "Printing only. This creates no disciplinary record, deduction or payroll input and makes no changes to employee records."
+      },
+      "fields": {
+        "candidate_name": "Candidate name",
+        "address": "Address",
+        "monthly_salary": "Monthly salary",
+        "evaluation_months": "Evaluation period in months",
+        "reply_deadline": "Reply deadline",
+        "start_date": "Start date",
+        "last_working_day": "Last working day",
+        "last_total_wage": "Last total monthly wage",
+        "wage_month": "Wage month",
+        "final_amount": "Final amount if overriding",
+        "override_reason": "Override reason",
+        "sim_number": "Mobile line number",
+        "mission_date": "Mission date",
+        "mission_reason": "Reason for the mission",
+        "department_manager": "Department manager",
+        "addressee": "Addressed to",
+        "permit_date": "Permit date",
+        "start_time": "From time",
+        "end_time": "To time",
+        "reason": "Reason",
+        "responsible_manager": "Responsible manager",
+        "regular_start": "Regular start time",
+        "regular_end": "Regular end time",
+        "requested_end": "Requested departure time",
+        "warning_date": "Warning date",
+        "warning_incident": "Incident",
+        "warning_period": "Dates or duration cited",
+        "warning_prior_occurrence": "Prior-occurrence statement",
+        "warning_explanation_request": "Request for explanation",
+        "confirm_declarations": "I confirm that the employee has undertaken to hand over their assigned duties and has received their employment documents and all financial dues, as stated in the form.",
+        "issued_on": "Issue date",
+        "job_title": "Job title"
+      }
+    },
+    "overtimeRequest": "Overtime request PDF",
+    "overtimeReason": "Reason for overtime",
+    "printOnly": "Printing does not change attendance, payroll inputs, or the request.",
+    "advanceRequest": "Advance request PDF",
+    "advanceReason": "Reason for advance",
+    "repaymentMethod": "Repayment method",
+    "receipts": "Present receipts",
+    "cash": "Pay cash",
+    "salaryDeduction": "Monthly salary deduction",
+    "previousAdvance": "Previous advance",
+    "yes": "Yes",
+    "no": "No",
+    "financeRemarks": "Finance remarks",
+    "leaveRequest": "Leave request PDF",
+    "notificationMethod": "Notification method",
+    "managerOpinion": "Department manager’s opinion",
+    "substitute": "Substitute employee",
+    "certificate": "Experience certificate",
+    "jobTitle": "Job title",
+    "praise": "Praise paragraph (optional)",
+    "generate": "Generate PDF",
+    "regenerate": "Regenerate PDF",
+    "cancel": "Cancel",
+    "empty": "No certificates to show",
+    "serial": "Serial {{serial}}",
+    "unsigned": "Unsigned",
+    "signed": "Signed",
+    "approvedViaViewAs": "Approved through View as",
+    "pending": "Generating PDF",
+    "ready": "Ready",
+    "failed": "PDF generation failed",
+    "download": "Download PDF",
+    "retry": "Retry",
+    "approvals": "Form approvals",
+    "approve": "Approve and sign",
+    "signature": "My signature",
+    "viewAsBlocked": "Signature preview and upload are unavailable in View as.",
+    "signatureFile": "Signature file (PNG or JPG, up to 2 MB)",
+    "upload": "Upload signature",
+    "previous": "Previous",
+    "next": "Next"
   }
 }

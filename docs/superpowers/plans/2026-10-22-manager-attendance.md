@@ -379,6 +379,12 @@
 
 # Slice 3: Overtime and advance requests
 
+### Decision update · 2026-11-08
+
+- Proposed overtime is work after the employee's scheduled shift end (09:00–16:00 for the standard field shift), starting no earlier than the actual arrival. Only approved minutes are credited.
+- Record the advance request and print the paper form. HR records the paper decision. An approved advance is paid immediately in the system and is entered once in attendance for payroll. There is no separate disbursement action.
+- The tasks below retain the original plan for reference. Reuse the existing UUID notification reference.
+
 ### Task 10: Requests module, notification refs, approve and refuse
 
 **Files:**
@@ -496,6 +502,19 @@
 ---
 
 # Slice 4: Sign, return, skipped days and the digest
+
+The owner confirmed the existing attendance periods and the HR workflow on 2026-11-08.
+Manager sign-off is optional for HR. HR can review and correct attendance and lock the
+period even when some or all employees have no manager sign-off. Sign-off limits only
+manager edits, and a return reopens those edits for the affected employee. The existing
+attendance checks still apply when HR locks the period.
+
+Acceptance: HR corrects a day for an employee with no manager sign-off, then locks the
+period successfully through the existing lock endpoint.
+
+The implementation uses the existing `attendance.record` and `attendance.lock`
+permissions for manager submission and HR return respectively. The scheduled
+missing-days command also dispatches the manager digest.
 
 ### Task 14: Sign-offs, return, and the period view
 

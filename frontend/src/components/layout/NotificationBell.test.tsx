@@ -302,6 +302,7 @@ test('the evening alert adds the open days and the crew changes to a group\'s li
   expect(items[0]).toContain('أيام غير مسجلة — عمال اليومية: 3 · بلا انصراف: 2 · تغييرات الطاقم: 4')
   expect(items[1]).toContain('المهندسون · بلا انصراف: 1')
   expect(items[2]).toContain('أجر يومي مقترح لـ أحمد علي (1042)')
+  expect(items[2]).not.toContain('350')
   expect(items[3]).toContain('انصراف أحمد علي (1042) ليوم 2026-11-02 بعد المهلة')
   expect(items[3]).toContain('Site-1')
   await user.click(screen.getByRole('menuitem', { name: /بعد المهلة/ }))

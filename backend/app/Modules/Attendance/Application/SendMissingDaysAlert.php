@@ -39,11 +39,14 @@ final class SendMissingDaysAlert implements ShouldQueue
     public function handle(AttendanceGrid $grid, Notifier $notifier, PermissionHolders $holders): void
     {
         $groups = array_values(array_filter($grid->missingCounts($this->date), fn (array $g) => $g['missing'] + $g['open'] + $g['crew_changes'] > 0));
-        if ($groups === []) {
-            return;
-        }
+        $skipped = $grid->skippedBySite($this->date);
         foreach ($holders->userIds('attendance.edit.all') as $id) {
-            $notifier->notifyOnce($id, 'attendance_missing_days', $this->date, ['date' => $this->date, 'groups' => $groups]);
+            if ($groups !== []) {
+                $notifier->notifyOnce($id, 'attendance_missing_days', $this->date, ['date' => $this->date, 'groups' => $groups]);
+            }
+            if ($skipped['sites'] !== [] || $skipped['engineers'] !== []) {
+                $notifier->notifyOnce($id, 'attendance_skipped_days', $this->date, ['date' => $this->date, ...$skipped]);
+            }
         }
     }
 

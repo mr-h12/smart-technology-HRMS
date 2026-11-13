@@ -120,12 +120,13 @@ class AttendanceTemplateTest extends TestCase
         $this->assertFalse($sheets['versions']['visible']);
 
         $versions = $sheets['versions']['rows'];
-        $this->assertSame($sheets['attendance']['rows'][0], $versions[0]);
+        $this->assertSame([...$sheets['attendance']['rows'][0], XlsxTemplateWriter::IDENTITY_COLUMN], $versions[0]);
+        $this->assertSame([$one, $two], [end($versions[1]), end($versions[2])]);
         $this->assertCount(3, $versions);
         $this->assertSame([$this->code($one), 'Engineer-1'], array_slice($versions[1], 0, 2));
         $this->assertSame([$this->code($two), 'Engineer-2'], array_slice($versions[2], 0, 2));
-        $this->assertSame([7 => 1], array_filter(array_slice($versions[1], 2, null, true), fn ($v) => $v !== '' && $v !== null));   // 10-01
-        $this->assertSame([], array_filter(array_slice($versions[2], 2), fn ($v) => $v !== '' && $v !== null));
+        $this->assertSame([7 => 1], array_filter(array_slice($versions[1], 2, -1, true), fn ($v) => $v !== '' && $v !== null));   // 10-01
+        $this->assertSame([], array_filter(array_slice($versions[2], 2, -1), fn ($v) => $v !== '' && $v !== null));
 
         $lists = array_column($sheets['lists']['rows'], 0);
         $active = Site::where(['kind' => 'leave', 'active' => true])->pluck('name_ar')->all();
@@ -204,7 +205,7 @@ class AttendanceTemplateTest extends TestCase
     {
         $leftovers = fn () => [...glob(sys_get_temp_dir().'/attendance-template-*'), ...glob(sys_get_temp_dir().'/xlsx*')];
         $before = $leftovers();
-        $grid = ['header' => ['Employee ID', 'Name', '2026-09-26'], 'rows' => [['code' => 1, 'name' => 'Engineer-1', 'cells' => [1], 'versions' => [null], 'grey' => []]], 'choices' => ['Site-1']];
+        $grid = ['header' => ['Employee ID', 'Name', '2026-09-26'], 'rows' => [['employee_id' => '', 'code' => 1, 'name' => 'Engineer-1', 'cells' => [1], 'versions' => [null], 'grey' => []]], 'choices' => ['Site-1']];
         try {
             app(XlsxTemplateWriter::class)->write($grid, 'ar');
             $this->fail('a cell that is not a string stops the write');

@@ -60,6 +60,76 @@ function routes(sites: unknown[], days: Record<string, unknown[]>, more: Record<
 const bodyOf = (fn: { mock: { calls: unknown[][] } }, i = 0) => JSON.parse(String((fn.mock.calls[i][1] as RequestInit).body))
 const group = (name: string) => screen.getByRole('group', { name })
 
+test('the server edit window offers yesterday and preserves the selected site', async () => {
+  routes([S1], {}, {
+    'GET /api/v1/attendance/site-day': (url) => {
+      const date = new URL(url, 'http://x').searchParams.get('date') ?? '2026-10-22'
+      return json(200, { data: { ...answer(S1, S1_ROWS), date, editable_yesterday: '2026-10-21' } })
+    },
+  })
+  render()
+  await enter()
+  await user.click(await screen.findByRole('button', { name: 'أمس' }))
+  expect(await screen.findByRole('button', { name: 'أمس', pressed: true })).toBeInTheDocument()
+  expect(screen.getByTestId('url')).toHaveTextContent('site=s1&date=2026-10-21')
+  await user.click(screen.getByRole('button', { name: 'اليوم' }))
+  expect(await screen.findByRole('button', { name: 'اليوم', pressed: true })).toBeInTheDocument()
+  expect(screen.getByTestId('url')).not.toHaveTextContent('date=')
+})
+
+test('a pending draft keeps the version it was based on after a refetch', async () => {
+  let currentVersion = 1
+  const worker = () => row('w1', 'Worker-1', 'day_laborer', 'workers', { state: 'stored', version: currentVersion, site_id: 's1', in_time: '08:00', out_time: currentVersion === 1 ? null : '16:00' })
+  const post = vi.fn((_url: string, init?: RequestInit) => {
+    const sent = JSON.parse(String(init?.body))
+    if (sent.site_id === 's2') currentVersion = 2
+    return json(200, { data: answer(sent.site_id === 's2' ? S2 : S1, sent.site_id === 's2' ? [] : [worker()]) })
+  })
+  const get = vi.fn((url: string) => {
+    const id = new URL(url, 'http://x').searchParams.get('site_id')
+    return json(200, { data: answer(id === 's2' ? S2 : S1, id === 's2' ? [row('w3', 'Worker-3', 'day_laborer', 'workers')] : [worker()]) })
+  })
+  routes([S1, S2], {}, { 'POST /api/v1/attendance/site-day': post, 'GET /api/v1/attendance/site-day': get })
+  render()
+  await enter(['Site-1', 'Site-2'])
+  await user.click(within(await screen.findByRole('group', { name: 'Worker-1' })).getByRole('button', { name: 'غياب' }))
+  const nav = screen.getByRole('navigation', { name: 'الموقع' })
+  await user.click(within(nav).getByRole('button', { name: /Site-2/ }))
+  await user.click(within(await screen.findByRole('group', { name: 'Worker-3' })).getByRole('button', { name: 'غياب' }))
+  const calls = get.mock.calls.filter(([url]) => url.includes('site_id=s1')).length
+  await user.click(screen.getByRole('button', { name: 'حفظ اليوم' }))
+  await waitFor(() => expect(get.mock.calls.filter(([url]) => url.includes('site_id=s1')).length).toBeGreaterThan(calls))
+  await user.click(within(nav).getByRole('button', { name: /Site-1/ }))
+  await screen.findByRole('group', { name: 'Worker-1' })
+  await user.click(screen.getByRole('button', { name: 'حفظ اليوم' }))
+  await waitFor(() => expect(post).toHaveBeenCalledTimes(2))
+  expect(bodyOf(post, 1).rows[0].version).toBe(1)
+})
+
+test('each site stays read-only until its own save finishes', async () => {
+  const finish = new Map<string, (r: Response) => void>()
+  const post = vi.fn((_url: string, init?: RequestInit) => new Promise<Response>((resolve) => {
+    finish.set(JSON.parse(String(init?.body)).site_id, resolve)
+  }) as unknown as Response)
+  routes([S1, S2], { s1: S1_ROWS, s2: [row('w3', 'Worker-3', 'day_laborer', 'workers')] }, { 'POST /api/v1/attendance/site-day': post })
+  render()
+  await enter(['Site-1', 'Site-2'])
+  await user.click(within(await screen.findByRole('group', { name: 'Engineer-1' })).getByRole('button', { name: 'غياب' }))
+  await user.click(screen.getByRole('button', { name: 'حفظ اليوم' }))
+  const nav = screen.getByRole('navigation', { name: 'الموقع' })
+  await user.click(within(nav).getByRole('button', { name: /Site-2/ }))
+  await user.click(within(await screen.findByRole('group', { name: 'Worker-3' })).getByRole('button', { name: 'غياب' }))
+  await user.click(screen.getByRole('button', { name: 'حفظ اليوم' }))
+  await waitFor(() => expect(post).toHaveBeenCalledTimes(2))
+  await user.click(within(nav).getByRole('button', { name: /Site-1/ }))
+  try {
+    expect(within(await screen.findByRole('group', { name: 'Engineer-1' })).getByRole('button', { name: 'مرضي' })).toBeDisabled()
+  } finally {
+    finish.get('s1')?.(json(500, { error: { code: 'server_error', message: 'تعذّر الحفظ', details: [] } }))
+    finish.get('s2')?.(json(500, { error: { code: 'server_error', message: 'تعذّر الحفظ', details: [] } }))
+  }
+})
+
 test('one site: no switcher, workers then the engineers section, and the stored marks pressed', async () => {
   const { siteDay } = routes([S1], { s1: S1_ROWS })
   render()
@@ -95,7 +165,7 @@ test('morning: «حضور الكل» fills the shift start, keeps a typed arriva
   const arrivalB = within(group('Laborer-B')).getByRole('textbox', { name: 'حضور Laborer-B' })
   await user.clear(arrivalB)
   await user.type(arrivalB, '9:15')
-  expect(within(group('Laborer-B')).getByText('تأخير 75 دقيقة')).toBeInTheDocument()
+  expect(within(group('Laborer-B')).getByText('تأخير 60 دقيقة')).toBeInTheDocument()
 
   await user.click(screen.getByRole('button', { name: 'حضور الكل (2)' }))
   expect(screen.getByRole('button', { name: 'حضور الكل (0)' })).toBeDisabled()

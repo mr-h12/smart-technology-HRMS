@@ -2,6 +2,8 @@
 
 return [
     'refusal' => [
+        'period_signed' => 'This attendance record has been submitted. Ask HR to return it for correction.',
+        'signoff_not_due' => 'Attendance can be submitted starting on the last day of the period.',
         'period_locked' => 'This attendance period is locked and cannot be edited.',
         'future_date' => 'Attendance cannot be recorded for a future date.',
         'employee_not_active' => 'The employee is not employed on this date.',

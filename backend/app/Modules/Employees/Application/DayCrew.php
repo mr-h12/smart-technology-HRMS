@@ -4,6 +4,10 @@ declare(strict_types=1);
 
 namespace App\Modules\Employees\Application;
 
+use App\Modules\Attendance\Domain\AttendanceRefusal;
+use App\Modules\Attendance\Domain\AttendanceRefused;
+use App\Modules\Attendance\Domain\Period;
+use App\Modules\Attendance\Infrastructure\PeriodGuard;
 use App\Modules\Employees\Domain\EffectiveDated;
 use App\Modules\Employees\Domain\EmployeeType;
 use App\Modules\Employees\Domain\WageProposalStatus;
@@ -224,15 +228,25 @@ final class DayCrew
             $employee = Employee::lockForUpdate()->findOrFail($p->employee_id);
             if ($approve) {
                 $from = (string) ($employee->hire_date ?? $p->created_at?->toDateString());
+                if (PeriodGuard::lockedFrom($from, EmployeeType::DayLaborer)) {
+                    throw AttendanceRefused::because(AttendanceRefusal::PeriodLocked);
+                }
                 $employee->payChanges()->create(['effective_from' => $from, 'daily_wage' => $wage ?? (string) $p->daily_wage]);
             } else {
                 // An earlier end HR already set stays; never before the hire date (PR #22 review).
                 $employee->termination_date = max((string) $employee->hire_date, min($today, (string) ($employee->termination_date ?? $today)));
-                $employee->save();
                 // Off every crew from today, and off any earlier day with nothing recorded, so the yesterday window adds no new day.
                 $recorded = DB::table('attendance_days')->where('employee_id', $employee->id)->whereNull('deleted_at')->pluck('date')->map(fn ($d) => (string) $d)->all();
-                DayCrewChange::where('employee_id', $employee->id)->where(fn (Builder $q) => $q->where('date', '>=', $today)->orWhereNotIn('date', $recorded))
-                    ->get()->each(fn (DayCrewChange $c) => $c->delete());
+                $changes = DayCrewChange::where('employee_id', $employee->id)->where(fn (Builder $q) => $q->where('date', '>=', $today)->orWhereNotIn('date', $recorded))
+                    ->orderBy('date')->get();
+                foreach ($changes as $change) {
+                    PeriodGuard::assertOpen(Period::containing(EmployeeType::DayLaborer, (string) $change->date));
+                }
+                if ($employee->isDirty('termination_date') && PeriodGuard::lockedFrom((string) $employee->termination_date, EmployeeType::DayLaborer)) {
+                    throw AttendanceRefused::because(AttendanceRefusal::PeriodLocked);
+                }
+                $employee->save();
+                $changes->each(fn (DayCrewChange $change) => $change->delete());
             }
             $p->fill(['status' => $approve ? WageProposalStatus::Approved : WageProposalStatus::Refused, 'decided_by' => $hrId, 'decided_at' => now(), 'version' => $version + 1]);
             $p->save();

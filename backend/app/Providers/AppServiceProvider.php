@@ -2,6 +2,8 @@
 
 namespace App\Providers;
 
+use App\Modules\Documents\Domain\FormRenderer;
+use App\Modules\Documents\Infrastructure\BrowsershotRenderer;
 use App\Modules\Employees\Application\EmployeeOpenItems;
 use App\Modules\Employees\Infrastructure\Eloquent\Employee;
 use App\Modules\Identity\Infrastructure\BearerSessionResolver;
@@ -24,7 +26,7 @@ class AppServiceProvider extends ServiceProvider
      */
     public function register(): void
     {
-        //
+        $this->app->bind(FormRenderer::class, BrowsershotRenderer::class);
     }
 
     /**

@@ -35,12 +35,13 @@ import { Sheet, SheetContent, SheetDescription, SheetTitle } from '@/components/
 import { useTheme } from '@/hooks/useTheme'
 import { useAuth } from '@/lib/auth'
 import { cn, FOCUS } from '@/lib/utils'
+import { PageErrorBoundary } from './PageErrorBoundary'
 import { NotificationBell } from './NotificationBell'
 import { TableSkeleton } from './PageSkeleton'
 import { SegmentedControl } from './SegmentedControl'
 
 /** An item shows when the user has any of its `abilities`; App's route guard reads the same list (`navAbilities`). */
-export const NAV: { group: string; items: { path: string; key: string; icon: LucideIcon; abilities: string[] }[] }[] = [
+export const NAV: { group: string; items: { path: string; key: string; icon: LucideIcon; abilities: string[]; requires?: string }[] }[] = [
   {
     group: 'nav.group.hr',
     items: [
@@ -48,7 +49,11 @@ export const NAV: { group: string; items: { path: string; key: string; icon: Luc
       { path: '/attendance', key: 'nav.attendance', icon: CalendarCheck, abilities: ['attendance.view'] },
       { path: '/site-day', key: 'nav.siteDay', icon: ClipboardCheck, abilities: ['attendance.record'] },
       { path: '/leave', key: 'nav.leave', icon: CalendarDays, abilities: ['leave.view'] },
+      { path: '/attendance-requests', key: 'nav.attendanceRequests', icon: HandCoins, abilities: ['attendance_request.decide'] },
       { path: '/wage-proposals', key: 'nav.wageProposals', icon: HandCoins, abilities: ['employee.approve_wage'] },
+      { path: '/hr-form-approvals', key: 'hrForms.approvals', icon: ScrollText, abilities: ['hr_forms.approve'] },
+      { path: '/hr-forms/job-offer', key: 'hrForms.manual.job_offer', icon: ScrollText, abilities: ['hr_forms.view.all', 'hr_forms.generate.all'], requires: 'employee.view.all' },
+      { path: '/my-signature', key: 'hrForms.signature', icon: UserCog, abilities: ['hr_signatures.manage'] },
       { path: '/team-fares', key: 'nav.teamFares', icon: Bus, abilities: ['fare.manage', 'employee.view.own'] },
       { path: '/payroll', key: 'nav.payroll', icon: Banknote, abilities: ['payroll.view'] },
     ],
@@ -65,6 +70,8 @@ export const NAV: { group: string; items: { path: string; key: string; icon: Luc
   },
 ]
 
+export const navRequirement = (path: string) => NAV.flatMap((g) => g.items).find((n) => n.path === path)?.requires
+
 export const navAbilities = (path: string) => NAV.flatMap((g) => g.items).find((n) => n.path === path)?.abilities ?? []
 
 /**
@@ -72,7 +79,7 @@ export const navAbilities = (path: string) => NAV.flatMap((g) => g.items).find((
  * the first page they may open. The fallback is the 1a landing page.
  */
 export const homePath = (can: (ability: string) => boolean) =>
-  can('attendance.record.own') && !can('attendance.record.all') ? '/site-day' : (NAV.flatMap((g) => g.items).find((n) => n.abilities.some(can))?.path ?? '/employees')
+  can('attendance.record.own') && !can('attendance.record.all') ? '/site-day' : (NAV.flatMap((g) => g.items).find((n) => n.abilities.some(can) && (!n.requires || can(n.requires)))?.path ?? '/employees')
 
 export function LanguageToggle() {
   const { t, i18n } = useTranslation()
@@ -132,7 +139,7 @@ function SidebarNav({ collapsed = false, onNavigate }: { collapsed?: boolean; on
   return (
     <nav aria-label={t('nav.main')} className="flex flex-col">
       {NAV.map(({ group, items }) => {
-        const visible = items.filter((n) => n.abilities.some(can))
+        const visible = items.filter((n) => n.abilities.some(can) && (!n.requires || can(n.requires)))
         if (visible.length === 0) return null
         return (
           <div key={group}>
@@ -337,6 +344,7 @@ function Navbar({ onOpenMobile }: { onOpenMobile: () => void }) {
  *   RTL: mirrored by `dir`; the sidebar is the inline-start child of one flex row.
  */
 export function AppLayout() {
+  const location = useLocation()
   const { t, i18n } = useTranslation()
   const { theme } = useTheme()
   const [collapsed, setCollapsed] = useState(false)
@@ -376,9 +384,11 @@ export function AppLayout() {
           <ViewAsBanner />
           <Navbar onOpenMobile={() => setMobileOpen(true)} />
           <main id="page-content" className="mx-auto w-full max-w-[1600px] flex-1 scroll-mt-20 p-4 sm:p-6">
-            <Suspense fallback={<TableSkeleton />}>
-              <Outlet />
-            </Suspense>
+            <PageErrorBoundary key={location.pathname}>
+              <Suspense fallback={<TableSkeleton />}>
+                <Outlet />
+              </Suspense>
+            </PageErrorBoundary>
           </main>
         </div>
 

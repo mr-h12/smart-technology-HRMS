@@ -51,7 +51,7 @@ export function SitePicker({ sites, initial, unsavedAt, onContinue }: { sites: R
 export function SiteTab({ s, active, date, unsaved, onPick }: { s: Row; active: boolean; date: string | null; unsaved: boolean; onPick: () => void }) {
   const { t, i18n } = useTranslation()
   const { data } = useApi<SiteDay>(dayPath(s.id, date))
-  const open = data && data.site.id === s.id ? counts(data.rows, {}, s.id) : null
+  const open = data && data.site.id === s.id ? counts(data.rows, {}, s.id, data.late_grace_minutes) : null
   const todo = open ? open.unrecorded + open.noCheckout : 0
   let state = null
   if (unsaved) state = <span className="text-[12px] font-normal text-warning">{t('siteDay.unsavedShort')}</span>

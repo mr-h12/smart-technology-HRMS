@@ -1,5 +1,5 @@
 import { expect, test } from 'vitest'
-import { arrivalDiff, changed, likeYesterday, likeYesterdayCount, checkOutAll, checkOutCount, counts, departureDiff, markAllCount, markAllPresent, saveBody, type SiteDayRow } from './site-day'
+import { chargeableLate, changed, likeYesterday, likeYesterdayCount, checkOutAll, checkOutCount, counts, departureDiff, markAllCount, markAllPresent, saveBody, type SiteDayRow } from './site-day'
 
 const S = 's1'
 const row = (id: string, day: Partial<SiteDayRow['day']> = {}, extra: Partial<SiteDayRow> = {}): SiteDayRow => ({
@@ -83,9 +83,11 @@ test('the departure difference', () => {
   expect(departureDiff(null, '16:00')).toBeNull()
 })
 
-test('the arrival difference and the late count', () => {
-  expect(arrivalDiff('09:20', '09:00')).toBe(20)
-  expect(arrivalDiff('08:50', '09:00')).toBe(-10)
+test('chargeable lateness starts on the minute after the grace period', () => {
+  expect(chargeableLate('09:15', '09:00', 15)).toBe(0)
+  expect(chargeableLate('09:16', '09:00', 15)).toBe(1)
+  expect(chargeableLate('09:25', '09:00', 15)).toBe(10)
+  expect(chargeableLate('08:50', '09:00', 15)).toBe(0)
   const r = row('l', { state: 'stored', version: 1, site_id: S, in_time: '09:20' }, { shift: { start: '09:00', end: '16:00' } })
   expect(counts([r], {}, S).late).toBe(1)
 })

@@ -197,7 +197,7 @@ class AttendanceImportTest extends TestCase
         foreach ($forms as $form => $cell) {
             $edited = $this->edit($path, $changes);
             $file = $this->rewrite($edited->getPathname(), fn (string $sheet, array $rows) => $sheet === 'lists' ? $rows : [
-                [...array_slice($rows[0], 0, 2), ...array_map($cell, array_slice($rows[0], 2))], ...array_slice($rows, 1),
+                [...array_slice($rows[0], 0, 2), ...array_map($cell, array_slice($rows[0], 2, $sheet === 'versions' ? -1 : null)), ...($sheet === 'versions' ? array_slice($rows[0], -1) : [])], ...array_slice($rows, 1),
             ]);
             $this->upload('preview', $file)->assertOk()->assertJsonPath('data.summary.errors', 0)->assertJsonPath('data.changes', $expected, $form);
         }
@@ -292,6 +292,19 @@ class AttendanceImportTest extends TestCase
         $this->assertSame(0, AttendanceDay::count());
     }
 
+    public function test_swapping_ids_of_two_employees_with_the_same_name_refuses_the_downloaded_rows(): void
+    {
+        $name = 'Same name';
+        $this->patchJson("/api/v1/employees/{$this->eng}", ['name_ar' => $name])->assertOk();
+        $second = $this->employee('engineer', '2026-01-01', ['name_ar' => $name]);
+        $file = $this->edit($this->download(), [$this->code($this->eng) => ['2026-10-01' => 'Site-1']]);
+        $this->patchJson("/api/v1/employees/{$this->eng}/code", ['code' => (int) $this->code($second), 'swap' => true])->assertOk();
+
+        $this->upload('confirm', $file)->assertOk()
+            ->assertJsonPath('data.applied', 0)->assertJsonPath('data.errors.0.error', 'code_name_mismatch');
+        $this->assertSame(0, AttendanceDay::count());
+    }
+
     public function test_a_row_typed_in_for_an_employee_missing_from_the_downloaded_template_skips_the_name_check(): void
     {
         $template = $this->download();
@@ -322,10 +335,11 @@ class AttendanceImportTest extends TestCase
         $this->upload('preview', $versions(fn (string $n) => "  $n "))->assertOk()->assertJsonPath('data.errors', [])->assertJsonPath('data.summary.changes', 1);
         $this->upload('preview', $versions(fn (string $n) => $n.'x'))->assertOk()->assertJsonPath('data.errors.0.error', 'code_name_mismatch');
         $this->upload('preview', $versions(fn (string $n) => null))->assertOk()->assertJsonPath('data.errors.0.error', 'code_name_mismatch');
-        // The visible name column is the user's to edit; only the hidden sheet is checked.
+        // A visible name must still describe the employee identified by the ID.
         $visible = $this->rewrite($file->getPathname(), fn (string $sheet, array $rows) => $sheet !== 'attendance' ? $rows
             : [$rows[0], ...array_map(fn (array $r) => [$r[0], 'Someone else', ...array_slice($r, 2)], array_slice($rows, 1))]);
-        $this->upload('preview', $visible)->assertOk()->assertJsonPath('data.errors', [])->assertJsonPath('data.summary.changes', 1);
+        $this->upload('preview', $visible)->assertOk()->assertJsonPath('data.errors.0.error', 'code_name_mismatch')->assertJsonPath('data.summary.changes', 0);
+        $this->upload('confirm', $visible)->assertOk()->assertJsonPath('data.applied', 0);
     }
 
     public function test_an_english_preview_names_employees_and_leave_types_in_english(): void
@@ -416,7 +430,7 @@ class AttendanceImportTest extends TestCase
         $this->upload('preview', $this->file($this->download('engineer', '2026-08-26')))->assertStatus(422)->assertJsonPath('error.code', 'template_mismatch');
         $this->upload('preview', $this->rewrite($this->download(), fn (string $sheet, array $rows) => $rows, drop: ['versions']))
             ->assertStatus(422)->assertJsonPath('error.code', 'template_mismatch')->assertJsonPath('error.message', 'الملف لا يطابق قالب الحضور لهذه الفترة.');
-        $this->upload('preview', $this->rewrite($this->download(), fn (string $sheet, array $rows) => $sheet === 'versions' ? [$rows[0], ...array_map(fn (array $r) => array_slice($r, 0, 2), array_slice($rows, 1))] : $rows))
+        $this->upload('preview', $this->rewrite($this->download(), fn (string $sheet, array $rows) => $sheet === 'versions' ? [array_slice($rows[0], 0, -1), ...array_map(fn (array $r) => array_slice($r, 0, 2), array_slice($rows, 1))] : $rows))
             ->assertOk()->assertJsonPath('data.summary.errors', 0);                                 // no stored day: blank versions are right
 
         $truncated = $this->download();
