@@ -19,7 +19,7 @@ import { Dialog, DialogBody, DialogContent, DialogFooter, DialogHeader, DialogTi
 import { Textarea } from '@/components/ui/input'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
-import { cairoToday, ErrorBanner, Field, type Errs, FormDialog, type FormApi, formatTime, ltrDates, type Row, SelectField, stopAtMissingPeriod, TextField, toErrs, useForm, useMoney } from '@/components/form'
+import { accountLabel, cairoToday, ErrorBanner, Field, type Errs, FormDialog, type FormApi, formatTime, ltrDates, type Row, SelectField, stopAtMissingPeriod, TextField, toErrs, useForm, useMoney } from '@/components/form'
 import { useDebounced } from '@/hooks/useDebounced'
 import { ApiError } from '@/lib/api'
 import { useAuth } from '@/lib/auth'
@@ -704,13 +704,19 @@ function SiteManagerFields({ f, empId, linked }: { f: FormApi; empId: string; li
   const { t } = useTranslation()
   const sites = useList(WORK_SITES)
   const engineers = useList('/employees?type=engineer&per_page=100')
-  const accounts = useApi<Row[]>(linked ? null : '/sites/manager-candidates') // the server refuses one already linked
+  const accounts = useApi<Row[]>(linked ? null : '/employees/site-manager-candidates') // only the site-manager accounts not yet linked to an employee
   return (
     <>
       <ErrorBanner err={sites.err ?? engineers.err ?? accounts.err} shown={[]} />
-      {!linked && <SelectField name="user_id" label={t('siteManager.existing')} blank={t('siteManager.newAccount')} options={(accounts.data ?? []).map((u) => [u.id, u.name])} {...f} />}
+      {!linked && <SelectField name="user_id" label={t('siteManager.existing')} blank={t('siteManager.newAccount')} options={(accounts.data ?? []).map((u) => [u.id, accountLabel(u)])} {...f} />}
       {f.values.user_id ? (
-        <p className="text-sm text-muted-foreground">{t('siteManager.existingHint')}</p>
+        <div className="space-y-1">
+          {/* the closed select clips its label on a phone; namesakes differ only by the email */}
+          <p className="text-[13px] text-muted-foreground">
+            <bdi dir="ltr" className="break-all">{accounts.data?.find((u) => u.id === f.values.user_id)?.email}</bdi>
+          </p>
+          <p className="text-sm text-muted-foreground">{t('siteManager.existingHint')}</p>
+        </div>
       ) : (
         <>
           {!linked && (

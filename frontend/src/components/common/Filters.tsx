@@ -20,10 +20,10 @@ export function SearchInput({ value, onChange, placeholder, className, maxLength
 }
 
 export function FilterSelect({
-  value, onChange, label, allLabel, options,
-}: { value: string; onChange: (v: string) => void; label: string; allLabel: string; options: [string, string][] }) {
+  value, onChange, label, allLabel, options, className,
+}: { value: string; onChange: (v: string) => void; label: string; allLabel: string; options: [string, string][]; className?: string }) {
   return (
-    <select aria-label={label} value={value} onChange={(e) => onChange(e.target.value)} className={cn(selectCls, 'w-full sm:w-44', value !== '' && 'border-primary/40 bg-primary/5 text-foreground')}>
+    <select aria-label={label} value={value} onChange={(e) => onChange(e.target.value)} className={cn(selectCls, 'w-full sm:w-44', value !== '' && 'border-primary/40 bg-primary/5 text-foreground', className)}>
       <option value="">{allLabel}</option>
       {options.map(([v, l]) => (
         <option key={v} value={v}>

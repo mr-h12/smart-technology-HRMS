@@ -1,7 +1,9 @@
 import { screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { afterEach, beforeEach, expect, test, vi } from 'vitest'
+import { canDo } from '@/lib/auth'
 import { json, me, mockFetch, pagination, renderApp } from '@/test-utils'
+import { homePath } from './AppLayout'
 
 const user = userEvent.setup()
 const signedIn = (permissions: string[]) => {
@@ -108,14 +110,39 @@ test('the header shows the notification bell before the account menu', async () 
   expect(bell.compareDocumentPosition(profile) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
 })
 
-test('a manager lands on /employees, the first item they may open', async () => {
+// The four roles as seeded (read from the local database); on main HR also holds user.manage.all.
+const ROLE = {
+  developer: ['attendance.edit.all', 'attendance.lock.all', 'attendance.view.all', 'audit_log.view.all', 'employee.approve_wage.all', 'employee.assign_manager.all', 'employee.assign_site.all', 'employee.create.all', 'employee.delete.all', 'employee.edit.all', 'employee.edit_code.all', 'employee.view.all', 'employee_document.edit.all', 'employee_document.view.all', 'fare.manage.all', 'holiday.manage.all', 'leave.adjust.all', 'leave.decide.all', 'leave.decide_escalated.all', 'leave.request.all', 'leave.view.all', 'role.manage.all', 'role.view.all', 'setting.manage.all', 'setting.view.all', 'site.assign_manager.all', 'site.manage.all', 'site.view.all', 'site.view.own', 'system_log.view.all', 'user.impersonate.all', 'user.manage.all', 'user.view.all'],
+  hr: ['attendance.edit.all', 'attendance.lock.all', 'attendance.view.all', 'employee.approve_wage.all', 'employee.assign_manager.all', 'employee.assign_site.all', 'employee.create.all', 'employee.delete.all', 'employee.edit.all', 'employee.edit_code.all', 'employee.view.all', 'employee_document.edit.all', 'employee_document.view.all', 'fare.manage.all', 'holiday.manage.all', 'leave.adjust.all', 'leave.decide.all', 'leave.request.all', 'leave.view.all', 'setting.manage.all', 'setting.view.all', 'site.assign_manager.all', 'site.manage.all', 'site.view.all', 'user.manage.all', 'user.view.all'],
+  ceo: ['attendance.view.all', 'audit_log.view.all', 'employee.view.all', 'employee_document.view.all', 'leave.decide_escalated.all', 'leave.view.all', 'setting.view.all', 'site.view.all'],
+  manager: ['attendance.record.own', 'employee.crew.own', 'employee.propose_laborer.own', 'employee.view.own', 'leave.request.own', 'leave.view.own', 'site.view.own'],
+}
+test.each([
+  ['the developer', '/employees', ROLE.developer],
+  ['HR', '/employees', ROLE.hr],
+  ['the CEO', '/employees', ROLE.ceo],
+  ['a site manager', '/site-day', ROLE.manager],
+  ['an account recording site attendance at both scopes', '/employees', [...ROLE.manager, 'attendance.record.all']],
+  ['an account with no permissions', '/employees', []],
+])('%s lands on %s', (_, path, permissions) => {
+  expect(homePath((a) => canDo(permissions, a))).toBe(path)
+})
+
+test('a site manager lands on Site attendance', async () => {
   localStorage.setItem('hrms.auth.token.v1', 't'.repeat(64))
   mockFetch({
-    'GET /api/v1/auth/me': () => json(200, { data: me(['attendance.record.own', 'employee.view.own', 'site.view.own']) }),
-    'GET /api/v1/employees': () => json(200, { data: [], meta: { pagination } }),
+    'GET /api/v1/auth/me': () => json(200, { data: me(ROLE.manager) }),
+    'GET /api/v1/sites': () => json(200, { data: [], meta: { pagination } }),
   })
   renderApp('/')
+  await waitFor(() => expect(screen.getByRole('link', { name: 'حضور الموقع' })).toHaveAttribute('aria-current', 'page'))
+})
+
+test('a site manager opening /employees by URL stays there: a deep link wins over the landing page', async () => {
+  signedIn(ROLE.manager)
+  renderApp('/employees')
   await waitFor(() => expect(screen.getByRole('link', { name: 'الموظفون' })).toHaveAttribute('aria-current', 'page'))
+  expect(screen.getByRole('link', { name: 'حضور الموقع' })).not.toHaveAttribute('aria-current')
 })
 
 const developer = { ...me(['user.view.all', 'user.impersonate.all']), id: 'u9', name: 'يوسف', role: { id: 'r9', slug: 'developer', name: 'Developer', name_ar: 'المطوّر' } }

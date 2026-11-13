@@ -76,6 +76,9 @@ export const intlLocale = (lng: string) => (lng === 'ar' ? 'ar-EG-u-nu-latn' : l
 /** `text` with each ISO date (YYYY-MM-DD) in an LTR isolate: inside RTL text, after an Arabic word, 2026-10-25 would draw as 25-10-2026. */
 export const ltrDates = (text: string) => text.split(/(\d{4}-\d{2}-\d{2})/).map((part, i) => (i % 2 ? <bdi key={i} dir="ltr" className="whitespace-nowrap">{part}</bdi> : part))
 
+/** An account as one line of a native `<option>` (text only): the name, then the email in an LTR isolate so it reads left to right in RTL. */
+export const accountLabel = (u: Row) => `${u.name} · \u2066${u.email}\u2069`
+
 /** Today's date in Cairo as YYYY-MM-DD. */
 export const cairoToday = () => new Date().toLocaleDateString('en-CA', { timeZone: 'Africa/Cairo' })
 

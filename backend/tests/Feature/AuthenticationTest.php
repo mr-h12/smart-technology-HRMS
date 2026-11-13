@@ -71,7 +71,11 @@ class AuthenticationTest extends TestCase
     public function test_inactive_account_is_403(): void
     {
         $this->makeUser('hr', ['email' => 'hr@smart.test', 'is_active' => false]);
-        $this->login()->assertStatus(403)->assertJsonPath('error.code', 'account_suspended');
+        $messages = ['ar' => 'تم تعطيل الحساب. يرجى التواصل مع إدارة الموارد البشرية.', 'en' => 'This account has been deactivated. Please contact HR.'];
+        foreach ($messages as $locale => $message) {
+            $this->withHeader('Accept-Language', $locale);
+            $this->login()->assertStatus(403)->assertJsonPath('error.code', 'account_suspended')->assertJsonPath('error.message', $message);
+        }
     }
 
     public function test_logout_revokes_the_token(): void

@@ -48,6 +48,9 @@ Route::middleware('auth')->group(function (): void {
     Route::prefix('employees')->controller(EmployeeController::class)->group(function (): void {
         Route::get('/', 'index')->middleware('permission:employee.view');
         Route::get('summary', 'summary')->middleware('permission:employee.view');
+        // The accounts the make-site-manager dialog may link: POST {employee}/site-manager's guards, less employee.scope (no employee yet).
+        Route::get('site-manager-candidates', 'siteManagerCandidates')
+            ->middleware(['permission:user.manage', 'permission:site.assign_manager', 'permission:employee.assign_manager']);
         Route::post('/', 'store')->middleware('permission:employee.create');
         Route::middleware([])->whereUuid('employee')->group(function (): void {
             Route::get('{employee}', 'show')->middleware(['permission:employee.view', 'employee.scope']);

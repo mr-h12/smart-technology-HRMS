@@ -138,8 +138,10 @@ class ManagerScopeTest extends TestCase
         $this->signIn('hr');
         $site = $this->postJson('/api/v1/sites', ['name_ar' => 'سموحة', 'kind' => 'work'])->json('data.id');
 
-        $ids = collect($this->getJson('/api/v1/sites/manager-candidates')->assertOk()->json('data'))->pluck('id')->sort()->values()->all();
-        $this->assertSame(collect([$lead->id, $other->id])->sort()->values()->all(), $ids);
+        $this->getJson('/api/v1/sites/manager-candidates')->assertOk()->assertJsonPath('data', [   // by name, with the account's email
+            ['id' => $lead->id, 'name' => 'manager', 'email' => $lead->email],
+            ['id' => $other->id, 'name' => 'site-lead', 'email' => $other->email],
+        ]);
         $this->putJson("/api/v1/sites/$site/managers", ['manager_ids' => [$hr->id]])->assertStatus(422)->assertJsonPath('error.details.0.field', 'manager_ids.0');
         $this->putJson("/api/v1/sites/$site/managers", ['manager_ids' => [$gone->id]])->assertStatus(422);
         $this->putJson("/api/v1/sites/$site/managers", ['manager_ids' => [$everywhere->id]])->assertStatus(422);
@@ -147,5 +149,15 @@ class ManagerScopeTest extends TestCase
 
         $this->actingAs($lead, 'api');
         $this->getJson('/api/v1/sites/manager-candidates')->assertStatus(403);
+    }
+
+    public function test_every_role_that_assigns_site_managers_already_sees_accounts(): void
+    {
+        // The candidates carry each account's email, which user.view (any scope) already shows.
+        $roles = Role::whereHas('permissions', fn ($q) => $q->where(['resource' => 'site', 'action' => 'assign_manager']))->get();
+        $this->assertNotEmpty($roles);
+        foreach ($roles as $role) {
+            $this->assertTrue($role->permissions()->where(['resource' => 'user', 'action' => 'view'])->exists(), "{$role->slug} lacks user.view");
+        }
     }
 }

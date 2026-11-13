@@ -1,13 +1,17 @@
 import { screen } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { afterEach, beforeEach, expect, test, vi } from 'vitest'
+import i18n from '@/i18n'
 import { canDo } from '@/lib/auth'
 import { json, me, mockFetch, pagination, renderApp } from '@/test-utils'
 
 const user = userEvent.setup()
 
 beforeEach(() => localStorage.clear())
-afterEach(() => vi.unstubAllGlobals())
+afterEach(async () => {
+  vi.unstubAllGlobals()
+  await i18n.changeLanguage('ar')
+})
 
 test('signs in, stores the token and opens the app', async () => {
   mockFetch({
@@ -30,6 +34,19 @@ test('shows the translated refusal', async () => {
   await user.type(screen.getByLabelText('كلمة المرور'), 'secret123')
   await user.click(screen.getByRole('button', { name: 'تسجيل الدخول' }))
   expect(await screen.findByRole('alert')).toHaveTextContent('تم قفل الحساب لتكرار محاولات الدخول الفاشلة. يرجى التواصل مع مسؤول النظام.')
+})
+
+test.each([
+  ['ar', 'البريد الإلكتروني', 'كلمة المرور', 'تسجيل الدخول', 'تم تعطيل الحساب. يرجى التواصل مع إدارة الموارد البشرية.'],
+  ['en', 'Email address', 'Password', 'Sign in', 'This account has been deactivated. Please contact HR.'],
+])('a deactivated account is told to contact HR (%s)', async (lang, email, password, submit, text) => {
+  await i18n.changeLanguage(lang)
+  mockFetch({ 'POST /api/v1/auth/login': () => json(403, { error: { code: 'account_suspended', message: 'x' } }) })
+  renderApp('/login')
+  await user.type(screen.getByLabelText(email), 'manager@smart.test')
+  await user.type(screen.getByLabelText(password), 'secret123')
+  await user.click(screen.getByRole('button', { name: submit }))
+  expect(await screen.findByRole('alert')).toHaveTextContent(text)
 })
 
 test('without a token any page redirects to login', async () => {

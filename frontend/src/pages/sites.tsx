@@ -6,7 +6,7 @@ import { EmptyState } from '@/components/common/EmptyState'
 import { FilterSelect } from '@/components/common/Filters'
 import { RowActions } from '@/components/common/RowActions'
 import { StatusBadge } from '@/components/common/StatusBadge'
-import { cairoToday, type Controlled, ErrorBanner, FormDialog, ltrDates, type Row, SelectField, TextField, useList, useMoney } from '@/components/form'
+import { accountLabel, cairoToday, type Controlled, ErrorBanner, FormDialog, ltrDates, type Row, SelectField, TextField, useList, useMoney } from '@/components/form'
 import { TableSkeleton } from '@/components/layout/PageSkeleton'
 import { Pagination, paginate } from '@/components/tables/Pagination'
 import { Badge } from '@/components/ui/badge'
@@ -219,7 +219,10 @@ function ManagersForm({ siteId, managerIds, users, loadErr, onDone }: { siteId: 
         {users.map((u) => (
           <label key={u.id} className="flex min-h-11 items-center gap-3 rounded-md px-2 text-sm hover:bg-muted">
             <input type="checkbox" checked={ticked.has(u.id)} onChange={(e) => toggle(u.id, e.target.checked)} />
-            {u.name}
+            <span className="flex min-w-0 flex-col items-start">
+              {u.name}{' '}
+              <span dir="ltr" className="text-[13px] break-all text-muted-foreground">{u.email}</span>
+            </span>
           </label>
         ))}
       </DialogBody>
@@ -457,7 +460,8 @@ export function FaresTab() {
       notice={
         <>
           <div className="flex flex-wrap items-center gap-2">
-            {leads.data && <FilterSelect value={lead} onChange={(v) => { setLead(v); setPage(1) }} label={t('fare.lead')} allLabel={t('fare.allLeads')} options={leads.data.map((m) => [m.id, m.name])} />}
+            {/* as wide as its longest name and email: a closed native select clips its label, and namesakes differ only by the email */}
+            {leads.data && <FilterSelect value={lead} onChange={(v) => { setLead(v); setPage(1) }} label={t('fare.lead')} allLabel={t('fare.allLeads')} options={leads.data.map((m) => [m.id, accountLabel(m)])} className="sm:w-auto sm:max-w-md" />}
           </div>
           <Notice show={fares.total > fares.rows.length} text={t('fare.tooMany')} />
         </>

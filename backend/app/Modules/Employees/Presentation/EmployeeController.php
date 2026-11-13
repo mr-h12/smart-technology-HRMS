@@ -119,6 +119,11 @@ final class EmployeeController
         return ApiEnvelope::single($request, $this->employees->makeSiteManager($employee, $data), 201);
     }
 
+    public function siteManagerCandidates(Request $request): JsonResponse
+    {
+        return ApiEnvelope::single($request, $this->employees->siteManagerCandidates());
+    }
+
     public function updateSiteManager(Request $request, string $employee): JsonResponse
     {
         return ApiEnvelope::single($request, $this->employees->updateSiteManager($employee, $request->validate(self::siteManagerTeam())));

@@ -38,7 +38,7 @@ export function TeamFaresPage() {
   // the picked site manager and the chip live in the URL, so going back from an employee shows the same team
   const [params, setParams] = useSearchParams()
   const picked = params.get('manager') ?? ''
-  const leads = useApi<Ref[]>(allowed && pick ? '/sites/manager-candidates' : null)
+  const leads = useApi<(Ref & { email: string })[]>(allowed && pick ? '/sites/manager-candidates' : null)
   const lead = picked || leads.data?.[0]?.id
   const path = !allowed ? null : pick ? (lead ? `/team-fares?manager_id=${lead}` : null) : '/team-fares'
   const { data, err, loading } = useApi<TeamFares>(path)
@@ -51,7 +51,8 @@ export function TeamFaresPage() {
           {(leads.data ?? []).map((m) => (
             // another team starts on all its rows (its sites differ): the chip goes with the old one
             <button key={m.id} type="button" aria-pressed={lead === m.id} onClick={() => lead !== m.id && setParams({ manager: m.id }, { replace: true })} className={chipCls}>
-              {m.name}
+              {m.name}{' '}
+              <span dir="ltr" className="font-normal wrap-anywhere text-muted-foreground">{m.email}</span>
             </button>
           ))}
         </div>
