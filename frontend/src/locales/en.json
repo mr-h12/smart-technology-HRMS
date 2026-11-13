@@ -807,6 +807,17 @@
       "skipped_zero": "no cells with errors",
       "skipped_one": "skipped 1 cell with errors",
       "skipped_other": "skipped {{count}} cells with errors",
+      "byType": "By group",
+      "bySite": "By site",
+      "site": {
+        "desc": "Download the site workbook empty for one site and up to {{max}} days, one sheet per day, for the site manager to fill in by name.",
+        "choose": "Choose a site",
+        "from": "From",
+        "to": "To",
+        "download": "Download site workbook",
+        "reversed": "The end date is before the start date.",
+        "tooLong": "The range is at most {{max}} days."
+      },
       "error": {
         "unknown_employee": "Unknown employee ID.",
         "unknown_site": "Unknown site or day type.",

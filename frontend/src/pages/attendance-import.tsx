@@ -22,10 +22,10 @@ type Result = { applied: number; unchanged: number; errors: CellError[] }
 /** The Excel cell HR looks for, e.g. G3, drawn left to right; a row error has no column, so it is just the row number. */
 const cellLabel = (c: Cell) => <bdi dir="ltr" className="font-medium">{`${c.column ?? ''}${c.row}`}</bdi>
 /** A step's number beside it; the list itself carries the order for a screen reader. */
-const STEP = 'grid size-6 shrink-0 place-items-center rounded-full border text-xs font-semibold text-muted-foreground'
+export const STEP = 'grid size-6 shrink-0 place-items-center rounded-full border text-xs font-semibold text-muted-foreground'
 const dash = (v: string | number | null) => v ?? '—'
 /** The server's error codes in the UI language (the server's message is in the request's); its own words only for a code this UI does not know. */
-const errorKey = (code: string) => `attendance.import.error.${code}`
+export const errorKey = (code: string) => `attendance.import.error.${code}`
 
 /**
  * The period's Excel grid: download the template, pick the filled file, preview what it would change (nothing is saved), then
