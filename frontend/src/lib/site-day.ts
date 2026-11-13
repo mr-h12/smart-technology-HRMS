@@ -1,5 +1,7 @@
 import { isHhmm } from '@/components/form'
 
+type RequestSummary = { id: string; status: 'pending' | 'approved' | 'refused'; minutes: number | null; amount: string | null; version: number }
+
 /** One `rows[]` item of `GET /attendance/site-day`: workers first, then the site manager's engineers. No pay figures. */
 export type SiteDayRow = {
   employee: { id: string; code: number; name_ar: string; name_en: string | null; type: string }
@@ -7,8 +9,9 @@ export type SiteDayRow = {
   /** the person's scheduled shift on the date: their own override, else the field shift setting */
   shift: { start: string; end: string }
   day: { state: 'stored' | 'derived' | 'missing' | 'future'; version: number | null; site_id: string | null; leave_code: string | null; in_time: string | null; out_time: string | null; note: string | null }
+  requests?: { overtime: RequestSummary | null; advance: RequestSummary | null }
   can_edit: boolean
-  why_not: 'locked' | 'window' | 'hr_day' | 'open_day' | null
+  why_not: 'locked' | 'window' | 'hr_day' | 'signed' | 'open_day' | null
   /** past the yesterday window: an open day of theirs here, where only the departure can still be entered (HR is told at once) */
   departure_only: boolean
   /** with why_not open_day: the earlier field day that has an arrival and no departure */
@@ -25,7 +28,7 @@ export const dayPath = (siteId: string, date: string | null) => `/attendance/sit
 /** The leave day-types a site manager may store (P11): code → the leave day-type's id. */
 export type LeaveDayTypes = Partial<Record<'absent' | 'sick' | 'rest' | 'other', string>>
 
-export type SiteDay = { site: { id: string; name_ar: string; name_en: string | null }; date: string; today: string; leave_day_types: LeaveDayTypes; rows: SiteDayRow[] }
+export type SiteDay = { site: { id: string; name_ar: string; name_en: string | null }; date: string; today: string; late_grace_minutes?: number; editable_yesterday: string | null; leave_day_types: LeaveDayTypes; rows: SiteDayRow[] }
 
 export const MARKS = ['present', 'absent', 'sick'] as const
 export type Mark = (typeof MARKS)[number]
@@ -33,7 +36,7 @@ export type Mark = (typeof MARKS)[number]
 export const MORE = ['rest', 'other'] as const
 
 /** What the screen holds for one person before «حفظ اليوم»: the site (a work site or a leave type), the two times, and a note when typed (undefined: untouched). */
-export type Draft = { site_id: string | null; in_time: string | null; out_time: string | null; note?: string | null }
+export type Draft = { site_id: string | null; in_time: string | null; out_time: string | null; note?: string | null; advance_request?: string | null; baseVersion?: number | null }
 export type Drafts = Record<string, Draft>
 
 /** The people whose earlier field day still has no departure: the banner above the list names them. */
@@ -89,7 +92,7 @@ const noteChanged = (r: SiteDayRow, d: Draft) => d.note !== undefined && (d.note
 export function changed(r: SiteDayRow, d: Draft | undefined): boolean {
   if (!d) return false
   const s = stored(r)
-  return !s || s.site_id !== d.site_id || s.in_time !== d.in_time || s.out_time !== d.out_time || noteChanged(r, d)
+  return !s || s.site_id !== d.site_id || s.in_time !== d.in_time || s.out_time !== d.out_time || noteChanged(r, d) || d.advance_request !== undefined
 }
 
 /**
@@ -112,7 +115,7 @@ export const likeYesterdayCount = (rows: SiteDayRow[], drafts: Drafts, siteId: s
   Object.keys(likeYesterday(rows, drafts, siteId, leave)).length - Object.keys(drafts).length
 
 /** What is still open on the screen: people with nothing recorded, and present people with no departure. Leave days count as recorded. */
-export function counts(rows: SiteDayRow[], drafts: Drafts, siteId: string) {
+export function counts(rows: SiteDayRow[], drafts: Drafts, siteId: string, grace = 15) {
   let present = 0
   let away = 0
   let unrecorded = 0
@@ -126,7 +129,7 @@ export function counts(rows: SiteDayRow[], drafts: Drafts, siteId: string) {
     } else if (isPresent(d, siteId)) {
       present++
       if (d.in_time && !d.out_time) noCheckout++
-      if (isHhmm(d.in_time) && minutes(d.in_time) > minutes(r.shift.start)) late++
+      if (isHhmm(d.in_time) && chargeableLate(d.in_time, r.shift.start, grace) > 0) late++
     } else away++
   }
   return { present, away, unrecorded, noCheckout, late }
@@ -141,7 +144,8 @@ export function saveBody(siteId: string, date: string, rows: SiteDayRow[], draft
       const d = drafts[r.employee.id]!
       const work = d.site_id === siteId
       return {
-        employee_id: r.employee.id, version: r.day.version, site_id: d.site_id, in_time: work ? d.in_time : null, out_time: work ? d.out_time : null,
+        employee_id: r.employee.id, version: d.baseVersion === undefined ? r.day.version : d.baseVersion, site_id: d.site_id, in_time: work ? d.in_time : null, out_time: work ? d.out_time : null,
+        ...(work && d.advance_request !== undefined && { advance_request: d.advance_request }),
         ...(noteChanged(r, d) && { note: d.note || null }),
       }
     }),
@@ -150,8 +154,9 @@ export function saveBody(siteId: string, date: string, rows: SiteDayRow[], draft
 
 const minutes = (hhmm: string) => Number(hhmm.slice(0, 2)) * 60 + Number(hhmm.slice(3, 5))
 
-/** The arrival against the shift start: positive = late (raw minutes; payroll takes the daily grace off once, calculations §0a). */
-export const arrivalDiff = (arrival: string | null, shiftStart: string): number | null => (arrival ? minutes(arrival) - minutes(shiftStart) : null)
+/** Chargeable minutes start after the grace period. The recorded arrival time is unchanged. */
+export const chargeableLate = (arrival: string, shiftStart: string, grace: number): number =>
+  Math.max(0, minutes(arrival) - minutes(shiftStart) - grace)
 
 /** The departure against the shift end: negative = left early, positive = stayed later (a time difference only; overtime needs HR's approval). */
 export const departureDiff = (out: string | null, shiftEnd: string): number | null => (out ? minutes(out) - minutes(shiftEnd) : null)

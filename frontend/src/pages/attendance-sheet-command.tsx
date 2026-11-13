@@ -1,13 +1,13 @@
 import { useId, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { toast } from 'sonner'
-import { intlLocale, isHhmm, localName, TimeInput } from '@/components/form'
+import { intlLocale, isHhmm, localName, type Row, SelectField, TimeInput } from '@/components/form'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Dialog, DialogBody, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { Textarea } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
-import { hhmm, isOfficeRow, MAX_BATCH, parseBatch, type SheetAction, type SheetRow, statusOf } from '@/lib/day-sheet'
+import { type BulkRow, hhmm, isOfficeRow, MAX_BATCH, parseBatch, parseSiteMessage, type SheetAction, type SheetRow, statusOf } from '@/lib/day-sheet'
 import { cn } from '@/lib/utils'
 import { QUICK, selectOnFocus } from './attendance-sheet-rows'
 
@@ -82,6 +82,72 @@ export function PasteDialog({ open, onOpenChange, rows, leaveTypeId, onApply }: 
               {t(label)}
             </Button>
           ))}
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  )
+}
+
+export function SiteMessageDialog({ rows, sites, date, absentId, allowOvernight, pending, onClose, onApply }: {
+  rows: SheetRow[]
+  sites: Row[]
+  date: string
+  absentId?: string
+  allowOvernight: boolean
+  pending: boolean
+  onClose: () => void
+  onApply: (out: BulkRow[], before: SheetRow[]) => Promise<boolean>
+}) {
+  const { t, i18n } = useTranslation()
+  const id = useId()
+  const [input, setInput] = useState('')
+  const [siteId, setSiteId] = useState('')
+  const selectedSite = sites.find((site) => site.id === siteId)
+  const { entries, invalid, capped } = parseSiteMessage(input, rows, allowOvernight)
+  const ready = !pending && !capped && !invalid.length && entries.length > 0
+    && entries.every(({ inTime }) => inTime ? !!selectedSite : !!absentId)
+
+  async function confirm() {
+    if (!ready) return
+    const saved = await onApply(entries.map(({ row, inTime, outTime }) => ({
+      employee_id: row.employee.id,
+      version: row.day.version,
+      site_id: inTime ? siteId : absentId,
+      ...(inTime && { in_time: inTime, out_time: outTime }),
+    })), entries.map(({ row }) => row))
+    if (saved) onClose()
+  }
+
+  return (
+    <Dialog open onOpenChange={(open) => { if (!open && !pending) onClose() }}>
+      <DialogContent>
+        <DialogHeader>
+          <DialogTitle>{t('attendance.sheet.message.title')}</DialogTitle>
+          <DialogDescription>{t('attendance.sheet.message.hint')} <bdi>{date}</bdi></DialogDescription>
+        </DialogHeader>
+        <DialogBody className="grid gap-3">
+          <SelectField name="site" label={t('attendance.sheet.message.site')} values={{ site: siteId }} set={(_, value) => setSiteId(value)}
+            errs={{}} blank disabled={pending} options={sites.map((site) => [site.id, localName(site, i18n.language)])} />
+          <Label htmlFor={id}>{t('attendance.sheet.message.label')}</Label>
+          <Textarea id={id} dir="auto" rows={5} disabled={pending} value={input} onChange={(e) => setInput(e.target.value)} />
+          {!!invalid.length && <p role="alert" className="text-sm text-destructive">{t('attendance.sheet.message.invalid', { lines: invalid.join(', ') })}</p>}
+          {capped && <p role="alert" className="text-sm text-destructive">{t('attendance.sheet.toast.tooMany', { max: MAX_BATCH })}</p>}
+          {!!entries.length && (
+            <ul aria-label={t('attendance.sheet.message.preview')} className="max-h-40 overflow-y-auto rounded-md border p-2 text-sm">
+              {entries.map(({ row, inTime, outTime }) => (
+                <li key={row.employee.id} className="flex flex-wrap items-center gap-x-2 py-0.5">
+                  <bdi>{row.employee.code}</bdi>
+                  <span>{localName(row.employee, i18n.language)}</span>
+                  {inTime ? <><bdi>{inTime} – {outTime}</bdi>{selectedSite && <span>{localName(selectedSite, i18n.language)}</span>}</> : <span>{t('attendance.state.absent')}</span>}
+                  {row.day.state !== 'missing' && <Badge variant="warning">{t('attendance.sheet.message.replaces')}</Badge>}
+                </li>
+              ))}
+            </ul>
+          )}
+        </DialogBody>
+        <DialogFooter>
+          <Button type="button" disabled={!ready} onClick={() => void confirm()}>{t('attendance.sheet.message.save', { count: entries.length })}</Button>
+          <Button type="button" variant="ghost" disabled={pending} onClick={onClose}>{t('common.cancel')}</Button>
         </DialogFooter>
       </DialogContent>
     </Dialog>

@@ -1,0 +1,17 @@
+#!/bin/sh
+set -eu
+
+if [ "$(id -u)" -eq 0 ]; then
+    for argument do
+        case "$argument" in
+            --user-data-dir=/tmp/puppeteer_dev_chrome_profile-*)
+                profile=${argument#--user-data-dir=}
+                chown www-data:www-data "$profile"
+                export HOME="$profile"
+                ;;
+        esac
+    done
+    exec setpriv --reuid=www-data --regid=www-data --init-groups --no-new-privs /usr/bin/chromium "$@"
+fi
+
+exec /usr/bin/chromium "$@"

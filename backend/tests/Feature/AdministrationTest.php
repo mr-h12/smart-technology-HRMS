@@ -7,15 +7,29 @@ use App\Modules\Identity\Infrastructure\Eloquent\Role;
 use App\Modules\Identity\Infrastructure\Eloquent\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Str;
 use Tests\TestCase;
 
 class AdministrationTest extends TestCase
 {
     use RefreshDatabase;
 
+    private ?string $fixturePassword = null;
+
+    /** @param array<string, mixed> $attributes */
+    protected function makeUser(string $roleSlug = 'developer', array $attributes = []): User
+    {
+        return parent::makeUser($roleSlug, ['password' => $this->fixturePassword(), ...$attributes]);
+    }
+
+    private function fixturePassword(): string
+    {
+        return $this->fixturePassword ??= Str::random(24).'a1';
+    }
+
     private function token(User $u): string
     {
-        return $this->postJson('/api/v1/auth/login', ['email' => $u->email, 'password' => 'secret123'])->json('data.token');
+        return $this->postJson('/api/v1/auth/login', ['email' => $u->email, 'password' => $this->fixturePassword()])->json('data.token');
     }
 
     /** Status of GET /auth/me with $token, then back to acting as $actor. */
@@ -31,7 +45,7 @@ class AdministrationTest extends TestCase
     public function test_developer_creates_an_account(): void
     {
         $this->signIn('developer');
-        $res = $this->postJson('/api/v1/users', ['name' => 'منى', 'email' => 'mona@smart.test', 'password' => 'abcd1234', 'role_id' => Role::where('slug', 'manager')->value('id')])
+        $res = $this->postJson('/api/v1/users', ['name' => 'منى', 'email' => 'mona@smart.test', 'password' => Str::random(24), 'role_id' => Role::where('slug', 'manager')->value('id')])
             ->assertCreated()->assertJsonMissingPath('data.password');
         $new = DB::table('audit_log')->where(['event' => 'USER_CREATED', 'entity_id' => $res->json('data.id')])->value('new_values');
         $this->assertStringNotContainsString('password', $new);
@@ -39,20 +53,44 @@ class AdministrationTest extends TestCase
         $this->postJson('/api/v1/users', [])->assertStatus(403);
     }
 
+    public function test_hr_can_manage_staff_credentials_but_not_privileged_accounts(): void
+    {
+        $developer = $this->makeUser('developer');
+        $ceo = $this->makeUser('ceo');
+        $manager = $this->makeUser('manager');
+        $hr = $this->signIn('hr');
+        $password = Str::random(24).'A1';
+        $account = ['name' => 'Demo user', 'email' => 'demo-staff@smart.test', 'password' => $password];
+
+        $this->getJson('/api/v1/users/assignable-roles')->assertOk()
+            ->assertJsonPath('data.0.slug', 'hr')->assertJsonPath('data.1.slug', 'manager')->assertJsonCount(2, 'data');
+        $this->postJson('/api/v1/users', [...$account, 'role_id' => $ceo->role_id])->assertForbidden();
+        $this->postJson('/api/v1/users', [...$account, 'role_id' => $developer->role_id])->assertForbidden();
+        $this->postJson('/api/v1/users', [...$account, 'role_id' => $hr->role_id])->assertCreated();
+        foreach ([$manager, $hr] as $target) {
+            $this->putJson("/api/v1/users/{$target->id}/password", ['password' => $password])->assertNoContent();
+        }
+        foreach ([$ceo, $developer] as $target) {
+            $this->putJson("/api/v1/users/{$target->id}/password", ['password' => $password])->assertForbidden();
+        }
+        $this->patchJson("/api/v1/users/{$manager->id}", ['role_id' => $developer->role_id])->assertForbidden();
+    }
+
     public function test_create_normalises_email_and_rejects_case_duplicate(): void
     {
         $this->signIn('developer');
         $role = Role::where('slug', 'manager')->value('id');
-        $this->postJson('/api/v1/users', ['name' => 'أ', 'email' => ' Ali@Smart.Test ', 'password' => 'abcd1234', 'role_id' => $role])
+        $this->postJson('/api/v1/users', ['name' => 'أ', 'email' => ' Ali@Smart.Test ', 'password' => Str::random(24), 'role_id' => $role])
             ->assertCreated()->assertJsonPath('data.email', 'ali@smart.test');
-        $this->postJson('/api/v1/users', ['name' => 'ب', 'email' => 'ALI@smart.test', 'password' => 'abcd1234', 'role_id' => $role])
+        $this->postJson('/api/v1/users', ['name' => 'ب', 'email' => 'ALI@smart.test', 'password' => Str::random(24), 'role_id' => $role])
             ->assertStatus(422)->assertJsonPath('error.details.0.field', 'email');
-        $this->postJson('/api/v1/users', ['name' => 'ج', 'email' => 'c@smart.test', 'password' => 'abcdefgh', 'role_id' => $role])
+        $this->postJson('/api/v1/users', ['name' => 'ج', 'email' => 'c@smart.test', 'password' => ' '.Str::random(4).' ', 'role_id' => $role])
             ->assertStatus(422)->assertJsonPath('error.details.0.field', 'password');
     }
 
     public function test_deactivate_and_password_set_end_sessions(): void
     {
+        $newPassword = Str::random(24).'a1';
         $m = $this->makeUser('manager');
         $t1 = $this->token($m);
         $dev = $this->signIn('developer');
@@ -60,28 +98,30 @@ class AdministrationTest extends TestCase
         $this->assertSame(401, $this->probe($t1, $dev));
         $this->patchJson("/api/v1/users/{$m->id}/reactivate")->assertOk();
         $t2 = $this->token($m);
-        $this->putJson("/api/v1/users/{$m->id}/password", ['password' => 'newpass99'])->assertNoContent();
+        $this->putJson("/api/v1/users/{$m->id}/password", ['password' => $newPassword])->assertNoContent();
         $this->assertSame(401, $this->probe($t2, $dev));
         $this->assertDatabaseHas('audit_log', ['event' => 'PASSWORD_SET', 'entity_id' => $m->id, 'new_values' => null]);
     }
 
     public function test_password_set_unlocks_a_locked_account(): void
     {
+        $newPassword = Str::random(24).'a1';
         $m = $this->makeUser('manager', ['failed_login_attempts' => 5, 'locked_until' => now()->addMinutes(30)]);
         $this->signIn('developer');
         $this->putJson("/api/v1/users/{$m->id}/password", ['password' => []])->assertStatus(422);
-        $this->putJson("/api/v1/users/{$m->id}/password", ['password' => 'newpass99'])->assertNoContent();
-        $this->postJson('/api/v1/auth/login', ['email' => $m->email, 'password' => 'newpass99'])->assertCreated();
+        $this->putJson("/api/v1/users/{$m->id}/password", ['password' => $newPassword])->assertNoContent();
+        $this->postJson('/api/v1/auth/login', ['email' => $m->email, 'password' => $newPassword])->assertCreated();
     }
 
     public function test_a_password_the_developer_sets_signs_the_account_in(): void
     {
+        $newPassword = Str::random(24).'a1';
         $dev = $this->makeUser('developer');
         $m = $this->makeUser('manager');
-        $this->withToken($this->token($dev))->putJson("/api/v1/users/{$m->id}/password", ['password' => 'password123'])->assertNoContent();
+        $this->withToken($this->token($dev))->putJson("/api/v1/users/{$m->id}/password", ['password' => $newPassword])->assertNoContent();
         $this->flushHeaders();
-        $this->postJson('/api/v1/auth/login', ['email' => $m->email, 'password' => 'secret123'])->assertStatus(401);
-        $this->postJson('/api/v1/auth/login', ['email' => $m->email, 'password' => 'password123'])->assertCreated();
+        $this->postJson('/api/v1/auth/login', ['email' => $m->email, 'password' => $this->fixturePassword()])->assertStatus(401);
+        $this->postJson('/api/v1/auth/login', ['email' => $m->email, 'password' => $newPassword])->assertCreated();
     }
 
     public function test_sessions_are_listed_and_terminated(): void
@@ -100,7 +140,7 @@ class AdministrationTest extends TestCase
     public function test_role_matrix_is_editable_and_audited(): void
     {
         $this->signIn('developer');
-        $this->getJson('/api/v1/permissions')->assertJsonCount(42, 'data');
+        $this->getJson('/api/v1/permissions')->assertJsonCount(48, 'data');
         $role = $this->postJson('/api/v1/roles', ['slug' => 'auditor', 'name' => 'Auditor', 'name_ar' => 'مراجع'])->assertCreated()->json('data.id');
         $pid = Permission::where(['resource' => 'audit_log', 'action' => 'view', 'scope' => 'all'])->value('id');
         $this->patchJson("/api/v1/roles/$role/permissions", ['permission_ids' => [$pid]])->assertOk()->assertJsonPath('data.permissions', ['audit_log.view.all']);
@@ -123,9 +163,10 @@ class AdministrationTest extends TestCase
 
     public function test_create_user_command(): void
     {
+        $newPassword = Str::random(24).'a1';
         $this->artisan('identity:create-user', ['email' => 'Dev@Smart.Test', '--name' => 'Yousef'])
-            ->expectsQuestion('Password', 'devpass123')->assertSuccessful();
-        $this->postJson('/api/v1/auth/login', ['email' => 'dev@smart.test', 'password' => 'devpass123'])
+            ->expectsQuestion('Password', $newPassword)->assertSuccessful();
+        $this->postJson('/api/v1/auth/login', ['email' => 'dev@smart.test', 'password' => $newPassword])
             ->assertCreated()->assertJsonPath('data.user.role.slug', 'developer');
     }
 }

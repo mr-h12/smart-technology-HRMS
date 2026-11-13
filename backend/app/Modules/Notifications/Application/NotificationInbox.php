@@ -59,7 +59,14 @@ final class NotificationInbox
         }
         $names = $this->roster->names($ids);
 
-        return array_map(fn (array $r) => [...$r, 'employee' => $names[$r['data']['employee_id'] ?? ''] ?? null], $rows);
+        return array_map(function (array $r) use ($names): array {
+            // Older notifications stored the proposed wage; only the approval endpoint may return it.
+            if ($r['type'] === 'wage_proposed') {
+                unset($r['data']['daily_wage']);
+            }
+
+            return [...$r, 'employee' => $names[$r['data']['employee_id'] ?? ''] ?? null];
+        }, $rows);
     }
 
     /** @return array<string, mixed> */

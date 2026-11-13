@@ -6,12 +6,16 @@ namespace App\Modules\Attendance\Application;
 
 use App\Modules\Attendance\Domain\AttendanceRefusal;
 use App\Modules\Attendance\Domain\AttendanceRefused;
+use App\Modules\Attendance\Domain\Period;
 use App\Modules\Attendance\Infrastructure\Eloquent\AttendanceDay;
+use App\Modules\Attendance\Infrastructure\PeriodGuard;
 use App\Modules\Employees\Application\DayCrew;
+use App\Modules\Employees\Domain\EmployeeType;
 use App\Modules\Identity\Application\Rbac\PermissionHolders;
 use App\Modules\Notifications\Application\Notifier;
 use App\Modules\Sites\Application\SiteService;
 use Illuminate\Database\Eloquent\ModelNotFoundException;
+use Illuminate\Support\Facades\DB;
 
 /**
  * The site manager's changes to today's day-labor crew on one of their sites (owner, 2026-11-04; approved as built 2026-11-05). Only today, Cairo; only day laborers;
@@ -25,6 +29,7 @@ final class SiteDayCrew
         private readonly SiteService $sites,
         private readonly Notifier $notifier,
         private readonly PermissionHolders $holders,
+        private readonly Signoffs $signoffs,
     ) {}
 
     /**
@@ -59,7 +64,7 @@ final class SiteDayCrew
         $mine = $this->mySites($siteId, $managerId);
         $today = EffectiveDays::today();
         // The checks and the change in one transaction with the person locked, as SiteDay::save does (PR #22 review B4).
-        $this->crew->locked([$employeeId], function () use ($siteId, $employeeId, $mine, $today): void {
+        $this->crew->locked([$employeeId], function () use ($siteId, $employeeId, $mine, $today, $managerId): void {
             if (! $this->crew->isAddableOn($employeeId, $today)) {
                 throw new ModelNotFoundException;
             }
@@ -71,6 +76,10 @@ final class SiteDayCrew
             if ($current !== null && $current !== $siteId && AttendanceDay::where(['employee_id' => $employeeId, 'date' => $today])->exists()) {
                 throw self::refused(AttendanceRefusal::CrewMovedHasDay);
             }
+            PeriodGuard::assertOpen(Period::containing(EmployeeType::DayLaborer, $today));
+            if ($this->signoffs->managerState($this->signoffs->overlapping([$employeeId], $today, $today)[$employeeId] ?? [], EmployeeType::DayLaborer, $managerId) === 'signed') {
+                throw self::refused(AttendanceRefusal::PeriodSigned);
+            }
             $this->crew->setCrew($employeeId, $siteId, $today);
         });
     }
@@ -79,12 +88,16 @@ final class SiteDayCrew
     {
         $this->mySites($siteId, $managerId);
         $today = EffectiveDays::today();
-        $this->crew->locked([$employeeId], function () use ($siteId, $employeeId, $today): void {
+        $this->crew->locked([$employeeId], function () use ($siteId, $employeeId, $today, $managerId): void {
             if ($this->crew->laborerSiteOn($employeeId, $today) !== $siteId) {
                 throw new ModelNotFoundException;
             }
             if (AttendanceDay::where(['employee_id' => $employeeId, 'date' => $today])->exists()) {
                 throw self::refused(AttendanceRefusal::CrewHasDay);
+            }
+            PeriodGuard::assertOpen(Period::containing(EmployeeType::DayLaborer, $today));
+            if ($this->signoffs->managerState($this->signoffs->overlapping([$employeeId], $today, $today)[$employeeId] ?? [], EmployeeType::DayLaborer, $managerId) === 'signed') {
+                throw self::refused(AttendanceRefusal::PeriodSigned);
             }
             $this->crew->setCrew($employeeId, null, $today);
         });
@@ -98,12 +111,16 @@ final class SiteDayCrew
     {
         $this->mySites($siteId, $managerId);
         $today = EffectiveDays::today();
-        $made = $this->crew->propose(['name_ar' => $data['name_ar'], 'gender' => $data['gender'], 'phone' => $data['phone'] ?? null], $siteId, $today, $data['daily_wage']);
+        $made = DB::transaction(function () use ($siteId, $today, $data): array {
+            PeriodGuard::assertOpen(Period::containing(EmployeeType::DayLaborer, $today));
+
+            return $this->crew->propose(['name_ar' => $data['name_ar'], 'gender' => $data['gender'], 'phone' => $data['phone'] ?? null], $siteId, $today, $data['daily_wage']);
+        });
         // A proposed wage is a request, so HR hears of it at once (CLAUDE.md: every manager action notifies HR).
         $site = $this->sites->names([$siteId])[$siteId] ?? null;
         foreach ($this->holders->userIds('employee.approve_wage.all') as $id) {
             $this->notifier->notifyOnce($id, 'wage_proposed', $today, [
-                'employee_id' => $made['id'], 'daily_wage' => $data['daily_wage'], 'site_name_ar' => (string) ($site['name_ar'] ?? ''), 'site_name_en' => $site['name_en'] ?? null,
+                'employee_id' => $made['id'], 'site_name_ar' => (string) ($site['name_ar'] ?? ''), 'site_name_en' => $site['name_en'] ?? null,
             ], $made['proposal_id']);
         }
 

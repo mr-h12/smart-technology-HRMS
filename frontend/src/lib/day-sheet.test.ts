@@ -1,5 +1,5 @@
 import { expect, test } from 'vitest'
-import { bulkRows, DAY_VALUES, type DayValue, fold, matches, parseBatch, type SheetRow, statusOf, undoRows } from './day-sheet'
+import { bulkRows, DAY_VALUES, type DayValue, fold, matches, parseBatch, parseSiteMessage, type SheetRow, statusOf, undoRows } from './day-sheet'
 
 const blank = Object.fromEntries(DAY_VALUES.map((f) => [f, null])) as Record<DayValue, null>
 const row = (code: number, o: { day?: Partial<SheetRow['day']>; last_site_id?: string | null; hints?: SheetRow['hints']; department?: string | null; name_en?: string; type?: string } = {}): SheetRow => ({
@@ -217,4 +217,18 @@ test('statusOf marks an office row late from the hint', () => {
 
 test('statusOf never marks a field row late', () => {
   expect(statusOf(row(1, { day: stored({ site_id: 'S1' }), hints: { late_minutes: 25, ot_minutes: 0 } }), false)).toBe('present')
+})
+
+test('site messages resolve employee IDs and reject invalid, repeated and unknown lines', () => {
+  const result = parseSiteMessage('١ ٠٩:١٦ ١٦:٠٠\n2 غياب\n1 09:00 16:00\n100 absent\n3 09:00 28:00\n4 16:00 09:00', sheet)
+  expect(result.entries).toEqual([{ row: sheet[0], inTime: '09:16', outTime: '16:00' }, { row: sheet[1] }])
+  expect(result.invalid).toEqual([3, 4, 5, 6])
+  expect(parseSiteMessage('1 absent\n'.repeat(501), sheet).capped).toBe(true)
+})
+
+test('site messages allow overnight shifts for permanent workers only', () => {
+  expect(parseSiteMessage('1 22:00 06:00', sheet).invalid).toEqual([1])
+  expect(parseSiteMessage('1 22:00 06:00', sheet, true).entries).toEqual([
+    { row: sheet[0], inTime: '22:00', outTime: '06:00' },
+  ])
 })

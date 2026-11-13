@@ -7,7 +7,7 @@ namespace App\Modules\Attendance\Domain;
 /**
  * Which dates a site manager may write in full (design Part 2, P8): today, and yesterday until the `manager_yesterday_until` time,
  * Cairo. After that a past day takes only the departure of an open day (owner, 2026-11-05), and that write is a past-day edit HR
- * hears of at once. Dates are Y-m-d and times H:i, so string comparison is chronological. A returned period (Slice 4) will widen this.
+ * hears of at once. Dates are Y-m-d and times H:i, so string comparison is chronological. SiteDay can widen this for the employee whose record HR returned.
  */
 final class ManagerWindow
 {
@@ -22,7 +22,7 @@ final class ManagerWindow
         return $date < $today && ! self::allows($date, $today, $now, $until);
     }
 
-    private static function yesterday(string $today): string
+    public static function yesterday(string $today): string
     {
         return (new \DateTimeImmutable($today))->modify('-1 day')->format('Y-m-d');
     }

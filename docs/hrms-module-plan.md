@@ -137,6 +137,7 @@ Smart Technology runs HR and payroll today on 6 hand-built Excel workbooks (anal
 ## Risks / to tell the client
 - ⚠️ **Backups are manual and not configured.** The client must confirm before we automate them.
   Employee document files live in `backend/storage/app/private`: copy that folder with every DB dump. Replaced and deleted files are never purged, so it only grows.
+  Generated PDFs and signature images also live in `backend/storage/app/private` and must be copied with every database dump.
 - **Tight scope for 2 devs.** The talent modules ship as lite versions in Month 4. If anything slips, they move first, never payroll.
 - **We need from the client:** remote access (VPN/SSH) to the on-prem server, plus an SMTP mailbox on the company domain. Without remote access, each release needs a site visit.
 - **Rates:** the site-dependent hourly rate is unconfirmed. The rate table supports both a fixed and a per-site rate.

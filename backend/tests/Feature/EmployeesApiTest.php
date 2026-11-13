@@ -123,6 +123,16 @@ class EmployeesApiTest extends TestCase
             ->assertJsonCount(1, 'data.type_changes');
     }
 
+    public function test_a_salary_change_preserves_the_omitted_insurance_raise_and_shift(): void
+    {
+        $id = $this->make(['raise' => '300', 'insured_basic' => '4000', 'shift_start' => '09:30', 'shift_end' => '17:30']);
+        $this->postJson("/api/v1/employees/$id/pay-changes", ['effective_from' => '2026-03-01', 'salary' => '9500'])
+            ->assertCreated()->assertJsonPath('data.pay_changes.1.raise', '300.000000')
+            ->assertJsonPath('data.pay_changes.1.insured_basic', '4000.000000')
+            ->assertJsonPath('data.pay_changes.1.shift_start', '09:30:00')
+            ->assertJsonPath('data.pay_changes.1.shift_end', '17:30:00');
+    }
+
     public function test_money_round_trips_without_float_drift(): void
     {
         $id = $this->make(['salary' => '0.1']);

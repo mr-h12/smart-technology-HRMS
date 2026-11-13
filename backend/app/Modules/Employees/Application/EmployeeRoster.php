@@ -8,6 +8,7 @@ use App\Modules\Employees\Domain\EffectiveDated;
 use App\Modules\Employees\Domain\EmployeeType;
 use App\Modules\Employees\Infrastructure\Eloquent\DayCrewChange;
 use App\Modules\Employees\Infrastructure\Eloquent\Employee;
+use App\Modules\Employees\Infrastructure\Eloquent\EmployeeManagerAssignment;
 use App\Modules\Employees\Infrastructure\Eloquent\EmployeePayChange;
 use App\Modules\Employees\Infrastructure\Eloquent\EmployeeSiteAssignment;
 use App\Modules\Employees\Infrastructure\Eloquent\EmployeeTypeChange;
@@ -161,9 +162,14 @@ final class EmployeeRoster
     }
 
     /** @return list<array<string, mixed>> the engineers employed on $date and assigned to $managerId on $date, by code */
-    public function engineersOf(string $managerId, string $date): array
+    public function engineersOf(string $managerId, string $date, bool $withManagerHistory = false): array
     {
-        return $this->rows(EmployeeReach::apply($this->employedAs([EmployeeType::Engineer], $date, $date, null), $managerId, $date));
+        $query = $this->employedAs([EmployeeType::Engineer], $date, $date, null);
+        if ($withManagerHistory) {
+            $query->with('managerAssignments');
+        }
+
+        return $this->rows(EmployeeReach::apply($query, $managerId, $date));
     }
 
     /** @return Builder<Employee> the ids of the archived employees, as a whereIn subquery */
@@ -291,6 +297,11 @@ final class EmployeeRoster
             'sites' => array_values($e->siteAssignments->sortBy('effective_from')->map(fn (EmployeeSiteAssignment $s) => [
                 'site_id' => (string) $s->site_id, 'effective_from' => (string) $s->effective_from,
             ])->all()),
+            ...($e->relationLoaded('managerAssignments') ? [
+                'managers' => array_values($e->managerAssignments->map(fn (EmployeeManagerAssignment $a) => [
+                    'manager_id' => (string) $a->manager_id, 'effective_from' => (string) $a->effective_from,
+                ])->all()),
+            ] : []),
             'crew' => array_values($e->crewChanges->map(fn (DayCrewChange $c) => [
                 'date' => (string) $c->date, 'site_id' => $c->site_id === null ? null : (string) $c->site_id,
             ])->all()),

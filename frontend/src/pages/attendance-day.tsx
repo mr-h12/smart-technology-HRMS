@@ -1,3 +1,4 @@
+import { useQuery } from '@tanstack/react-query'
 import { useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { toast } from 'sonner'
@@ -8,10 +9,10 @@ import { TableSkeleton } from '@/components/layout/PageSkeleton'
 import { Button } from '@/components/ui/button'
 import { Textarea } from '@/components/ui/input'
 import { Sheet, SheetContent, SheetFooter, SheetHeader, SheetTitle } from '@/components/ui/sheet'
-import { ApiError } from '@/lib/api'
+import { apiList, ApiError } from '@/lib/api'
 import { useAuth } from '@/lib/auth'
 import { hhmm, DAY_VALUES as VALUES } from '@/lib/day-sheet'
-import { SITES, useApi, useSave } from '@/lib/query'
+import { queryKey, SITES, useApi, useSave } from '@/lib/query'
 
 type Day = Row & { fields: string[]; leave_day_fields: string[]; hints: Record<string, number>; period: { is_locked: boolean } | null }
 type Options = [string, string][]
@@ -72,6 +73,13 @@ function DayBody({ employee, date, archived, onDone, onReload }: { employee: Row
 function DayForm({ day, sites, path, archived, loadErr, onDone, onReload }: { day: Day; sites: Row[]; path: string; archived: boolean; loadErr?: unknown; onDone: () => void; onReload: () => void }) {
   const { t, i18n } = useTranslation()
   const { can } = useAuth()
+  const requestPath = `/attendance/requests?${new URLSearchParams({ employee_id: day.employee_id, date: day.date, status: 'all' })}`
+  const requests = useQuery({
+    queryKey: queryKey(requestPath),
+    queryFn: ({ signal }) => apiList<{ type: string; status: string }>(requestPath, { signal }),
+    enabled: can('attendance_request.decide'),
+  })
+  const paid = requests.data?.data.some((r) => r.type === 'advance' && r.status === 'approved')
   const send = useSave()
   const { form, set } = useForm({ site_id: day.site_id ?? '', ...Object.fromEntries(VALUES.map((f) => [f, asText(f, day[f])])) })
   const [err, setErr] = useState<unknown>()
@@ -118,14 +126,16 @@ function DayForm({ day, sites, path, archived, loadErr, onDone, onReload }: { da
           {(p) => <Textarea {...p} value={form.note} maxLength={500} disabled={readOnly} onChange={(e) => set(f, e.target.value)} />}
         </Field>
       )
+    const request = requests.data?.data.find((r) => r.type === ({ ot_minutes: 'overtime', advance_amount: 'advance' } as Record<string, string>)[f])
     // the hints come from the stored times: a time changed in the form hides its own hint until it is typed back
     const hint = HINT[f] && (hhmm(form[f]) ?? '') === (hhmm(day[f] as string | null) ?? '') ? day.hints[HINT[f][0]] : undefined
     // the overtime suggestion fills its box; Save stores it
     const fill = f === 'out_time' && !readOnly && shown.includes('ot_minutes') && (hint ?? 0) > 0 && String(hint) !== form.ot_minutes
     return (
       <div key={f} className="grid gap-1.5">
-        <TextField name={f} label={label} values={form} set={setValue} errs={errs} disabled={readOnly} {...(COMPUTED.includes(f) && { placeholder: t('attendance.day.computedOnSave') })}
+        <TextField name={f} label={label} values={form} set={setValue} errs={errs} disabled={readOnly || (f === 'advance_amount' && paid)} {...(COMPUTED.includes(f) && { placeholder: t('attendance.day.computedOnSave') })}
           {...(TIMES.includes(f) ? { type: 'time' } : { inputMode: MINUTES.includes(f) ? 'numeric' : 'decimal' })} />
+        {request && <StatusBadge variant="neutral" label={t(request.type === 'advance' && paid ? 'attendanceRequests.paid' : `attendanceRequests.status.${request.status}`)} />}
         {hint != null && (
           <p className="flex items-center gap-2 text-[13px] text-muted-foreground">
             {t(HINT[f][1], { minutes: hint })}
@@ -163,7 +173,7 @@ function DayForm({ day, sites, path, archived, loadErr, onDone, onReload }: { da
       </div>
       {!readOnly && (
         <SheetFooter>
-          {day.state === 'stored' && (
+          {day.state === 'stored' && !paid && (
             <Button type="button" variant="outline" className="text-destructive" disabled={busy} onClick={clear}>
               {t('attendance.day.clear')}
             </Button>

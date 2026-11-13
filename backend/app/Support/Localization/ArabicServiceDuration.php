@@ -1,0 +1,56 @@
+<?php
+
+declare(strict_types=1);
+
+namespace App\Support\Localization;
+
+use DateInterval;
+
+final class ArabicServiceDuration
+{
+    public static function format(DateInterval $duration): string
+    {
+        $parts = [
+            self::part($duration->y, 'سنة واحدة', 'سنتان', 'سنوات', 'سنة'),
+            self::months($duration->m),
+            self::days($duration->d),
+        ];
+
+        return implode(' و', array_filter($parts));
+    }
+
+    public static function months(int $count): string
+    {
+        return self::part($count, 'شهر واحد', 'شهران', 'أشهر', 'شهرًا');
+    }
+
+    public static function days(int $count): string
+    {
+        return $count < 0
+            ? $count.' '.match (true) {
+                $count >= -2 => 'يوم',
+                $count >= -10 => 'أيام',
+                default => 'يومًا',
+            }
+        : self::part($count, 'يوم واحد', 'يومان', 'أيام', 'يومًا');
+    }
+
+    public static function hoursAndMinutes(int $minutes): string
+    {
+        return implode(' و', array_filter([
+            self::part(intdiv($minutes, 60), 'ساعة واحدة', 'ساعتان', 'ساعات', 'ساعة'),
+            self::part($minutes % 60, 'دقيقة واحدة', 'دقيقتان', 'دقائق', 'دقيقة'),
+        ]));
+    }
+
+    private static function part(int $count, string $singular, string $dual, string $plural, string $accusative): string
+    {
+        return match (true) {
+            $count === 0 => '',
+            $count === 1 => $singular,
+            $count === 2 => $dual,
+            $count <= 10 => "{$count} {$plural}",
+            default => "{$count} {$accusative}",
+        };
+    }
+}

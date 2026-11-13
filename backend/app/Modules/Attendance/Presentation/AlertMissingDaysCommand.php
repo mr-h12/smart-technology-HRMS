@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Modules\Attendance\Presentation;
 
 use App\Modules\Attendance\Application\EffectiveDays;
+use App\Modules\Attendance\Application\SendManagerDigest;
 use App\Modules\Attendance\Application\SendMissingDaysAlert;
 use DateTimeImmutable;
 use Illuminate\Console\Command;
@@ -26,6 +27,7 @@ final class AlertMissingDaysCommand extends Command
             return self::FAILURE;
         }
         SendMissingDaysAlert::dispatch($date);
+        SendManagerDigest::dispatch($date);
         $this->info("Queued the missing-days alert for {$date}.");
 
         return self::SUCCESS;

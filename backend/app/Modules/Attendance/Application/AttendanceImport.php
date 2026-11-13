@@ -8,6 +8,7 @@ use App\Modules\Attendance\Domain\AttendanceRefusal;
 use App\Modules\Attendance\Domain\AttendanceRefused;
 use App\Modules\Attendance\Infrastructure\PeriodGuard;
 use App\Modules\Attendance\Infrastructure\XlsxAttendanceReader;
+use App\Modules\Attendance\Infrastructure\XlsxTemplateWriter;
 use App\Modules\Employees\Application\EmployeeRoster;
 use App\Modules\Employees\Domain\EmployeeType;
 use App\Modules\Sites\Infrastructure\Eloquent\Site;
@@ -83,14 +84,23 @@ final class AttendanceImport
         $file = $this->reader->read($path, $this->maxRows);
         $dates = $p->days();
         $headers = [AttendanceTemplate::header($dates, 'ar'), AttendanceTemplate::header($dates, 'en')];
-        if (! in_array($file['header'], $headers, true) || ! in_array($file['versions'][0], $headers, true)) {
+        $identityIndex = count($dates) + 2;
+        $versionHeader = $file['versions'][0];
+        $hasIdentity = ($versionHeader[$identityIndex] ?? null) === XlsxTemplateWriter::IDENTITY_COLUMN;
+        if ($hasIdentity) {
+            array_pop($versionHeader);
+        }
+        if (! in_array($file['header'], $headers, true) || ! in_array($versionHeader, $headers, true)) {
             throw AttendanceRefused::because(AttendanceRefusal::TemplateMismatch);
         }
 
         $employees = [];
+        $namesInRoster = [];
         // An archived employee is not a template row, but a row typed in with their code is matched; their cells up to the termination date are accepted.
         foreach ($this->roster->withArchived()->allOfType($g, $p->start, $p->end, $ownerId) as $e) {
             $employees[(int) $e['code']] = $e;
+            $key = self::key((string) $e['name_ar']);
+            $namesInRoster[$key] = ($namesInRoster[$key] ?? 0) + 1;
         }
         // Matched by code, not by row, so sorting the visible sheet cannot pair a cell with another employee's version.
         $versions = [];
@@ -125,10 +135,16 @@ final class AttendanceImport
 
                 continue;
             }
-            // HR may have changed or swapped IDs since the download: the hidden sheet's name (as downloaded) must still be the code's
-            // employee. A row typed in for someone not in the download has no line there and is not checked.
-            // ponytail: two people with the identical full name swapping IDs still pass.
-            if (isset($versions[$code]) && self::key($versions[$code][1] ?? '') !== self::key((string) $employee['name_ar'])) {
+            // The hidden sheet keeps the original identity even when HR sorts visible rows or swaps employee IDs.
+            // Legacy sheets have only the name. They cannot disambiguate two employees with that name.
+            $metadata = $versions[$code] ?? null;
+            $currentName = self::key((string) $employee['name_ar']);
+            $visibleName = self::key($values[1] ?? '');
+            if (($visibleName !== '' && $visibleName !== $currentName) || ($metadata !== null && (
+                self::key($metadata[1] ?? '') !== $currentName
+                || ($hasIdentity && ($metadata[$identityIndex] ?? null) !== $employee['id'])
+                || (! $hasIdentity && $namesInRoster[$currentName] > 1)
+            ))) {
                 $plan['errors'][] = self::error($row, 0, $code, null, 'code_name_mismatch');
 
                 continue;

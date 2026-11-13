@@ -5,7 +5,7 @@ declare(strict_types=1);
 namespace App\Modules\Audit\Domain;
 
 /**
- * Masks what the request and error logs store: a key rule (secrets by substring, money and IDs by exact name) at any depth,
+ * Masks what the request and error logs store: a key rule (secrets by substring, sensitive fields by exact name) at any depth,
  * then a shape rule (a run of 7+ digits, Arabic-Indic and Persian digits included) on every remaining string, keys included, and
  * on every int or float. A whole UUID is kept: its hex groups often hold 7 digits in a row. The spec's "Masking" section is the
  * source, these build-time additions included.
@@ -17,8 +17,9 @@ final class LogMasker
     private const SECRET_FRAGMENTS = ['password', 'token', 'secret', 'authorization', 'cookie'];
 
     /** Exact names, not fragments: `pay`/`rate`/`basic` would also hide `pay_method`, `allowance_mode` and `fares`. */
-    private const MONEY_AND_ID_KEYS = ['salary', 'raise', 'insured_basic', 'daily_wage', 'value', 'amount', 'current_pay', 'national_id',
-        'insurance_no', 'bank_account', 'phone'];
+    private const SENSITIVE_KEYS = ['salary', 'raise', 'insured_basic', 'daily_wage', 'value', 'amount', 'advance_request', 'advance_amount', 'current_pay', 'national_id',
+        'insurance_no', 'bank_account', 'phone', 'sim_number', 'monthly_salary', 'last_total_wage', 'final_amount', 'override_reason', 'address', 'candidate_name',
+        'warning_incident', 'warning_period', 'warning_prior_occurrence', 'warning_explanation_request'];
 
     /** Western, Arabic-Indic and Persian digits, mixed in one run too: HR types on Arabic keyboards. `/u` is safe after mb_scrub. */
     private const DIGIT = '[0-9٠-٩۰-۹]';
@@ -88,6 +89,6 @@ final class LogMasker
             }
         }
 
-        return in_array($key, self::MONEY_AND_ID_KEYS, true) || str_ends_with($key, '_amount');
+        return in_array($key, self::SENSITIVE_KEYS, true) || str_ends_with($key, '_amount');
     }
 }

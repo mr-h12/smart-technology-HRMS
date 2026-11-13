@@ -26,6 +26,8 @@ use Throwable;
  */
 final class XlsxTemplateWriter
 {
+    public const IDENTITY_COLUMN = 'employee_uuid';
+
     private const GREY = 'D9D9D9';
 
     /** Site workbook: day-sheet column => [its list's column in `lists`, the $book key]. A the name, B the status, I the residence. */
@@ -35,7 +37,7 @@ final class XlsxTemplateWriter
     private const FIRST_ROW = 3;
 
     /**
-     * @param  array{header: non-empty-list<string>, rows: list<array{code: int, name: string, cells: list<?string>, versions: list<?int>, grey: list<int>}>, choices: list<string>}  $grid
+     * @param  array{header: non-empty-list<string>, rows: list<array{employee_id: string, code: int, name: string, cells: list<?string>, versions: list<?int>, grey: list<int>}>, choices: list<string>}  $grid
      * @return string the path of a temp file; the caller deletes it
      */
     public function write(array $grid, string $locale): string
@@ -109,7 +111,7 @@ final class XlsxTemplateWriter
         return $path;
     }
 
-    /** @param  array{header: non-empty-list<string>, rows: list<array{code: int, name: string, cells: list<?string>, versions: list<?int>, grey: list<int>}>, choices: list<string>}  $grid */
+    /** @param  array{header: non-empty-list<string>, rows: list<array{employee_id: string, code: int, name: string, cells: list<?string>, versions: list<?int>, grey: list<int>}>, choices: list<string>}  $grid */
     private function fill(Writer $writer, array $grid, string $locale): void
     {
         $text = new Style(format: '@');
@@ -137,10 +139,10 @@ final class XlsxTemplateWriter
         }
 
         $writer->addNewSheetAndMakeItCurrent()->setName('versions')->setIsVisible(false);
-        $writer->addRow(self::row($grid['header']));
+        $writer->addRow(self::row([...$grid['header'], self::IDENTITY_COLUMN]));
         foreach ($grid['rows'] as $r) {
             $versions = array_map(fn (?int $v) => $v === null ? new EmptyCell(null) : new NumericCell($v), $r['versions']);
-            $writer->addRow(new Row([self::cell((string) $r['code']), self::cell($r['name']), ...$versions]));
+            $writer->addRow(new Row([self::cell((string) $r['code']), self::cell($r['name']), ...$versions, self::cell($r['employee_id'])]));
         }
     }
 

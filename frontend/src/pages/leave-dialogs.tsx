@@ -1,3 +1,4 @@
+import { LeaveRequestPdf } from './leave-request-pdf'
 import { useState } from 'react'
 import { Trans, useTranslation } from 'react-i18next'
 import { toast } from 'sonner'
@@ -220,6 +221,7 @@ function DecideBody({ id, close, busy, setBusy }: { id: string; close: () => voi
             {t('leave.decide.replace')}
           </label>
         )}
+        {r.employee && can('hr_forms.view') && <LeaveRequestPdf key={r.id} id={r.id} />}
       </DialogBody>
       {(!!actions.length || cancellable) && (
         <DialogFooter>

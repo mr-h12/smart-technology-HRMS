@@ -181,7 +181,7 @@ final class LeaveRequests
     {
         return $this->detail(DB::transaction(function () use ($id, $version, $reason, $by): LeaveRequest {
             $request = $this->forDecision($id, $version, $by, true);
-            $request->fill(['status' => LeaveStatus::Escalated->value, 'decision_reason' => $reason, 'version' => $request->version + 1])->save();
+            $request->fill(['status' => LeaveStatus::Escalated->value, 'escalated_by' => (string) $by->getAuthIdentifier(), 'escalated_at' => now(), 'decision_reason' => $reason, 'version' => $request->version + 1])->save();
             foreach (array_diff($this->holders->userIds('leave.decide_escalated.all'), [(string) $by->getAuthIdentifier()]) as $userId) {
                 $this->notifier->notifyOnce($userId, 'leave_escalated', now('Africa/Cairo')->toDateString(), $this->notice($request), (string) $request->id);
             }

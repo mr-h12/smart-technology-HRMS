@@ -121,7 +121,22 @@ final class DayRules
         return false;
     }
 
-    /** "HH:MM" (or "HH:MM:SS") → minutes after midnight. */
+    /** Work after the scheduled end, allowing a permanent worker's overnight attendance. */
+    public static function fieldOvertime(string $start, string $end, string $in, string $out, bool $overnight): int
+    {
+        $arrival = self::minutes($in);
+        $departure = self::minutes($out);
+        $scheduledEnd = self::minutes($end);
+        if ($overnight && $departure < $arrival) {
+            $departure += 1440;
+        }
+        if ($overnight && $scheduledEnd < self::minutes($start)) {
+            $scheduledEnd += 1440;
+        }
+
+        return min(self::MAX_MINUTES, max(0, $departure - max($arrival, $scheduledEnd)));
+    }
+
     /** Raw late minutes: the arrival after the scheduled start, no grace (calculations §0a subtracts it once at payroll). */
     public static function lateMinutes(string $scheduledIn, string $in): int
     {

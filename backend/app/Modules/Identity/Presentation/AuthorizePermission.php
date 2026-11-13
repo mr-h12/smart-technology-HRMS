@@ -19,20 +19,23 @@ final class AuthorizePermission
     public function __construct(private readonly AuthorizeAction $authorize) {}
 
     /** @param  Closure(Request): Response  $next */
-    public function handle(Request $request, Closure $next, string $ability): Response
+    public function handle(Request $request, Closure $next, string $ability, string ...$alternatives): Response
     {
         $user = $request->user();
         if ($user === null) {
             throw new AuthenticationException;
         }
 
-        $decision = $this->authorize->decide($user, $ability);
-        if (! $decision->granted()) {
-            throw AuthorizationRefused::of($ability);
-        }
-        $request->attributes->set(self::ATTRIBUTE, $decision);
-        $request->attributes->set(self::ATTRIBUTE.':'.$ability, $decision);
+        foreach ([$ability, ...$alternatives] as $candidate) {
+            $decision = $this->authorize->decide($user, $candidate);
+            if ($decision->granted()) {
+                $request->attributes->set(self::ATTRIBUTE, $decision);
+                $request->attributes->set(self::ATTRIBUTE.':'.$candidate, $decision);
 
-        return $next($request);
+                return $next($request);
+            }
+        }
+
+        throw AuthorizationRefused::of($ability);
     }
 }

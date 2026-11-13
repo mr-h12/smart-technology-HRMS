@@ -187,7 +187,16 @@ class SiteDayCrewTest extends TestCase
         $n = DB::table('notifications')->where(['user_id' => $hr->id, 'type' => 'wage_proposed'])->first();
         $this->assertNotNull($n);
         $this->assertSame($made['proposal_id'], $n->ref);
-        $this->assertSame([$made['id'], '350', 'Site-1'], [json_decode($n->data, true)['employee_id'], json_decode($n->data, true)['daily_wage'], json_decode($n->data, true)['site_name_ar']]);
+        $payload = json_decode($n->data, true);
+        $this->assertSame([$made['id'], 'Site-1'], [$payload['employee_id'], $payload['site_name_ar']]);
+        $this->assertArrayNotHasKey('daily_wage', $payload);
+        // A legacy inbox row must not return an amount, including from the mark-read response.
+        DB::table('notifications')->where('id', $n->id)->update(['data' => json_encode([...$payload, 'daily_wage' => '350'])]);
+        $this->actingAs($hr, 'api');
+        $this->getJson('/api/v1/notifications')->assertOk()->assertJsonPath('data.0.ref', $made['proposal_id'])
+            ->assertJsonMissingPath('data.0.data.daily_wage');
+        $this->patchJson("/api/v1/notifications/{$n->id}/read")->assertOk()->assertJsonMissingPath('data.data.daily_wage');
+        $this->actingAs($this->m, 'api');
         $this->propose(['name_ar' => 'عامل آخر', 'daily_wage' => '300'])->assertCreated();
 
         $this->actingAs($hr, 'api');
@@ -196,10 +205,35 @@ class SiteDayCrewTest extends TestCase
         // each row names the site the laborer was added to and the site manager who proposed the wage, oldest first
         $this->getJson('/api/v1/employees/wage-proposals')->assertOk()
             ->assertJsonPath('data.0.id', $made['proposal_id'])
+            ->assertJsonPath('data.0.daily_wage', '350.000000')
             ->assertJsonPath('data.0.site.name_ar', 'Site-1')
             ->assertJsonPath('data.0.proposed_by', ['id' => (string) $this->m->id, 'name' => $this->m->name])
             ->assertJsonPath('data.0.employee.hire_date', '2026-10-22')
             ->assertJsonMissingPath('data.0.site_id');
+    }
+
+    public function test_crew_and_wage_changes_cannot_mutate_a_locked_day_labor_period(): void
+    {
+        $this->leaveTypes();
+        $this->homeSite($laborer = $this->employee('day_laborer'), $this->s1, '2026-10-01');
+        $this->actingAs($this->m, 'api');
+        $made = $this->propose()->assertCreated()->json('data');
+
+        $this->actingAs($this->makeUser('hr'), 'api');
+        $this->postJson('/api/v1/attendance/locks', ['group' => 'day_laborer', 'period_start' => '2026-10-16', 'confirm_missing' => true])->assertCreated();
+        foreach (['approve', 'refuse'] as $action) {
+            $this->postJson("/api/v1/employees/wage-proposals/{$made['proposal_id']}/{$action}", ['version' => 1])
+                ->assertStatus(423)->assertJsonPath('error.code', 'period_locked');
+        }
+        $this->assertDatabaseHas('employee_wage_proposals', ['id' => $made['proposal_id'], 'status' => 'pending']);
+        $this->assertDatabaseMissing('employee_pay_changes', ['employee_id' => $made['id']]);
+
+        $this->actingAs($this->m, 'api');
+        $this->crew($this->s1, $laborer, 'remove')->assertStatus(423)->assertJsonPath('error.code', 'period_locked');
+        $this->crew($this->s2, $laborer, 'add')->assertStatus(423)->assertJsonPath('error.code', 'period_locked');
+        $this->propose(['name_ar' => 'عامل آخر'])->assertStatus(423)->assertJsonPath('error.code', 'period_locked');
+        $this->assertDatabaseMissing('day_crew_changes', ['employee_id' => $laborer, 'date' => '2026-10-22']);
+        $this->assertDatabaseMissing('employees', ['name_ar' => 'عامل آخر']);
     }
 
     public function test_hr_refuses_a_proposed_wage_and_it_leaves_the_list_with_no_pay_row(): void

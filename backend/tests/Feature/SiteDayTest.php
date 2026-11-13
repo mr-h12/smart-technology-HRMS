@@ -88,6 +88,15 @@ class SiteDayTest extends TestCase
         $this->siteDay($this->s1)->assertForbidden();
     }
 
+    public function test_yesterday_picker_uses_the_manager_window(): void
+    {
+        $this->actingAs($this->m, 'api');
+        $this->cairo('2026-10-22 11:59');
+        $this->siteDay($this->s1)->assertOk()->assertJsonPath('data.editable_yesterday', '2026-10-21');
+        $this->cairo('2026-10-22 12:00');
+        $this->siteDay($this->s1)->assertOk()->assertJsonPath('data.editable_yesterday', null);
+    }
+
     private function siteDay(string $siteId, ?string $date = null): TestResponse
     {
         return $this->getJson('/api/v1/attendance/site-day?'.http_build_query(array_filter(['site_id' => $siteId, 'date' => $date])));

@@ -1,0 +1,51 @@
+name: Checks
+
+on:
+  pull_request:
+  push:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: checks-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  backend:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Start test services
+        run: |
+          cp .env.example .env
+          cp backend/.env.example backend/.env
+          docker compose up --build --wait app
+          docker compose exec -T app composer install --no-interaction --prefer-dist
+          docker compose exec -T app php artisan key:generate
+      - name: Check backend
+        run: |
+          docker compose exec -T app php artisan test --compact
+          docker compose exec -T app vendor/bin/pint --test
+          docker compose exec -T app vendor/bin/phpstan analyse --no-progress
+          docker compose exec -T app vendor/bin/deptrac analyse --config-file=deptrac.layers.yaml --no-progress
+      - name: Stop test services
+        if: always()
+        run: docker compose down --volumes
+
+  frontend:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: frontend
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+      - run: npm ci
+      - run: npm run lint
+      - run: npm test
+      - run: npm run build

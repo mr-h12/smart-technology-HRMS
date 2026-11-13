@@ -28,6 +28,8 @@ import { cn } from '@/lib/utils'
 import { RESIDENCES, USERS, useApi, useList, useSave, WORK_SITES } from '@/lib/query'
 import { noGenerator } from './console'
 import { EmployeeAttendance } from './employee-attendance'
+import { ManualHrForms } from './manual-hr-forms'
+import { CertificateDocuments } from './hr-forms'
 import { Documents } from './employee-documents'
 import { Leave } from './employee-leave'
 
@@ -338,6 +340,8 @@ function EmployeeForm({ emp, loadErr }: { emp?: Row; loadErr?: unknown }) {
   const { data: residences = [], err: residencesErr } = useApi<Row[]>(RESIDENCES)
   const send = useSave() // refreshes every employees list and summary, and the detail
   const [err, setErr] = useState<unknown>()
+  const [saving, setSaving] = useState(false)
+  const saveInFlight = useRef(false)
   const errs = toErrs(err)
   // An own-scoped (manager) record comes without the sensitive identity and pay fields; never render or send what was not received.
   const has = (k: string) => !emp || k in emp
@@ -347,7 +351,9 @@ function EmployeeForm({ emp, loadErr }: { emp?: Row; loadErr?: unknown }) {
 
   async function save(ev: React.FormEvent<HTMLFormElement>) {
     ev.preventDefault()
-    if (stopAtMissingPeriod(ev.currentTarget)) return
+    if (saveInFlight.current || stopAtMissingPeriod(ev.currentTarget)) return
+    saveInFlight.current = true
+    setSaving(true)
     setErr(undefined)
     try {
       if (id) {
@@ -360,6 +366,9 @@ function EmployeeForm({ emp, loadErr }: { emp?: Row; loadErr?: unknown }) {
       }
     } catch (e) {
       setErr(e)
+    } finally {
+      saveInFlight.current = false
+      setSaving(false)
     }
   }
 
@@ -376,7 +385,7 @@ function EmployeeForm({ emp, loadErr }: { emp?: Row; loadErr?: unknown }) {
   const profile = (
     <form onSubmit={save} className="space-y-6">
       <ErrorBanner err={err ?? residencesErr} shown={shown} />
-      <fieldset disabled={!editable} className="min-w-0 space-y-6">
+      <fieldset disabled={!editable || saving} className="min-w-0 space-y-6">
         {section('employee.identity', (
           <>
             <TextField name="name_ar" label={t('employee.name_ar')} {...f} />
@@ -420,7 +429,7 @@ function EmployeeForm({ emp, loadErr }: { emp?: Row; loadErr?: unknown }) {
       </fieldset>
       {editable && (
         <div className="flex justify-end">
-          <Button type="submit">{t('common.save')}</Button>
+          <Button type="submit" disabled={saving}>{t(saving ? 'common.saving' : 'common.save')}</Button>
         </div>
       )}
     </form>
@@ -436,7 +445,7 @@ function EmployeeForm({ emp, loadErr }: { emp?: Row; loadErr?: unknown }) {
 
   const worker = WORKERS.includes(emp.current_type)
   const sited = SITED.includes(emp.current_type)
-  const tabs = TABS.filter(([v]) => (v !== 'manager' || !worker) && (v !== 'site' || sited) && (v !== 'leave' || (can('leave.view') && emp.current_type !== 'day_laborer')) && (v !== 'documents' || can('employee_document.view')) && (v !== 'attendance' || can('attendance.view')))
+  const tabs = TABS.filter(([v]) => (v !== 'manager' || !worker) && (v !== 'site' || sited) && (v !== 'leave' || (can('leave.view') && emp.current_type !== 'day_laborer')) && (v !== 'documents' || can('employee_document.view') || can('hr_forms.view') || can('hr_forms.generate')) && (v !== 'attendance' || can('attendance.view')))
   const tab = tabs.some(([v]) => v === params.get('tab')) ? params.get('tab')! : 'profile'
   return (
     <div className="mx-auto max-w-5xl space-y-6">
@@ -517,7 +526,11 @@ function EmployeeForm({ emp, loadErr }: { emp?: Row; loadErr?: unknown }) {
             manager: <ManagerHistory emp={emp} />,
             site: <SiteHistory emp={emp} />,
             history: <History emp={emp} readOnly={archived} />,
-            documents: <Documents emp={emp} readOnly={archived} />,
+            documents: <>
+              {can('employee_document.view') && <Documents emp={emp} readOnly={archived} />}
+              {can('hr_forms.view') && <CertificateDocuments key={String(emp.id)} employee={String(emp.id)} />}
+              {(can('hr_forms.view') || can('hr_forms.generate')) && <ManualHrForms key={`manual-${emp.id}`} employee={emp} />}
+            </>,
             leave: <Leave emp={emp} initialYear={params.get('year')} readOnly={archived} />,
             attendance: <EmployeeAttendance emp={emp} readOnly={archived} />,
           }[tab]}
