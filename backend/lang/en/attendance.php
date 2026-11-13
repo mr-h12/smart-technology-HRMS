@@ -67,6 +67,12 @@ return [
         'bad_amount' => 'The amount must be a number above zero.',
         'note_too_long' => 'The note is longer than 500 characters.',
         'choice_required' => 'A day is already recorded at another site; choose keep or replace.',
+        'national_id_required' => 'A new day laborer needs a 14-digit national ID.',
+        'national_id_taken' => 'This national ID belongs to someone who is not on this file\'s list.',
+        'national_id_name_mismatch' => 'This national ID appears under another name in the file.',
+        'new_laborer_not_allowed' => 'You may not add a new employee.',
+        'bad_mobile' => 'Not a valid mobile number; write 11 digits starting 010, 011, 012 or 015.',
+        'unknown_residence' => 'Unknown residence; choose one from the list.',
     ],
     'workbook_max_days' => 'The range is at most :max days.',
 ];

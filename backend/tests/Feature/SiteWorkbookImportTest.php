@@ -7,7 +7,9 @@ use App\Modules\Attendance\Application\SiteWorkbookImport;
 use App\Modules\Attendance\Application\SiteWorkbookTemplate;
 use App\Modules\Employees\Application\EmployeeRoster;
 use App\Modules\Employees\Application\EmployeeService;
+use App\Modules\Employees\Infrastructure\Eloquent\Employee;
 use App\Modules\Identity\Infrastructure\Eloquent\User;
+use App\Modules\Sites\Infrastructure\Eloquent\Residence;
 use App\Modules\Sites\Infrastructure\Eloquent\Site;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Http\UploadedFile;
@@ -15,6 +17,7 @@ use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Mail;
 use Illuminate\Support\Facades\Notification;
 use Illuminate\Support\Facades\Queue;
+use Illuminate\Support\Str;
 use Illuminate\Testing\TestResponse;
 use OpenSpout\Common\Entity\Cell\NumericCell;
 use PHPUnit\Framework\Attributes\DataProvider;
@@ -34,6 +37,11 @@ class SiteWorkbookImportTest extends TestCase
     private const SUN = 'الأحد 08-11';
 
     private const FRI = 'الجمعة 13-11';
+
+    /** Two made-up 14-digit national IDs (test data, no real person). */
+    private const NID = '29501010212345';
+
+    private const NID2 = '29601010212346';
 
     /** @var array<string, string> */
     private array $leave;
@@ -561,6 +569,290 @@ class SiteWorkbookImportTest extends TestCase
             $this->confirm($file, [], $token)->assertStatus(403)->assertJsonPath('error.code', 'permission_denied');
         }
         $this->assertSame(0, DB::table('attendance_days')->count());
+    }
+
+    /** W5: a typed name is one new day laborer per national ID, hired on their earliest date in the file, male, on this site's crew that day only. */
+    public function test_a_new_laborer_is_one_employee_hired_on_the_earliest_date(): void
+    {
+        $residence = (string) Residence::create(['name_ar' => 'Residence-R'])->getKey();
+        $file = $this->fill($this->download(), [
+            self::SUN => [['New Laborer', 'حاضر', '08:00', '18:00', '', '', self::NID, '٠١٠١٢٣٤٥٦٧٨', 'Residence-R', '350']],   // mobile in Arabic-Indic digits
+            self::SAT => [$this->newRow('New Laborer', self::NID)],
+        ]);
+
+        $data = $this->preview($file)->assertOk()->json('data');
+
+        $this->assertSame([[
+            'name_ar' => 'New Laborer', 'national_id' => self::NID, 'phone' => '01012345678', 'residence' => 'Residence-R', 'proposed_wage' => '350.000000',
+            'gender' => 'male', 'first_date' => '2026-11-07', 'days' => 2,
+        ]], $data['new_laborers']);
+        $this->assertSame(['rows' => 2, 'changes' => 2, 'unchanged' => 0, 'errors' => 0, 'conflicts' => 0, 'new_laborers' => 1], array_slice($data['summary'], 0, 6));
+        $this->assertSame([], $data['errors']);
+        $this->assertSame([
+            'key' => null, 'sheet' => self::SUN, 'row' => 3, 'date' => '2026-11-08', 'employee_id' => null, 'code' => null, 'name_ar' => 'New Laborer', 'name_en' => null,
+            'type' => 'day_laborer', 'new_laborer' => true, 'matched_by_national_id' => false, 'conflict_site' => null, 'from' => null,
+            'to' => ['site' => 'Site-S', 'in_time' => '08:00', 'out_time' => '18:00', 'late_minutes' => 0, 'ot_minutes' => 60, 'advance_amount' => null, 'note' => null],
+        ], $data['changes'][1]);
+        $this->assertSame([self::SAT, true], [$data['changes'][0]['sheet'], $data['changes'][0]['new_laborer']]);
+
+        $made = $this->confirm($file)->assertOk()->json('data');
+
+        $e = DB::table('employees')->where('national_id', self::NID)->first();
+        $this->assertNotNull($e);
+        $this->assertSame([['employee_id' => $e->id, 'code' => (int) $e->code, 'name_ar' => 'New Laborer', 'proposal' => true]], $made['new_laborers']);
+        $this->assertSame([2, []], [$made['applied'], $made['errors']]);
+        $this->assertSame(['male', '2026-11-07', '01012345678', $residence], [$e->gender, $e->hire_date, $e->phone, $e->residence_id]);
+        $this->assertEquals([(object) ['type' => 'day_laborer', 'effective_from' => '2026-11-07']], DB::table('employee_type_changes')->where('employee_id', $e->id)->get(['type', 'effective_from'])->all());
+        $this->assertSame(0, DB::table('employee_site_assignments')->where('employee_id', $e->id)->count());
+        $this->assertEquals([(object) ['date' => '2026-11-07', 'site_id' => $this->site]], DB::table('day_crew_changes')->where('employee_id', $e->id)->get(['date', 'site_id'])->all());
+        $this->assertEquals([(object) ['daily_wage' => '350.000000', 'status' => 'pending']], DB::table('employee_wage_proposals')->where('employee_id', $e->id)->get(['daily_wage', 'status'])->all());
+        $this->assertSame([['2026-11-07', $this->site, 'imported'], ['2026-11-08', $this->site, 'imported']], DB::table('attendance_days')->where('employee_id', $e->id)->orderBy('date')
+            ->get()->map(fn (object $d) => [$d->date, $d->site_id, $d->source])->all());
+    }
+
+    /** W5, spec «Differences» 2: a blank proposed wage makes no proposal; HR sets the wage on the employee's page. */
+    public function test_a_blank_wage_makes_no_proposal(): void
+    {
+        $file = $this->fill($this->download(), [self::SAT => [$this->newRow('New Laborer', self::NID)]]);
+
+        $this->preview($file)->assertOk()->assertJsonPath('data.new_laborers.0.proposed_wage', null);
+        $this->confirm($file)->assertOk()->assertJsonPath('data.new_laborers.0.proposal', false);
+
+        $this->assertSame(1, DB::table('employees')->where('national_id', self::NID)->count());
+        $this->assertSame(0, DB::table('employee_wage_proposals')->count());
+    }
+
+    /** W5, Review Focus 4: rows that disagree take each value from the first non-blank row by sheet date, never by sheet position. */
+    public function test_the_first_non_blank_value_in_date_order_wins(): void
+    {
+        Residence::create(['name_ar' => 'Residence-R']);
+        $file = $this->fill($this->download(), [
+            self::SUN => [$this->newRow('New Laborer', self::NID, '01011111111', 'Residence-R', '300')],
+            self::SAT => [$this->newRow('New Laborer', self::NID, '01022222222')],
+        ], [self::SUN, self::SAT]);
+
+        $this->preview($file)->assertOk()->assertJsonPath('data.new_laborers', [[
+            'name_ar' => 'New Laborer', 'national_id' => self::NID, 'phone' => '01022222222', 'residence' => 'Residence-R', 'proposed_wage' => '300.000000',
+            'gender' => 'male', 'first_date' => '2026-11-07', 'days' => 2,
+        ]]);
+    }
+
+    /** @return array<string, array{string}> */
+    public static function nationalIdErrors(): array
+    {
+        return [
+            'missing' => ['missing'], '13 digits' => ['13_digits'], 'an archived employee\'s' => ['archived'], 'a soft-deleted employee\'s' => ['deleted'],
+            'an office employee of another site\'s' => ['office'], 'another name on a later row' => ['mismatch'], 'twice on one sheet' => ['twice'],
+        ];
+    }
+
+    /** W5, W4, spec «Security notes»: a national ID that cannot make or find the person refuses the row, and its message never holds the ID. */
+    #[DataProvider('nationalIdErrors')]
+    public function test_national_id_errors(string $case): void
+    {
+        $path = $this->download();
+        $holder = match ($case) {
+            'archived' => $this->employee('day_laborer', '2026-01-01', ['termination_date' => '2026-11-10']),
+            'deleted' => $this->homed('day_laborer', $this->site),
+            'office' => $this->homed('office', $this->other),
+            default => null,
+        };
+        if ($holder !== null) {
+            DB::table('employees')->where('id', $holder)->update(['national_id' => self::NID, ...($case === 'deleted' ? ['deleted_at' => now()] : [])]);
+        }
+        [$bySheet, $error, $sheet, $row] = match ($case) {
+            'missing' => [[self::SAT => [$this->newRow('New Laborer', null)]], 'national_id_required', self::SAT, 3],
+            '13_digits' => [[self::SAT => [$this->newRow('New Laborer', substr(self::NID, 1))]], 'national_id_required', self::SAT, 3],
+            'archived', 'deleted', 'office' => [[self::SAT => [$this->newRow('New Laborer', self::NID)]], 'national_id_taken', self::SAT, 3],
+            'mismatch' => [[self::SAT => [$this->newRow('New Laborer', self::NID)], self::SUN => [$this->newRow('Other Name', self::NID)]], 'national_id_name_mismatch', self::SUN, 3],
+            'twice' => [[self::SAT => [$this->newRow('New Laborer', self::NID), $this->newRow('New Laborer', self::NID)]], 'duplicate_row', self::SAT, 4],
+        };
+
+        $response = $this->preview($this->fill($path, $bySheet))->assertOk();
+
+        $e = $response->json('data.errors');
+        $this->assertSame([[$sheet, $row, $error]], array_map(fn (array $x) => [$x['sheet'], $x['row'], $x['error']], $e));
+        $this->assertStringNotContainsString(self::NID, $e[0]['message']);
+        $this->assertStringNotContainsString('attendance.', $e[0]['message'], 'every code has its message');
+        if (in_array($case, ['archived', 'deleted', 'office'], true)) {
+            $this->assertStringNotContainsString(self::NID, (string) $response->getContent(), 'a taken ID is never shown');
+        }
+        $this->assertSame(in_array($case, ['mismatch', 'twice'], true) ? 1 : 0, $response->json('data.summary.new_laborers'));
+    }
+
+    /** @return array<string, array{string}> */
+    public static function listedNationalIds(): array
+    {
+        return ['as typed' => [self::NID], 'in Arabic-Indic digits' => [strtr(self::NID, ['٠', '١', '٢', '٣', '٤', '٥', '٦', '٧', '٨', '٩'])]];
+    }
+
+    /** W5, Review Focus 2: the national ID of someone in the name list is that employee, flagged; columns H–J are ignored and nobody is created. */
+    #[DataProvider('listedNationalIds')]
+    public function test_a_listed_employees_national_id_is_that_employee(string $typed): void
+    {
+        $laborer = $this->homed('day_laborer', $this->other);
+        DB::table('employees')->where('id', $laborer)->update(['national_id' => self::NID]);
+        $file = $this->fill($this->download(), [self::SAT => [$this->newRow('Typed Name', $typed, 'not a mobile', 'No such residence', 'x')]]);
+        $employees = DB::table('employees')->count();
+
+        $data = $this->preview($file)->assertOk()->json('data');
+
+        $this->assertSame([], $data['errors']);
+        $this->assertSame([], $data['new_laborers']);
+        $this->assertSame([["{$laborer}/2026-11-07", $laborer, 'Laborer-1', false, true]], array_map(fn (array $c) => [$c['key'], $c['employee_id'], $c['name_ar'], $c['new_laborer'], $c['matched_by_national_id']], $data['changes']));
+        $this->confirm($file)->assertOk()->assertJsonPath('data.applied', 1)->assertJsonPath('data.new_laborers', []);
+        $this->assertSame($employees, DB::table('employees')->count());
+    }
+
+    /** @return array<string, array{list<?string>, string}> mobile, residence, wage; the error */
+    public static function newLaborerCells(): array
+    {
+        return [
+            'a 10-digit mobile' => [['0101234567', null, null], 'bad_mobile'],
+            'an unknown residence' => [[null, 'Residence-X', null], 'unknown_residence'],
+            'a residence name two residences share' => [[null, 'residence-r', null], 'unknown_residence'],
+            'a wage of 0' => [[null, null, '0'], 'bad_amount'],
+            'a wage of x' => [[null, null, 'x'], 'bad_amount'],
+        ];
+    }
+
+    /**
+     * W5: a new laborer's mobile, residence and proposed wage; a refused row hires nobody.
+     *
+     * @param  list<?string>  $cells
+     */
+    #[DataProvider('newLaborerCells')]
+    public function test_new_laborer_cells(array $cells, string $error): void
+    {
+        Residence::create(['name_ar' => 'Residence-R']);
+        Residence::create(['name_ar' => 'RESIDENCE-R']);
+        $file = $this->fill($this->download(), [self::SAT => [$this->newRow('New Laborer', self::NID, ...$cells)]]);
+
+        $this->preview($file)->assertOk()->assertJsonPath('data.new_laborers', [])
+            ->assertJsonPath('data.errors.0.error', $error)->assertJsonCount(1, 'data.errors');
+    }
+
+    /** Spec «Endpoints and permissions»: without employee.create at all scope a new laborer's row is refused; the file's other rows are saved. */
+    public function test_new_laborer_not_allowed_without_employee_create_at_all_scope(): void
+    {
+        $laborer = $this->homed('day_laborer', $this->site);
+        $file = $this->fill($this->download(), [self::SAT => [[$this->entry($laborer), 'حاضر'], $this->newRow('New Laborer', self::NID)]]);
+        $this->actingAs($this->userWith('all', 'all'), 'api');
+
+        $data = $this->confirm($file)->assertOk()->json('data');
+
+        $this->assertSame([1, []], [$data['applied'], $data['new_laborers']]);
+        $this->assertSame([['New Laborer', 'new_laborer_not_allowed']], array_map(fn (array $e) => [$e['name'], $e['error']], $data['errors']));
+        $this->assertSame([$laborer], DB::table('attendance_days')->pluck('employee_id')->all());
+        $this->assertSame(0, DB::table('employees')->where('national_id', self::NID)->count());
+    }
+
+    /** Review Focus 1 (plan «Pinned here»): rows after today or in a locked day-laborer period are refused before the hire date is chosen. */
+    public function test_rows_after_today_or_in_a_locked_period_do_not_hire(): void
+    {
+        $this->postJson('/api/v1/attendance/locks', ['group' => 'day_laborer', 'period_start' => '2026-10-16', 'confirm_missing' => true])->assertCreated();
+        [$fri, $sun, $later] = ['الجمعة 30-10', 'الأحد 01-11', 'الجمعة 13-11'];
+        $file = $this->fill($this->download('2026-10-30', '2026-11-13'), [
+            $fri => [$this->newRow('Hired', self::NID, '01011111111'), $this->newRow('Never', self::NID2)],
+            $sun => [$this->newRow('Hired', self::NID, '01022222222')],
+            $later => [$this->newRow('Hired', self::NID), $this->newRow('Never', self::NID2)],
+        ]);
+
+        $data = $this->preview($file)->assertOk()->json('data');
+
+        $this->assertSame([['Hired', '01022222222', '2026-11-01', 1]], array_map(fn (array $l) => [$l['name_ar'], $l['phone'], $l['first_date'], $l['days']], $data['new_laborers']));
+        $this->assertSame([[$fri, 3, 'period_locked'], [$fri, 4, 'period_locked'], [$later, 3, 'future_date'], [$later, 4, 'future_date']],
+            array_map(fn (array $e) => [$e['sheet'], $e['row'], $e['error']], $data['errors']));
+        $this->confirm($file)->assertOk()->assertJsonPath('data.applied', 1);
+        $e = DB::table('employees')->where('national_id', self::NID)->first();
+        $this->assertNotNull($e);
+        $this->assertSame('2026-11-01', $e->hire_date);
+        $this->assertSame(['2026-11-01'], DB::table('day_crew_changes')->where('employee_id', $e->id)->pluck('date')->all());
+        $this->assertSame(['2026-11-01'], DB::table('employee_type_changes')->where('employee_id', $e->id)->pluck('effective_from')->all());
+        $this->assertSame(['2026-11-01'], DB::table('attendance_days')->where('employee_id', $e->id)->pluck('date')->all());
+        $this->assertSame(0, DB::table('employees')->where('national_id', self::NID2)->count());
+    }
+
+    /** W15: the preview creates the laborer and rolls them back, the employee ID counter included; it notifies nobody. */
+    public function test_the_preview_with_a_new_laborer_saves_nothing(): void
+    {
+        $file = $this->fill($this->download(), [self::SAT => [$this->newRow('New Laborer', self::NID, null, null, '350')]]);
+        $tables = ['employees', 'employee_type_changes', 'day_crew_changes', 'employee_wage_proposals', 'attendance_days', 'audit_log'];
+        $before = [...array_map(fn (string $t) => DB::table($t)->count(), $tables), DB::table('employee_code_counter')->value('last_issued')];
+        Queue::fake();
+        Mail::fake();
+        Notification::fake();
+
+        $this->preview($file)->assertOk()->assertJsonPath('data.summary.new_laborers', 1)->assertJsonPath('data.summary.changes', 1);
+
+        $this->assertSame($before, [...array_map(fn (string $t) => DB::table($t)->count(), $tables), DB::table('employee_code_counter')->value('last_issued')]);
+        Queue::assertNothingPushed();
+        Mail::assertNothingSent();
+        Notification::assertNothingSent();
+    }
+
+    /** W15: after a confirm the file's national ID resolves to the employee it created, so the same file again creates and changes nothing. */
+    public function test_uploading_again_after_a_confirm_creates_nobody(): void
+    {
+        $file = $this->fill($this->download(), [
+            self::SAT => [$this->newRow('New Laborer', self::NID, null, null, '350')],
+            self::SUN => [['New Laborer', 'حاضر', '08:00', '18:00', '', '', self::NID]],
+        ]);
+        $this->confirm($file)->assertOk()->assertJsonPath('data.applied', 2);
+        $employees = DB::table('employees')->count();
+
+        $this->preview($file)->assertOk()->assertJsonPath('data.changes', [])->assertJsonPath('data.new_laborers', [])->assertJsonPath('data.summary.unchanged', 2);
+        $this->confirm($file)->assertOk()->assertJsonPath('data.applied', 0)->assertJsonPath('data.new_laborers', []);
+
+        $this->assertSame($employees, DB::table('employees')->count());
+    }
+
+    /** W15: the token covers each new national ID's resolution, so someone given that ID since the preview makes the confirm stale. */
+    public function test_a_national_id_taken_after_the_preview_is_409_and_saves_nothing(): void
+    {
+        $laborer = $this->homed('day_laborer', $this->site);
+        $file = $this->fill($this->download(), [self::SAT => [[$this->entry($laborer), 'حاضر'], $this->newRow('New Laborer', self::NID)]]);
+        $token = $this->preview($file)->assertOk()->json('data.token');
+        $this->employee('office', '2026-01-01', ['national_id' => self::NID]);
+        $employees = DB::table('employees')->count();
+
+        $this->confirm($file, [], $token)->assertStatus(409)->assertJsonPath('error.code', 'preview_stale');
+
+        $this->assertSame([0, $employees], [DB::table('attendance_days')->count(), DB::table('employees')->count()]);
+    }
+
+    /** W5, W15: a national ID inserted by another request between the read and the create is a 409 for the whole file; nothing is saved. */
+    public function test_a_racing_national_id_is_a_conflict_for_the_whole_file(): void
+    {
+        $laborer = $this->homed('day_laborer', $this->site);
+        // The first new laborer is created before the second one's insert fails, so the whole transaction must roll back.
+        $file = $this->fill($this->download(), [self::SAT => [[$this->entry($laborer), 'حاضر'], $this->newRow('First New', self::NID2), $this->newRow('New Laborer', self::NID)]]);
+        $token = $this->preview($file)->assertOk()->json('data.token');
+        // Another request commits an employee with that ID just before this one's insert.
+        Employee::creating(function (Employee $e): void {
+            if ($e->national_id === self::NID) {
+                DB::table('employees')->insert(['id' => (string) Str::uuid7(), 'code' => 999999, 'name_ar' => 'Rival', 'gender' => 'male', 'national_id' => self::NID]);
+            }
+        });
+        $before = [DB::table('employees')->count(), DB::table('employee_code_counter')->value('last_issued'), DB::table('audit_log')->count()];
+
+        foreach ([$this->confirm($file, [], $token), $this->preview($file)] as $response) {
+            $response->assertStatus(409)->assertJsonPath('error.code', 'concurrency_conflict');
+            $this->assertStringNotContainsString(self::NID, (string) $response->getContent());
+        }
+
+        $this->assertSame(0, DB::table('attendance_days')->count());
+        $this->assertSame($before, [DB::table('employees')->count(), DB::table('employee_code_counter')->value('last_issued'), DB::table('audit_log')->count()]);
+    }
+
+    /**
+     * A new day laborer's row: the typed name, a status, then from column G the national ID, mobile, residence and proposed wage.
+     *
+     * @return list<string>
+     */
+    private function newRow(string $name, ?string $nationalId, ?string $mobile = null, ?string $residence = null, ?string $wage = null): array
+    {
+        return [$name, 'حاضر', '', '', '', '', $nationalId ?? '', $mobile ?? '', $residence ?? '', $wage ?? ''];
     }
 
     /** An employee of $type employed from 2026-01-01 whose home site is $siteId (office: their dated site). */

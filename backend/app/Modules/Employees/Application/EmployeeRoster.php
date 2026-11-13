@@ -180,6 +180,14 @@ final class EmployeeRoster
         return $e === null ? null : $this->row($e);
     }
 
+    /** The id of the employee holding $nationalId, a deleted one too: the column is unique over every row (create_employees_tables). */
+    public function idWithNationalId(string $nationalId): ?string
+    {
+        $id = Employee::withTrashed()->where('national_id', $nationalId)->value('id');
+
+        return $id === null ? null : (string) $id;
+    }
+
     /**
      * @param  list<string>  $ids
      * @return array<array-key, array<string, mixed>> keyed by id (a UUID, so never cast to int); unknown ids are left out
