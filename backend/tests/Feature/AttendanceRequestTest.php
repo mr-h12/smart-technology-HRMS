@@ -42,15 +42,15 @@ class AttendanceRequestTest extends TestCase
         $this->worker = $this->employee('engineer');
         app(EmployeeService::class)->assignManager($this->worker, ['manager_id' => $this->manager->id, 'effective_from' => '2026-10-01']);
         $saved = $this->save('17:00')->assertOk()
-            ->assertJsonPath('data.rows.0.requests.overtime.minutes', 60)
-            ->assertJsonPath('data.rows.0.requests.overtime.status', 'pending');
+            ->assertJsonPath('data.rows.1.requests.overtime.minutes', 60)
+            ->assertJsonPath('data.rows.1.requests.overtime.status', 'pending');
         $this->assertSame(0, $this->day()->ot_minutes);
-        $id = $saved->json('data.rows.0.requests.overtime.id');
+        $id = $saved->json('data.rows.1.requests.overtime.id');
         $this->getJson('/api/v1/attendance/requests')->assertForbidden();
         $this->actingAs($this->makeUser('ceo'), 'api')->getJson('/api/v1/attendance/requests')->assertForbidden();
         $this->save('16:30', 1)->assertOk()
-            ->assertJsonPath('data.rows.0.requests.overtime.minutes', 30)
-            ->assertJsonPath('data.rows.0.requests.overtime.status', 'pending');
+            ->assertJsonPath('data.rows.1.requests.overtime.minutes', 30)
+            ->assertJsonPath('data.rows.1.requests.overtime.status', 'pending');
         $this->assertSame(0, $this->day()->ot_minutes);
         $this->signIn('hr');
         $this->approve($id, 1)->assertConflict();

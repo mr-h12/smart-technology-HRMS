@@ -6,6 +6,7 @@ namespace App\Modules\Attendance\Application;
 
 use App\Modules\Attendance\Domain\AttendanceRefusal;
 use App\Modules\Attendance\Domain\AttendanceRefused;
+use App\Modules\Attendance\Domain\DayRules;
 use App\Modules\Attendance\Domain\Employment;
 use App\Modules\Attendance\Domain\ManagerWindow;
 use App\Modules\Attendance\Domain\Period;
