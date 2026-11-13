@@ -104,7 +104,7 @@ final class HrLeaveRequestFormTest extends TestCase
         $this->assertSame(1, DB::table('hr_form_exports')->where('stage', 'signed')->count());
     }
 
-    public function test_escalated_approval_in_view_as_and_migration_backfill(): void
+    public function test_escalated_approval_is_refused_in_view_as_and_migration_backfill(): void
     {
         $this->leaveTypes();
         $hr = $this->signIn('hr');
@@ -135,10 +135,16 @@ final class HrLeaveRequestFormTest extends TestCase
         $token = $this->postJson('/api/v1/auth/login', ['email' => $developer->email, 'password' => 'secret123'])->assertCreated()->json('data.token');
         app('auth')->forgetGuards();
         $view = $this->withToken($token)->postJson('/api/v1/auth/view-as', ['user_id' => $ceo->id, 'reason' => 'Synthetic QA'])->assertCreated()->json('data.token');
-        $signed = $this->withToken($view)->postJson("/api/v1/hr-form-exports/{$unsigned}/approve-leave-request")
+        // the developer viewing as the CEO must not stamp the CEO's stored signature
+        $this->withToken($view)->postJson("/api/v1/hr-form-exports/{$unsigned}/approve-leave-request")->assertForbidden();
+        $this->assertDatabaseHas('hr_form_exports', ['id' => $unsigned, 'approved_by' => null, 'signature_image_id' => null]);
+        app('auth')->forgetGuards();
+        $own = $this->postJson('/api/v1/auth/login', ['email' => $ceo->email, 'password' => 'secret123'])->assertCreated()->json('data.token');
+        app('auth')->forgetGuards();
+        $signed = $this->withToken($own)->postJson("/api/v1/hr-form-exports/{$unsigned}/approve-leave-request")
             ->assertAccepted()->json('data.id');
         $this->assertSame('company_manager', $this->snapshot($signed)['stamp_line']);
-        $this->assertDatabaseHas('audit_log', ['entity_id' => $signed, 'event' => 'APPROVED', 'user_id' => $developer->id, 'on_behalf_of' => $ceo->id]);
+        $this->assertDatabaseHas('audit_log', ['entity_id' => $signed, 'event' => 'APPROVED', 'user_id' => $ceo->id, 'on_behalf_of' => null]);
         $this->render($signed, fn (string $html): bool => (bool) preg_match('/data-stamp-line="company_manager">\s*<div>[^<]+<\/div>\s*<img/', $html));
     }
 

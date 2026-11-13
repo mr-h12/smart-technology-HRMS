@@ -83,7 +83,7 @@ class HrExperienceCertificateTest extends TestCase
         }
     }
 
-    public function test_approval_in_view_as_retains_the_serial_and_retries_the_same_export(): void
+    public function test_view_as_cannot_approve_and_approval_retains_the_serial_and_retries_the_same_export(): void
     {
         Queue::fake();
         $this->signIn('hr');
@@ -111,16 +111,21 @@ class HrExperienceCertificateTest extends TestCase
         app('auth')->forgetGuards();
         $view = $this->withToken($token)->postJson('/api/v1/auth/view-as', ['user_id' => $ceo->id, 'reason' => 'Synthetic QA'])
             ->assertCreated()->json('data.token');
-        $this->withToken($view)->postJson("/api/v1/hr-form-exports/{$older}/approve")->assertConflict();
-        $signed = $this->withToken($view)->postJson("/api/v1/hr-form-exports/{$unsigned}/approve")
-            ->assertAccepted()->assertJsonPath('data.serial_number', 2)
-            ->assertJsonPath('data.impersonator_id', $developer->id)->json('data.id');
+        // the developer viewing as the CEO must not stamp the CEO's stored signature
+        $this->withToken($view)->postJson("/api/v1/hr-form-exports/{$unsigned}/approve")->assertForbidden();
+        $this->assertDatabaseHas('hr_form_exports', ['id' => $unsigned, 'approved_by' => null, 'signature_image_id' => null]);
+        app('auth')->forgetGuards();
+        $own = $this->postJson('/api/v1/auth/login', ['email' => $ceo->email, 'password' => 'secret123'])->assertCreated()->json('data.token');
+        app('auth')->forgetGuards();
+        $this->withToken($own)->postJson("/api/v1/hr-form-exports/{$older}/approve")->assertConflict();
+        $signed = $this->withToken($own)->postJson("/api/v1/hr-form-exports/{$unsigned}/approve")
+            ->assertAccepted()->assertJsonPath('data.serial_number', 2)->json('data.id');
         $audit = ['event' => 'APPROVED', 'entity_type' => 'hr_form_exports', 'entity_id' => $signed];
-        $this->assertDatabaseHas('audit_log', [...$audit, 'user_id' => $developer->id, 'on_behalf_of' => $ceo->id]);
+        $this->assertDatabaseHas('audit_log', [...$audit, 'user_id' => $ceo->id, 'on_behalf_of' => null]);
         (new RenderHrForm($signed))->failed(null);
-        $this->withToken($view)->getJson("/api/v1/hr-form-exports/{$signed}")->assertOk()
+        $this->withToken($own)->getJson("/api/v1/hr-form-exports/{$signed}")->assertOk()
             ->assertJsonPath('data.failure_code', 'render_failed');
-        $this->withToken($view)->postJson("/api/v1/hr-form-exports/{$signed}/retry")
+        $this->withToken($own)->postJson("/api/v1/hr-form-exports/{$signed}/retry")
             ->assertAccepted()->assertJsonPath('data.id', $signed)->assertJsonPath('data.status', 'pending');
         $this->assertDatabaseHas('hr_form_exports', [
             'id' => $signed, 'serial_number' => 2, 'signature_image_id' => $signature,

@@ -15,8 +15,11 @@ final readonly class ViewAs
     /** Who may start one; a target holding it in any scope is refused. */
     public const ABILITY = 'user.impersonate';
 
-    /** `resource.action` refused while viewing, whatever the target's role holds: no accounts, passwords, role grants or second view-as. */
-    private const BLOCKED = ['user.manage', 'role.manage', 'hr_signatures.manage', self::ABILITY];
+    /**
+     * `resource.action` refused while viewing, whatever the target's role holds: no accounts, passwords, role grants or second view-as,
+     * and nothing that uses or stamps the target's stored signature (form approvals included).
+     */
+    private const BLOCKED = ['user.manage', 'role.manage', 'hr_signatures.manage', 'hr_forms.approve', 'hr_forms.approve_leave_request', self::ABILITY];
 
     public function __construct(public string $byId, public string $byName, public DateTimeImmutable $expiresAt) {}
 
