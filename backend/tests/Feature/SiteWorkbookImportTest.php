@@ -20,6 +20,8 @@ use Illuminate\Support\Facades\Queue;
 use Illuminate\Support\Str;
 use Illuminate\Testing\TestResponse;
 use OpenSpout\Common\Entity\Cell\NumericCell;
+use OpenSpout\Common\Entity\Row;
+use OpenSpout\Writer\XLSX\Writer;
 use PHPUnit\Framework\Attributes\DataProvider;
 use Tests\AttendanceFixtures;
 use Tests\TestCase;
@@ -176,6 +178,18 @@ class SiteWorkbookImportTest extends TestCase
         $this->assertSame(count($rows) + 1, $data['summary']['rows']);
     }
 
+    /** W6 (ruling B2 m5): an inactive leave day-type typed as a status is that day-type, refused by the write as site_inactive, not unknown_status. */
+    public function test_an_inactive_leave_day_type_is_site_inactive(): void
+    {
+        $laborer = $this->homed('day_laborer', $this->site);
+        $path = $this->download();
+        Site::whereKey($this->leave['sick'])->update(['active' => false]);
+        $sick = (string) Site::whereKey($this->leave['sick'])->value('name_ar');
+
+        $this->preview($this->fill($path, [self::SAT => [[$this->entry($laborer), $sick]]]))->assertOk()
+            ->assertJsonPath('data.changes', [])->assertJsonCount(1, 'data.errors')->assertJsonPath('data.errors.0.error', 'site_inactive');
+    }
+
     /** W6, W10: «حاضر» is office present (no site); an advance or a note on an office row is refused by the day rules. */
     public function test_office_rows_take_status_and_times_only(): void
     {
@@ -274,6 +288,21 @@ class SiteWorkbookImportTest extends TestCase
         $this->assertSame(['future_date'], array_column($data['errors'], 'error'));
     }
 
+    /** W3 (security review L1): a control character in a cell (Excel writes a NUL as `_x0000_`) reads as a space, so its row is saved, never a 500. */
+    public function test_a_control_character_in_a_cell_reads_as_a_space(): void
+    {
+        $laborer = $this->homed('day_laborer', $this->site);
+        $file = $this->fill($this->download(), [self::SAT => [[$this->entry($laborer), 'حاضر', '', '', '', "x\x00y\x1F"], $this->newRow("N\x00M", self::NID)]]);
+
+        $data = $this->preview($file)->assertOk()->json('data');
+
+        $this->assertSame([], $data['errors']);
+        $this->assertSame([['x y', null], [null, 'N M']], array_map(fn (array $c) => [$c['to']['note'], $c['new_laborer'] ? $c['name_ar'] : null], $data['changes']));
+        $this->confirm($file)->assertOk()->assertJsonPath('data.applied', 2);
+        $this->assertSame('x y', DB::table('attendance_days')->where('employee_id', $laborer)->value('note'));
+        $this->assertSame('N M', DB::table('employees')->where('national_id', self::NID)->value('name_ar'));
+    }
+
     /** W4: on a row whose name is an entry, the national ID, mobile, residence and wage columns are ignored. */
     public function test_columns_g_to_j_on_an_entry_row_are_ignored(): void
     {
@@ -313,6 +342,9 @@ class SiteWorkbookImportTest extends TestCase
             'lists D2 not an ISO date' => ['not_iso'],
             'lists D2 after D3' => ['reversed'],
             'a 32-day range' => ['32_days'],
+            'lists D3 no such date' => ['no_such_date'],
+            // Security review A1: a range ending 9999-12-31 ran its dates on past the year 9999 until memory ran out.
+            'lists D2:D3 in the year 9999' => ['9999'],
         ];
     }
 
@@ -337,9 +369,58 @@ class SiteWorkbookImportTest extends TestCase
             'not_iso' => $this->rewrite($path, $lists(2, '07/11/2026')),
             'reversed' => $this->rewrite($path, $lists(2, '2026-11-14')),
             '32_days' => $this->rewrite($path, $lists(3, '2026-12-08')),
+            'no_such_date' => $this->rewrite($path, $lists(3, '2026-11-31')),
+            '9999' => $this->rewrite($path, fn (string $name, array $rows) => $name === 'lists'
+                ? $this->setCell($this->setCell($rows, 2, 3, '9999-12-01'), 3, 3, '9999-12-31') : $this->rows($name, $rows, $laborer)),
         };
 
         $this->preview($file)->assertStatus(422)->assertJsonPath('error.code', 'template_mismatch');
+    }
+
+    /** W2, W16 (security review A2): more visible sheets than a 31-day file has (and `lists`) is refused before their rows are read. */
+    public function test_a_file_with_33_visible_sheets_is_refused_before_its_rows_are_read(): void
+    {
+        $this->app->when(SiteWorkbookImport::class)->needs('$maxRows')->give(2);
+        $path = $this->temp();
+        $writer = new Writer;
+        $writer->openToFile($path);
+        foreach (range(1, 33) as $n) {
+            ($n === 1 ? $writer->getCurrentSheet() : $writer->addNewSheetAndMakeItCurrent())->setName("sheet {$n}");
+            // The 33rd holds more data rows than the cap: had it been read, the answer would be too_many_rows.
+            foreach (range(1, $n === 33 ? 5 : 2) as $row) {
+                $writer->addRow(Row::fromValues(["row {$row}"]));
+            }
+        }
+        $writer->close();
+
+        $this->preview($this->file($path))->assertStatus(422)->assertJsonPath('error.code', 'template_mismatch');
+    }
+
+    /** W2: a day sheet deleted from the file is simply not imported; the other sheets are. */
+    public function test_a_deleted_day_sheet_is_not_imported(): void
+    {
+        $laborer = $this->homed('day_laborer', $this->site);
+        $file = $this->rewrite($this->download(), fn (string $name, array $rows) => match ($name) {
+            self::SAT => null,
+            self::SUN => [...array_slice($rows, 0, 2), [$this->entry($laborer), 'حاضر']],
+            default => $rows,
+        });
+
+        $this->preview($file)->assertOk()->assertJsonPath('data.errors', [])->assertJsonPath('data.summary.changes', 1);
+        $this->confirm($file)->assertOk()->assertJsonPath('data.applied', 1);
+
+        $this->assertSame(['2026-11-08'], DB::table('attendance_days')->where('employee_id', $laborer)->pluck('date')->all());
+    }
+
+    /** W16: the preview takes the upload rule the routes share: .xlsx only, at most 5 MB, else 422 validation_failed. */
+    public function test_the_preview_takes_an_xlsx_file_of_at_most_5_mb(): void
+    {
+        $xlsx = (string) file_get_contents($this->download());
+
+        foreach ([UploadedFile::fake()->createWithContent('upload.csv', "a,b\n"), UploadedFile::fake()->createWithContent('upload.xlsx', $xlsx)->size(5121)] as $file) {
+            $this->preview($file)->assertStatus(422)->assertJsonPath('error.code', 'validation_failed')->assertJsonPath('error.details.0.field', 'file');
+        }
+        $this->preview(UploadedFile::fake()->createWithContent('upload.xlsx', $xlsx)->size(5120))->assertOk();
     }
 
     /** W1, W2: 31 days is the longest range a file may give. */
@@ -691,7 +772,8 @@ class SiteWorkbookImportTest extends TestCase
 
         $e = $response->json('data.errors');
         $this->assertSame([[$sheet, $row, $error]], array_map(fn (array $x) => [$x['sheet'], $x['row'], $x['error']], $e));
-        $this->assertStringNotContainsString(self::NID, $e[0]['message']);
+        // The whole errors list (its name, sheet and message), not the response: for `mismatch` and `twice` new_laborers rightly holds the ID.
+        $this->assertStringNotContainsString(self::NID, (string) json_encode($e));
         $this->assertStringNotContainsString('attendance.', $e[0]['message'], 'every code has its message');
         if (in_array($case, ['archived', 'deleted', 'office'], true)) {
             $this->assertStringNotContainsString(self::NID, (string) $response->getContent(), 'a taken ID is never shown');
@@ -783,6 +865,34 @@ class SiteWorkbookImportTest extends TestCase
         $this->assertSame(0, DB::table('employees')->where('national_id', self::NID)->count());
     }
 
+    /**
+     * Security review L2 (controller ruling): without employee.create at all scope a typed name is new_laborer_not_allowed before its national
+     * ID is looked up, so the file learns nothing about the ID: whether listed, archived, new or missing. The file's other rows are saved.
+     */
+    public function test_without_employee_create_a_typed_name_is_refused_before_any_national_id_lookup(): void
+    {
+        $laborer = $this->homed('day_laborer', $this->site);
+        $listed = $this->homed('day_laborer', $this->other);
+        DB::table('employees')->where('id', $listed)->update(['national_id' => self::NID]);
+        $this->employee('day_laborer', '2026-01-01', ['termination_date' => '2026-11-10', 'national_id' => self::NID2]);
+        $file = $this->fill($this->download(), [self::SAT => [
+            [$this->entry($laborer), 'حاضر'],
+            $this->newRow('Typed Listed', self::NID), $this->newRow('Typed Archived', self::NID2), $this->newRow('Typed New', '29701010212347'), $this->newRow('Typed None', null),
+        ]]);
+        $this->actingAs($this->userWith('all', 'all'), 'api');
+
+        $preview = $this->preview($file)->assertOk()->json('data');
+        $data = $this->confirm($file)->assertOk()->json('data');
+
+        $refused = [[4, 'new_laborer_not_allowed'], [5, 'new_laborer_not_allowed'], [6, 'new_laborer_not_allowed'], [7, 'new_laborer_not_allowed']];
+        foreach ([$preview, $data] as $d) {
+            $this->assertSame($refused, array_map(fn (array $e) => [$e['row'], $e['error']], $d['errors']));
+        }
+        $this->assertSame([[$laborer, false]], array_map(fn (array $c) => [$c['employee_id'], $c['matched_by_national_id']], $preview['changes']));
+        $this->assertSame([1, []], [$data['applied'], $data['new_laborers']]);
+        $this->assertSame([$laborer], DB::table('attendance_days')->pluck('employee_id')->all());
+    }
+
     /** Review Focus 1 (plan «Pinned here»): rows after today or in a locked day-laborer period are refused before the hire date is chosen. */
     public function test_rows_after_today_or_in_a_locked_period_do_not_hire(): void
     {
@@ -807,6 +917,23 @@ class SiteWorkbookImportTest extends TestCase
         $this->assertSame(['2026-11-01'], DB::table('employee_type_changes')->where('employee_id', $e->id)->pluck('effective_from')->all());
         $this->assertSame(['2026-11-01'], DB::table('attendance_days')->where('employee_id', $e->id)->pluck('date')->all());
         $this->assertSame(0, DB::table('employees')->where('national_id', self::NID2)->count());
+    }
+
+    /** W5 (ruling B4 m4, owner at Gate B): a new laborer whose rows the write path all refuses is still created, with 0 days and no attendance day. */
+    public function test_a_new_laborer_whose_rows_are_all_refused_is_created_with_0_days(): void
+    {
+        $file = $this->fill($this->download(), [self::SAT => [['New Laborer', 'حاضر', '17:00', '08:00', '', '', self::NID]]]);
+
+        $data = $this->preview($file)->assertOk()->json('data');
+
+        $this->assertSame([['New Laborer', '2026-11-07', 0]], array_map(fn (array $l) => [$l['name_ar'], $l['first_date'], $l['days']], $data['new_laborers']));
+        $this->assertSame([[self::SAT, 3, 'out_before_in']], array_map(fn (array $e) => [$e['sheet'], $e['row'], $e['error']], $data['errors']));
+        $this->assertSame([], $data['changes']);
+        $made = $this->confirm($file)->assertOk()->json('data');
+        $this->assertSame([0, ['New Laborer']], [$made['applied'], array_column($made['new_laborers'], 'name_ar')]);
+        $id = DB::table('employees')->where('national_id', self::NID)->value('id');
+        $this->assertNotNull($id);
+        $this->assertSame(0, DB::table('attendance_days')->where('employee_id', $id)->count());
     }
 
     /** W15: the preview creates the laborer and rolls them back, the employee ID counter included; it notifies nobody. */

@@ -21,6 +21,12 @@ final class SiteWorkbookTemplate
     /** W1: one sheet per day, at most this many (a technical limit of the file, not a setting). */
     public const MAX_DAYS = 31;
 
+    /**
+     * The years a range may fall in: the window the leave and holiday endpoints already take (a technical limit, not a setting). The
+     * attendance code compares and walks Y-m-d strings, which holds only while every date, and the periods around it, has four digits.
+     */
+    public const YEARS = [2000, 2100];
+
     /** Empty rows per day sheet, or twice the site's own people when that is more (a technical limit of the file, not a setting). */
     public const MIN_ROWS = 30;
 
@@ -31,17 +37,14 @@ final class SiteWorkbookTemplate
     ) {}
 
     /**
-     * W1: the empty file, in Arabic whatever the request language. $siteId is a live, active work site and $from..$to at most
-     * MAX_DAYS dates; the caller checks both.
+     * W1: the empty file, in Arabic whatever the request language. $siteId is a live, active work site and $from..$to a range dates()
+     * accepts; the caller checks both.
      *
      * @return string the path of a temp .xlsx file; the caller deletes it
      */
     public function file(string $siteId, string $from, string $to): string
     {
-        $dates = self::dates($from, $to);
-        if ($dates === []) {
-            throw new InvalidArgumentException("{$from} is after {$to}.");
-        }
+        $dates = self::dates($from, $to) ?? throw new InvalidArgumentException("{$from}..{$to} is no site workbook range.");
         /** @var array{name_ar: string, managers: list<array{id: string, name: string}>} $site */
         $site = $this->sites->show($siteId);
         $names = $this->names($siteId, $from, $to, $site['managers']);
@@ -95,8 +98,8 @@ final class SiteWorkbookTemplate
     {
         /** @var list<array{id: string, name: string}> $managers */
         $managers = $managers ?? $this->sites->show($siteId)['managers'];
+        $dates = self::dates($from, $to) ?? throw new InvalidArgumentException("{$from}..{$to} is no site workbook range.");
         $people = $this->roster->siteWorkbookPeople($siteId, array_column($managers, 'id'), $from, $to);
-        $dates = self::dates($from, $to);
 
         $names = [];
         foreach (['own' => true, 'others' => false] as $group => $own) {
@@ -118,14 +121,30 @@ final class SiteWorkbookTemplate
         return $names;
     }
 
-    /** @return list<string> every date from $from to $to (Y-m-d), in order */
-    public static function dates(string $from, string $to): array
+    /**
+     * W1, W2, the one range check of the download and the upload: every date from $from to $to (Y-m-d), in order; null unless both
+     * are real dates (2026-02-30 is not) within YEARS, $from is not after $to and the range is at most MAX_DAYS dates. The length
+     * comes from the two dates, so no list is built for a range that is too long.
+     *
+     * @return non-empty-list<string>|null
+     */
+    public static function dates(?string $from, ?string $to): ?array
     {
-        $dates = [];
-        for ($d = new DateTimeImmutable($from); $d->format('Y-m-d') <= $to; $d = $d->modify('+1 day')) {
-            $dates[] = $d->format('Y-m-d');
+        [$first, $last] = [self::date($from), self::date($to)];
+        if ($first === null || $last === null || $first > $last) {
+            return null;
         }
+        $days = (int) $first->diff($last)->days + 1;
 
-        return $dates;
+        return $days > self::MAX_DAYS ? null : array_map(fn (int $i) => $first->modify("+{$i} days")->format('Y-m-d'), range(0, $days - 1));
+    }
+
+    /** A real Y-m-d date within YEARS, else null. */
+    private static function date(?string $value): ?DateTimeImmutable
+    {
+        $date = $value === null ? false : DateTimeImmutable::createFromFormat('!Y-m-d', $value);
+        $year = $date === false ? 0 : (int) $date->format('Y');
+
+        return $date !== false && $date->format('Y-m-d') === $value && $year >= self::YEARS[0] && $year <= self::YEARS[1] ? $date : null;
     }
 }

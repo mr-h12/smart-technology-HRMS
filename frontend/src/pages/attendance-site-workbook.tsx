@@ -70,8 +70,9 @@ export function SiteWorkbookTab() {
   const [result, setResult] = useState<Result>()
   // the server refuses both; saying so here keeps HR from a download that cannot work
   const why = from && to && (to < from ? t('attendance.import.site.reversed') : span(from, to) > MAX_DAYS ? t('attendance.import.site.tooLong', { max: MAX_DAYS }) : '')
-  const conflicts = preview?.changes.filter((c) => c.conflict_site) ?? []
-  const chosen = new Set(conflicts.map((c) => choices[c.key!] ?? ''))
+  // a conflict is a stored day, so it always has a key (only a new laborer's change has none)
+  const conflicts = preview?.changes.filter((c): c is Change & { key: string } => !!c.conflict_site && c.key !== null) ?? []
+  const chosen = new Set(conflicts.map((c) => choices[c.key] ?? ''))
   const open = chosen.has('')
   // a refusal belongs to the inputs it answered: editing them clears it, as a new file does
   const edit = (k: string, v: string) => {
@@ -118,7 +119,7 @@ export function SiteWorkbookTab() {
   function confirm() {
     const f = body()
     f.set('token', preview!.token)
-    for (const c of conflicts) f.set(`choices[${c.key}]`, choices[c.key!])
+    for (const c of conflicts) f.set(`choices[${c.key}]`, choices[c.key])
     run(
       // confirm can create employees (new laborers) as well as days
       () => save<Result>('/attendance/site-workbook/confirm', { body: f }, ['/attendance', '/employees']).catch((e: unknown) => {
@@ -210,7 +211,8 @@ export function SiteWorkbookTab() {
         {result && (
           <Alert tone="success">
             <p className="font-medium">{t('attendance.import.site.done', { saved: t('attendance.import.saved', { count: result.applied }), unchanged: result.unchanged, kept: result.kept, errors: result.errors.length })}</p>
-            <p>{t('attendance.import.site.savedAdvances', { total: money(result.advances_total) })}</p>
+            {/* the server's total over the rows saved or left unchanged: the same rows as the preview's total */}
+            <p>{t('attendance.import.site.advances', { total: money(result.advances_total) })}</p>
           </Alert>
         )}
       </Card>
@@ -224,7 +226,7 @@ export function SiteWorkbookTab() {
                 name="workbook_all"
                 label={t('attendance.import.site.setAll')}
                 values={{ workbook_all: chosen.size === 1 ? [...chosen][0] : '' }}
-                set={(_, v) => setChoices(Object.fromEntries(conflicts.map((c) => [c.key!, v])))}
+                set={(_, v) => setChoices(Object.fromEntries(conflicts.map((c) => [c.key, v])))}
                 errs={{}}
                 blank={t('attendance.import.site.pick')}
                 options={choiceOptions}
@@ -235,7 +237,7 @@ export function SiteWorkbookTab() {
           <DataList
             label={t('attendance.import.site.conflicts')}
             rows={conflicts}
-            rowKey={(c) => c.key!}
+            rowKey={(c) => c.key}
             // the person first, with the sheet under the name: four columns, so the choice fits beside both days from 640 px
             title={{
               header: t('attendance.employee'),
@@ -252,7 +254,7 @@ export function SiteWorkbookTab() {
               {
                 header: t('attendance.import.site.choice'),
                 cell: (c) => (
-                  <select aria-label={t('attendance.import.site.choiceFor', { name: localName(c, i18n.language), date: c.date })} className={cn(selectCls, 'w-auto')} value={choices[c.key!] ?? ''} disabled={busy} onChange={(e) => setChoices((o) => ({ ...o, [c.key!]: e.target.value }))}>
+                  <select aria-label={t('attendance.import.site.choiceFor', { name: localName(c, i18n.language), date: c.date })} className={cn(selectCls, 'w-auto')} value={choices[c.key] ?? ''} disabled={busy} onChange={(e) => setChoices((o) => ({ ...o, [c.key]: e.target.value }))}>
                     <option value="">{t('attendance.import.site.pick')}</option>
                     {choiceOptions.map(([v, l]) => (
                       <option key={v} value={v}>
@@ -394,7 +396,8 @@ function NewLaborers({ rows }: { rows: NewLaborer[] }) {
             header: t('attendance.import.site.firstDate'),
             cell: (l) => (
               <span className="grid">
-                {ltrDates(l.first_date)}
+                {/* a span, not the date's own bdi, is the grid item: a dir="ltr" grid item would sit at the column's end in Arabic */}
+                <span>{ltrDates(l.first_date)}</span>
                 <span className="text-xs text-muted-foreground">{t('attendance.import.site.daysLine', { days: l.days })}</span>
               </span>
             ),

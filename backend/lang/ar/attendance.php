@@ -75,7 +75,7 @@ return [
         'bad_mobile' => 'رقم الموبايل غير صحيح؛ اكتب 11 رقمًا تبدأ بـ 010 أو 011 أو 012 أو 015.',
         'unknown_residence' => 'محل الإقامة غير موجود؛ اختره من القائمة.',
     ],
-    'workbook_max_days' => 'المدة :max يومًا على الأكثر.',
+    'workbook_range' => 'المدة :max يومًا على الأكثر، بين عامي :first و:last.',
     // The site workbook's own text: the file is Arabic whatever the request language (calculations §14 W1).
     'workbook' => [
         'type' => [

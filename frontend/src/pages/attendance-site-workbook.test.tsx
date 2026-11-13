@@ -261,6 +261,8 @@ test('the preview shows the file\'s site and range, the changes with late and ov
   expect(within(hassan).getByText('01012345678').parentElement).toHaveTextContent('رقم الهاتف: 01012345678')
   expect(values(hassan).slice(1, 3)).toEqual(['29501010212345', '350.00'])
   expect(values(hassan)[3]).toContain('2026-11-03')
+  // the LTR date sits in a span, so the grid item keeps the page's direction and lines up with its header and «الأيام: 2»
+  expect(within(hassan).getByText('2026-11-03').parentElement).not.toHaveClass('grid')
   expect(values(rowWith(laborers, KARIM))).toContain('بدون أجر مقترح')
   expect(screen.getByText('يُنشأ كل منهم عند التأكيد بالنوع «ذكر»، ويمكن تغييره من صفحة الموظف.')).toBeInTheDocument()
 
@@ -408,7 +410,8 @@ test('the confirm result shows the counts, the advances, the new laborers\' Empl
   await user.click(screen.getByRole('button', { name: 'تأكيد الحفظ' }))
   const done = await screen.findByRole('status')
   expect(done).toHaveTextContent('تم حفظ 9 أيام · بدون تغيير: 0 · أُبقي على المسجّل: 1 · أخطاء: 2')
-  expect(done).toHaveTextContent('مجموع السلف في الصفوف المحفوظة: 500.00')
+  // the server's total covers the rows saved and the rows left unchanged, as the preview's does
+  expect(done).toHaveTextContent('مجموع السلف في صفوف الملف المقبولة: 500.00')
   const added = screen.getByRole('table', { name: 'عمال اليومية المضافون' })
   expect(within(added).getByRole('columnheader', { name: 'الرقم الوظيفي' })).toBeInTheDocument()
   expect(values(rowWith(added, HASSAN))).toEqual([HASSAN, '24', 'أُرسل للاعتماد'])
@@ -442,7 +445,7 @@ test('with no active work site the picker says so', async () => {
 test('names, codes, times and sheet references never break inside a word, and the tables keep to four or five columns', async () => {
   await previewed()
   const table = (name: string) => screen.getByRole('table', { name })
-  expect([['التغييرات', 5], ['التعارضات', 5], ['عمال يومية جدد', 4], ['الأخطاء', 4]].map(([n]) => within(table(n as string)).getAllByRole('columnheader').length)).toEqual([5, 4, 4, 4])
+  expect(['التغييرات', 'التعارضات', 'عمال يومية جدد', 'الأخطاء'].map((n) => within(table(n)).getAllByRole('columnheader').length)).toEqual([5, 4, 4, 4])
   const late = rowWith(table('التغييرات'), 'Engineer-2')
   for (const text of ['13', WED, '8:30 ص', '6:00 م']) expect(within(late).getByText(text)).toHaveClass('whitespace-nowrap')
   // DataList lets a cell break anywhere; a name may wrap only between its words

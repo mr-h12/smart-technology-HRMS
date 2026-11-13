@@ -58,17 +58,29 @@ final class XlsxAttendanceReader
     /**
      * The site workbook (W2): every visible sheet below its two head rows, $timeColumns (0-based) read as times from row 3 (W8), and
      * `lists` rows 1–3 only, all head rows so D2 and D3 read alike (the site and range; the name list is rebuilt from the database),
-     * whatever its visibility. Other hidden sheets are skipped. Rows are keyed by Excel row number, blank rows left out.
+     * whatever its visibility. Other hidden sheets are skipped. Rows are keyed by Excel row number, blank rows left out. A control
+     * character (Excel writes a NUL as `_x0000_`) reads as a space: PostgreSQL refuses a NUL in text and in the audit row's jsonb.
+     * A file with more than $maxSheets of these sheets is template_mismatch before the next one's rows are read.
      *
      * @param  list<int>  $timeColumns
      * @return list<array{name: string, visible: bool, rows: array<int, list<?string>>}>
      */
-    public function sheets(string $path, int $maxRows, array $timeColumns): array
+    public function sheets(string $path, int $maxRows, array $timeColumns, int $maxSheets): array
     {
-        return $this->each($path, fn (Sheet $sheet) => match (true) {
-            $sheet->getName() === 'lists' => ['name' => 'lists', 'visible' => $sheet->isVisible(), 'rows' => $this->rows($sheet, $maxRows, 3, [], 3)],
-            $sheet->isVisible() => ['name' => $sheet->getName(), 'visible' => true, 'rows' => $this->rows($sheet, $maxRows, 2, $timeColumns)],
-            default => null,
+        $count = 0;
+
+        return $this->each($path, function (Sheet $sheet) use ($maxRows, $timeColumns, $maxSheets, &$count): ?array {
+            $lists = $sheet->getName() === 'lists';
+            if (! $lists && ! $sheet->isVisible()) {
+                return null;
+            }
+            if (++$count > $maxSheets) {
+                throw AttendanceRefused::because(AttendanceRefusal::TemplateMismatch);
+            }
+
+            return $lists
+                ? ['name' => 'lists', 'visible' => $sheet->isVisible(), 'rows' => $this->rows($sheet, $maxRows, 3, [], 3, true)]
+                : ['name' => $sheet->getName(), 'visible' => true, 'rows' => $this->rows($sheet, $maxRows, 2, $timeColumns, null, true)];
         });
     }
 
@@ -119,11 +131,12 @@ final class XlsxAttendanceReader
 
     /**
      * Rows 1..$headRows are head rows (a date there reads as Y-m-d) and do not count toward $maxRows; $timeColumns read as times below them.
+     * $noControls reads a control character as a space (the site workbook; the per-type file reads as it always has).
      *
      * @param  list<int>  $timeColumns
      * @return array<int, list<?string>> Excel row number => cells, blank rows left out, nothing after $lastRow
      */
-    private function rows(Sheet $sheet, int $maxRows, int $headRows = 1, array $timeColumns = [], ?int $lastRow = null): array
+    private function rows(Sheet $sheet, int $maxRows, int $headRows = 1, array $timeColumns = [], ?int $lastRow = null, bool $noControls = false): array
     {
         $rows = [];
         $data = 0;
@@ -136,7 +149,8 @@ final class XlsxAttendanceReader
             }
             $values = [];
             foreach ($row->cells as $i => $cell) {
-                $values[$i] = self::value($cell, $n <= $headRows, $n > $headRows && in_array($i, $timeColumns, true));
+                $v = self::value($cell, $n <= $headRows, $n > $headRows && in_array($i, $timeColumns, true));
+                $values[$i] = $noControls && $v !== null ? self::text((string) preg_replace('/\p{Cc}/u', ' ', $v)) : $v;
             }
             $cells = $values === [] ? [] : array_replace(array_fill(0, max(array_keys($values)) + 1, null), $values);
             while ($cells !== [] && end($cells) === null) {

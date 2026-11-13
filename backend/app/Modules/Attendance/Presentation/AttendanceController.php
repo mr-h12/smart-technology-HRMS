@@ -13,14 +13,11 @@ use App\Modules\Attendance\Application\SiteWorkbookImport;
 use App\Modules\Attendance\Application\SiteWorkbookTemplate;
 use App\Modules\Employees\Application\EmployeeService;
 use App\Modules\Employees\Domain\EmployeeType;
-use App\Modules\Identity\Application\Rbac\AuthorizeAction;
 use App\Modules\Identity\Domain\Rbac\AuthorizationRefused;
-use App\Modules\Identity\Domain\Rbac\Scope;
 use App\Modules\Identity\Presentation\RequestScope;
 use App\Modules\Sites\Domain\SiteKind;
 use App\Support\Http\ApiEnvelope;
 use Closure;
-use DateTimeImmutable;
 use Illuminate\Database\Eloquent\ModelNotFoundException;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -95,7 +92,7 @@ final class AttendanceController
             ->deleteFileAfterSend();
     }
 
-    /** The site workbook (calculations §14 W1): one live, active work site and at most 31 days, future dates allowed. HR only. */
+    /** The site workbook (calculations §14 W1): one live, active work site and at most 31 days in the years 2000–2100, future dates allowed. HR only. */
     public function siteWorkbook(Request $request): BinaryFileResponse
     {
         $this->assertAllScope($request);
@@ -103,9 +100,9 @@ final class AttendanceController
             'site_id' => ['bail', 'required', 'uuid', Rule::exists('sites', 'id')->where('kind', SiteKind::Work->value)->where('active', true)->whereNull('deleted_at')],
             'from' => ['required', 'date_format:Y-m-d'],
             'to' => ['bail', 'required', 'date_format:Y-m-d', 'after_or_equal:from', function (string $attribute, mixed $value, Closure $fail) use ($request): void {
-                $from = DateTimeImmutable::createFromFormat('!Y-m-d', (string) $request->query('from'));
-                if ($from !== false && $from->diff(new DateTimeImmutable((string) $value))->days >= SiteWorkbookTemplate::MAX_DAYS) {
-                    $fail(__('attendance.workbook_max_days', ['max' => SiteWorkbookTemplate::MAX_DAYS]));
+                if (SiteWorkbookTemplate::dates((string) $request->query('from'), (string) $value) === null) {
+                    [$first, $last] = SiteWorkbookTemplate::YEARS;
+                    $fail(__('attendance.workbook_range', ['max' => SiteWorkbookTemplate::MAX_DAYS, 'first' => $first, 'last' => $last]));
                 }
             }],
         ]);
@@ -122,7 +119,7 @@ final class AttendanceController
         /** @var UploadedFile $file */
         $file = $request->validate(['file' => self::FILE])['file'];
 
-        return ApiEnvelope::single($request, $this->workbookImport->preview($file->getPathname(), $this->mayCreateEmployees($request)));
+        return ApiEnvelope::single($request, $this->workbookImport->preview($file->getPathname(), $request->user()));
     }
 
     /** The site workbook's confirm (calculations §14 W13, W15): the same file, the preview's token and a keep or replace per conflict. HR only. */
@@ -132,7 +129,7 @@ final class AttendanceController
         /** @var array{file: UploadedFile, token: string, choices?: array<string, string>} $q */
         $q = $request->validate(['file' => self::FILE, 'token' => ['required', 'string'], 'choices' => ['sometimes', 'array'], 'choices.*' => ['in:keep,replace']]);
 
-        return ApiEnvelope::single($request, $this->workbookImport->confirm($q['file']->getPathname(), $q['token'], $q['choices'] ?? [], $this->mayCreateEmployees($request)));
+        return ApiEnvelope::single($request, $this->workbookImport->confirm($q['file']->getPathname(), $q['token'], $q['choices'] ?? [], $request->user()));
     }
 
     /** The import's preview: the template's rule (P34), view and edit with the narrower scope. Nothing is saved, the upload included. */
@@ -213,14 +210,6 @@ final class AttendanceController
         if (RequestScope::narrowestOwnerId($request, 'attendance.view', 'attendance.edit') !== null) {
             throw AuthorizationRefused::of('attendance.edit');
         }
-    }
-
-    /** Spec «Endpoints and permissions»: a site workbook row creates a new day laborer only for a caller holding employee.create at all scope (W5). */
-    private function mayCreateEmployees(Request $request): bool
-    {
-        $user = $request->user();
-
-        return $user !== null && app(AuthorizeAction::class)->decide($user, 'employee.create')->allows(Scope::All);
     }
 
     /** @return array<string, array<mixed>> */

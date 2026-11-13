@@ -841,7 +841,6 @@
         "noWage": "No proposed wage",
         "firstDate": "First day",
         "done": "{{saved}} · Unchanged: {{unchanged}} · Kept: {{kept}} · Errors: {{errors}}",
-        "savedAdvances": "Advances on the saved rows: {{total}}",
         "added": "Day laborers added",
         "proposalSent": "Sent for approval",
         "noProposal": "No proposed wage: set it on the employee's page",

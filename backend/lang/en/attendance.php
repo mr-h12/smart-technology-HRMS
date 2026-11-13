@@ -75,5 +75,5 @@ return [
         'bad_mobile' => 'Not a valid mobile number; write 11 digits starting 010, 011, 012 or 015.',
         'unknown_residence' => 'Unknown residence; choose one from the list.',
     ],
-    'workbook_max_days' => 'The range is at most :max days.',
+    'workbook_range' => 'The range is at most :max days, within the years :first to :last.',
 ];
