@@ -67,6 +67,12 @@ return [
         'bad_amount' => 'المبلغ يجب أن يكون رقمًا أكبر من صفر.',
         'note_too_long' => 'الملاحظة أطول من 500 حرف.',
         'choice_required' => 'لهذا اليوم حضور مسجّل في موقع آخر؛ اختر الإبقاء أو الاستبدال.',
+        'national_id_required' => 'عامل اليومية الجديد يحتاج رقمًا قوميًا من 14 رقمًا.',
+        'national_id_taken' => 'هذا الرقم القومي مسجّل لشخص ليس في قائمة هذا الملف.',
+        'national_id_name_mismatch' => 'هذا الرقم القومي مكتوب باسم آخر في الملف.',
+        'new_laborer_not_allowed' => 'غير مسموح لك بإضافة موظف جديد.',
+        'bad_mobile' => 'رقم الموبايل غير صحيح؛ اكتب 11 رقمًا تبدأ بـ 010 أو 011 أو 012 أو 015.',
+        'unknown_residence' => 'محل الإقامة غير موجود؛ اختره من القائمة.',
     ],
     'workbook_max_days' => 'المدة :max يومًا على الأكثر.',
     // The site workbook's own text: the file is Arabic whatever the request language (calculations §14 W1).
