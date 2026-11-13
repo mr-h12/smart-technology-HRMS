@@ -131,21 +131,24 @@ final class DayCrew
     }
 
     /**
-     * A new day laborer, hired on $date and on $siteId's crew that day, with no home site and no pay row; $wage waits as a pending proposal.
+     * A new day laborer, hired on $date and on $siteId's crew that day, with no home site and no pay row; $wage waits as a pending
+     * proposal, and a null $wage makes none (the site workbook's blank proposed wage: HR sets the wage on the employee's page).
      *
-     * @param  array{name_ar: string, gender: string, phone?: ?string}  $identity
-     * @return array{id: string, code: int, name_ar: string, proposal_id: string}
+     * @param  array{name_ar: string, gender: string, phone?: ?string, national_id?: ?string, residence_id?: ?string}  $identity
+     * @return ($wage is string ? array{id: string, code: int, name_ar: string, proposal_id: string} : array{id: string, code: int, name_ar: string, proposal_id: null})
      */
-    public function propose(array $identity, string $siteId, string $date, string $wage): array
+    public function propose(array $identity, string $siteId, string $date, ?string $wage): array
     {
         return DB::transaction(function () use ($identity, $siteId, $date, $wage): array {
             $code = EmployeeCodes::issueNext();
-            $employee = Employee::create(['name_ar' => $identity['name_ar'], 'gender' => $identity['gender'], 'phone' => $identity['phone'] ?? null, 'hire_date' => $date, 'code' => $code]);
+            // The national ID and residence only when given, so a site manager's proposal audits the same row as before.
+            $optional = array_filter(['national_id' => $identity['national_id'] ?? null, 'residence_id' => $identity['residence_id'] ?? null], fn (?string $v) => $v !== null);
+            $employee = Employee::create(['name_ar' => $identity['name_ar'], 'gender' => $identity['gender'], 'phone' => $identity['phone'] ?? null, ...$optional, 'hire_date' => $date, 'code' => $code]);
             $employee->typeChanges()->create(['type' => EmployeeType::DayLaborer->value, 'effective_from' => $date]);
             $employee->crewChanges()->create(['date' => $date, 'site_id' => $siteId]);
-            $proposal = EmployeeWageProposal::create(['employee_id' => $employee->id, 'daily_wage' => $wage, 'status' => WageProposalStatus::Pending]);
+            $proposal = $wage === null ? null : EmployeeWageProposal::create(['employee_id' => $employee->id, 'daily_wage' => $wage, 'status' => WageProposalStatus::Pending]);
 
-            return ['id' => (string) $employee->id, 'code' => $code, 'name_ar' => (string) $employee->name_ar, 'proposal_id' => (string) $proposal->id];
+            return ['id' => (string) $employee->id, 'code' => $code, 'name_ar' => (string) $employee->name_ar, 'proposal_id' => $proposal === null ? null : (string) $proposal->id];
         });
     }
 

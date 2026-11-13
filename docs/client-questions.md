@@ -3,7 +3,7 @@
 Every item has a working default already built into the specs (`docs/calculations.md`, `docs/hrms-module-plan.md`). The client may change any default during the build. When an answer arrives, update the spec, then strike the item here.
 
 ## Release 1: employees, sites, attendance
-1. هل يختلف أجر عامل اليومية نفسه حسب الموقع، أم الاختلاف في البدل فقط؟ *(default: البدل فقط)*
+1. ~~هل يختلف أجر عامل اليومية نفسه حسب الموقع، أم الاختلاف في البدل فقط؟~~ *(رد المالك 2026-11-12: البدل فقط؛ اليومية لا تتغير حسب الموقع (ADR 0002)، والعامل المثبت لا يأخذ بدل موقع.)*
 2. نفس السكن ونفس الموقع بأجرة مواصلات مختلفة لعمال مختلفين (مثلاً كفر الدوار ← جوار: 30 و35). هل هذا مقصود؟ *(default: أجرة افتراضية + أجرة خاصة لكل عامل)*
 3. هل يأخذ عامل اليومية مواصلات؟ عمود المواصلات = صفر للجميع في أكتوبر. *(default: يُصرف حسب جدول الأجرة)*
 4. أي عنوان وتليفون وإيميل هو الحالي: 9 ش علي هيبة - سيدي بشر، أم 5 ش الفتح - بولكلي؟ info@ أم smart@؟ يشمل هذا البند ترويسة خطاب قبول التوظيف.
