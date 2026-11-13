@@ -167,7 +167,7 @@ Status is verified against `main` at `7be93b9` (PR #3 merged) by reading the cod
 | 7 | A way to record arrival and leaving times | 🟡 ❓ | Office: in and out times. Permanent workers: scheduled and actual times. Engineers: optional times, used in no calculation. Day laborers: no times (`Attendance/Domain/DayRules.php:16-18`). The day sheet edits only the office in-time inline. | Attendance |
 | 8 | Lateness computed automatically | 🟡 🔁 | Computed for office (grace applied) and permanent workers (`DayRules::officeLateMinutes`, `workerMinutes`). Engineers and day laborers type late minutes, an owner decision in the 1c spec ("typed as in the Excel"). | Attendance, calculations.md |
 | 9 | Default the site to the last one entered; the user can change it | 🟡 | `last_site_id` is the latest work site in the 7 days before the date (`AttendanceGrid.php:169`). The day sheet's "present" action uses it; the day editor does not prefill it. | Attendance |
-| 10 | Excel attendance per site: auto-fill, HR reviews, and an alert listing what is missing with a count | 🟡 | The per-type template (per group and period, keyed by employee code, one site or day type per cell, G1–G9) stays. The per-site file is designed, not yet built (owner, 2026-11-12; see Site workbook below): HR downloads an **empty** site workbook for one site and up to 31 days, the site manager fills it by name, HR previews (changes, late and overtime minutes, advances, new laborers, errors) and confirms. No auto-fill: the owner chose an empty file. Neither file lists missing days; the 21:00 alert counts them. The layout is the owner's approved sample; the client's own site sheets (for example the Sheraton sheet HR keeps) were not analysed. | Attendance |
+| 10 | Excel attendance per site: auto-fill, HR reviews, and an alert listing what is missing with a count | ✅ | The per-type template (per group and period, keyed by employee code, one site or day type per cell, G1–G9) stays. The per-site file is built (download, preview, confirm and HR's screen, 2026-11-13; rules: owner, 2026-11-12; see Site workbook below): HR downloads an **empty** site workbook for one site and up to 31 days, the site manager fills it by name, HR previews (changes, late and overtime minutes, advances, new laborers, errors) and confirms. No auto-fill: the owner chose an empty file. Neither file lists missing days; the 21:00 alert counts them. The layout is the owner's approved sample; the client's own site sheets (for example the Sheraton sheet HR keeps) were not analysed. | Attendance |
 | 11 | Every input restricted to its format, for example phone = 11 digits starting 01… | 🟡 | Phone done per Q8: `^01[0125]\d{8}$`, text, shared by the API and the master import (`EmployeeRules::MOBILE`), with an Arabic and English message; the form uses a numeric keypad, Arabic digits become ASCII, 11 characters at most. ⚠️ Before deploying, list the stored phones that fail the rule on a database copy: the edit form sends every field, so an employee with such a phone cannot be saved until it is fixed. Other free-text fields (insurance no., bank account) still have no format rule: R6 named only the phone. | Employees, all forms |
 | 12 | The manager also has attendance | ✅ | Built 2026-11-12 (Q4): HR or the Developer makes an employee a site manager from the employee's page, which creates or links the account (`employees.user_id`, one live employee per account). HR records their attendance like anyone else's; they never reach their own record. Spec: `docs/superpowers/specs/2026-11-12-site-manager-accounts-design.md`. | Identity, Employees |
 | 13 | An "all employees in the system" option | ❓ | Every attendance view is per employee type, because periods differ per type. Where "all" is wanted (sheet, grid, filter, bulk edit) is not stated. | Attendance |
@@ -288,7 +288,7 @@ Item 10, approved by the owner after a grilling round and four sample files. Rul
 - **Already recorded that day at another site: HR chooses** per row in the preview, keep the recorded day or replace it with the file's row. One attendance day per person per date stays the rule. Already recorded at this site: an ordinary change.
 - **A typed name not in the list is a new day laborer:** name and 14-digit national ID required; mobile, residence and proposed wage optional. A national ID that already exists resolves to that employee, never a duplicate. Only day laborers can be new.
 - **Office staff:** status and times only; an advance is refused.
-- **Advance:** stored as the day's advance and deducted in full in the same period, as today; the preview lists every advance and the total. For this file, this reverses the 2026-10-20 note that times, overtime and advances stay in the app.
+- **Advance:** stored as the day's advance and deducted in full in the same period, as today; the preview shows each changed row's advance and the backend's total over the rows saved or left unchanged. For this file, this reverses the 2026-10-20 note that times, overtime and advances stay in the app.
 - **Late and overtime** come from the times (PR #56 rule). HR's confirm approves the overtime: stored on confirm, no per-day «اعتماد». The preview shows each row's late and overtime minutes.
 - **Refused in the preview:** a row in a locked period of that person's type (the range is not tied to a pay period), a date still in the future at upload, times with a leave status, the same person twice on one sheet, an unknown status.
 - **Blank rows are ignored:** absence is an explicit غ; times are optional with «حاضر».
@@ -296,7 +296,7 @@ Item 10, approved by the owner after a grilling round and four sample files. Rul
 - **Outside Alexandria and transport stay in the app:** no columns for them. No notifications, since the import is HR's own action. Audited as any attendance write.
 
 **Defaults built, told to the owner.** The spec settles what the rules above left open or what the code made different (its section "Differences from the hand-over"). They reopen no rule:
-1. **Gender:** a laborer created from the file is male; the preview shows it and HR changes it on the employee's page. ⚠️ Awaiting the owner; a gender column (ذكر/أنثى) is the alternative.
+1. **Gender:** a laborer created from the file is male; the preview shows it and HR changes it on the employee's page. Kept by the owner at Gate A (2026-11-12); a gender column (ذكر/أنثى) remains the alternative if asked.
 2. **Blank proposed wage:** no wage proposal is made; HR sets the wage on the employee's page.
 3. **Before the wage is approved** the laborer's days are in payroll at wage 0 with a `no_wage` flag (fare and a fixed site allowance still pay), as for any proposed laborer today, not left out.
 4. **A note on an office row is refused,** like the advance.
@@ -304,6 +304,17 @@ Item 10, approved by the owner after a grilling round and four sample files. Rul
 6. **The file can write annual, casual and unpaid leave** without a leave request, as HR's per-type template already can.
 7. **Every imported day becomes HR's,** so the site manager can no longer edit that day in the app.
 8. **The visited site's manager does not see a one-day visitor in their list** (no crew change is written; ADR 0004 amended 2026-11-12).
+
+**Defaults built and approved by the owner at Gate B (2026-11-13).** Rules: `docs/calculations.md` §14 W5, W9, W10, W15.
+9. **A day entered by hand that the file repeats is a change:** it becomes imported (new version, audit row), and the preview marks it «نفس القيم؛ يصبح اليوم مستوردًا». Only an imported day the file repeats is unchanged.
+10. **The advances total covers the rows saved and the rows left unchanged** (kept conflicts and refused rows excluded), in the preview and the confirm; a re-upload with nothing to save still shows it.
+11. **A new laborer's name over 255 characters is refused** (`name_too_long`), as a row error.
+12. **A new laborer whose rows are all refused later is still created, with 0 days;** the corrected file, uploaded again, finds them by national ID.
+13. **The office refusals use the generic message:** an advance or a note on an office row answers `field_not_allowed` «هذا الحقل لا ينطبق على هذا اليوم.» without naming the field.
+
+**Also built** (they follow from the rules above and reopen none):
+14. **Hire date:** a new laborer's rows after today or in a locked day-laborer period are refused first; the hire date is the earliest remaining date, and with no remaining row nobody is created (W5).
+15. **The per-site option is HR's only:** the switch shows it only to a user holding `attendance.view.all` and `attendance.edit.all`, since the three routes refuse an own-scope caller.
 
 ### Changes to the work plan
 - **Youssef:**

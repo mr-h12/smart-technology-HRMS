@@ -54,7 +54,7 @@ The day laborers on a site's list for one date: those whose home site it is, cha
 _Avoid_: team, gang, roster (that is the whole list, workers and engineers)
 
 **Proposed laborer** (عامل مقترح):
-A new day laborer a site manager adds to today's crew, with their name, gender, optional mobile and a proposed wage. HR's site workbook can also create one, with a national ID, an optional mobile, residence and proposed wage, and gender male until HR changes it (a default pending the owner); with no proposed wage HR sets the wage on the employee's page. They have no home site and no pay row until HR approves the wage; if HR refuses it, they end on that day and leave every crew, and the days already recorded wait for HR.
+A new day laborer a site manager adds to today's crew, with their name, gender, optional mobile and a proposed wage. HR's site workbook can also create one, with a national ID, an optional mobile, residence and proposed wage, and gender male until HR changes it (the owner's default, 2026-11-12); with no proposed wage HR sets the wage on the employee's page. They have no home site and no pay row until HR approves the wage; if HR refuses it, they end on that day and leave every crew, and the days already recorded wait for HR.
 _Avoid_: temporary worker, new hire
 
 **Proposed wage** (أجر مقترح):

@@ -68,7 +68,7 @@ decided it. Here and below, paths are under `backend/app/Modules/` unless they s
 3. **Gender defaults to male** (not in the hand-over). `employees.gender` is required and not null
    (`backend/database/migrations/2026_10_16_000001_create_employees_tables.php:17`; the owner kept it required for proposed
    laborers on 2026-11-05) and the approved layout has no gender column. The preview shows it; HR changes it on the employee's
-   page. Awaiting the owner (see Open).
+   page. Kept by the owner at Gate A (2026-11-12); a gender column (ذكر/أنثى) remains the alternative if asked.
 4. **An existing national ID resolves only to someone in the file's name list** (rule 8 said it resolves to that employee).
    `national_id` is unique over every row, soft-deleted ones included (`create_employees_tables.php:18`; the API rule at
    `Employees/Application/EmployeeRules.php:64` has no `whereNull('deleted_at')`), so a deleted employee's ID can be neither found by a
@@ -96,7 +96,7 @@ decided it. Here and below, paths are under `backend/app/Modules/` unless they s
 11. **The preview is the confirm, rolled back** (the hand-over said it dry-runs every write). The dry run returns before storing
     and gives back no computed values (`AttendanceDays.php:366-369`), so it could not show late and overtime minutes.
 12. **Conflicts:** a day stored at another work site is a conflict whatever the file's status; the preview shows it replaced; at
-    confirm a conflict with no choice is not saved (`choice_required`).
+    confirm a conflict with no choice is dry-run: its refusal if the write refuses it, else `choice_required`.
 13. **`lists` holds the site id and ISO dates** (the sample wrote the site name and a `from..to` text). A site name can change or
     be shared by two sites (the per-type import calls a shared name unknown, `AttendanceImport.php:199-232`). The upload form
     sends no site or range.
@@ -104,8 +104,9 @@ decided it. Here and below, paths are under `backend/app/Modules/` unless they s
     some day of the range; archived employees are left out, as from every roster set (`Employees/Application/EmployeeRoster.php:24-25`).
     The type label is the type on the first day of the range the person is employed. A site manager who is an employee is listed
     like anyone: this is HR's file, and `EmployeeReach::exceptOwn` (`Employees/Application/EmployeeReach.php:48-51`) applies to
-    reach only. The entry ends with the numeric Employee ID (`employees.code`, digits only, `create_employees_tables.php:13`); the
-    sample's `E-01` style was illustrative. The type labels are new backend keys, worded as the sample (يومية, موظف مكتب), since
+    reach only. One exception of order only: group 1's engineers come through `EmployeeRoster::engineersOf`, which applies
+    `exceptOwn`, so an engineer whose own account manages the site is listed in group 2. The entry ends with the numeric
+    Employee ID (`employees.code`, digits only, `create_employees_tables.php:13`); the sample's `E-01` style was illustrative. The type labels are new backend keys, worded as the sample (يومية, موظف مكتب), since
     only the frontend has type labels today (`frontend/src/locales/ar.json:204-208`).
 15. **Always Arabic** (not in the hand-over). The per-type writer follows the request language
     (`XlsxTemplateWriter::write(array $grid, string $locale)`, `Attendance/Infrastructure/XlsxTemplateWriter.php:30`); this file
@@ -186,58 +187,71 @@ The file is Arabic whatever the request language. No `versions` sheet.
 - Middleware `permission:attendance.view` and `permission:attendance.edit`, as the template routes. Then, before any file is read
   or written, the controller answers 403 `permission_denied` unless both are held at all scope
   (`RequestScope::narrowestOwnerId($request, 'attendance.view', 'attendance.edit') !== null`). A site manager is refused all three.
-- A row that would create a new day laborer is refused (`new_laborer_not_allowed`) unless the caller holds `employee.create` at all
-  scope, checked by name through `AuthorizeAction::decide` (`Identity/Application/Rbac/AuthorizeAction.php:18`). The rest of the
+- A typed name (a row whose name is no entry and not shaped like one) is refused (`new_laborer_not_allowed`) unless the caller
+  holds `employee.create` at all scope, checked by name through `AuthorizeAction::decide`
+  (`Identity/Application/Rbac/AuthorizeAction.php:18`) before any national-ID lookup, so nothing about the national ID is answered
+  to a caller who may not create employees (such a caller picks a listed employee from the name list instead). The rest of the
   file goes on. HR holds it today.
-- Download: `site_id` must be a live, active work site; `from` and `to` are `Y-m-d`, `from ≤ to`, at most 31 days. Future dates are
-  allowed. Anything else is 422 `validation_failed`.
+- Download: `site_id` must be a live, active work site; `from` and `to` are `Y-m-d`, `from ≤ to`, at most 31 days; a range whose
+  length cannot be computed (a date that does not exist, or one such as 9999-12-31) is refused too. Future dates are allowed.
+  Anything else is 422 `validation_failed`.
 - Upload, as `AttendanceController::upload` (`Attendance/Presentation/AttendanceController.php:145-156`): `file` required, at most
   5120 KB, `mimes:xlsx` (the real MIME type) and `extensions:xlsx`, read from PHP's temp path and never stored. Confirm adds
   `token` (required) and `choices` (optional; each value `keep` or `replace`).
 
 **Security notes**
 - The own-scope refusal is the boundary that keeps `ownerId = null` writes away from site managers; it has its own negative test.
-- The national ID appears only in HR's preview (new laborers and matched rows). It is never in an error message. The request log
-  keeps bodies of 4xx answers only, through `LogMasker`, which masks the `national_id` and `phone` keys and
-  long digit runs (`Audit/Domain/LogMasker.php:20-26`). The file is never stored.
+- The national ID appears only in HR's preview, for new laborers (a matched row carries `matched_by_national_id`, not the ID). It
+  is never in an error message. The request log keeps bodies of 4xx answers only, through `LogMasker`, which masks the
+  `national_id` and `phone` keys and long digit runs (`Audit/Domain/LogMasker.php:20-26`). The file is never stored.
 - Cells are read as text and every write goes through the day rules; nothing in the file is evaluated.
 
 ## Reading the upload (W2, W3)
-- `XlsxAttendanceReader` reads the visible sheets and `lists`, keeping visibility; other hidden sheets are ignored. `lists!D1:D3`
-  give the site and range. A missing or unreadable `lists`, an unknown or deleted site, or a bad range (not ISO dates, `from` after
-  `to`, over 31 days) refuses the file (`template_mismatch`). A site made inactive since the download is not a file error: each
-  row at it is refused by the write (`site_inactive`).
+- `XlsxAttendanceReader::sheets()` reads the visible sheets and the sheet named `lists` (rows 1–3 only) whatever its visibility; a
+  visible `lists` is still `lists`, not a day sheet; other hidden sheets are ignored. A file with more visible sheets than the
+  31-day limit allows is refused (`template_mismatch`) before its rows are read. `lists!D1:D3` give the site and range. A missing
+  or unreadable `lists`, an unknown or deleted site or one that is not a work site, or a bad range (not real ISO dates, `from`
+  after `to`, over 31 days, or a length that cannot be computed, such as a range ending 9999-12-31) refuses the file
+  (`template_mismatch`). A site made inactive since the download is not a file error: each row at it is refused by the write
+  (`site_inactive`).
 - Each visible sheet's date is the one date of the range whose `dd-mm` ends the sheet name; a range of at most 31 days never
   repeats a `dd-mm`. A visible sheet with no date, two sheets for one date, or a row 2 that is not the ten headers (read through
   `text()`) refuses the file. Row 1 is not read.
 - At most 2000 data rows per sheet (`too_many_rows`).
-- Cell text goes through `XlsxAttendanceReader::text()` (L78-83). Columns C and D also accept what Excel makes of a typed time: a
-  time fraction, a `DateTime` or a `DateInterval`. Today `value()` (L115-131) turns those into a date, a decimal string and
+- Cell text goes through `XlsxAttendanceReader::text()` (L78-83); on this read path a control character also reads as a space
+  (PostgreSQL refuses a NUL in text and in the audit row's `jsonb`; the per-type import's reading is unchanged). Columns C and D
+  also accept what Excel makes of a typed time: a time fraction, a `DateTime` or a `DateInterval`. Today `value()` (L115-131) turns those into a date, a decimal string and
   `0 08:30:00`, so the reader gets a time mode for these columns; the per-type reading does not change.
 
 ## Resolving the person (W4, W5)
 - The import rebuilds the name list for the file's site and range with the function the download uses, and looks the whole cell
   text up after `text()`. A hit is that employee.
 - No hit, and the text ends in ` · ` and digits: `unknown_employee`.
-- No hit otherwise: a new day laborer. The national ID (G) must be 14 digits (`national_id_required`). It is looked up among all
-  employees, soft-deleted included (`Employee::withTrashed()`): someone in the name list → that employee, `matched_by_national_id`
-  in the preview; anyone else → `national_id_taken`; nobody → new, one person per national ID across the file. A later row (sheet
-  order) whose name differs from the first row's is `national_id_name_mismatch`.
-- `new_laborer_not_allowed` is checked once the row is known to create a laborer.
+- No hit otherwise: a typed name, a new day laborer. Without `employee.create` at all scope it is `new_laborer_not_allowed` at
+  once, before the national ID is looked up. The national ID (G) must be 14 digits (`national_id_required`). It is looked up among
+  all employees, soft-deleted included (`Employee::withTrashed()`): someone in the name list → that employee,
+  `matched_by_national_id` in the preview; anyone else → `national_id_taken`; nobody → new, one person per national ID across the
+  file. A later row (date order, then row) whose name differs from the first row's is `national_id_name_mismatch`. A new
+  laborer's name longer than 255 characters (`employees.name_ar` is `varchar(255)`) is `name_too_long`.
 - After resolution, the same employee (or the same new national ID) twice on one sheet: the second row is `duplicate_row`.
 - Columns G–J filled on a row whose name is an entry of the list are ignored, with no error: the person exists, and those
   columns describe a new day laborer only (controller, 2026-11-12).
 
 ## Creating a new day laborer (W5)
 - Through `Employees/Application/DayCrew::propose` (L139-150), widened to take `national_id`, `residence_id` and a nullable wage.
-  With a wage it writes the pending proposal as today; without one it writes none. Gender `male`. Hire date = the earliest date
-  the person has in the file. It already writes the employee, the type from the hire date, the crew row for the hire date at the
-  file's site and the Employee ID (`EmployeeCodes::issueNext`), and sends no notification (the notification is in
+  With a wage it writes the pending proposal as today; without one it writes none. Gender `male`. Hire date: of the person's
+  rows that pass the row checks, those after today (`future_date`) or on a date where a locked (not reopened) day-laborer period
+  ends on or after it (`period_locked`, `PeriodGuard::lockedFrom`) are refused first; the hire date is the earliest remaining date
+  and the values come from the remaining rows; with no remaining row nobody is created. A laborer whose remaining rows are all
+  refused later by the write path is still created, with `days` 0 (owner, Gate B, 2026-11-13); when the write refuses the
+  earliest remaining row, the hire date comes before the first saved day. It already writes the employee, the type from the
+  hire date, the crew row for the hire date at the file's site and the Employee ID (`EmployeeCodes::issueNext`), and sends no notification (the notification is in
   `SiteDayCrew::propose`, `Attendance/Application/SiteDayCrew.php:97-111`, which the import does not call).
 - Mobile: `EmployeeRules::MOBILE` (`^01[0125]\d{8}$`), else `bad_mobile`. Residence: a residence's name, else
   `unknown_residence`. Proposed wage: the money format of the day (`^\d{1,12}(\.\d{1,6})?$`) and above 0, else `bad_amount`.
 - Rows of one new laborer that disagree on mobile, residence or proposed wage are not refused: for each field the first
-  non-blank value in date order wins. The name must still match (`national_id_name_mismatch`) (controller, 2026-11-12).
+  non-blank value over the remaining rows, in date order then row, wins. The name must still match
+  (`national_id_name_mismatch`) (controller, 2026-11-12).
 - Calling an Employees application class from Attendance is what `SiteDayCrew` already does; deptrac checks layers only, and the
   coding standard (§3.2) forbids writing another module's tables, not calling its use cases.
 
@@ -245,7 +259,8 @@ The file is Arabic whatever the request language. No `versions` sheet.
 Each row is one `AttendanceDays::writeCell($employee, $date, $input, ownerId: null, source: 'imported')`
 (`AttendanceDays.php:177-184`), its own savepoint. `$input` holds:
 - `site_id`: the file's site for «حاضر» (field types); null for office present; the leave day-type's id for any other status
-  (matched as `AttendanceImport::choices()` matches, limited to the present word and the active leave day-types).
+  (matched as `AttendanceImport::choices()` matches: the present word in either language and every live leave day-type; an
+  inactive one is refused by the write, `site_inactive`).
 - `version`: the live version read for the token, null when there is no live day.
 - `in_time` and `out_time`: only when the row gives both. Unsent otherwise, so the keep rule and the field-shift fill of the
   write path apply (`AttendanceDays.php:321-345`).
@@ -256,33 +271,44 @@ Each row is one `AttendanceDays::writeCell($employee, $date, $input, ownerId: nu
   the day's 500 characters, `AttendanceDays::FORMAT` L46, is `note_too_long`, controller 2026-11-12).
 
 Nothing else is sent; the late minutes follow the arrival in the write path. The write path's refusals keep their codes (W12),
-and a row whose write changes nothing writes nothing (no version, no audit row).
+and a row whose write changes nothing writes nothing (no version, no audit row). A day entered by HR or a site manager that the
+file repeats is a change: it becomes `imported`, with a new version and an audit row; only an imported day the file repeats is
+unchanged.
 
 ## Conflicts (W13)
 A row whose resolved employee has a live day on the date at a work site other than the file's site is a conflict, whatever its
 status. Its `key` is `<employee_id>/<date>`. Preview applies it as `replace` and shows `conflict_site`. At confirm:
-`choices[key] = keep` writes nothing and counts it as kept; `replace` writes the row over the stored day (same row and version);
-no choice is `choice_required`. A new laborer's row can never conflict.
+`choices[key] = keep` writes nothing, counts it as kept and adds nothing to `advances_total`; `replace` writes the row over the
+stored day (same row and version); no choice is dry-run: its refusal if the write refuses it (the preview listed that row under
+`errors` and asked no choice), else `choice_required`. A new laborer's row can never conflict.
 
 ## Preview, confirm and the token (W15)
 Both run the same steps over the uploaded file:
 1. Read the file and check it whole; any failure refuses the request.
 2. Rebuild the name list; resolve every row; list the row errors found so far.
 3. Read the live day of each resolved (employee, date) once. The token is the SHA-256, in hex, of those reads (employee id, date,
-   live version or none, site id) in `employee_id, date` order, followed by each new national ID and its resolution.
+   live version or none, site id) in `employee_id, date` order, followed by each national ID looked up and its resolution (`new`,
+   the listed employee, or `taken`), sorted.
 4. Confirm only: if the token differs from the one posted, answer 409 `preview_stale` and save nothing.
-5. In one transaction: create the new laborers, then apply the rows in `employee_id, date` order, each in its own savepoint,
-   passing the version read in step 3. A change after that read is the row's `concurrency_conflict`, never an overwrite. Read
-   back each written day for the preview's `to`, with its late and overtime minutes.
+5. In one transaction: refuse each new laborer's rows after today or in a locked day-laborer period, create the laborers (hire
+   date = the earliest remaining row), then apply the rows in `employee_id, date` order (the new laborers' rows last), each in its
+   own savepoint, passing the version read in step 3. A change after that read is the row's `concurrency_conflict`, never an
+   overwrite. A national ID given to someone by another request between the read and the create is a 409
+   `concurrency_conflict` for the whole request. Read back each written day for the preview's `to`, with its late and overtime
+   minutes.
 6. Preview: roll back everything (laborers, proposals, crew rows, days, audit rows). Confirm: commit.
 
 The first task of the plan proves that the write path and `DayCrew::propose` have no effect outside the transaction (queue,
 mail, cache, events). If one has, it moves to after commit, or the preview falls back to the existing `dryRun` flag for existing
 employees.
 
-`advances_total` is the backend's decimal-string sum of the advances on the non-refused rows; the frontend never adds money.
+`advances_total` is the backend's decimal-string sum of the file's advances on the rows saved or left unchanged (kept conflicts
+and refused rows excluded); the frontend never adds money. The screen words it as the advances of the file's accepted rows
+(«مجموع السلف في صفوف الملف المقبولة»). The changes table shows each changed row's resulting advance, which can be a stored advance
+the file left blank and kept (not in the total); advances on unchanged rows are in the total, but those rows are not listed.
 Uploading the same file again after a confirm saves nothing: its rows are unchanged and its new national IDs now resolve to the
-employees created.
+employees created; the total is the same, so a confirm of it answers `applied` 0 with that total. A first upload over days
+entered by hand shows them as changes (source → `imported`).
 
 **Preview** (inside the usual envelope):
 ```json
@@ -326,6 +352,8 @@ employees created.
 ```
 `from` and `to` name the site or leave day-type in the request language, or the present word for office present. `from` is null
 when there is no live day. A new laborer with no wage has `"proposed_wage": null` and is shown «بدون أجر مقترح».
+`new_laborers[].days` is the number of that laborer's rows saved; 0 when the write refuses all of them (the laborer is still
+created). `summary.conflicts` counts the conflict rows in `changes`; a conflict row the write refuses is under `errors` only.
 
 **Confirm**:
 ```json
@@ -335,7 +363,8 @@ when there is no live day. A new laborer with no wage has `"proposed_wage": null
   "errors": [{"sheet": "الأحد 08-11", "row": 4, "date": "2026-11-08", "name": "منى خالد (موظف مكتب) · 3", "error": "field_not_allowed", "message": "…"}]
 }
 ```
-`advances_total` is the sum on the rows the confirm saved. A stale token answers 409 with `error.code` `preview_stale`.
+`advances_total` is the sum on the rows the confirm saved or left unchanged. A stale token answers 409 with `error.code`
+`preview_stale`.
 
 ## Error codes
 Whole file or request (nothing is saved):
@@ -343,11 +372,12 @@ Whole file or request (nothing is saved):
 | Code | Status | When | |
 |---|---|---|---|
 | `permission_denied` | 403 | a route permission is missing, or either attendance permission is held at own scope only | existing code; the own-scope case is new |
-| `validation_failed` | 422 | download query; upload rules; confirm without `token`; a choice other than `keep` or `replace` | existing |
+| `validation_failed` | 422 | download query (including a range whose length cannot be computed); upload rules; confirm without `token`; a choice other than `keep` or `replace` | existing |
 | `unreadable_file` | 422 | not a readable `.xlsx` | existing |
-| `template_mismatch` | 422 | `lists` missing or unreadable; site unknown or deleted; bad range; a sheet with no date; two sheets for one date; a wrong header row | existing code, new causes |
+| `template_mismatch` | 422 | more visible sheets than the 31-day limit allows; `lists` missing or unreadable; site unknown, deleted or not a work site; bad range (including one whose length cannot be computed); a sheet with no date; two sheets for one date; a wrong header row | existing code, new causes |
 | `too_many_rows` | 422 | a sheet with more than 2000 data rows | existing |
 | `preview_stale` | 409 | confirm: the stored days changed since the preview | new |
+| `concurrency_conflict` | 409 | a new national ID given to someone by another request between the read and the create | existing |
 
 Row (listed in `errors`; the other rows go on):
 
@@ -359,17 +389,18 @@ Row (listed in `errors`; the other rows go on):
 | `national_id_required` | a new laborer without a 14-digit national ID | new |
 | `national_id_taken` | the national ID belongs to someone outside the name list | new |
 | `national_id_name_mismatch` | one new national ID under two names | new |
-| `new_laborer_not_allowed` | a new laborer and no `employee.create` at all scope | new |
-| `duplicate_row` | the same person twice on one sheet | existing |
-| `unknown_status` | a status that is neither the present word nor an active leave day-type | new |
+| `new_laborer_not_allowed` | a typed name and no `employee.create` at all scope (checked before the national-ID lookup) | new |
+| `duplicate_row` | the same person, or the same new national ID, twice on one sheet | existing |
+| `unknown_status` | a status that is neither the present word nor a leave day-type (an inactive one is `site_inactive`) | new |
 | `bad_time` | a time that is not `H:MM`, `HH:MM` or an Excel time | new |
 | `times_need_both` | one time without the other | existing code (day rules), new check for every type |
 | `bad_amount` | an advance or proposed wage not a positive amount | new |
 | `note_too_long` | a note longer than 500 characters | new |
+| `name_too_long` | a new laborer's name over 255 characters | new |
 | `bad_mobile` | a mobile failing the mobile rule | new |
 | `unknown_residence` | a residence that is no residence's name | new |
-| `choice_required` | confirm: a conflict with no choice | new |
-| `future_date`, `employee_not_active`, `period_locked` | the write path's guard (`AttendanceDays.php:440-450`) | existing |
+| `choice_required` | confirm: a conflict with no choice that the write would accept | new |
+| `future_date`, `employee_not_active`, `period_locked` | the write path's guard (`AttendanceDays.php:440-450`); `future_date` and `period_locked` also a new laborer's row before the hire (`period_locked` when a locked day-laborer period ends on or after the date) | existing |
 | `concurrency_conflict` | the day changed after step 3 | existing |
 | `field_not_allowed`, `site_inactive`, `out_before_in`, `out_of_bounds` | the day rules (`DayRules.php:28-66`) | existing |
 
@@ -389,28 +420,39 @@ Generalised (the per-type template and import keep their behaviour; their tests 
   writer opens (`backend/vendor/openspout/openspout/src/Writer/XLSX/Options.php:64-75, 100-110`).
 - **Reader:** `XlsxAttendanceReader::read` keeps only the sheets `attendance` and `versions` (L50). It learns to return the
   visible sheets and `lists` with their visibility, and a time mode for chosen columns (above).
-- **Status matching:** the private `AttendanceImport::choices()` (L199-232) is shared, limited here to the present word and the
-  active leave day-types.
+- **Status matching:** the private `AttendanceImport::choices()` (L199-232) is shared, called as
+  `choices(EmployeeType::Office)`: the present word and every leave day-type, inactive ones included (the write refuses them).
 - **`DayCrew::propose`:** widened (above). Its site manager caller keeps its behaviour.
-- **Name list:** a new `EmployeeRoster` method returns the two groups for a site and range without manager reach (there is no
-  HR-level `onSite`: L120-127 requires a manager). Group 2 reuses `allOfType` (L111-114). The site's managers come from a new
-  `SiteService` read: today there is only `idsManagedBy` (`Sites/Application/SiteService.php:188-191`).
+- **Name list:** a new `EmployeeRoster` method returns the two groups for a site and range without manager reach: `onSite` takes
+  a nullable manager; group 2 is one `employedAs` query over the three types; the managers come from
+  `SiteService::show()['managers']`, no new read.
 - **New:** `Attendance/Application/SiteWorkbookTemplate.php` and `SiteWorkbookImport.php`, three actions on
   `AttendanceController`, the routes beside the template's, backend keys for the four type labels.
 
 ## Frontend
-- `frontend/src/pages/attendance-import.tsx`: a per-type / per-site switch at the top of the import tab. Per type is today's tab,
-  unchanged.
-- Per site, in its own component file: a work-site picker (`FilterSelect`, `frontend/src/components/common/Filters.tsx:22`, over
-  `WORK_SITES`, `frontend/src/lib/query.ts:27`) and from/to date inputs (`TextField type="date"`,
-  `frontend/src/components/form.tsx:137`), defaulting to the current
-  half-month from `cairoToday()` and limited to 31 days; download through `apiBlob`. Then choose a file (the same 5 MB and
-  `.xlsx` check), preview, confirm.
-- The preview shows the site and range read from the file; the changes, from → to, with late and overtime minutes; the advances
-  with the backend's total; the new laborers with gender and «بدون أجر مقترح» where it applies; the errors; and for each conflict
-  a keep/replace choice, plus one control that sets them all. Confirm stays disabled until every conflict has a choice. A
-  `preview_stale` answer clears the preview and asks HR to preview again.
-- Every string under `attendance.import.*` in `ar.json` and `en.json`.
+- `frontend/src/pages/attendance.tsx`: a per-type / per-site switch at the top of the import tab (`?tab=import&by=site`),
+  labelled «حسب المجموعة» / «حسب الموقع», shown only to a user holding `attendance.view.all` and `attendance.edit.all`; for anyone
+  else `by=site` falls back to per type. Per type is today's tab, unchanged (`attendance-import.tsx` only exports `STEP` and
+  `errorKey`). The per-site side asks for no period.
+- Per site, in its own file `frontend/src/pages/attendance-site-workbook.tsx`: a work-site picker (`SelectField` over
+  `WORK_SITES`, `frontend/src/lib/query.ts:27`, with a «اختر موقعًا» option) and from/to date inputs (`TextField type="date"`,
+  `frontend/src/components/form.tsx:137`), defaulting to the current half-month from `cairoToday()` and limited to 31 days;
+  download through `apiBlob`. Then choose a file (the same 5 MB and `.xlsx` check), preview, confirm. A new file drops the
+  preview and its choices, so confirm sends only the file previewed.
+- The preview shows the site and range read from the file, the summary, and the backend's advances total («مجموع السلف في صفوف
+  الملف المقبولة»). The changes table: sheet · row, the employee (with «جديد», «طابق بالرقم القومي» or «تعارض»), from, and to with
+  the late and overtime minutes, the line «نفس القيم؛ يصبح اليوم مستوردًا» when only the source changes, and the note under it;
+  then the resulting day's advance. Conflicts have their own card: the recorded day in full, the file's day, a keep/replace
+  choice per row and one control that sets them all. The new laborers: name with gender, residence and mobile, national ID,
+  proposed wage or «بدون أجر مقترح», first day and days. Then the errors.
+- Confirm is offered when the preview has a change or a new laborer (a 0-day laborer alone counts), and is enabled once every
+  conflict has a choice; otherwise the preview says there is nothing to save, or that the file has no filled rows. The result
+  shows the counts, the backend's advances total and the laborers created, each linked to their page. A `preview_stale` answer
+  clears the preview and its choices and asks HR to preview again.
+- Every string under `attendance.import.*` in `ar.json` and `en.json`. A code with a site-workbook wording
+  (`attendance.import.site.error.<code>`: `template_mismatch`, `too_many_rows`, `unknown_employee`, `duplicate_row`) shows that,
+  else `attendance.import.error.<code>`, else the server's message. `validation_failed` has no key on purpose: the server's field
+  details show.
 
 ## Tests
 `backend/tests/Feature/SiteWorkbookTemplateTest.php` (download read back with OpenSpout and the sheet XML, as
@@ -451,17 +493,29 @@ Frontend (vitest, beside `attendance-import.test.tsx`): the switch; the download
 every conflict has a choice, and the set-all control; `preview_stale`; locale parity.
 
 ## Open
-**For the owner (the only open item):** the new laborer's gender. Built default: male, shown in the preview, changed by HR on the
-employee's page. The alternative is one more dropdown column (ذكر/أنثى), which changes the approved layout.
+None. The new laborer's gender was kept as built at Gate A (2026-11-12): male, shown in the preview, changed by HR on the
+employee's page. One more dropdown column (ذكر/أنثى) remains the alternative if the owner asks; it changes the approved layout.
 
 ## Known limits
-- A file with a new laborer holds the lock `EmployeeCodes::issueNext` takes on `employees`
-  (`Employees/Application/EmployeeCodes.php:17-24`) until the preview rolls back or the confirm commits; other employee writes
-  wait meanwhile.
+- A file with a new laborer holds, until the preview rolls back or the confirm commits, the lock `EmployeeCodes::issueNext` takes
+  on `employees` (`Employees/Application/EmployeeCodes.php:17-24`) and the share lock `PeriodGuard::lockedFrom` takes on
+  `attendance_locks`; other employee writes, and every period lock or reopen, wait meanwhile. Each row also holds its period's
+  shared advisory lock, as any attendance write.
 - Each row costs about 8 queries through the write path (the `ponytail:` note at `AttendanceImport.php:175`), and the file is
   applied twice (preview, confirm), so a full 31-day file is slow.
-- The token covers the stored days, not the file: a different file over the same people and dates confirms what it says. The
-  per-type import also re-reads the file at confirm.
+- The token covers each resolved employee and date's live version and site, and each national ID's resolution. It does not cover
+  the file's content: a different file over the same people and dates confirms what it says (the per-type import also re-reads
+  the file at confirm; the screen can confirm only the file it previewed). Nor does it cover the choices, period locks or
+  reopens, settings and shifts, a site's or leave day-type's active flag, or type history: a change there between preview and
+  confirm shows at confirm as a row refusal or as other minutes, not as `preview_stale`.
+- Someone archived after the download is no longer in the rebuilt name list, so each of their rows is `unknown_employee`, days
+  before the termination date included (the per-type import still accepts those days, `docs/calculations.md` §14); HR enters them
+  in the app or the per-type template.
+- A bare date typed in a time cell whose text format was removed (for example by pasting from another workbook) reads as 00:00,
+  not `bad_time`.
+- The API's `unknown_employee` message keeps the per-type wording («الرقم الوظيفي غير موجود.»); the screen shows its own
+  (`attendance.import.site.error.unknown_employee`). A client other than the screen reads the per-type wording.
+- An engineer whose own account manages the site is listed in group 2, not group 1 («Differences» 14): order only.
 - A mobile that Excel stores as a number loses its leading 0 and is `bad_mobile`; the cells are text, so a typed mobile keeps it.
 - The file never clears a day; a deleted sheet imports nothing for its date.
 
