@@ -35,6 +35,7 @@ final class AttendanceRequestController
     public function show(Request $request, string $id): JsonResponse
     {
         self::requireAll($request);
+
         return ApiEnvelope::single($request, $this->requests->show($id));
     }
 
