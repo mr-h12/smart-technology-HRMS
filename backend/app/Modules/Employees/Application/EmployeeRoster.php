@@ -115,15 +115,40 @@ final class EmployeeRoster
 
     /**
      * @return list<array<string, mixed>> the workers employed on $date whose site on $date (that day's crew change, else the home site) is $siteId
-     *                                    and whom $managedBy reaches then (never their own record), by code
+     *                                    and, when $managedBy is set, whom that user reaches then (never their own record), by code
      */
-    public function onSite(string $siteId, string $date, string $managedBy): array
+    public function onSite(string $siteId, string $date, ?string $managedBy): array
     {
-        return $this->rows(EmployeeReach::apply($this->employees()->with(self::RELATIONS)
+        return $this->rows($this->employees()->with(self::RELATIONS)
             ->where(fn (Builder $q) => $q->whereRaw(self::EMPLOYED_AS, [EmployeeType::PermanentWorker->value, $date, $date])
                 ->orWhereRaw(self::EMPLOYED_AS, [EmployeeType::DayLaborer->value, $date, $date]))
             ->whereRaw(Employee::SITE_ON.' = ?', [$date, $date, $date, $siteId])
-            ->orderBy('code'), $managedBy, $date));
+            ->when($managedBy !== null, fn (Builder $q) => EmployeeReach::apply($q, (string) $managedBy, $date))
+            ->orderBy('code'));
+    }
+
+    /**
+     * The site workbook's name list (calculations §14 W4), with no manager reach: it is HR's file. own = the workers and office staff whose
+     * site on $from is $siteId and the engineers assigned on $from to any of $managerIds; others = every other day laborer, permanent worker
+     * and engineer employed on some day of [$from, $to]. Each group by name_ar in code-point order (as the C.UTF-8 database sorts), then code.
+     *
+     * @param  list<string>  $managerIds
+     * @return array{own: list<array<string, mixed>>, others: list<array<string, mixed>>}
+     */
+    public function siteWorkbookPeople(string $siteId, array $managerIds, string $from, string $to): array
+    {
+        $own = array_column([
+            ...$this->onSite($siteId, $from, null),
+            ...$this->rows($this->employees()->with(self::RELATIONS)->whereKey($this->officeIdsAt($siteId, $from))),
+            ...array_merge([], ...array_map(fn (string $m) => $this->engineersOf($m, $from), $managerIds)),
+        ], null, 'id');
+        $field = [EmployeeType::DayLaborer, EmployeeType::PermanentWorker, EmployeeType::Engineer];
+        $others = array_filter($this->rows($this->employedAs($field, $from, $to, null)), fn (array $e) => ! isset($own[$e['id']]));
+        $byName = fn (array $a, array $b) => strcmp($a['name_ar'], $b['name_ar']) ?: $a['code'] <=> $b['code'];
+        usort($own, $byName);
+        usort($others, $byName);
+
+        return ['own' => $own, 'others' => $others];
     }
 
     /** @return list<string> the office staff whose site on $date is $siteId; that site only lists them there (owner, 2026-11-08) */
@@ -153,6 +178,14 @@ final class EmployeeRoster
         $e = Employee::with(self::RELATIONS)->when($withTrashed, fn (Builder $q) => $q->withTrashed())->find($id);
 
         return $e === null ? null : $this->row($e);
+    }
+
+    /** The id of the employee holding $nationalId, a deleted one too: the column is unique over every row (create_employees_tables). */
+    public function idWithNationalId(string $nationalId): ?string
+    {
+        $id = Employee::withTrashed()->where('national_id', $nationalId)->value('id');
+
+        return $id === null ? null : (string) $id;
     }
 
     /**

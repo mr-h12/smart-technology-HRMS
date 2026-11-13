@@ -170,7 +170,7 @@ final class AttendanceDays
      * own savepoint, so a refused cell never aborts the caller's transaction. $dryRun runs every check and saves nothing (the preview).
      *
      * @param  array<string, mixed>  $employee  an EmployeeRoster row
-     * @param  array{version: ?int, site_id: ?string}  $input  the Day sheet's bulk row for a site, a leave type or office present
+     * @param  array{version: ?int, site_id: ?string, in_time?: string, out_time?: string, ot_minutes?: int, advance_amount?: string, note?: string}  $input  the Day sheet's bulk row for a site, a leave type or office present; the site workbook also sends times, overtime, advance and note
      *
      * @throws AttendanceRefused|ConcurrencyConflict|DayRulesViolated
      */

@@ -9,10 +9,15 @@ use App\Modules\Attendance\Application\AttendanceGrid;
 use App\Modules\Attendance\Application\AttendanceImport;
 use App\Modules\Attendance\Application\AttendanceTemplate;
 use App\Modules\Attendance\Application\EffectiveDays;
+use App\Modules\Attendance\Application\SiteWorkbookImport;
+use App\Modules\Attendance\Application\SiteWorkbookTemplate;
 use App\Modules\Employees\Application\EmployeeService;
 use App\Modules\Employees\Domain\EmployeeType;
+use App\Modules\Identity\Domain\Rbac\AuthorizationRefused;
 use App\Modules\Identity\Presentation\RequestScope;
+use App\Modules\Sites\Domain\SiteKind;
 use App\Support\Http\ApiEnvelope;
+use Closure;
 use Illuminate\Database\Eloquent\ModelNotFoundException;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -23,6 +28,9 @@ use Symfony\Component\HttpFoundation\BinaryFileResponse;
 
 final class AttendanceController
 {
+    /** G9, W16: 5 MB, .xlsx only. The file is read from PHP's temp path and never stored. */
+    private const FILE = ['required', 'file', 'max:5120', 'mimes:xlsx', 'extensions:xlsx'];
+
     public function __construct(
         private readonly AttendanceGrid $grid,
         private readonly EffectiveDays $days,
@@ -30,6 +38,8 @@ final class AttendanceController
         private readonly EmployeeService $employees,
         private readonly AttendanceTemplate $template,
         private readonly AttendanceImport $import,
+        private readonly SiteWorkbookTemplate $workbook,
+        private readonly SiteWorkbookImport $workbookImport,
     ) {}
 
     public function period(Request $request): JsonResponse
@@ -80,6 +90,46 @@ final class AttendanceController
 
         return response()->download($path, "attendance-{$q['group']}-{$q['period_start']}.xlsx", ['Content-Type' => 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'])
             ->deleteFileAfterSend();
+    }
+
+    /** The site workbook (calculations §14 W1): one live, active work site and at most 31 days in the years 2000–2100, future dates allowed. HR only. */
+    public function siteWorkbook(Request $request): BinaryFileResponse
+    {
+        $this->assertAllScope($request);
+        $q = $request->validate([
+            'site_id' => ['bail', 'required', 'uuid', Rule::exists('sites', 'id')->where('kind', SiteKind::Work->value)->where('active', true)->whereNull('deleted_at')],
+            'from' => ['required', 'date_format:Y-m-d'],
+            'to' => ['bail', 'required', 'date_format:Y-m-d', 'after_or_equal:from', function (string $attribute, mixed $value, Closure $fail) use ($request): void {
+                if (SiteWorkbookTemplate::dates((string) $request->query('from'), (string) $value) === null) {
+                    [$first, $last] = SiteWorkbookTemplate::YEARS;
+                    $fail(__('attendance.workbook_range', ['max' => SiteWorkbookTemplate::MAX_DAYS, 'first' => $first, 'last' => $last]));
+                }
+            }],
+        ]);
+        $path = $this->workbook->file($q['site_id'], $q['from'], $q['to']);
+
+        return response()->download($path, "site-workbook-{$q['from']}-{$q['to']}.xlsx", ['Content-Type' => 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'])
+            ->deleteFileAfterSend();
+    }
+
+    /** The site workbook's preview (calculations §14 W15): every row written, then rolled back; nothing is saved, the upload included. HR only. */
+    public function siteWorkbookPreview(Request $request): JsonResponse
+    {
+        $this->assertAllScope($request);
+        /** @var UploadedFile $file */
+        $file = $request->validate(['file' => self::FILE])['file'];
+
+        return ApiEnvelope::single($request, $this->workbookImport->preview($file->getPathname(), $request->user()));
+    }
+
+    /** The site workbook's confirm (calculations §14 W13, W15): the same file, the preview's token and a keep or replace per conflict. HR only. */
+    public function siteWorkbookConfirm(Request $request): JsonResponse
+    {
+        $this->assertAllScope($request);
+        /** @var array{file: UploadedFile, token: string, choices?: array<string, string>} $q */
+        $q = $request->validate(['file' => self::FILE, 'token' => ['required', 'string'], 'choices' => ['sometimes', 'array'], 'choices.*' => ['in:keep,replace']]);
+
+        return ApiEnvelope::single($request, $this->workbookImport->confirm($q['file']->getPathname(), $q['token'], $q['choices'] ?? [], $request->user()));
     }
 
     /** The import's preview: the template's rule (P34), view and edit with the narrower scope. Nothing is saved, the upload included. */
@@ -137,22 +187,29 @@ final class AttendanceController
         return ApiEnvelope::single($request, $this->writes->clear($employee, $date, (int) $q['version']));
     }
 
-    /**
-     * G9: 5 MB, .xlsx only. The file is read from PHP's temp path and never stored.
-     *
-     * @return array{EmployeeType, string, string}
-     */
+    /** @return array{EmployeeType, string, string} */
     private function upload(Request $request): array
     {
         $q = $request->validate([
             'group' => ['required', Rule::enum(EmployeeType::class)],
             'period_start' => ['required', 'date_format:Y-m-d'],
-            'file' => ['required', 'file', 'max:5120', 'mimes:xlsx', 'extensions:xlsx'],
+            'file' => self::FILE,
         ]);
         /** @var UploadedFile $file */
         $file = $q['file'];
 
         return [EmployeeType::from($q['group']), $q['period_start'], $file->getPathname()];
+    }
+
+    /**
+     * The site workbook writes with no owner, which skips a site manager's reach (spec «Differences» 5), so a caller holding either
+     * attendance permission at own scope is refused before anything is read or validated.
+     */
+    private function assertAllScope(Request $request): void
+    {
+        if (RequestScope::narrowestOwnerId($request, 'attendance.view', 'attendance.edit') !== null) {
+            throw AuthorizationRefused::of('attendance.edit');
+        }
     }
 
     /** @return array<string, array<mixed>> */
