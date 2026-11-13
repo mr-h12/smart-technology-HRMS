@@ -189,12 +189,15 @@ The file is Arabic whatever the request language. No `versions` sheet.
   (`RequestScope::narrowestOwnerId($request, 'attendance.view', 'attendance.edit') !== null`). A site manager is refused all three.
 - A typed name (a row whose name is no entry and not shaped like one) is refused (`new_laborer_not_allowed`) unless the caller
   holds `employee.create` at all scope, checked by name through `AuthorizeAction::decide`
-  (`Identity/Application/Rbac/AuthorizeAction.php:18`) before any national-ID lookup, so nothing about the national ID is answered
+  (`Identity/Application/Rbac/AuthorizeAction.php:18`) inside `SiteWorkbookImport`, whose `preview()` and `confirm()` take the
+  caller (`?Authenticatable $by`), before `national_id_required` and before any national-ID lookup, so nothing about the national ID is answered
   to a caller who may not create employees (such a caller picks a listed employee from the name list instead). The rest of the
   file goes on. HR holds it today.
-- Download: `site_id` must be a live, active work site; `from` and `to` are `Y-m-d`, `from ≤ to`, at most 31 days; a range whose
-  length cannot be computed (a date that does not exist, or one such as 9999-12-31) is refused too. Future dates are allowed.
-  Anything else is 422 `validation_failed`.
+- Download: `site_id` must be a live, active work site; `from` and `to` are `Y-m-d`, `from ≤ to`, and pass the range check shared
+  with the upload (`SiteWorkbookTemplate::dates()`, null when refused): both real dates within the years 2000 to 2100
+  (`SiteWorkbookTemplate::YEARS`), at most 31 dates. Future dates are allowed. Anything else is 422 `validation_failed`; a range
+  failing that check (also a `from` that is no real date) is reported on `to` with `attendance.workbook_range`, «المدة 31 يومًا على
+  الأكثر، بين عامي 2000 و2100.».
 - Upload, as `AttendanceController::upload` (`Attendance/Presentation/AttendanceController.php:145-156`): `file` required, at most
   5120 KB, `mimes:xlsx` (the real MIME type) and `extensions:xlsx`, read from PHP's temp path and never stored. Confirm adds
   `token` (required) and `choices` (optional; each value `keep` or `replace`).
@@ -208,17 +211,19 @@ The file is Arabic whatever the request language. No `versions` sheet.
 
 ## Reading the upload (W2, W3)
 - `XlsxAttendanceReader::sheets()` reads the visible sheets and the sheet named `lists` (rows 1–3 only) whatever its visibility; a
-  visible `lists` is still `lists`, not a day sheet; other hidden sheets are ignored. A file with more visible sheets than the
-  31-day limit allows is refused (`template_mismatch`) before its rows are read. `lists!D1:D3` give the site and range. A missing
-  or unreadable `lists`, an unknown or deleted site or one that is not a work site, or a bad range (not real ISO dates, `from`
-  after `to`, over 31 days, or a length that cannot be computed, such as a range ending 9999-12-31) refuses the file
-  (`template_mismatch`). A site made inactive since the download is not a file error: each row at it is refused by the write
+  visible `lists` is still `lists`, not a day sheet; other hidden sheets are ignored. It counts the sheets it reads (`$maxSheets`
+  = 32: 31 day sheets and `lists`, a visible `lists` counted once); the 33rd refuses the file (`template_mismatch`) as it is
+  reached, before its rows are read, so this can come before a later sheet's `too_many_rows`. `lists!D1:D3` give the site and
+  range. A missing or unreadable `lists`, an unknown or deleted site or one that is not a work site, or a range failing the
+  download's range check (`SiteWorkbookTemplate::dates()`: real dates within 2000–2100, `from` not after `to`, at most 31 dates)
+  refuses the file (`template_mismatch`). A site made inactive since the download is not a file error: each row at it is refused by the write
   (`site_inactive`).
 - Each visible sheet's date is the one date of the range whose `dd-mm` ends the sheet name; a range of at most 31 days never
   repeats a `dd-mm`. A visible sheet with no date, two sheets for one date, or a row 2 that is not the ten headers (read through
   `text()`) refuses the file. Row 1 is not read.
 - At most 2000 data rows per sheet (`too_many_rows`).
-- Cell text goes through `XlsxAttendanceReader::text()` (L78-83); on this read path a control character also reads as a space
+- Cell text goes through `XlsxAttendanceReader::text()` (L78-83); on this read path a control character (U+0000–U+001F,
+  U+007F–U+009F; Excel writes a NUL as `_x0000_`) also reads as a space before that, so a cell of control characters only is blank
   (PostgreSQL refuses a NUL in text and in the audit row's `jsonb`; the per-type import's reading is unchanged). Columns C and D
   also accept what Excel makes of a typed time: a time fraction, a `DateTime` or a `DateInterval`. Today `value()` (L115-131) turns those into a date, a decimal string and
   `0 08:30:00`, so the reader gets a time mode for these columns; the per-type reading does not change.
@@ -288,7 +293,7 @@ Both run the same steps over the uploaded file:
 2. Rebuild the name list; resolve every row; list the row errors found so far.
 3. Read the live day of each resolved (employee, date) once. The token is the SHA-256, in hex, of those reads (employee id, date,
    live version or none, site id) in `employee_id, date` order, followed by each national ID looked up and its resolution (`new`,
-   the listed employee, or `taken`), sorted.
+   the listed employee, or `taken`), sorted; without `employee.create` no national ID is looked up, so none is in the token.
 4. Confirm only: if the token differs from the one posted, answer 409 `preview_stale` and save nothing.
 5. In one transaction: refuse each new laborer's rows after today or in a locked day-laborer period, create the laborers (hire
    date = the earliest remaining row), then apply the rows in `employee_id, date` order (the new laborers' rows last), each in its
@@ -372,9 +377,9 @@ Whole file or request (nothing is saved):
 | Code | Status | When | |
 |---|---|---|---|
 | `permission_denied` | 403 | a route permission is missing, or either attendance permission is held at own scope only | existing code; the own-scope case is new |
-| `validation_failed` | 422 | download query (including a range whose length cannot be computed); upload rules; confirm without `token`; a choice other than `keep` or `replace` | existing |
+| `validation_failed` | 422 | download query (including the range check: dates outside 2000–2100, over 31 days); upload rules; confirm without `token`; a choice other than `keep` or `replace` | existing |
 | `unreadable_file` | 422 | not a readable `.xlsx` | existing |
-| `template_mismatch` | 422 | more visible sheets than the 31-day limit allows; `lists` missing or unreadable; site unknown, deleted or not a work site; bad range (including one whose length cannot be computed); a sheet with no date; two sheets for one date; a wrong header row | existing code, new causes |
+| `template_mismatch` | 422 | more than 32 sheets read (visible sheets and `lists`); `lists` missing or unreadable; site unknown, deleted or not a work site; a range failing the download's range check; a sheet with no date; two sheets for one date; a wrong header row | existing code, new causes |
 | `too_many_rows` | 422 | a sheet with more than 2000 data rows | existing |
 | `preview_stale` | 409 | confirm: the stored days changed since the preview | new |
 | `concurrency_conflict` | 409 | a new national ID given to someone by another request between the read and the create | existing |
@@ -436,8 +441,9 @@ Generalised (the per-type template and import keep their behaviour; their tests 
   `errorKey`). The per-site side asks for no period.
 - Per site, in its own file `frontend/src/pages/attendance-site-workbook.tsx`: a work-site picker (`SelectField` over
   `WORK_SITES`, `frontend/src/lib/query.ts:27`, with a «اختر موقعًا» option) and from/to date inputs (`TextField type="date"`,
-  `frontend/src/components/form.tsx:137`), defaulting to the current half-month from `cairoToday()` and limited to 31 days;
-  download through `apiBlob`. Then choose a file (the same 5 MB and `.xlsx` check), preview, confirm. A new file drops the
+  `frontend/src/components/form.tsx:137`), defaulting to the current half-month from `cairoToday()` and limited to 31 days
+  (the screen checks the order and the length; for a year outside 2000–2100 the server's message shows); download through
+  `apiBlob`. Then choose a file (the same 5 MB and `.xlsx` check), preview, confirm. A new file drops the
   preview and its choices, so confirm sends only the file previewed.
 - The preview shows the site and range read from the file, the summary, and the backend's advances total («مجموع السلف في صفوف
   الملف المقبولة»). The changes table: sheet · row, the employee (with «جديد», «طابق بالرقم القومي» or «تعارض»), from, and to with
@@ -447,7 +453,8 @@ Generalised (the per-type template and import keep their behaviour; their tests 
   proposed wage or «بدون أجر مقترح», first day and days. Then the errors.
 - Confirm is offered when the preview has a change or a new laborer (a 0-day laborer alone counts), and is enabled once every
   conflict has a choice; otherwise the preview says there is nothing to save, or that the file has no filled rows. The result
-  shows the counts, the backend's advances total and the laborers created, each linked to their page. A `preview_stale` answer
+  shows the counts, the backend's advances total worded as the preview's («مجموع السلف في صفوف الملف المقبولة») and the
+  laborers created, each linked to their page. A `preview_stale` answer
   clears the preview and its choices and asks HR to preview again.
 - Every string under `attendance.import.*` in `ar.json` and `en.json`. A code with a site-workbook wording
   (`attendance.import.site.error.<code>`: `template_mismatch`, `too_many_rows`, `unknown_employee`, `duplicate_row`) shows that,
