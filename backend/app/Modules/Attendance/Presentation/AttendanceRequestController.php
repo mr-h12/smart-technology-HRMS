@@ -5,6 +5,8 @@ declare(strict_types=1);
 namespace App\Modules\Attendance\Presentation;
 
 use App\Modules\Attendance\Application\AttendanceRequests;
+use App\Modules\Identity\Domain\Rbac\AuthorizationRefused;
+use App\Modules\Identity\Presentation\RequestScope;
 use App\Support\Http\ApiEnvelope;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -15,6 +17,7 @@ final class AttendanceRequestController
 
     public function index(Request $request): JsonResponse
     {
+        self::requireAll($request);
         $filters = $request->validate([
             'status' => ['sometimes', 'in:pending,approved,refused,all'],
             'type' => ['sometimes', 'in:overtime,advance'],
@@ -31,6 +34,7 @@ final class AttendanceRequestController
 
     public function show(Request $request, string $id): JsonResponse
     {
+        self::requireAll($request);
         return ApiEnvelope::single($request, $this->requests->show($id));
     }
 
@@ -46,6 +50,7 @@ final class AttendanceRequestController
 
     private function decide(Request $request, string $id, bool $approve): JsonResponse
     {
+        self::requireAll($request);
         $q = $request->validate([
             'version' => ['required', 'integer', 'min:1'],
             'paper_decision_date' => ['sometimes', 'nullable', 'date_format:Y-m-d'],
@@ -55,5 +60,12 @@ final class AttendanceRequestController
             $q['paper_decision_date'] ?? null, array_key_exists('paper_decision_date', $q));
 
         return ApiEnvelope::single($request, ['id' => $id, 'status' => $status]);
+    }
+
+    private static function requireAll(Request $request): void
+    {
+        if (RequestScope::ownerId($request) !== null) {
+            throw AuthorizationRefused::of('attendance_request.decide');
+        }
     }
 }

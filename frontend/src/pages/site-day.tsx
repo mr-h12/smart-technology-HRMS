@@ -132,6 +132,14 @@ export function SiteDayPage() {
       setSaveErr(new Error(t('siteDay.badTime', { names: bad.map((r) => localName(r.employee as Row, lang)).join('، ') })))
       return
     }
+    const invalidAdvance = rows.some((r) => {
+      const amount = drafts[r.employee.id]?.advance_request
+      return amount != null && (!/^\d{1,12}(\.\d{1,6})?$/.test(amount) || !/[1-9]/.test(amount))
+    })
+    if (invalidAdvance) {
+      setSaveErr(new Error(t('attendanceRequests.invalidAmount')))
+      return
+    }
     const savedPath = path
     const savedAt = key
     const sent = drafts // the drafts this request carries; rows stay read-only until it returns
@@ -180,7 +188,7 @@ export function SiteDayPage() {
   const siteName = site ? localName(day?.site ?? site, lang) : ''
   const crewTools = isToday && (can('employee.crew') || can('employee.propose_laborer'))
   const person = (r: SiteDayRow, removable: boolean) => (
-    <PersonRow key={r.employee.id} r={r} draft={current(r, drafts)} siteId={siteId} leave={day?.leave_day_types ?? {}} sites={mine} locked={locked} onOpenDay={openDate}
+    <PersonRow key={r.employee.id} r={r} draft={current(r, drafts)} siteId={siteId} siteName={siteName} date={day?.date ?? date ?? ''} leave={day?.leave_day_types ?? {}} sites={mine} locked={locked} onOpenDay={openDate}
       removable={removable && !locked} onRemoved={reload} set={(d) => setDrafts(d === null ? omit(drafts, r.employee.id) : { ...drafts, [r.employee.id]: d })} />
   )
 

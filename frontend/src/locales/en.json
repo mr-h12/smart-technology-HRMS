@@ -376,7 +376,10 @@
       "employee_document": "Employee documents",
       "leave": "Leave",
       "system_log": "System logs",
-      "payroll": "Payroll"
+      "payroll": "Payroll",
+      "attendance_request": "Attendance requests",
+      "hr_forms": "HR forms",
+      "hr_signatures": "HR form signatures"
     },
     "action": {
       "view": "View",
@@ -393,7 +396,9 @@
       "decide": "Decide",
       "decide_escalated": "Decide escalated",
       "adjust": "Adjust balance",
-      "impersonate": "View as"
+      "impersonate": "View as",
+      "generate": "Generate",
+      "approve_leave_request": "Approve leave form"
     },
     "attendance": {
       "view": "Attendance: view",
@@ -479,7 +484,8 @@
       "notifications": "Notifications",
       "employee_site_assignments": "Home sites",
       "payroll_entries": "Payroll inputs",
-      "payroll_overrides": "Payroll overrides"
+      "payroll_overrides": "Payroll overrides",
+      "attendance_requests": "Attendance requests"
     },
     "onBehalfOf": "on behalf of {{name}}"
   },

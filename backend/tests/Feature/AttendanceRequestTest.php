@@ -2,6 +2,7 @@
 
 namespace Tests\Feature;
 
+use App\Modules\Employees\Application\EmployeeService;
 use App\Modules\Identity\Infrastructure\Eloquent\User;
 use App\Modules\Settings\Application\BusinessRules;
 use Illuminate\Foundation\Testing\RefreshDatabase;
@@ -36,13 +37,10 @@ class AttendanceRequestTest extends TestCase
         BusinessRules::forgetCache();
     }
 
-    public function test_overtime_begins_at_shift_end_and_changed_times_need_fresh_approval(): void
+    public function test_overtime_begins_at_shift_end_and_approval_makes_the_day_hrs(): void
     {
         $this->worker = $this->employee('engineer');
-        $this->engineerManager($this->worker, $this->manager, '2026-10-01');
-        DB::table('settings')->where('key', 'engineer_shift_start')->update(['value' => '09:00']);
-        DB::table('settings')->where('key', 'engineer_shift_end')->update(['value' => '16:00']);
-        BusinessRules::forgetCache();
+        app(EmployeeService::class)->assignManager($this->worker, ['manager_id' => $this->manager->id, 'effective_from' => '2026-10-01']);
         $saved = $this->save('17:00')->assertOk()
             ->assertJsonPath('data.rows.0.requests.overtime.minutes', 60)
             ->assertJsonPath('data.rows.0.requests.overtime.status', 'pending');
@@ -50,16 +48,16 @@ class AttendanceRequestTest extends TestCase
         $id = $saved->json('data.rows.0.requests.overtime.id');
         $this->getJson('/api/v1/attendance/requests')->assertForbidden();
         $this->actingAs($this->makeUser('ceo'), 'api')->getJson('/api/v1/attendance/requests')->assertForbidden();
-        $this->signIn('hr');
-        $this->approve($id, 1)->assertOk();
-        $this->assertSame(60, $this->day()->ot_minutes);
-        $this->save('16:30', 2)->assertOk()
+        $this->save('16:30', 1)->assertOk()
             ->assertJsonPath('data.rows.0.requests.overtime.minutes', 30)
             ->assertJsonPath('data.rows.0.requests.overtime.status', 'pending');
         $this->assertSame(0, $this->day()->ot_minutes);
         $this->signIn('hr');
         $this->approve($id, 1)->assertConflict();
-        $this->approve($id, 3)->assertOk();
+        $this->approve($id, 2)->assertOk();
+        $this->assertSame(30, $this->day()->ot_minutes);
+        $this->assertSame('entered', $this->day()->source);
+        $this->save('17:00', 3)->assertUnprocessable();
         $this->assertSame(30, $this->day()->ot_minutes);
     }
 

@@ -23,7 +23,9 @@ type LeaveDecided = Base & { type: 'leave_decided'; data: RequestData & { status
 type LeaveCancelled = Base & { type: 'leave_cancelled'; data: RequestData; employee: Named }
 type WageProposed = Base & { type: 'wage_proposed'; data: { employee_id: string; daily_wage: string; site_name_ar: string; site_name_en: string | null }; employee: Named }
 type PastEdit = Base & { type: 'attendance_past_edit'; data: { employee_id: string; date: string; out_time: string; site_name_ar: string; site_name_en: string | null; group: string; period_start: string }; employee: Named }
-type Notification = MissingDays | LeaveAnniversary | LeaveRequested | LeaveEscalated | LeaveDecided | LeaveCancelled | WageProposed | PastEdit
+type AttendanceRequestCreated = Base & { type: 'attendance_request_created'; data: { request_id: string; kind: string; status: string; site_id: string } }
+type AttendanceRequestDecided = Base & { type: 'attendance_request_decided'; data: AttendanceRequestCreated['data'] }
+type Notification = AttendanceRequestCreated | AttendanceRequestDecided | MissingDays | LeaveAnniversary | LeaveRequested | LeaveEscalated | LeaveDecided | LeaveCancelled | WageProposed | PastEdit
 
 /** One clickable line: what it says, the muted line under it, and where it opens (null: it only marks the notification read). */
 type Line = { key: string; text: ReactNode; detail: string; to: string | null }
@@ -80,6 +82,22 @@ const VIEWS: { [K in Notification['type']]: (n: Extract<Notification, { type: K 
       text: named('notifications.wageProposed', n.employee, ctx),
       detail: ctx.t('notifications.wageProposed.detail', { amount: n.data.daily_wage, site: ctx.lang === 'en' ? n.data.site_name_en || n.data.site_name_ar : n.data.site_name_ar }),
       to: n.ref ? `/wage-proposals?proposal=${n.ref}` : '/wage-proposals',
+    }],
+  }),
+  attendance_request_created: (n, { t }) => ({
+    lines: [{
+      key: n.id,
+      text: t('attendanceRequests.newNotification'),
+      detail: t(`attendanceRequests.type.${n.data.kind}`),
+      to: `/attendance-requests?${new URLSearchParams({ request: n.data.request_id })}`,
+    }],
+  }),
+  attendance_request_decided: (n, { t }) => ({
+    lines: [{
+      key: n.id,
+      text: t(`attendanceRequests.type.${n.data.kind}`),
+      detail: t(n.data.kind === 'advance' && n.data.status === 'approved' ? 'attendanceRequests.paid' : `attendanceRequests.status.${n.data.status}`),
+      to: `/site-day?${new URLSearchParams({ site: n.data.site_id, date: n.date })}`,
     }],
   }),
   // a departure the site manager entered after the yesterday window: an edit to a past day, which HR can correct (owner, 2026-11-05)

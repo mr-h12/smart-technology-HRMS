@@ -380,7 +380,10 @@
       "employee_document": "مستندات الموظفين",
       "leave": "الإجازات",
       "system_log": "سجلات النظام",
-      "payroll": "المرتبات"
+      "payroll": "المرتبات",
+      "attendance_request": "طلبات الحضور",
+      "hr_forms": "نماذج الموارد البشرية",
+      "hr_signatures": "توقيعات نماذج الموارد البشرية"
     },
     "action": {
       "view": "عرض",
@@ -397,7 +400,9 @@
       "decide": "البت في الطلبات",
       "decide_escalated": "البت في الطلبات المحالة",
       "adjust": "تعديل الرصيد",
-      "impersonate": "عرض كـ"
+      "impersonate": "عرض كـ",
+      "generate": "إنشاء",
+      "approve_leave_request": "اعتماد نموذج الإجازة"
     },
     "attendance": {
       "view": "الحضور: عرض",
@@ -483,7 +488,8 @@
       "notifications": "الإشعارات",
       "employee_site_assignments": "المواقع الأساسية",
       "payroll_entries": "مدخلات المرتبات",
-      "payroll_overrides": "القيم البديلة في المرتبات"
+      "payroll_overrides": "القيم البديلة في المرتبات",
+      "attendance_requests": "طلبات الحضور"
     },
     "onBehalfOf": "نيابة عن {{name}}"
   },

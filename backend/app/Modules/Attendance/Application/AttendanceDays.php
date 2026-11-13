@@ -104,7 +104,7 @@ final class AttendanceDays
     {
         $date = (string) $request->date;
         $employee = $this->roster->find((string) $request->employee_id) ?? throw new ConcurrencyConflict;
-        [, $day] = $this->guard($employee, $date);
+        [$type, $day] = $this->guard($employee, $date);
         if (! $approve) {
             return;
         }
@@ -112,10 +112,12 @@ final class AttendanceDays
             throw new ConcurrencyConflict;
         }
         if ($request->type === 'overtime') {
-            if ($day->source !== 'manager' || $day->in_time !== $request->in_time || $day->out_time !== $request->out_time) {
+            if (! in_array($type, [EmployeeType::Engineer, EmployeeType::DayLaborer], true) || $day->source !== 'manager'
+                || $day->in_time !== $request->in_time || $day->out_time !== $request->out_time) {
                 throw new ConcurrencyConflict;
             }
             $day->ot_minutes = $request->minutes;
+            $day->source = 'entered';
         } else {
             if ($day->getAttribute('advance_amount') !== null) {
                 throw new ConcurrencyConflict;

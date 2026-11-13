@@ -60,6 +60,20 @@ function routes(sites: unknown[], days: Record<string, unknown[]>, more: Record<
 const bodyOf = (fn: { mock: { calls: unknown[][] } }, i = 0) => JSON.parse(String((fn.mock.calls[i][1] as RequestInit).body))
 const group = (name: string) => screen.getByRole('group', { name })
 
+test('a site manager saves a requested advance with the attendance day', async () => {
+  const { post } = routes([S1], { s1: S1_ROWS })
+  render()
+  await enter()
+  const worker = group('Worker-1').closest('li')!
+  await user.click(within(worker).getByRole('button', { name: 'طلب سلفة' }))
+  await user.type(within(worker).getByRole('textbox', { name: 'مبلغ السلفة' }), '٢٥٠.٥٠')
+  await user.click(screen.getByRole('button', { name: 'حفظ اليوم' }))
+  await waitFor(() => expect(post).toHaveBeenCalledTimes(1))
+  expect(bodyOf(post).rows).toEqual([expect.objectContaining({
+    employee_id: 'w1', advance_request: '250.50',
+  })])
+})
+
 test('one site: no switcher, workers then the engineers section, and the stored marks pressed', async () => {
   const { siteDay } = routes([S1], { s1: S1_ROWS })
   render()
