@@ -105,7 +105,7 @@ final class HrLatePermitFormTest extends TestCase
         $this->generate(['reason' => 'Different'], $key)->assertConflict();
         $snapshot = DB::table('hr_form_exports')->where('id', $id)->value('snapshot');
         $this->assertEquals([
-            'name_ar' => 'سارة مثال للاختبار', 'name_en' => 'Synthetic Worker', 'code' => 1, 'department' => 'اختبار',
+            'name_ar' => 'سارة مثال للاختبار', 'name_en' => 'Synthetic Worker', 'code' => 1, 'department' => 'اختبار', 'gender' => 'male',
             'fields' => self::FIELDS,
         ], json_decode($snapshot, true, flags: JSON_THROW_ON_ERROR));
         $created = DB::table('audit_log')->where(['event' => 'CREATED', 'entity_type' => 'hr_form_exports', 'entity_id' => $id]);

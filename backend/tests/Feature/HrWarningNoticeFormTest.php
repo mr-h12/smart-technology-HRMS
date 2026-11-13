@@ -75,6 +75,21 @@ final class HrWarningNoticeFormTest extends TestCase
         }
     }
 
+    public function test_a_female_employees_notice_uses_feminine_wording(): void
+    {
+        $this->employeeId = $this->employee('office', '2026-01-01', ['gender' => 'female']);
+        $id = $this->generate()->assertAccepted()->json('data.id');
+        $renderer = $this->createMock(FormRenderer::class);
+        $renderer->expects($this->once())->method('pdf')->with($this->callback(function (string $html): bool {
+            $this->assertStringContainsString('إلى الموظفة /', $html);
+            $this->assertStringContainsString('رقم الموظفة /', $html);
+            $this->assertStringNotContainsString('الموظف /', $html);
+
+            return true;
+        }))->willReturn('%PDF-1.7 warning notice');
+        (new RenderHrForm($id))->handle($renderer);
+    }
+
     public function test_each_typed_field_is_validated_and_unknown_forms_are_refused(): void
     {
         foreach (array_keys(self::FIELDS) as $field) {
@@ -102,7 +117,7 @@ final class HrWarningNoticeFormTest extends TestCase
         $this->generate(['warning_incident' => 'Different synthetic incident'], $key)->assertConflict();
         $snapshot = DB::table('hr_form_exports')->where('id', $id)->value('snapshot');
         $this->assertEquals([
-            'name_ar' => 'سارة مثال للاختبار', 'name_en' => 'Synthetic Worker', 'code' => 1, 'department' => 'اختبار',
+            'name_ar' => 'سارة مثال للاختبار', 'name_en' => 'Synthetic Worker', 'code' => 1, 'department' => 'اختبار', 'gender' => 'male',
             'fields' => self::FIELDS,
         ], json_decode($snapshot, true, flags: JSON_THROW_ON_ERROR));
         $created = DB::table('audit_log')->where(['event' => 'CREATED', 'entity_type' => 'hr_form_exports', 'entity_id' => $id]);

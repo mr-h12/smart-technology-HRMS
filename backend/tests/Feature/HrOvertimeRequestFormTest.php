@@ -55,7 +55,7 @@ final class HrOvertimeRequestFormTest extends TestCase
         $export = $this->generate($id)->assertAccepted()->assertJsonPath('data.form_type', 'overtime_request')->json('data.id');
         $snapshot = json_decode(DB::table('hr_form_exports')->where('id', $export)->value('snapshot'), true, flags: JSON_THROW_ON_ERROR);
         $this->assertEquals([
-            'name_ar' => 'سارة مثال للاختبار', 'name_en' => 'Synthetic Worker', 'department' => 'Synthetic QA', 'code' => 1,
+            'name_ar' => 'سارة مثال للاختبار', 'name_en' => 'Synthetic Worker', 'department' => 'Synthetic QA', 'code' => 1, 'gender' => 'male',
             'job_title' => 'Synthetic technician', 'reason' => 'Synthetic overtime reason',
             'overtime_request_id' => $id, 'request_date' => '2026-10-22', 'checkout_time' => '17:35:00', 'minutes' => $minutes,
         ], $snapshot);

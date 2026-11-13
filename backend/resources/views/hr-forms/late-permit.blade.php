@@ -30,9 +30,9 @@
 </p>
 <p class="courtesy">وتفضلوا سيادتكم بقبول فائق الاحترام والتقدير،،،</p>
 <div class="applicant">
-    <p>مقدم لسيادتكم</p>
+    <p>{{ $feminine ? 'مقدمة' : 'مقدم' }} لسيادتكم</p>
     <p>الاسم / {{ $snapshot['name_ar'] }}</p>
-    <p>رقم الموظف / <bdi>{{ $snapshot['code'] }}</bdi> · القسم / {{ $snapshot['department'] ?? '—' }}</p>
+    <p>رقم {{ $feminine ? 'الموظفة' : 'الموظف' }} / <bdi>{{ $snapshot['code'] }}</bdi> · القسم / {{ $snapshot['department'] ?? '—' }}</p>
     <p>التوقيع / <span class="line"></span></p>
     <p>الوظيفة / {{ $fields['job_title'] }}</p>
     <p>المدير المسؤول / {{ $fields['responsible_manager'] }}</p>

@@ -14,11 +14,12 @@
 @section('document')
 @php
     $fields = $snapshot['fields'];
+    $employee = $feminine ? 'الموظفة' : 'الموظف';
     $mission = \App\Support\Localization\ArabicFormDate::format($fields['mission_date']);
 @endphp
 <h1>إذن مأمورية</h1>
-<p>اسم الموظف / {{ $snapshot['name_ar'] }}<br>
-    رقم الموظف / <bdi>{{ $snapshot['code'] }}</bdi> · القسم / {{ $snapshot['department'] ?? '—' }}</p>
+<p>اسم {{ $employee }} / {{ $snapshot['name_ar'] }}<br>
+    رقم {{ $employee }} / <bdi>{{ $snapshot['code'] }}</bdi> · القسم / {{ $snapshot['department'] ?? '—' }}</p>
 <p>الوظيفة / {{ $fields['job_title'] }}</p>
 <p>اليوم {{ $mission['weekday'] }} الموافق <bdi>{{ $mission['date'] }}</bdi></p>
 <p>سبب المأمورية / <span class="reason">{{ $fields['mission_reason'] }}</span></p>

@@ -11,6 +11,7 @@
 @section('document')
 @php
     $fields = $snapshot['fields'];
+    $employee = $feminine ? 'الموظفة' : 'الموظف';
     $issued = \App\Support\Localization\ArabicFormDate::format($fields['issued_on']);
     $duration = \App\Support\Localization\ArabicServiceDuration::format(
         (new DateTimeImmutable($fields['hire_date']))->diff(new DateTimeImmutable($fields['last_working_day']))
@@ -23,19 +24,19 @@
 @endphp
 <h1>مكافأة نهاية الخدمة</h1>
 <p>إنه في يوم {{ $issued['weekday'] }} الموافق <bdi>{{ $issued['date'] }}</bdi></p>
-<p>تؤكد شركة سمارت تكنولوجي للأنظمة المتكاملة بأن الموظف المذكور:</p>
-<p>اسم الموظف / {{ $snapshot['name_ar'] }} · رقم الموظف / <bdi>{{ $snapshot['code'] }}</bdi></p>
+<p>تؤكد شركة سمارت تكنولوجي للأنظمة المتكاملة بأن {{ $feminine ? 'الموظفة المذكورة' : 'الموظف المذكور' }}:</p>
+<p>اسم {{ $employee }} / {{ $snapshot['name_ar'] }} · رقم {{ $employee }} / <bdi>{{ $snapshot['code'] }}</bdi></p>
 <p>المسمى الوظيفي / {{ $fields['job_title'] }} · القسم / {{ $snapshot['department'] ?? '—' }}</p>
-<p>يعمل في الشركة منذ {{ $duration }}، وهي من {{ $hire['weekday'] }} الموافق <bdi>{{ $hire['date'] }}</bdi>
-    إلى {{ $last['weekday'] }} الموافق <bdi>{{ $last['date'] }}</bdi>، ومستحقاته عن كل سنة طبقًا لقانون العمل هي نصف شهر وتحسب على آخر أجر شامل، وكان أجره في شهر <bdi>{{ $wageMonth }}</bdi> هو <bdi>{{ $wage }}</bdi> جنيه.</p>
+<p>{{ $feminine ? 'تعمل' : 'يعمل' }} في الشركة منذ {{ $duration }}، وهي من {{ $hire['weekday'] }} الموافق <bdi>{{ $hire['date'] }}</bdi>
+    إلى {{ $last['weekday'] }} الموافق <bdi>{{ $last['date'] }}</bdi>، {{ $feminine ? 'ومستحقاتها' : 'ومستحقاته' }} عن كل سنة طبقًا لقانون العمل هي نصف شهر وتحسب على آخر أجر شامل، وكان {{ $feminine ? 'أجرها' : 'أجره' }} في شهر <bdi>{{ $wageMonth }}</bdi> هو <bdi>{{ $wage }}</bdi> جنيه.</p>
 @if ($fields['submitted_amount'] === null)
     <p><bdi dir="ltr">{{ $fields['completed_years'] }} × ({{ $wage }} ÷ 2) = {{ $amount }}</bdi></p>
 @endif
 <p>الحساب اليدوي، إن لزم / <span class="line"></span></p>
-<p>وبذلك تصبح مكافأة نهاية الخدمة للموظف المذكور هي <bdi>{{ $amount }}</bdi> جنيه.</p>
+<p>وبذلك تصبح مكافأة نهاية الخدمة {{ $feminine ? 'للموظفة المذكورة' : 'للموظف المذكور' }} هي <bdi>{{ $amount }}</bdi> جنيه.</p>
 <p>تحريرًا في يوم <span class="line"></span> الموافق <bdi>____ / ____ / ____</bdi></p>
 <div class="signatures">
-    <p>توقيع الموظف / <span class="line"></span></p>
+    <p>توقيع {{ $employee }} / <span class="line"></span></p>
     <p>الرقم القومي / <span class="line"></span></p>
     <p>مدير الشركة / <span class="line"></span></p>
 </div>

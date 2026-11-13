@@ -65,7 +65,7 @@ final class ManualHrForms
 
             $snapshotFields = $form === 'end_of_service' ? EndOfServiceAmounts::calculate($employee, $fields) : $fields;
             $export = $this->exports->storeUnsigned($form, $employeeId, $actor, $key, [
-                ...array_intersect_key($employee, array_flip(['name_ar', 'name_en', 'code', 'department'])),
+                ...array_intersect_key($employee, array_flip(['name_ar', 'name_en', 'code', 'department', 'gender'])),
                 'fields' => $snapshotFields,
             ], null);
             $namesOnly = ManualFormDefinitions::all()[$form]['audit_field_names_only'] ?? false;

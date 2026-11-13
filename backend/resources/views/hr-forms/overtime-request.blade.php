@@ -11,7 +11,7 @@
 <h1>طلب عمل إضافي / <bdi lang="en" dir="ltr">Overtime Request</bdi></h1>
 <table class="request-table request-table-details">
     <tr><th>الاسم</th><td>{{ $snapshot['name_ar'] }} @if (!empty($snapshot['name_en'])) / <bdi>{{ $snapshot['name_en'] }}</bdi> @endif</td><th lang="en" dir="ltr">Employee Name</th></tr>
-    <tr><th>رقم الموظف</th><td><bdi>{{ $snapshot['code'] }}</bdi></td><th lang="en" dir="ltr">Employee No.</th></tr>
+    <tr><th>رقم {{ $feminine ? 'الموظفة' : 'الموظف' }}</th><td><bdi>{{ $snapshot['code'] }}</bdi></td><th lang="en" dir="ltr">Employee No.</th></tr>
     <tr><th>القسم</th><td>{{ $snapshot['department'] ?? '—' }}</td><th lang="en" dir="ltr">Department</th></tr>
     <tr><th>الوظيفة</th><td>{{ $snapshot['job_title'] }}</td><th lang="en" dir="ltr">Job Title</th></tr>
     <tr><th>تاريخ العمل</th><td>{{ $workDate['weekday'] }} الموافق <bdi>{{ $workDate['date'] }}</bdi></td><th lang="en" dir="ltr">Work Date</th></tr>

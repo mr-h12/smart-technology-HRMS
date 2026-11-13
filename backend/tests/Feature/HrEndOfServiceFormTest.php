@@ -90,6 +90,32 @@ final class HrEndOfServiceFormTest extends TestCase
         }
     }
 
+    public function test_a_female_employees_letter_uses_feminine_wording(): void
+    {
+        Queue::fake();
+        Storage::fake('local');
+        $this->signIn('hr');
+        $employee = $this->employee('permanent_worker', '2024-02-29', ['hire_date' => '2024-02-29', 'gender' => 'female']);
+        $id = $this->postJson("/api/v1/employees/{$employee}/hr-forms/manual/end_of_service", [
+            'job_title' => 'Synthetic technician', 'last_working_day' => '2026-03-01', 'issued_on' => '2026-03-01',
+            'last_total_wage' => '12345.67', 'wage_month' => '2026-03', 'idempotency_key' => (string) Str::uuid7(),
+        ])->assertAccepted()->json('data.id');
+        $this->assertSame('female', json_decode(DB::table('hr_form_exports')->where('id', $id)->value('snapshot'), true)['gender']);
+        $renderer = $this->createMock(FormRenderer::class);
+        $renderer->expects($this->once())->method('pdf')->with($this->callback(function (string $html): bool {
+            foreach (['بأن الموظفة المذكورة:', 'اسم الموظفة /', 'رقم الموظفة /', 'تعمل في الشركة منذ', 'ومستحقاتها عن كل سنة',
+                'وكان أجرها في شهر', 'للموظفة المذكورة هي', 'توقيع الموظفة /'] as $feminine) {
+                $this->assertStringContainsString($feminine, $html);
+            }
+            foreach (['الموظف المذكور', 'يعمل في', 'أجره ', 'ومستحقاته ', 'توقيع الموظف /'] as $masculine) {
+                $this->assertStringNotContainsString($masculine, $html);
+            }
+
+            return true;
+        }))->willReturn('%PDF-1.7 synthetic');
+        (new RenderHrForm($id))->handle($renderer);
+    }
+
     public function test_override_validation_audit_and_pay_access(): void
     {
         Queue::fake();

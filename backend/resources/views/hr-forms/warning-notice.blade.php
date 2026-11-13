@@ -16,14 +16,15 @@
 @section('document')
 @php
     $fields = $snapshot['fields'];
+    $employee = $feminine ? 'الموظفة' : 'الموظف';
     $date = \App\Support\Localization\ArabicFormDate::format($fields['warning_date']);
 @endphp
 <p class="brand" dir="ltr" lang="en">Smart Technology <small>For Integrated Systems</small></p>
 <h1>نموذج إنذار</h1>
 <p>إنه في يوم {{ $date['weekday'] }} الموافق <bdi>{{ $date['date'] }}</bdi></p>
-<p>من إدارة شركة سمارت تكنولوجي للأنظمة المتكاملة إلى الموظف / {{ $snapshot['name_ar'] }}</p>
+<p>من إدارة شركة سمارت تكنولوجي للأنظمة المتكاملة إلى {{ $employee }} / {{ $snapshot['name_ar'] }}</p>
 <p>المسمى الوظيفي / {{ $fields['job_title'] }} · القسم / {{ $snapshot['department'] ?? '—' }}
-    · رقم الموظف / <bdi>{{ $snapshot['code'] }}</bdi></p>
+    · رقم {{ $employee }} / <bdi>{{ $snapshot['code'] }}</bdi></p>
 <div class="narrative">
     <p>الواقعة: {{ $fields['warning_incident'] }}</p>
     <p>التواريخ أو المدة المذكورة: {{ $fields['warning_period'] }}</p>

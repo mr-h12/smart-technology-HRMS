@@ -24,8 +24,8 @@
 @endphp
 <p class="brand" dir="ltr" lang="en">Smart Technology</p>
 <h1>طلب انصراف باكرًا</h1>
-<p>مقدم إلى سيادتكم / {{ $snapshot['name_ar'] }}<br>
-    قسم / {{ $snapshot['department'] ?? '—' }} · رقم الموظف / <bdi>{{ $snapshot['code'] }}</bdi>
+<p>{{ $feminine ? 'مقدمة' : 'مقدم' }} إلى سيادتكم / {{ $snapshot['name_ar'] }}<br>
+    قسم / {{ $snapshot['department'] ?? '—' }} · رقم {{ $feminine ? 'الموظفة' : 'الموظف' }} / <bdi>{{ $snapshot['code'] }}</bdi>
 </p>
 <p>إلى مدير الشركة سمارت تكنولوجي للأنظمة المتكاملة وقسم الموارد البشرية</p>
 <p class="greeting">تحية طيبة وبعد،،،</p>
@@ -38,7 +38,7 @@
 <p>وتفضلوا سيادتكم بقبول فائق الاحترام والتقدير.</p>
 <p>تحريرًا في يوم {{ $issued['weekday'] }} الموافق <bdi>{{ $issued['date'] }}</bdi></p>
 <div class="applicant">
-    <p>مقدم لسيادتكم / {{ $snapshot['name_ar'] }}</p>
+    <p>{{ $feminine ? 'مقدمة' : 'مقدم' }} لسيادتكم / {{ $snapshot['name_ar'] }}</p>
     <p>التوقيع / <span class="line"></span></p>
 </div>
 <div class="approvals">

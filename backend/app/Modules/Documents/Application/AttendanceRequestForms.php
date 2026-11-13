@@ -66,7 +66,7 @@ final class AttendanceRequestForms
             $previous = $this->rows($id, $form)->orderByDesc('serial_number')->value('id');
 
             return $this->exports->storeUnsigned($form, $employeeId, $actor, $key, [
-                ...array_intersect_key($employee, array_flip(['name_ar', 'name_en', 'code', 'department'])),
+                ...array_intersect_key($employee, array_flip(['name_ar', 'name_en', 'code', 'department', 'gender'])),
                 ...$fields, ...$details,
                 $sourceKey => $id, 'request_date' => $date,
             ], $previous === null ? null : (string) $previous);
