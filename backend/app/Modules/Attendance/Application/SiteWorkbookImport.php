@@ -51,10 +51,13 @@ final class SiteWorkbookImport
     /** A technical cap per day sheet (W16), not a business setting. */
     public const MAX_ROWS = 2000;
 
+    /** The longest name a new day laborer may have: employees.name_ar is varchar(255), a column limit, not a business setting. */
+    private const NAME_MAX = 255;
+
     /** The row codes this import gives itself (attendance.import.*); the others are the write path's and the day rules'. */
     private const OWN_CODES = [
         'name_required', 'status_required', 'unknown_employee', 'national_id_required', 'national_id_taken', 'national_id_name_mismatch', 'new_laborer_not_allowed',
-        'duplicate_row', 'unknown_status', 'bad_time', 'bad_amount', 'note_too_long', 'bad_mobile', 'unknown_residence', 'choice_required',
+        'duplicate_row', 'unknown_status', 'bad_time', 'bad_amount', 'note_too_long', 'name_too_long', 'bad_mobile', 'unknown_residence', 'choice_required',
     ];
 
     public function __construct(
@@ -191,6 +194,8 @@ final class SiteWorkbookImport
                 ($times[0] === null) !== ($times[1] === null) => 'times_need_both',     // W8: an imported day is never left open
                 $advance !== null && ! self::passes($advance, $amount) => 'bad_amount',
                 $note !== null && ! self::passes($note, AttendanceDays::FORMAT['note']) => 'note_too_long',
+                // A new laborer's cells; every one is format-checked, so nothing from the file can overflow a column (a 500).
+                $new !== null && mb_strlen((string) $name) > self::NAME_MAX => 'name_too_long',
                 $new !== null && $mobile !== null && ! self::passes($mobile, [EmployeeRules::MOBILE]) => 'bad_mobile',
                 $new !== null && $residence !== null && ! isset($residences[$residenceKey]) => 'unknown_residence',
                 $new !== null && $wage !== null && ! self::passes($wage, $amount) => 'bad_amount',
@@ -367,21 +372,25 @@ final class SiteWorkbookImport
         $total = bcadd('0', '0', Precision::MONEY_SCALE);
         // A new laborer's rows come last: their ids are the newest, and no other request can see, so lock, those rows yet.
         foreach ([...$plan['writes'], ...$hires] as $w) {
-            // W13: a conflict is written only on `replace`; `keep` writes nothing; no choice is refused. Other rows ignore $choices.
+            // W13: a conflict is written only on `replace`; `keep` writes nothing. Other rows ignore $choices.
             $choice = $choices === null || ! $w['conflict'] ? 'replace' : ($choices[$w['key']] ?? null);
-            if ($choice !== 'replace') {
-                if ($choice === 'keep') {
-                    $kept++;
-                } else {
-                    $errors[] = self::error($w['at'], 'choice_required');
-                }
+            if ($choice === 'keep') {
+                $kept++;
 
                 continue;
             }
+            // No choice writes nothing either: a dry run gives the refusal the preview showed for the row (so the screen asked no
+            // choice, B3 review M2), else the row is choice_required.
+            $dryRun = $choice !== 'replace';
             try {
-                $this->writes->writeCell($w['employee'], $w['date'], $w['input'], null, 'imported');
+                $this->writes->writeCell($w['employee'], $w['date'], $w['input'], null, 'imported', $dryRun);
             } catch (AttendanceRefused|ConcurrencyConflict|DayRulesViolated $e) {
                 $errors[] = [...$w['at'], ...AttendanceImport::reason($e)];
+
+                continue;
+            }
+            if ($dryRun) {
+                $errors[] = self::error($w['at'], 'choice_required');
 
                 continue;
             }

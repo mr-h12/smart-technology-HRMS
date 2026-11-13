@@ -480,6 +480,23 @@ class SiteWorkbookImportTest extends TestCase
         $this->assertEquals((object) ['ot_minutes' => 60, 'source' => 'imported'], $day());
     }
 
+    /** W12, W13 (B3 review M2): a conflict row the write refuses confirms, with no choice sent, as that refusal, as the preview showed it; nothing is saved. */
+    public function test_a_conflict_the_write_refuses_confirms_as_its_refusal(): void
+    {
+        $laborer = $this->homed('day_laborer', $this->site);
+        $this->putDay($laborer, '2026-11-07', ['site_id' => $this->other, 'in_time' => '08:00', 'out_time' => '16:00'])->assertOk();
+        $file = $this->fill($this->download(), [self::SAT => [[$this->entry($laborer), 'حاضر', '17:00', '08:00']]]);
+        [$days, $audits] = [DB::table('attendance_days')->get()->all(), DB::table('audit_log')->count()];
+        $refused = fn (TestResponse $r) => array_map(fn (array $e) => [$e['name'], $e['error']], $r->json('data.errors'));
+
+        $preview = $this->preview($file)->assertOk()->assertJsonPath('data.summary.conflicts', 0);
+        $confirm = $this->confirm($file)->assertOk()->assertJsonPath('data.applied', 0)->assertJsonPath('data.kept', 0);
+
+        $this->assertSame([[$this->entry($laborer), 'out_before_in']], $refused($preview));
+        $this->assertSame($refused($preview), $refused($confirm));
+        $this->assertEquals([$days, $audits], [DB::table('attendance_days')->get()->all(), DB::table('audit_log')->count()]);
+    }
+
     /** W9: the advance is stored; the total is the sum on the rows the confirm saved, not on a kept or a refused row. */
     public function test_the_advance_is_stored(): void
     {
@@ -567,6 +584,8 @@ class SiteWorkbookImportTest extends TestCase
         foreach ([$this->userWith('own', 'own'), $this->userWith('all', 'own'), $this->userWith('own', 'all'), $this->manager] as $caller) {
             $this->actingAs($caller, 'api');
             $this->confirm($file, [], $token)->assertStatus(403)->assertJsonPath('error.code', 'permission_denied');
+            // Before validation: no file and no token is still a 403, not a 422.
+            $this->postJson('/api/v1/attendance/site-workbook/confirm')->assertStatus(403)->assertJsonPath('error.code', 'permission_denied');
         }
         $this->assertSame(0, DB::table('attendance_days')->count());
     }
@@ -730,6 +749,23 @@ class SiteWorkbookImportTest extends TestCase
 
         $this->preview($file)->assertOk()->assertJsonPath('data.new_laborers', [])
             ->assertJsonPath('data.errors.0.error', $error)->assertJsonCount(1, 'data.errors');
+    }
+
+    /** W5: a new laborer's name longer than employees.name_ar holds (255 characters) is a row error, never a database error; 255 is accepted. */
+    public function test_a_new_laborers_name_over_255_characters_is_name_too_long(): void
+    {
+        $laborer = $this->homed('day_laborer', $this->site);
+        $long = str_repeat('ن', 256);       // 256 characters, 512 bytes: counted in characters
+        $file = $this->fill($this->download(), [self::SAT => [[$this->entry($laborer), 'حاضر'], $this->newRow($long, self::NID), $this->newRow(str_repeat('ن', 255), self::NID2)]]);
+
+        $data = $this->preview($file)->assertOk()->json('data');
+
+        $this->assertSame([[$long, 'name_too_long']], array_map(fn (array $e) => [$e['name'], $e['error']], $data['errors']));
+        $this->assertStringNotContainsString('attendance.', $data['errors'][0]['message'], 'the code has its message');
+        $this->assertSame([self::NID2], array_column($data['new_laborers'], 'national_id'));
+        $this->assertSame(2, $data['summary']['changes']);
+        $this->confirm($file)->assertOk()->assertJsonPath('data.applied', 2)->assertJsonPath('data.errors.0.error', 'name_too_long');
+        $this->assertSame(0, DB::table('employees')->where('national_id', self::NID)->count());
     }
 
     /** Spec «Endpoints and permissions»: without employee.create at all scope a new laborer's row is refused; the file's other rows are saved. */
