@@ -16,6 +16,8 @@ use App\Modules\Employees\Application\EmployeeRoster;
 use App\Modules\Employees\Application\EmployeeRules;
 use App\Modules\Employees\Domain\EmployeeType;
 use App\Modules\Employees\Domain\Gender;
+use App\Modules\Identity\Application\Rbac\AuthorizeAction;
+use App\Modules\Identity\Domain\Rbac\Scope;
 use App\Modules\Settings\Application\BusinessRules;
 use App\Modules\Sites\Application\SiteService;
 use App\Modules\Sites\Domain\SiteKind;
@@ -24,7 +26,7 @@ use App\Modules\Sites\Infrastructure\Eloquent\Site;
 use App\Support\Database\ConcurrencyConflict;
 use App\Support\Database\Precision;
 use App\Support\Money\Decimal;
-use DateTimeImmutable;
+use Illuminate\Contracts\Auth\Authenticatable;
 use Illuminate\Database\Eloquent\ModelNotFoundException;
 use Illuminate\Database\UniqueConstraintViolationException;
 use Illuminate\Support\Facades\DB;
@@ -69,18 +71,19 @@ final class SiteWorkbookImport
         private readonly DayCrew $crew,
         private readonly BusinessRules $rules,
         private readonly XlsxAttendanceReader $reader,
+        private readonly AuthorizeAction $authorize,
         private readonly int $maxRows = self::MAX_ROWS,
     ) {}
 
     /**
-     * W15: the file's rows written and rolled back, new laborers included. $mayCreate is employee.create at all scope: without it a new
-     * day laborer's row is new_laborer_not_allowed (W5).
+     * W15: the file's rows written and rolled back, new laborers included. A new day laborer's row needs $by to hold employee.create at
+     * all scope, else it is new_laborer_not_allowed (W5).
      *
      * @return array{site: array{id: string, name_ar: string, name_en: ?string}, from: string, to: string, token: string, summary: array{rows: int, changes: int, unchanged: int, errors: int, conflicts: int, new_laborers: int, advances_total: string}, changes: list<array<string, mixed>>, new_laborers: list<array<string, mixed>>, errors: list<RowError>}
      */
-    public function preview(string $path, bool $mayCreate): array
+    public function preview(string $path, ?Authenticatable $by): array
     {
-        $plan = $this->plan($path, $mayCreate);
+        $plan = $this->plan($path, $by);
         DB::beginTransaction();
         try {
             $result = $this->apply($plan, null);
@@ -107,14 +110,14 @@ final class SiteWorkbookImport
 
     /**
      * W13, W15: the preview's writes, committed in one transaction, if the stored days and the new national IDs are still what the
-     * preview read (its token); else nothing is saved. $choices is keep or replace by conflict key; $mayCreate as preview().
+     * preview read (its token); else nothing is saved. $choices is keep or replace by conflict key; $by as preview().
      *
      * @param  array<string, string>  $choices
      * @return array{applied: int, unchanged: int, kept: int, advances_total: string, new_laborers: list<array{employee_id: string, code: int, name_ar: string, proposal: bool}>, errors: list<RowError>}
      */
-    public function confirm(string $path, string $token, array $choices, bool $mayCreate): array
+    public function confirm(string $path, string $token, array $choices, ?Authenticatable $by): array
     {
-        $plan = $this->plan($path, $mayCreate);
+        $plan = $this->plan($path, $by);
         if (! hash_equals($plan['token'], $token)) {
             throw AttendanceRefused::because(AttendanceRefusal::PreviewStale);
         }
@@ -134,9 +137,11 @@ final class SiteWorkbookImport
      *
      * @return Plan
      */
-    private function plan(string $path, bool $mayCreate): array
+    private function plan(string $path, ?Authenticatable $by): array
     {
         [$site, $from, $to, $rows] = $this->read($path);
+        // Spec «Endpoints and permissions»: only a caller holding employee.create at all scope creates a new day laborer (W5).
+        $mayCreate = $by !== null && $this->authorize->decide($by, 'employee.create')->allows(Scope::All);
         $names = [];
         $listed = [];
         foreach ($this->template->names($site['id'], $from, $to, $site['managers']) as $n) {
@@ -162,18 +167,21 @@ final class SiteWorkbookImport
             $employee = $names[(string) $name] ?? null;
             [$new, $matched, $person] = [null, false, null];     // a new laborer's national ID; found by national ID; the person's refusal
             // W4, W5: a text that is no entry and not shaped like one (`… · <digits>`) is a new day laborer, known by their national ID.
-            // Columns G–J of an entry's row are never read.
+            // Columns G–J of an entry's row are never read. Without employee.create at all scope the ID is never looked up, so the
+            // file cannot ask whose it is (security review L2).
             if ($employee === null && $name !== null && $status !== null && preg_match('/ · \d+$/Du', $name) !== 1) {
-                if ($nationalId === null || preg_match('/^\d{14}$/D', $nationalId) !== 1) {
+                if (! $mayCreate) {
+                    $person = 'new_laborer_not_allowed';
+                } elseif ($nationalId === null || preg_match('/^\d{14}$/D', $nationalId) !== 1) {
                     $person = 'national_id_required';
                 } else {
                     $holder = array_key_exists($nationalId, $holders) ? $holders[$nationalId] : ($holders[$nationalId] = $this->roster->idWithNationalId($nationalId));
                     $employee = $holder === null ? null : $listed[$holder] ?? null;
                     $matched = $employee !== null;
+                    $firstName = $firstNames[$nationalId] ??= $name;
                     $person = match (true) {
                         $holder !== null => $matched ? null : 'national_id_taken',
-                        ($firstNames[$nationalId] ??= $name) !== $name => 'national_id_name_mismatch',
-                        ! $mayCreate => 'new_laborer_not_allowed',
+                        $firstName !== $name => 'national_id_name_mismatch',
                         default => null,
                     };
                     $new = $holder === null && $person === null ? $nationalId : null;
@@ -449,14 +457,16 @@ final class SiteWorkbookImport
      */
     private function read(string $path): array
     {
-        $sheets = $this->reader->sheets($path, $this->maxRows, [2, 3]);    // C and D: the arrival and departure (W8)
+        // C and D: the arrival and departure (W8); at most a day sheet per date and `lists` (security review A2).
+        $sheets = $this->reader->sheets($path, $this->maxRows, [2, 3], SiteWorkbookTemplate::MAX_DAYS + 1);
         $lists = array_column($sheets, 'rows', 'name')['lists'] ?? throw self::mismatch();
-        [$siteId, $from, $to] = [$lists[1][3] ?? null, $lists[2][3] ?? null, $lists[3][3] ?? null];
+        $siteId = $lists[1][3] ?? null;
+        $dates = SiteWorkbookTemplate::dates($lists[2][3] ?? null, $lists[3][3] ?? null);
         // Str::isUuid first: Postgres answers a malformed uuid with a query error.
-        if ($siteId === null || ! Str::isUuid($siteId) || ! self::isDate($from) || ! self::isDate($to) || $from > $to
-            || (new DateTimeImmutable($from))->diff(new DateTimeImmutable($to))->days >= SiteWorkbookTemplate::MAX_DAYS) {
+        if ($siteId === null || ! Str::isUuid($siteId) || $dates === null) {
             throw self::mismatch();
         }
+        [$from, $to] = [$dates[0], $dates[count($dates) - 1]];
         try {
             /** @var array{id: string, name_ar: string, name_en: ?string, kind: string, managers: list<array{id: string, name: string}>} $site */
             $site = $this->sites->show($siteId);
@@ -468,7 +478,7 @@ final class SiteWorkbookImport
         }
 
         $byDayMonth = [];
-        foreach (SiteWorkbookTemplate::dates($from, $to) as $d) {
+        foreach ($dates as $d) {
             $byDayMonth[substr($d, 8, 2).'-'.substr($d, 5, 2)] = $d;       // dd-mm; at most 31 days never repeat one
         }
         $header = array_map(XlsxAttendanceReader::text(...), SiteWorkbookTemplate::columns());
@@ -537,14 +547,6 @@ final class SiteWorkbookImport
     private static function passes(string $value, array $rules): bool
     {
         return Validator::make(['value' => $value], ['value' => $rules])->passes();
-    }
-
-    /** @phpstan-assert-if-true string $value */
-    private static function isDate(?string $value): bool
-    {
-        $date = $value === null ? false : DateTimeImmutable::createFromFormat('!Y-m-d', $value);
-
-        return $date !== false && $date->format('Y-m-d') === $value;
     }
 
     /**

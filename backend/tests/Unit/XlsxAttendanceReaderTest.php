@@ -41,7 +41,7 @@ class XlsxAttendanceReaderTest extends TestCase
         $this->assertSame([
             ['name' => 'A', 'visible' => true, 'rows' => [1 => ['title'], 2 => ['head'], 3 => ['x', 'y']]],
             ['name' => 'lists', 'visible' => false, 'rows' => [1 => ['l1'], 2 => ['l2'], 3 => ['l3']]],
-        ], (new XlsxAttendanceReader)->sheets($path, 2000, []));
+        ], (new XlsxAttendanceReader)->sheets($path, 2000, [], 32));
     }
 
     public function test_a_visible_lists_is_still_read_as_lists_to_row_3(): void
@@ -50,7 +50,7 @@ class XlsxAttendanceReaderTest extends TestCase
 
         $this->assertSame(
             ['name' => 'lists', 'visible' => true, 'rows' => [1 => ['l1'], 2 => ['l2'], 3 => ['l3']]],
-            (new XlsxAttendanceReader)->sheets($path, 2, [])[1],
+            (new XlsxAttendanceReader)->sheets($path, 2, [], 32)[1],
         );
     }
 
@@ -59,7 +59,7 @@ class XlsxAttendanceReaderTest extends TestCase
         $date = new NumericCell(46333);   // 2026-11-07 retyped as a General number
         $path = $this->xlsx([['A', true, [['title']]], ['lists', false, [['x', '', '', 'site'], ['', '', '', $date], ['', '', '', $date]]]]);
 
-        $this->assertSame([2 => [null, null, null, '2026-11-07'], 3 => [null, null, null, '2026-11-07']], array_slice((new XlsxAttendanceReader)->sheets($path, 2000, [])[1]['rows'], 1, null, true));
+        $this->assertSame([2 => [null, null, null, '2026-11-07'], 3 => [null, null, null, '2026-11-07']], array_slice((new XlsxAttendanceReader)->sheets($path, 2000, [], 32)[1]['rows'], 1, null, true));
     }
 
     public function test_time_columns_read_what_excel_makes_of_a_typed_time(): void
@@ -78,7 +78,7 @@ class XlsxAttendanceReaderTest extends TestCase
         }
         $path = $this->xlsx([['A', true, $rows], ['lists', false, [['x']]]]);
 
-        $read = (new XlsxAttendanceReader)->sheets($path, 2000, [2, 3])[0]['rows'];
+        $read = (new XlsxAttendanceReader)->sheets($path, 2000, [2, 3], 32)[0]['rows'];
 
         // A negative duration is not a time: it reads as before, and the import refuses it.
         $this->assertSame(['09:00', '09:30', '08:05', '9:05', '0 08:05:00'], array_map(fn (array $cells) => $cells[2], array_slice($read, 2)));
@@ -91,11 +91,11 @@ class XlsxAttendanceReaderTest extends TestCase
         $reader = new XlsxAttendanceReader;
 
         $two = $this->xlsx([['A', true, [['title'], ['head'], ['r3'], ['r4']]], $lists]);
-        $this->assertCount(2, $reader->sheets($two, 2, []));
+        $this->assertCount(2, $reader->sheets($two, 2, [], 32));
 
         $three = $this->xlsx([['A', true, [['title'], ['head'], ['r3'], ['r4'], ['r5']]], $lists]);
         try {
-            $reader->sheets($three, 2, []);
+            $reader->sheets($three, 2, [], 32);
             $this->fail('three data rows passed a cap of two');
         } catch (AttendanceRefused $e) {
             $this->assertSame(AttendanceRefusal::TooManyRows, $e->reason);

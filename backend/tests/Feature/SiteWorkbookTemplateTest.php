@@ -283,10 +283,13 @@ class SiteWorkbookTemplateTest extends TestCase
             'a bad date' => ['bad_date', 'from'],
             'from after to' => ['reversed', 'to'],
             '32 days' => ['32_days', 'to'],
+            // Security review A1: a range ending 9999-12-31 ran its dates on past the year 9999 until memory ran out.
+            'a range in the year 9999' => ['9999', 'to'],
+            'a range starting before 2000' => ['before_2000', 'to'],
         ];
     }
 
-    /** W1, spec «Endpoints and permissions»: a live, active work site and at most 31 days; anything else is 422. */
+    /** W1, spec «Endpoints and permissions»: a live, active work site and at most 31 days within the years 2000–2100; anything else is 422. */
     #[DataProvider('badRequests')]
     public function test_the_download_refuses_a_bad_site_or_range(string $case, string $field): void
     {
@@ -299,12 +302,14 @@ class SiteWorkbookTemplateTest extends TestCase
             'bad_date' => $this->params('2026-02-30', '2026-03-02'),
             'reversed' => $this->params('2026-11-13', '2026-11-07'),
             '32_days' => $this->params('2026-11-01', '2026-12-02'),
+            '9999' => $this->params('9999-12-01', '9999-12-31'),
+            'before_2000' => $this->params('1999-12-31', '2000-01-02'),
         };
 
         $response = $this->getJson('/api/v1/attendance/site-workbook?'.$query, ['Accept-Language' => 'en'])
             ->assertStatus(422)->assertJsonPath('error.code', 'validation_failed')->assertJsonPath('error.details.0.field', $field);
-        if ($case === '32_days') {
-            $response->assertJsonPath('error.details.0.message', 'The range is at most 31 days.');
+        if (in_array($case, ['32_days', '9999', 'before_2000'], true)) {
+            $response->assertJsonPath('error.details.0.message', 'The range is at most 31 days, within the years 2000 to 2100.');
         }
     }
 
