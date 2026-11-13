@@ -6,8 +6,13 @@ namespace App\Modules\Documents\Application;
 
 final class ManualFormDefinitions
 {
+    public static function showsPay(string $form): bool
+    {
+        return self::all()[$form]['shows_pay'] ?? false;
+    }
+
     /**
-     * @return array<string, array{view: view-string, audit_field_names_only?: bool, candidate?: bool, fields: array<string, array{input: string, rules: list<string>}>}>
+     * @return array<string, array{view: view-string, audit_field_names_only?: bool, candidate?: bool, shows_pay?: bool, fields: array<string, array{input: string, rules: list<string>}>}>
      */
     public static function all(): array
     {
@@ -52,9 +57,24 @@ final class ManualFormDefinitions
                     'warning_explanation_request' => ['input' => 'textarea', 'rules' => ['required', 'string', 'max:200']],
                 ],
             ],
+            'end_of_service' => [
+                'view' => 'hr-forms.end-of-service',
+                'shows_pay' => true,
+                'audit_field_names_only' => true,
+                'fields' => [
+                    'job_title' => ['input' => 'text', 'rules' => ['required', 'string', 'max:160']],
+                    'issued_on' => ['input' => 'date', 'rules' => ['required', 'date_format:Y-m-d']],
+                    'last_working_day' => ['input' => 'date', 'rules' => ['required', 'date_format:Y-m-d']],
+                    'last_total_wage' => ['input' => 'text', 'rules' => ['required', 'string', 'regex:/^(?:0|[1-9][0-9]{0,11})(?:[.][0-9]{1,2})?$/D']],
+                    'wage_month' => ['input' => 'month', 'rules' => ['required', 'date_format:Y-m']],
+                    'final_amount' => ['input' => 'text', 'rules' => ['nullable', 'string', 'regex:/^(?:0|[1-9][0-9]{0,11})(?:[.][0-9]{1,2})?$/D']],
+                    'override_reason' => ['input' => 'textarea', 'rules' => ['nullable', 'required_with:final_amount', 'string', 'max:500']],
+                ],
+            ],
             'job_offer' => [
                 'view' => 'hr-forms.job-offer',
                 'candidate' => true,
+                'shows_pay' => true,
                 'audit_field_names_only' => true,
                 'fields' => [
                     'issued_on' => ['input' => 'date', 'rules' => ['required', 'date_format:Y-m-d']],

@@ -157,7 +157,7 @@ final class ExperienceCertificates
     {
         return DB::table('hr_form_exports')->where('employee_id', $employee)->whereNull('deleted_at')
             ->when($form !== null, fn ($query) => $query->where('form_type', $form))
-            ->when(! $includePay, fn ($query) => $query->where('form_type', '!=', AttendanceRequestForms::ADVANCE))
+            ->when(! $includePay, fn ($query) => $query->whereNotIn('form_type', [AttendanceRequestForms::ADVANCE, ...array_keys(array_filter(ManualFormDefinitions::all(), fn (array $definition): bool => $definition['shows_pay'] ?? false))]))
             ->orderByDesc('created_at')->orderByDesc('id')->paginate(25);
     }
 

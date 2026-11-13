@@ -324,3 +324,5 @@ How an uploaded attendance template (the grid: one row per employee, one column 
 ## Not calculated by the system
 - Bonuses, negligence deductions, penalties, lateness exemptions, insurance shares and income tax: entered by HR.
 - Bank transfers: HR only marks "paid" and writes how the money was received.
+
+The end-of-service print form suggests half the last total monthly wage for each completed year of service. Partial years contribute zero. For a 29 February hire, a non-leap-year anniversary completes on 1 March. Keep six decimal places in the snapshot and round to two for display. HR may enter a final amount with a reason. The whole-years rule is pending client confirmation.

@@ -7,7 +7,7 @@ import { useAuth } from '@/lib/auth'
 import { useApi, useList, useSave } from '@/lib/query'
 import { download, ExportPages } from './hr-forms'
 
-type Field = { name: string; input: 'text' | 'date' | 'time' | 'textarea' | 'checkbox'; required: boolean; max: number | null }
+type Field = { name: string; input: 'text' | 'date' | 'month' | 'time' | 'textarea' | 'checkbox'; required: boolean; max: number | null }
 type Definition = { type: string; fields: Field[] }
 
 export function ManualHrForms({ employee }: { employee: Row }) {

@@ -4,11 +4,16 @@ declare(strict_types=1);
 
 // The field labels and the custom messages: Laravel merges this over the framework's English messages.
 return [
+    'end_of_service_last_day' => 'The last working day must be on or after the hire date and no more than one year from today.',
+    'end_of_service_wage_month' => 'The wage month cannot be after the last working day’s month.',
+    'end_of_service_wage' => 'The last total monthly wage must be greater than zero.',
+
     'custom' => [
         'end_date' => ['after_or_equal' => 'The To date must be on or after the From date.'],
         'phone' => ['regex' => 'The phone must be an Egyptian mobile number: 11 digits starting with 010, 011, 012 or 015.'],
     ],
     'attributes' => [
+        'override_reason' => 'override reason',
         'monthly_salary' => 'monthly salary',
         'name_ar' => 'Arabic name',
         'name_en' => 'English name',

@@ -30,7 +30,8 @@ final class ManualHrFormController
         abort_if($candidate && (! $this->pay->canViewPay($request->user()) || RequestScope::ownerId($request) !== null), 403);
         $forms = [];
         foreach (ManualFormDefinitions::all() as $type => $definition) {
-            if (($definition['candidate'] ?? false) !== $candidate) {
+            if (($definition['candidate'] ?? false) !== $candidate
+                || (ManualFormDefinitions::showsPay($type) && ! $this->pay->canViewPay($request->user()))) {
                 continue;
             }
             $fields = [];
@@ -75,6 +76,7 @@ final class ManualHrFormController
 
     private function generate(Request $request, string $form, ?string $employee): JsonResponse
     {
+        abort_if(ManualFormDefinitions::showsPay($form) && ! $this->pay->canViewPay($request->user()), 403);
         $definition = ManualFormDefinitions::all()[$form];
         $data = $request->validate([
             'idempotency_key' => ['required', 'uuid'],
@@ -90,6 +92,7 @@ final class ManualHrFormController
     {
         $row = $this->exports->find($export);
         abort_unless($row->form_type === $form, 404);
+        abort_if(ManualFormDefinitions::showsPay($form) && ! $this->pay->canViewPay($request->user()), 403);
         if (ManualFormDefinitions::all()[$form]['candidate'] ?? false) {
             $this->requireCandidateAccess($request);
         } else {

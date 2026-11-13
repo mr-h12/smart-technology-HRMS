@@ -69,6 +69,12 @@ try {
                 'job_title' => 'مهندسة اختبار', 'monthly_salary' => '12345.6', 'evaluation_months' => 4,
                 'reply_deadline' => '2027-02-05', 'start_date' => '2027-02-08',
             ], null);
+        } elseif (getenv('HRMS_SMOKE_FORM') === 'end-of-service') {
+            Auth::setUser($hr);
+            $row = app(ManualHrForms::class)->create('end_of_service', $employee, $hr->id, (string) Str::uuid7(), [
+                'job_title' => 'مهندسة اختبار', 'last_working_day' => '2026-10-25', 'issued_on' => '2026-10-26',
+                'last_total_wage' => '12345.67', 'wage_month' => '2026-10',
+            ], null);
         } elseif ($departurePermit) {
             Auth::setUser($hr);
             $row = app(ManualHrForms::class)->create('leave_permit', $employee, $hr->id, (string) Str::uuid7(), [

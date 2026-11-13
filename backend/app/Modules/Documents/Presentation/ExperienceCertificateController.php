@@ -56,7 +56,10 @@ final class ExperienceCertificateController
         $type = $request->query('form_type');
         $form = is_string($type) && ($type === 'experience_certificate' || isset(ManualFormDefinitions::all()[$type])) ? $type : null;
 
-        return self::list($request, $this->certificates->history($employee, $form, $this->advances->canViewPay($request->user())));
+        $canViewPay = $this->advances->canViewPay($request->user());
+        abort_if($form !== null && ManualFormDefinitions::showsPay($form) && ! $canViewPay, 403);
+
+        return self::list($request, $this->certificates->history($employee, $form, $canViewPay));
     }
 
     public function awaitingApproval(Request $request): JsonResponse
@@ -118,7 +121,7 @@ final class ExperienceCertificateController
     private function scoped(Request $request, string $export): stdClass
     {
         $row = $this->certificates->find($export);
-        abort_if(($row->form_type === AttendanceRequestForms::ADVANCE || (ManualFormDefinitions::all()[$row->form_type]['candidate'] ?? false)) && ! $this->advances->canViewPay($request->user()), 403);
+        abort_if(($row->form_type === AttendanceRequestForms::ADVANCE || ManualFormDefinitions::showsPay((string) $row->form_type)) && ! $this->advances->canViewPay($request->user()), 403);
         $scope = RequestScope::ownerId($request);
         abort_if($scope !== null && ($row->employee_id === null || ! $this->employees->isManagedBy((string) $row->employee_id, $scope)), 404);
 

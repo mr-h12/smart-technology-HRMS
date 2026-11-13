@@ -1322,7 +1322,12 @@
         "monthly_salary": "Monthly salary",
         "evaluation_months": "Evaluation period in months",
         "reply_deadline": "Reply deadline",
-        "start_date": "Start date"
+        "start_date": "Start date",
+        "last_working_day": "Last working day",
+        "last_total_wage": "Last total monthly wage",
+        "wage_month": "Wage month",
+        "final_amount": "Final amount if overriding",
+        "override_reason": "Override reason"
       },
       "early_leave_request": "Early Departure Request",
       "resignation": "Resignation",
@@ -1330,12 +1335,14 @@
       "notices": {
         "warning_notice": "Printing only. This creates no disciplinary record, deduction or payroll input and makes no changes to employee records.",
         "sim_receipt": "Printing only. This creates no custody or asset record and leaves employee records unchanged.",
-        "job_offer": "Printing only. This creates no employee, contract, or pay record."
+        "job_offer": "Printing only. This creates no employee, contract, or pay record.",
+        "end_of_service": "Printing only. This creates no payroll input, payment, or ledger entry and does not end employment or change employee status."
       },
       "mission_permit": "Mission Permit",
       "leave_permit": "Departure Permit",
       "sim_receipt": "SIM Receipt",
-      "job_offer": "Job Offer"
+      "job_offer": "Job Offer",
+      "end_of_service": "End-of-Service Gratuity"
     },
     "leaveRequest": "Leave request PDF",
     "notificationMethod": "Notification method",

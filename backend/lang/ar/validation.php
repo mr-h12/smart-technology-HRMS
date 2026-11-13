@@ -3,6 +3,10 @@
 declare(strict_types=1);
 
 return [
+    'end_of_service_last_day' => 'يجب أن يكون آخر يوم عمل في تاريخ التعيين أو بعده، وفي غضون سنة من اليوم.',
+    'end_of_service_wage_month' => 'يجب ألا يتجاوز شهر الأجر شهر آخر يوم عمل.',
+    'end_of_service_wage' => 'يجب أن يكون آخر أجر شهري شامل أكبر من صفر.',
+
     'accepted' => 'يجب قبول :attribute.',
     'accepted_if' => 'يجب قبول :attribute في حالة :other يساوي :value.',
     'active_url' => 'حقل :attribute لا يُمثّل رابطًا صحيحًا.',
@@ -164,6 +168,7 @@ return [
     ],
     // Field labels; equal to the frontend's ar.json wording.
     'attributes' => [
+        'override_reason' => 'سبب التعديل',
         'monthly_salary' => 'الراتب الشهري',
         'name_ar' => 'الاسم بالعربية',
         'name_en' => 'الاسم بالإنجليزية',
