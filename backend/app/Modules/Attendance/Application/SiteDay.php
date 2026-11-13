@@ -173,6 +173,8 @@ final class SiteDay
                     ! $window && ! self::isOpenHere($stored, $siteId, $type) => [AttendanceRefusal::OutsideManagerWindow, ['until' => $settings['manager_yesterday_until']]],
                     ! $window && ! self::onlyDeparture($row, $stored, $siteId) => [AttendanceRefusal::DepartureOnly, []],
                     self::hrDay($stored) => [AttendanceRefusal::HrDay, []],
+                    // an HR-approved advance stays on its work day: the manager may still add the departure, never clear or move the day
+                    $stored['advance_amount'] !== null && ($clear || $target !== $stored['site_id']) => [AttendanceRefusal::HrDay, []],
                     isset($open[$e['id']]) => [AttendanceRefusal::OpenEarlierDay, ['date' => $open[$e['id']]['date']]],
                     $clear && ($stored['state'] !== 'stored' || ($stored['site_id'] !== $siteId && ! in_array($stored['site_id'], $allowedLeave, true))) => [AttendanceRefusal::ClearNotAllowed, []],
                     ! $clear && $target !== $siteId && ! in_array($target, $allowedLeave, true) => [AttendanceRefusal::SiteNotForManager, []],

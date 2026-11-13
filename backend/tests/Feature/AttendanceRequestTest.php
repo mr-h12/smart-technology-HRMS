@@ -80,6 +80,24 @@ class AttendanceRequestTest extends TestCase
         $this->assertSame('250.500000', $this->day()->advance_amount);
     }
 
+    public function test_the_site_manager_cannot_clear_or_move_a_day_holding_an_approved_advance(): void
+    {
+        $leave = $this->leaveTypes();
+        $id = $this->save('16:00', null, ['advance_request' => '250'])->assertOk()->json('data.rows.0.requests.advance.id');
+        $this->signIn('hr');
+        $this->approve($id, 1)->assertOk();
+
+        $this->actingAs($this->manager, 'api');
+        foreach ([['clear' => true], ['site_id' => $leave['absent']]] as $change) {
+            $this->postJson('/api/v1/attendance/site-day', [
+                'site_id' => $this->site, 'date' => self::DATE,
+                'rows' => [['employee_id' => $this->worker, 'version' => 2, ...$change]],
+            ])->assertStatus(422)->assertJsonPath('error.code', 'hr_day');
+        }
+        $this->assertSame([$this->site, '250.000000'], [$this->day()->site_id, $this->day()->advance_amount]);
+        $this->assertNull($this->day()->deleted_at);
+    }
+
     public function test_a_revised_advance_makes_the_printed_requests_previous_revision_stale(): void
     {
         $saved = $this->save(null, null, ['advance_request' => '200'])->assertOk();
