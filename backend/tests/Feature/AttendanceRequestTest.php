@@ -123,7 +123,7 @@ class AttendanceRequestTest extends TestCase
         ]);
     }
 
-    public function test_a_locked_period_blocks_both_decisions(): void
+    public function test_a_locked_period_blocks_approval_but_not_refusal(): void
     {
         $this->leaveTypes();
         $id = $this->save('16:00', null, ['advance_request' => '250'])->assertOk()->json('data.rows.0.requests.advance.id');
@@ -132,8 +132,10 @@ class AttendanceRequestTest extends TestCase
             'group' => 'permanent_worker', 'period_start' => '2026-09-26', 'confirm_missing' => true,
         ])->assertCreated();
         $this->approve($id, 1)->assertStatus(423);
-        $this->postJson("/api/v1/attendance/requests/{$id}/refuse", ['version' => 1, 'reason' => 'Test'])->assertStatus(423);
         $this->assertDatabaseHas('attendance_requests', ['id' => $id, 'status' => 'pending', 'version' => 1]);
+        $this->postJson("/api/v1/attendance/requests/{$id}/refuse", ['version' => 1, 'reason' => 'Test'])->assertOk();
+        $this->assertDatabaseHas('attendance_requests', ['id' => $id, 'status' => 'refused', 'version' => 2]);
+        $this->assertNull($this->day()->advance_amount);
     }
 
     /** @param array<string, mixed> $extra */

@@ -102,12 +102,13 @@ final class AttendanceDays
     /** Apply an HR decision while the employee is locked by AttendanceRequests. */
     public function decideRequest(AttendanceRequest $request, bool $approve): void
     {
-        $date = (string) $request->date;
-        $employee = $this->roster->find((string) $request->employee_id) ?? throw new ConcurrencyConflict;
-        [$type, $day] = $this->guard($employee, $date);
+        // a refusal leaves the day untouched, so HR may refuse a pending request even in a locked period
         if (! $approve) {
             return;
         }
+        $date = (string) $request->date;
+        $employee = $this->roster->find((string) $request->employee_id) ?? throw new ConcurrencyConflict;
+        [$type, $day] = $this->guard($employee, $date);
         if ($day === null || $day->trashed() || $day->site_id !== $request->site_id) {
             throw new ConcurrencyConflict;
         }
