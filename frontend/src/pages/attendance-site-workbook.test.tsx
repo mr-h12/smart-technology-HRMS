@@ -66,7 +66,8 @@ test('landing on by=site shows the site workbook without asking for a period', a
 test('the per-site switch needs both attendance.view.all and attendance.edit.all, else by=site is per type', async () => {
   mockFetch(routes)
   for (const p of [['attendance.view.own', 'attendance.edit.own'], ['attendance.view.all', 'attendance.edit.own'], ['attendance.view.own', 'attendance.edit.all']]) {
-    const view = renderWithAuth(<AttendancePage />, p, { path: '/attendance?group=engineer&tab=import&by=site&period=2026-09-26' })
+    // no period in the URL: the per-type template button shows only once the period request answers, which per site skips
+    const view = renderWithAuth(<AttendancePage />, p, { path: '/attendance?group=engineer&tab=import&by=site' })
     expect(await screen.findByRole('button', { name: 'تنزيل القالب' })).toBeInTheDocument()
     expect(screen.getByRole('combobox', { name: 'المجموعة' })).toBeInTheDocument()
     expect(screen.queryByRole('tab', { name: 'حسب الموقع' })).not.toBeInTheDocument()
@@ -111,6 +112,31 @@ test.each([
   expect(screen.getByLabelText('إلى تاريخ')).toHaveValue(to)
 })
 
+test('the 15th still gives the 1st to the 15th', () => {
+  vi.useFakeTimers({ toFake: ['Date'] })
+  vi.setSystemTime(new Date('2026-11-15T10:00:00Z'))
+  mockFetch(routes)
+  renderWithAuth(<SiteWorkbookTab />, perms)
+  expect(screen.getByLabelText('من تاريخ')).toHaveValue('2026-11-01')
+  expect(screen.getByLabelText('إلى تاريخ')).toHaveValue('2026-11-15')
+})
+
+test('a download refusal goes away once HR changes the site or the dates', async () => {
+  onThe12th()
+  const user = userEvent.setup()
+  mockFetch({ ...routes, 'GET /api/v1/attendance/site-workbook': () => json(422, { error: { code: 'validation_failed', message: 'The selected site is invalid.', details: [] } }) })
+  renderWithAuth(<SiteWorkbookTab />, perms)
+  await pickSite(user)
+  await user.click(screen.getByRole('button', { name: 'تنزيل ملف الموقع' }))
+  expect(await screen.findByRole('alert')).toHaveTextContent('The selected site is invalid.')
+  fireEvent.change(screen.getByLabelText('إلى تاريخ'), { target: { value: '2026-11-14' } })
+  expect(screen.queryByRole('alert')).not.toBeInTheDocument()
+  await user.click(screen.getByRole('button', { name: 'تنزيل ملف الموقع' }))
+  expect(await screen.findByRole('alert')).toBeInTheDocument()
+  await pickSite(user, 'Site-2')
+  expect(screen.queryByRole('alert')).not.toBeInTheDocument()
+})
+
 test('a reversed range or one over 31 days disables the download and says why', async () => {
   onThe12th()
   const user = userEvent.setup()
@@ -124,6 +150,10 @@ test('a reversed range or one over 31 days disables the download and says why', 
   fireEvent.change(to, { target: { value: '2026-10-31' } })
   expect(download).toBeDisabled()
   expect(to).toHaveAccessibleDescription('تاريخ النهاية قبل تاريخ البداية.')
+
+  fireEvent.change(to, { target: { value: '2026-11-01' } }) // one day: from = to
+  expect(download).toBeEnabled()
+  expect(to).not.toHaveAccessibleDescription()
 
   fireEvent.change(to, { target: { value: '2026-12-01' } }) // 31 days, both ends counted
   expect(download).toBeEnabled()
@@ -215,15 +245,22 @@ test('the preview shows the file\'s site and range, the changes with late and ov
   expect(within(changes).getAllByRole('row')).toHaveLength(9) // the head and 8 changes
   const late = rowWith(changes, 'Engineer-2')
   expect(within(late).getByText(WED).tagName).toBe('BDI')
-  expect(values(late).slice(-4)).toEqual(['30', '60', '—', '—'])
-  expect(values(rowWith(changes, 'Engineer-1')).slice(-2)).toEqual(['500.00', 'سلفة تجربة'])
+  expect(values(late)).toHaveLength(5) // sheet · row, employee, current value, new value, advance
+  expect(values(late)[3]).toContain('دقائق التأخير: 30 · دقائق الإضافي: 60') // late and overtime under the new value
+  const advance = values(rowWith(changes, 'Engineer-1'))
+  expect(advance.at(-1)).toBe('500.00')
+  expect(advance[3]).toContain('ملاحظة: سلفة تجربة') // the note under the new value
   expect(rowWith(changes, 'Laborer-1').textContent).toContain('برج العرب') // the recorded day it replaces
 
   const laborers = screen.getByRole('table', { name: 'عمال يومية جدد' })
   const hassan = rowWith(laborers, HASSAN)
   expect(within(hassan).getByText('29501010212345')).toHaveAttribute('dir', 'ltr')
   expect(within(hassan).getByText('01012345678')).toHaveAttribute('dir', 'ltr')
-  expect(values(hassan)).toEqual([HASSAN, '29501010212345', '01012345678', 'العامرية', 'ذكر', '350.00', '2026-11-03', '2'])
+  // gender, residence and mobile under the name; the days under the first day
+  for (const text of ['ذكر', 'محل الإقامة: العامرية', 'الأيام: 2']) expect(within(hassan).getByText(text)).toBeInTheDocument()
+  expect(within(hassan).getByText('01012345678').parentElement).toHaveTextContent('رقم الهاتف: 01012345678')
+  expect(values(hassan).slice(1, 3)).toEqual(['29501010212345', '350.00'])
+  expect(values(hassan)[3]).toContain('2026-11-03')
   expect(values(rowWith(laborers, KARIM))).toContain('بدون أجر مقترح')
   expect(screen.getByText('يُنشأ كل منهم عند التأكيد بالنوع «ذكر»، ويمكن تغييره من صفحة الموظف.')).toBeInTheDocument()
 
@@ -243,10 +280,10 @@ test('a day the file repeats with the same values says it becomes imported', asy
 test('late and overtime show a dash when the server sends none, and 0 when it sends 0', async () => {
   await previewed()
   const changes = screen.getByRole('table', { name: 'التغييرات' })
-  const lateOt = (text: string) => values(rowWith(changes, text)).slice(-4, -2)
-  expect(lateOt('Laborer-2')).toEqual(['0', '0'])
-  expect(lateOt('غ')).toEqual(['—', '—']) // a leave row
-  expect(lateOt('برج العرب')).toEqual(['—', '0']) // a replaced day whose arrival did not change
+  const newValue = (text: string) => values(rowWith(changes, text))[3]
+  expect(newValue('Laborer-2')).toContain('دقائق التأخير: 0 · دقائق الإضافي: 0')
+  expect(newValue('برج العرب')).toContain('دقائق التأخير: — · دقائق الإضافي: 0') // a replaced day whose arrival did not change
+  expect(newValue('غ')).not.toContain('دقائق') // a leave row has neither: no line at all, and never a 0
 })
 
 test('a new laborer\'s rows have no key or Employee ID, and one with no row saved shows 0 days', async () => {
@@ -256,7 +293,7 @@ test('a new laborer\'s rows have no key or Employee ID, and one with no row save
   expect(rows).toHaveLength(2)
   for (const r of rows) expect(within(r).getByText('جديد')).toBeInTheDocument()
   expect(error).not.toHaveBeenCalled() // no duplicate React keys
-  expect(values(rowWith(screen.getByRole('table', { name: 'عمال يومية جدد' }), KARIM)).at(-1)).toBe('0')
+  expect(within(rowWith(screen.getByRole('table', { name: 'عمال يومية جدد' }), KARIM)).getByText('الأيام: 0')).toBeInTheDocument()
 })
 
 test('confirm stays disabled until every conflict has a choice, and the set-all control sets them all', async () => {
@@ -268,6 +305,10 @@ test('confirm stays disabled until every conflict has a choice, and the set-all 
   const conflicts = screen.getByRole('table', { name: 'التعارضات' })
   expect(within(conflicts).getAllByRole('row')).toHaveLength(3)
   expect(rowWith(conflicts, 'Laborer-3').textContent).toContain('العلمين')
+  // the recorded day in full beside the file's, as HR decides here
+  expect(within(conflicts).getByRole('columnheader', { name: 'اليوم المسجّل' })).toBeInTheDocument()
+  expect(values(rowWith(conflicts, 'Laborer-1')).slice(1, 3)).toEqual(['برج العرب · 8:00 ص–5:00 م', 'Site-1 · 8:00 ص–4:00 م'])
+  expect(within(rowWith(conflicts, 'Laborer-1')).getByText(TUE)).toBeInTheDocument() // the sheet under the name: the person is the subject here
   const first = screen.getByRole('combobox', { name: 'إبقاء أو استبدال: Laborer-1، 2026-11-03' })
   const other = screen.getByRole('combobox', { name: 'إبقاء أو استبدال: Laborer-3، 2026-11-04' })
   expect(first).toHaveValue('')
@@ -396,4 +437,47 @@ test('with no active work site the picker says so', async () => {
   mockFetch({ 'GET /api/v1/sites': () => json(200, { data: [], meta: { pagination: { ...pagination, total: 0 } } }) })
   renderWithAuth(<SiteWorkbookTab />, perms)
   expect(await screen.findByText('لا توجد مواقع عمل نشطة. أضف موقعًا أو فعّله من صفحة المواقع.')).toBeInTheDocument()
+})
+
+test('names, codes, times and sheet references never break inside a word, and the tables keep to four or five columns', async () => {
+  await previewed()
+  const table = (name: string) => screen.getByRole('table', { name })
+  expect([['التغييرات', 5], ['التعارضات', 5], ['عمال يومية جدد', 4], ['الأخطاء', 4]].map(([n]) => within(table(n as string)).getAllByRole('columnheader').length)).toEqual([5, 4, 4, 4])
+  const late = rowWith(table('التغييرات'), 'Engineer-2')
+  for (const text of ['13', WED, '8:30 ص', '6:00 م']) expect(within(late).getByText(text)).toHaveClass('whitespace-nowrap')
+  // DataList lets a cell break anywhere; a name may wrap only between its words
+  expect(within(late).getByText('Engineer-2').closest('.wrap-normal')).not.toBeNull()
+  expect(within(rowWith(table('عمال يومية جدد'), HASSAN)).getByText(HASSAN).closest('.wrap-normal')).not.toBeNull()
+})
+
+test.each([
+  ['unknown_employee', 'هذا الاسم ليس في قائمة الموقع لهذه الأيام (تغيّر أو نُقل أو أُرشف)؛ نزّل ملف الموقع من جديد.'],
+  ['duplicate_row', 'هذا الموظف مكرر في هذه الورقة.'],
+])('a %s row speaks of the site workbook, and the per-type wording stays', async (code, shown) => {
+  const shared = i18n.getFixedT('ar')(`attendance.import.error.${code}`)
+  await previewed({ ...noConflict, errors: [rowError(WED, 9, '2026-11-04', 'Worker-9 (عامل) · 99', code, 'server words')] })
+  expect(within(screen.getByRole('table', { name: 'الأخطاء' })).getByText(shown)).toBeInTheDocument()
+  expect(shared).not.toBe(shown) // the per-type tab keeps its own key
+})
+
+test('a new laborer whose rows were all refused is still offered to confirm', async () => {
+  await previewed({ ...noConflict, summary: { ...noConflict.summary, changes: 0, new_laborers: 1 }, changes: [], new_laborers: [preview.new_laborers[1]] })
+  expect(screen.getByRole('button', { name: 'تأكيد الحفظ' })).toBeEnabled()
+  expect(screen.queryByText('لا شيء للحفظ: كل صف في الملف محفوظ بالفعل أو به خطأ.')).not.toBeInTheDocument()
+})
+
+test('a file with no filled rows says so and offers no confirm', async () => {
+  await previewed({ ...preview, summary: { rows: 0, changes: 0, unchanged: 0, errors: 0, conflicts: 0, new_laborers: 0, advances_total: '0.000000' }, changes: [], new_laborers: [], errors: [] })
+  expect(screen.getByText('لا توجد صفوف مملوءة في الملف.')).toBeInTheDocument()
+  expect(screen.queryByText('لا شيء للحفظ: كل صف في الملف محفوظ بالفعل أو به خطأ.')).not.toBeInTheDocument()
+  expect(screen.queryByRole('button', { name: 'تأكيد الحفظ' })).not.toBeInTheDocument()
+})
+
+test('the changes mark the conflict row and a person matched by national ID', async () => {
+  const matched = listed('e20', 20, 'Laborer-4', 'day_laborer', '2026-11-04', WED, 9, day(), { matched_by_national_id: true })
+  await previewed({ ...preview, changes: [...preview.changes, matched] })
+  const changes = screen.getByRole('table', { name: 'التغييرات' })
+  expect(within(rowWith(changes, 'Laborer-4')).getByText('طابق بالرقم القومي')).toBeInTheDocument()
+  expect(within(rowWith(changes, 'Laborer-1')).getByText('تعارض')).toBeInTheDocument()
+  expect([within(changes).getAllByText('طابق بالرقم القومي').length, within(changes).getAllByText('تعارض').length]).toEqual([1, 1])
 })

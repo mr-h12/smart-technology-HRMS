@@ -828,7 +828,7 @@
         "new": "New",
         "conflicts": "Conflicts",
         "conflictsDesc": "These people already have a day recorded at another site on the same date. For each, keep the recorded day or replace it with the file's.",
-        "recorded": "Recorded site",
+        "recorded": "Recorded day",
         "inFile": "In the file",
         "choice": "Choice",
         "choiceFor": "Keep or replace: {{name}}, {{date}}",
@@ -840,15 +840,21 @@
         "newLaborersDesc": "Each is created on confirm as male; change it on the employee's page.",
         "noWage": "No proposed wage",
         "firstDate": "First day",
-        "days": "Days",
         "done": "{{saved}} · Unchanged: {{unchanged}} · Kept: {{kept}} · Errors: {{errors}}",
         "savedAdvances": "Advances on the saved rows: {{total}}",
         "added": "Day laborers added",
         "proposalSent": "Sent for approval",
         "noProposal": "No proposed wage: set it on the employee's page",
+        "empty": "The file has no filled rows.",
+        "lateOt": "Late minutes: {{late}} · Overtime minutes: {{ot}}",
+        "daysLine": "Days: {{days}}",
+        "matched": "Matched by national ID",
+        "conflict": "Conflict",
         "error": {
           "template_mismatch": "The file does not match a site workbook. Download a fresh one and fill it in.",
-          "too_many_rows": "A sheet in the file has more than {{max}} rows."
+          "too_many_rows": "A sheet in the file has more than {{max}} rows.",
+          "unknown_employee": "This name is not on the site's list for these dates (renamed, moved or archived); download the site workbook again.",
+          "duplicate_row": "This employee appears twice on this sheet."
         }
       },
       "error": {
