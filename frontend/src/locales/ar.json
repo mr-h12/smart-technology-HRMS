@@ -1319,5 +1319,35 @@
       "reasonRequired": "اكتب سبب القيمة البديلة.",
       "revertReasonRequired": "اكتب سبب الإرجاع."
     }
+  },
+  "hrForms": {
+    "leaveRequest": "نموذج طلب إجازة",
+    "notificationMethod": "طريقة التبليغ",
+    "managerOpinion": "رأي مدير القسم",
+    "substitute": "الموظف البديل",
+    "certificate": "شهادة خبرة",
+    "jobTitle": "المسمى الوظيفي",
+    "praise": "فقرة الإشادة (اختيارية)",
+    "generate": "إنشاء الملف",
+    "regenerate": "إعادة إنشاء الملف",
+    "cancel": "إلغاء",
+    "empty": "لا توجد شهادات للعرض",
+    "serial": "مسلسل {{serial}}",
+    "unsigned": "بدون توقيع",
+    "signed": "موقّعة",
+    "approvedViaViewAs": "اعتُمدت بالعرض بحساب آخر",
+    "pending": "جارٍ إنشاء الملف",
+    "ready": "جاهز",
+    "failed": "تعذر إنشاء الملف",
+    "download": "تنزيل الملف",
+    "retry": "إعادة المحاولة",
+    "approvals": "اعتماد النماذج",
+    "approve": "اعتماد وتوقيع",
+    "signature": "توقيعي",
+    "viewAsBlocked": "عرض التوقيع ورفعه غير متاحين أثناء العرض بحساب آخر.",
+    "signatureFile": "ملف التوقيع (بي إن جي أو جي بي إي جي، حتى ٢ ميجابايت)",
+    "upload": "رفع التوقيع",
+    "previous": "السابق",
+    "next": "التالي"
   }
 }

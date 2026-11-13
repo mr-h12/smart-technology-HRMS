@@ -1288,5 +1288,35 @@
       "reasonRequired": "Write the reason for the override.",
       "revertReasonRequired": "Write the reason for the revert."
     }
+  },
+  "hrForms": {
+    "leaveRequest": "Leave request PDF",
+    "notificationMethod": "Notification method",
+    "managerOpinion": "Department manager’s opinion",
+    "substitute": "Substitute employee",
+    "certificate": "Experience certificate",
+    "jobTitle": "Job title",
+    "praise": "Praise paragraph (optional)",
+    "generate": "Generate PDF",
+    "regenerate": "Regenerate PDF",
+    "cancel": "Cancel",
+    "empty": "No certificates to show",
+    "serial": "Serial {{serial}}",
+    "unsigned": "Unsigned",
+    "signed": "Signed",
+    "approvedViaViewAs": "Approved through View as",
+    "pending": "Generating PDF",
+    "ready": "Ready",
+    "failed": "PDF generation failed",
+    "download": "Download PDF",
+    "retry": "Retry",
+    "approvals": "Form approvals",
+    "approve": "Approve and sign",
+    "signature": "My signature",
+    "viewAsBlocked": "Signature preview and upload are unavailable in View as.",
+    "signatureFile": "Signature file (PNG or JPG, up to 2 MB)",
+    "upload": "Upload signature",
+    "previous": "Previous",
+    "next": "Next"
   }
 }

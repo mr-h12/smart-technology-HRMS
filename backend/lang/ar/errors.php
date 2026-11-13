@@ -3,6 +3,10 @@
 declare(strict_types=1);
 
 return [
+    'certificate_signature_required' => 'ارفع صورة توقيعك قبل اعتماد شهادة الخبرة.',
+    'certificate_employee_data' => 'أكمل بيانات الموظف المطلوبة لإصدار شهادة الخبرة.',
+    'signature_pixels' => 'صورة التوقيع يجب ألا تتجاوز أربعة ملايين بكسل.',
+    'signature_type' => 'صورة التوقيع لازم تكون PNG أو JPG.',
     'validation_failed' => 'البيانات المُرسلة غير صحيحة.',
     'not_found' => 'المورد غير موجود.',
     'unauthenticated' => 'يرجى تسجيل الدخول.',

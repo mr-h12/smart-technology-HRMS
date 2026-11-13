@@ -49,6 +49,8 @@ export const NAV: { group: string; items: { path: string; key: string; icon: Luc
       { path: '/site-day', key: 'nav.siteDay', icon: ClipboardCheck, abilities: ['attendance.record'] },
       { path: '/leave', key: 'nav.leave', icon: CalendarDays, abilities: ['leave.view'] },
       { path: '/wage-proposals', key: 'nav.wageProposals', icon: HandCoins, abilities: ['employee.approve_wage'] },
+      { path: '/hr-form-approvals', key: 'hrForms.approvals', icon: ScrollText, abilities: ['hr_forms.approve'] },
+      { path: '/my-signature', key: 'hrForms.signature', icon: UserCog, abilities: ['hr_signatures.manage'] },
       { path: '/team-fares', key: 'nav.teamFares', icon: Bus, abilities: ['fare.manage', 'employee.view.own'] },
       { path: '/payroll', key: 'nav.payroll', icon: Banknote, abilities: ['payroll.view'] },
     ],
