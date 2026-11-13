@@ -25,6 +25,7 @@ import { SITES, useApi, useList, useSave, WORK_SITES } from '@/lib/query'
 import { DayEditor } from './attendance-day'
 import { ImportTab } from './attendance-import'
 import { DaySheet } from './attendance-sheet'
+import { SiteWorkbookTab } from './attendance-site-workbook'
 import { NotFoundPage } from './pages'
 
 const GROUPS = ['office', 'engineer', 'permanent_worker', 'day_laborer']
@@ -58,8 +59,9 @@ function pickDate(s: string | null) {
 }
 
 /**
- * HR's attendance page, URL state `?group=&period=&date=&tab=&site=&q=&with_archived=` (site: all-scope attendance only, the sheet also takes `none`;
- * q: the grid's name or code search; with_archived=1: the grid's switch, attendance.edit.all only); the group defaults to engineers,
+ * HR's attendance page, URL state `?group=&period=&date=&tab=&site=&q=&with_archived=&by=` (site: all-scope attendance only, the sheet also takes `none`;
+ * q: the grid's name or code search; with_archived=1: the grid's switch, attendance.edit.all only; by=site: the import tab's site
+ * workbook, attendance.view.all and attendance.edit.all only, else per type); the group defaults to engineers,
  * the grid's period to the current one, the sheet's date to today.
  */
 export function AttendancePage() {
@@ -89,10 +91,14 @@ export function AttendancePage() {
   // HR brings those who left back to the grid to finish their last days; the header's missing count follows the grid
   const archivedSwitch = tab === 'grid' && can('attendance.edit.all')
   const withArchived = archivedSwitch && params.get('with_archived') === '1'
+  // the site workbook is HR's: the server refuses it to anyone holding attendance at own scope
+  const siteSwitch = can('attendance.view.all') && can('attendance.edit.all')
+  const bySite = tab === 'import' && siteSwitch && params.get('by') === 'site'
   // the sheet's period is the one holding its date; the grid's is the chosen one
   // the sheet keeps the last period while the next date's loads, so the header does not blink inside one period; a kept period
-  // of another group, or one not holding the date, is not current: the header shows loading and offers no arrows or lock until the real one arrives
-  const { data: kept, err } = useApi<Period>(allowed ? `/attendance/period?${new URLSearchParams(tab === 'sheet' ? { group: periodGroup, date } : { group: periodGroup, ...(chosen && { period_start: chosen }), ...(withArchived && { with_archived: '1' }) })}` : null, { keep: tab === 'sheet' })
+  // of another group, or one not holding the date, is not current: the header shows loading and offers no arrows or lock until the real one arrives;
+  // the site workbook has no group, so no period (nor its header line or lock)
+  const { data: kept, err } = useApi<Period>(allowed && !bySite ? `/attendance/period?${new URLSearchParams(tab === 'sheet' ? { group: periodGroup, date } : { group: periodGroup, ...(chosen && { period_start: chosen }), ...(withArchived && { with_archived: '1' }) })}` : null, { keep: tab === 'sheet' })
   const period = tab !== 'sheet' || (kept && kept.group === periodGroup && kept.start <= date && date <= kept.end) ? kept : undefined
   const start = chosen ?? period?.start // the grid follows the URL as soon as an arrow moves it
   const move = (to: string) => set(tab === 'sheet' ? { date: to } : { period: to })
@@ -148,6 +154,13 @@ export function AttendancePage() {
       )}
     </>
   )
+  // the import tab's per-type side: the chosen group's period template
+  const perType = (
+    <>
+      <Card className="overflow-hidden [&>:last-child]:border-b-0">{bar}</Card>
+      {start ? <ImportTab key={`${group}/${start}`} group={group} periodStart={start} /> : !err && <TableSkeleton rows={3} />}
+    </>
+  )
   // Lock is the grid's main action; on the sheet and import tabs their own action leads, so Lock and Reopen are alternatives
   const lockAction = period && !all && can('attendance.lock')
     ? period.is_locked
@@ -192,8 +205,16 @@ export function AttendancePage() {
         </TabsContent>
         {can('attendance.edit') && (
           <TabsContent value="import" className="space-y-4">
-            <Card className="overflow-hidden [&>:last-child]:border-b-0">{bar}</Card>
-            {start ? <ImportTab key={`${group}/${start}`} group={group} periodStart={start} /> : !err && <TableSkeleton rows={3} />}
+            {siteSwitch ? (
+              <Tabs value={bySite ? 'site' : 'type'} onValueChange={(v) => set({ by: v === 'site' ? v : null })}>
+                <TabsList>
+                  <TabsTrigger value="type">{t('attendance.import.byType')}</TabsTrigger>
+                  <TabsTrigger value="site">{t('attendance.import.bySite')}</TabsTrigger>
+                </TabsList>
+                <TabsContent value="type" className="space-y-4">{perType}</TabsContent>
+                <TabsContent value="site"><SiteWorkbookTab /></TabsContent>
+              </Tabs>
+            ) : perType}
           </TabsContent>
         )}
       </Tabs>
