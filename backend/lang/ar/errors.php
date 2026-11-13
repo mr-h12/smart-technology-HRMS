@@ -3,6 +3,10 @@
 declare(strict_types=1);
 
 return [
+    'certificate_signature_required' => 'ارفع صورة توقيعك قبل اعتماد شهادة الخبرة.',
+    'certificate_employee_data' => 'أكمل بيانات الموظف المطلوبة لإصدار شهادة الخبرة.',
+    'signature_pixels' => 'صورة التوقيع يجب ألا تتجاوز أربعة ملايين بكسل.',
+    'signature_type' => 'صورة التوقيع لازم تكون PNG أو JPG.',
     'validation_failed' => 'البيانات المُرسلة غير صحيحة.',
     'not_found' => 'المورد غير موجود.',
     'unauthenticated' => 'يرجى تسجيل الدخول.',
@@ -50,4 +54,8 @@ return [
         'permanent_worker' => 'عامل مثبت',
         'day_laborer' => 'عامل باليومية',
     ],
+    'advance_paper_date_type' => 'تاريخ القرار الورقي متاح فقط عند البت في طلب سلفة.',
+    'advance_paper_date_future' => 'لا يمكن أن يكون تاريخ القرار الورقي بعد اليوم بتوقيت القاهرة.',
+    'advance_paper_date_before_request' => 'لا يمكن أن يسبق تاريخ القرار الورقي تاريخ الطلب.',
+    'advance_paper_date_pending' => 'أدخل تاريخ القرار الورقي عند قبول طلب السلفة أو رفضه.',
 ];

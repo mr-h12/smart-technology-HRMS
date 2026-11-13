@@ -210,3 +210,14 @@ Certification that a leaving employee has returned all custody. It cannot be iss
 **End-of-service bonus** (مكافأة نهاية الخدمة):
 A one-time amount paid to a leaver, suggested by the system and set by HR.
 _Avoid_: gratuity
+
+## HR forms
+
+**Form serial** (الرقم المسلسل للنموذج):
+The number assigned within one form type. The unsigned and approved versions of a document share a serial. Regeneration issues a new serial.
+
+**Form snapshot** (نسخة النموذج):
+An immutable copy of an HR form and the values used to produce it. Approval creates a separate snapshot and retains the unsigned copy.
+
+**Signature image** (صورة التوقيع):
+An image an approver provides for their own signature. A form uses the version in force when the document was approved.

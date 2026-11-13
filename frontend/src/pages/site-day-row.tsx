@@ -1,10 +1,11 @@
 import { MoreHorizontal, StickyNote, UserMinus } from 'lucide-react'
 import { useId, useState } from 'react'
 import { useTranslation } from 'react-i18next'
-import { ErrorBanner, isHhmm, localName, type Row, TimeInput } from '@/components/form'
+import { AdvancePrint } from '@/components/AdvancePrint'
+import { asciiDigits, ErrorBanner, isHhmm, localName, type Row, TimeInput } from '@/components/form'
 import { Button } from '@/components/ui/button'
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu'
-import { Textarea } from '@/components/ui/input'
+import { Input, Textarea } from '@/components/ui/input'
 import { useSave } from '@/lib/query'
 import { arrivalDiff, changed, departureDiff, type Draft, type LeaveDayTypes, type Mark, MARKS, MORE, type SiteDayRow } from '@/lib/site-day'
 import { cn } from '@/lib/utils'
@@ -19,8 +20,8 @@ const PRESSED: Record<Mark, string> = {
 const leaveOf = (d: Draft | null, leave: LeaveDayTypes) => (d ? (Object.entries(leave).find(([, id]) => id === d.site_id)?.[0] ?? null) : null)
 
 /** One person: status buttons, then (when present) the arrival and the departure with its difference from the shift end. */
-export function PersonRow({ r, draft, siteId, leave, sites, set, removable, onRemoved, locked, onOpenDay }: {
-  r: SiteDayRow; draft: Draft | null; siteId: string; leave: LeaveDayTypes; sites: Row[]; set: (d: Draft | null) => void; removable: boolean; onRemoved: () => void; locked: boolean
+export function PersonRow({ r, draft, siteId, siteName, date, leave, sites, set, removable, onRemoved, locked, onOpenDay }: {
+  r: SiteDayRow; draft: Draft | null; siteId: string; siteName: string; date: string; leave: LeaveDayTypes; sites: Row[]; set: (d: Draft | null) => void; removable: boolean; onRemoved: () => void; locked: boolean
   onOpenDay: (date: string, site: string) => void
 }) {
   const { t, i18n } = useTranslation()
@@ -61,6 +62,10 @@ export function PersonRow({ r, draft, siteId, leave, sites, set, removable, onRe
   const arrival = draft?.in_time ?? null
   const late = present && isHhmm(arrival) ? arrivalDiff(arrival, r.shift.start) : null
   const missingOut = present && isHhmm(draft?.in_time ?? null) && !out
+  const [advanceOpen, setAdvanceOpen] = useState(false)
+  const advance = r.requests?.advance
+  const overtime = r.requests?.overtime
+  const editableAdvance = !!draft && present && !fixed && (!advance || advance.status === 'pending')
   const [noteOpen, setNoteOpen] = useState(false)
   const storedNote = r.day.state === 'stored' ? r.day.note : null
   const noteText = draft?.note !== undefined ? (draft.note ?? '') : (storedNote ?? '')
@@ -152,6 +157,22 @@ export function PersonRow({ r, draft, siteId, leave, sites, set, removable, onRe
               onChange={(e) => set({ ...draft, note: e.target.value })} className="mt-1" />
           )}
         </div>
+      )}
+      {(overtime || advance || editableAdvance) && (
+        <div className="mt-2 flex flex-wrap items-center gap-2">
+          {overtime && <span className="rounded-md bg-muted px-2 py-1 text-xs">{t('attendanceRequests.type.overtime')} · {t('attendanceRequests.minutes', { count: overtime.minutes ?? 0 })} · {t(`attendanceRequests.status.${overtime.status}`)}</span>}
+          {advance && <span className="rounded-md bg-muted px-2 py-1 text-xs">{t('attendanceRequests.type.advance')} · {t(advance.status === 'approved' ? 'attendanceRequests.paid' : `attendanceRequests.status.${advance.status}`)}</span>}
+          {editableAdvance && <Button type="button" variant="ghost" className="min-h-tap" aria-expanded={advanceOpen} onClick={() => setAdvanceOpen((open) => !open)}>{t('attendanceRequests.requestAdvance')}</Button>}
+          {advance?.amount && draft?.advance_request === undefined && <AdvancePrint id={advance.id} version={advance.version} name={name} code={r.employee.code} site={siteName} date={date} amount={advance.amount} />}
+        </div>
+      )}
+      {advanceOpen && editableAdvance && draft && (
+        <label className="mt-2 grid max-w-64 gap-1 text-sm">
+          {t('attendanceRequests.amount')}
+          <Input aria-label={t('attendanceRequests.amount')} dir="ltr" inputMode="decimal" maxLength={19} value={draft.advance_request === undefined ? advance?.amount ?? '' : draft.advance_request ?? ''}
+            onChange={(e) => set({ ...draft, advance_request: asciiDigits(e.target.value).trim() || null })} />
+          <span className="text-xs text-muted-foreground">{t('attendanceRequests.saveBeforePrint')}</span>
+        </label>
       )}
       {removeErr !== undefined && <div className="mt-2"><ErrorBanner err={removeErr} shown={[]} /></div>}
     </li>

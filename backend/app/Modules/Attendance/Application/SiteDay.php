@@ -6,6 +6,7 @@ namespace App\Modules\Attendance\Application;
 
 use App\Modules\Attendance\Domain\AttendanceRefusal;
 use App\Modules\Attendance\Domain\AttendanceRefused;
+use App\Modules\Attendance\Domain\DayRules;
 use App\Modules\Attendance\Domain\Employment;
 use App\Modules\Attendance\Domain\ManagerWindow;
 use App\Modules\Attendance\Domain\Period;
@@ -23,6 +24,7 @@ use App\Modules\Sites\Domain\SiteKind;
 use App\Modules\Sites\Infrastructure\Eloquent\Site;
 use Illuminate\Database\Eloquent\ModelNotFoundException;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Validation\ValidationException;
 
 /**
  * The site manager's day at one of their sites (design Part 2): the site's workers on that date, then the manager's engineers,
@@ -33,6 +35,8 @@ final class SiteDay
 {
     /** The save body; nothing else in a row is read. */
     public const FORMAT = [
+        'paper_decision_date' => ['missing'],
+        'rows.*.paper_decision_date' => ['missing'],
         'site_id' => ['required', 'uuid'],
         'date' => ['required', 'date_format:Y-m-d'],
         'rows' => ['required', 'list', 'min:1', 'max:'.AttendanceDays::BULK_MAX_ROWS],
@@ -42,6 +46,7 @@ final class SiteDay
         'rows.*.site_id' => ['present_unless:rows.*.clear,true,1,yes,on', 'nullable', 'uuid'],
         'rows.*.in_time' => ['nullable', 'date_format:H:i'],
         'rows.*.out_time' => ['nullable', 'date_format:H:i'],
+        'rows.*.advance_request' => [...AttendanceDays::FORMAT['advance_amount'], 'numeric', 'gt:0'],
         'rows.*.note' => ['nullable', 'string', 'max:500'],
     ];
 
@@ -59,6 +64,7 @@ final class SiteDay
         private readonly DayCrew $crew,
         private readonly Notifier $notifier,
         private readonly PermissionHolders $holders,
+        private readonly AttendanceRequests $requests,
     ) {}
 
     /**
@@ -83,12 +89,14 @@ final class SiteDay
         $open = $this->openDays(array_map(fn (array $l) => $l[0], $listed), $date, $managerId);
         $previous = $this->previousDays(array_map(fn (array $l) => (string) $l[0]['id'], $listed), $date, $managerId);
 
+        $requests = $this->requests->forSite($siteId, $date, $managerId, array_column(array_column($listed, 0), 'id'));
+
         return [
             'site' => ['id' => (string) $site->getKey(), 'name_ar' => (string) $site->name_ar, 'name_en' => $site->name_en],
             'date' => $date,
             'today' => EffectiveDays::today(),
             'leave_day_types' => $this->managerLeaveDayTypes(),
-            'rows' => array_map(function (array $l) use ($days, $date, $siteId, $settings, $window, $open, $previous, &$locked): array {
+            'rows' => array_map(function (array $l) use ($days, $date, $siteId, $settings, $window, $open, $previous, $requests, &$locked): array {
                 [$e, $section] = $l;
                 $day = $days[$e['id']][$date];
                 $type = (string) $day['type'];
@@ -112,6 +120,7 @@ final class SiteDay
                     'departure_only' => $whyNot === null && $departureOnly,
                     'open_date' => $open[$e['id']]['date'] ?? null,
                     'open_site_id' => $open[$e['id']]['site_id'] ?? null,
+                    'requests' => ['overtime' => null, 'advance' => null, ...($requests[$e['id']] ?? [])],
                     'previous' => $previous[$e['id']] ?? null,
                 ];
             }, $listed),
@@ -152,6 +161,8 @@ final class SiteDay
 
             $refused = [];
             $out = [];
+            $overtime = [];
+            $advances = [];
             foreach ($rows as $i => $row) {
                 $e = $byId[(string) $row['employee_id']] ?? throw new ModelNotFoundException;
                 $stored = $days[$e['id']][$date];
@@ -162,6 +173,8 @@ final class SiteDay
                     ! $window && ! self::isOpenHere($stored, $siteId, $type) => [AttendanceRefusal::OutsideManagerWindow, ['until' => $settings['manager_yesterday_until']]],
                     ! $window && ! self::onlyDeparture($row, $stored, $siteId) => [AttendanceRefusal::DepartureOnly, []],
                     self::hrDay($stored) => [AttendanceRefusal::HrDay, []],
+                    // an HR-approved advance stays on its work day: the manager may still add the departure, never clear or move the day
+                    $stored['advance_amount'] !== null && ($clear || $target !== $stored['site_id']) => [AttendanceRefusal::HrDay, []],
                     isset($open[$e['id']]) => [AttendanceRefusal::OpenEarlierDay, ['date' => $open[$e['id']]['date']]],
                     $clear && ($stored['state'] !== 'stored' || ($stored['site_id'] !== $siteId && ! in_array($stored['site_id'], $allowedLeave, true))) => [AttendanceRefusal::ClearNotAllowed, []],
                     ! $clear && $target !== $siteId && ! in_array($target, $allowedLeave, true) => [AttendanceRefusal::SiteNotForManager, []],
@@ -173,14 +186,42 @@ final class SiteDay
 
                     continue;
                 }
+                $work = $target === $siteId;
+                $values = $this->values($row, $work);
+                $in = $values['in_time'] ?? null;
+                $departure = $values['out_time'] ?? null;
+                $timesChanged = $stored['site_id'] !== $target || $stored['in_time'] !== $in || $stored['out_time'] !== $departure;
+                if ($timesChanged && in_array($type, [EmployeeType::Engineer, EmployeeType::DayLaborer], true)) {
+                    $minutes = 0;
+                    if ($in !== null && $departure !== null) {
+                        $shift = EffectiveDays::fieldShift($e, $date, $settings);
+                        $minutes = DayRules::workerMinutes($shift['start'], $shift['end'], $in, $departure)['ot'];
+                    }
+                    $overtime[$e['id']] = [$in, $departure, $minutes];
+                }
+                if (array_key_exists('advance_request', $row)) {
+                    if (! $work || ! $window) {
+                        throw ValidationException::withMessages(["rows.{$i}.advance_request" => __('validation.prohibited', ['attribute' => 'advance_request'])]);
+                    }
+                    $advances[$e['id']] = [$row['advance_request'], false];
+                    $values['advance_request_changed'] = true;
+                } elseif ($timesChanged && $stored['site_id'] !== $target) {
+                    $advances[$e['id']] = [null, true];
+                }
                 $out[] = $clear
                     ? ['employee_id' => $e['id'], 'version' => $row['version'], 'clear' => true]
-                    : ['employee_id' => $e['id'], 'version' => $row['version'] ?? null, 'site_id' => $target, ...$this->values($row, $target === $siteId)];
+                    : ['employee_id' => $e['id'], 'version' => $row['version'] ?? null, 'site_id' => $target, ...$values];
             }
             if ($refused !== []) {
                 throw AttendanceRefused::because($refused[0][0], $refused[0][1], array_column($refused, 2));
             }
             $this->attendance->bulk($date, $out, $managerId, 'manager');
+            foreach ($overtime as $id => [$in, $departure, $minutes]) {
+                $this->requests->overtime((string) $id, $date, $siteId, $managerId, $in, $departure, $minutes);
+            }
+            foreach ($advances as $id => [$amount, $withdraw]) {
+                $this->requests->advance((string) $id, $date, $siteId, $managerId, $amount, $withdraw);
+            }
             if (! $window) {
                 $this->tellHr($site, $date, array_map(fn (array $o) => $byId[$o['employee_id']], $out));
             }

@@ -3,6 +3,10 @@
 declare(strict_types=1);
 
 return [
+    'certificate_signature_required' => 'Upload your signature before approving the experience certificate.',
+    'certificate_employee_data' => 'Complete the employee details required for the experience certificate.',
+    'signature_pixels' => 'The signature image must not exceed four million pixels.',
+    'signature_type' => 'The signature image must be a PNG or JPG.',
     'validation_failed' => 'The given data was invalid.',
     'not_found' => 'Resource not found.',
     'unauthenticated' => 'Unauthenticated.',
@@ -50,4 +54,8 @@ return [
         'permanent_worker' => 'Permanent worker',
         'day_laborer' => 'Day laborer',
     ],
+    'advance_paper_date_type' => 'Only an advance decision can include a paper decision date.',
+    'advance_paper_date_future' => 'The paper decision date cannot be after today in Cairo.',
+    'advance_paper_date_before_request' => 'The paper decision date cannot be before the request date.',
+    'advance_paper_date_pending' => 'Enter the paper decision date when approving or refusing the advance.',
 ];

@@ -10,6 +10,7 @@ use App\Modules\Attendance\Domain\DayRules;
 use App\Modules\Attendance\Domain\Employment;
 use App\Modules\Attendance\Domain\Period;
 use App\Modules\Attendance\Infrastructure\Eloquent\AttendanceDay;
+use App\Modules\Attendance\Infrastructure\Eloquent\AttendanceRequest;
 use App\Modules\Attendance\Infrastructure\PeriodGuard;
 use App\Modules\Employees\Application\EmployeeReach;
 use App\Modules\Employees\Application\EmployeeRoster;
@@ -96,6 +97,36 @@ final class AttendanceDays
         }
 
         return $this->days->effectiveDay($employeeId, $date);
+    }
+
+    /** Apply an HR decision while the employee is locked by AttendanceRequests. */
+    public function decideRequest(AttendanceRequest $request, bool $approve): void
+    {
+        // a refusal leaves the day untouched, so HR may refuse a pending request even in a locked period
+        if (! $approve) {
+            return;
+        }
+        $date = (string) $request->date;
+        $employee = $this->roster->find((string) $request->employee_id) ?? throw new ConcurrencyConflict;
+        [$type, $day] = $this->guard($employee, $date);
+        if ($day === null || $day->trashed() || $day->site_id !== $request->site_id) {
+            throw new ConcurrencyConflict;
+        }
+        if ($request->type === 'overtime') {
+            if (! in_array($type, [EmployeeType::Engineer, EmployeeType::DayLaborer], true) || $day->source !== 'manager'
+                || $day->in_time !== $request->in_time || $day->out_time !== $request->out_time) {
+                throw new ConcurrencyConflict;
+            }
+            $day->ot_minutes = $request->minutes;
+            $day->source = 'entered';
+        } else {
+            if ($day->getAttribute('advance_amount') !== null) {
+                throw new ConcurrencyConflict;
+            }
+            $day->advance_amount = $request->amount;
+        }
+        $day->version++;
+        $day->save();
     }
 
     /** @return array<string, mixed> the day after the clear, now derived or missing */
@@ -388,7 +419,7 @@ final class AttendanceDays
         }
         $row ??= new AttendanceDay(['employee_id' => $employee['id'], 'date' => $date, 'version' => 0]);
         $row->fill([...$values, 'site_id' => $siteId, 'source' => $source, 'deleted_at' => null]);
-        if ($row->exists && ! $row->isDirty()) {
+        if ($row->exists && ! $row->isDirty() && ! ($source === 'manager' && isset($input['advance_request_changed']))) {
             return $row->version;
         }
         $row->version = $row->version + 1;
