@@ -22,7 +22,7 @@ class SiteWorkbookTemplateTest extends TestCase
     use RefreshDatabase;
     use XlsxFiles;
 
-    private const COLUMNS = ['الاسم', 'الحالة', 'حضور', 'انصراف', 'سلفة', 'ملاحظات', 'الرقم القومي', 'الموبايل', 'محل الإقامة', 'الأجر المقترح'];
+    private const COLUMNS = ['الاسم', 'الحالة', 'حضور', 'ص/م', 'انصراف', 'ص/م', 'سلفة', 'ملاحظات', 'الرقم القومي', 'الموبايل', 'محل الإقامة', 'الأجر المقترح'];
 
     private const WEEK = ['السبت 07-11', 'الأحد 08-11', 'الاثنين 09-11', 'الثلاثاء 10-11', 'الأربعاء 11-11', 'الخميس 12-11', 'الجمعة 13-11'];
 
@@ -144,12 +144,12 @@ class SiteWorkbookTemplateTest extends TestCase
             $this->assertContains((string) $view['rightToLeft'], ['1', 'true'], $day);
             $this->assertSame(['1', '2', 'B3', 'frozen'], [(string) $view->pane['xSplit'], (string) $view->pane['ySplit'], (string) $view->pane['topLeftCell'], (string) $view->pane['state']], $day);
             $this->assertSame($i === 0, in_array((string) $view['tabSelected'], ['1', 'true'], true), $day);
-            $this->assertSame(['A1:J1'], array_map(fn ($m) => (string) $m['ref'], iterator_to_array($sheet->mergeCells->mergeCell, false)), $day);
+            $this->assertSame(['A1:L1'], array_map(fn ($m) => (string) $m['ref'], iterator_to_array($sheet->mergeCells->mergeCell, false)), $day);
 
             $cells = $this->cells($i + 1);
             $this->assertSame(['value' => "موقع Site-S — {$day}-2026", 'type' => 'inlineStr', 'fill' => 'DDEBF7', 'text' => true, 'bold' => true, 'size' => '14'], $cells['A1'], $day);
-            $this->assertSame(self::COLUMNS, array_map(fn (string $k) => $cells["{$k}2"]['value'], str_split('ABCDEFGHIJ')), $day);
-            $this->assertSame(array_fill(0, 10, true), array_map(fn (string $k) => $cells["{$k}2"]['bold'], str_split('ABCDEFGHIJ')), $day);
+            $this->assertSame(self::COLUMNS, array_map(fn (string $k) => $cells["{$k}2"]['value'], str_split('ABCDEFGHIJKL')), $day);
+            $this->assertSame(array_fill(0, 12, true), array_map(fn (string $k) => $cells["{$k}2"]['bold'], str_split('ABCDEFGHIJKL')), $day);
         }
 
         // A range across a month end (an engineer's 26th → 25th period) names each sheet by its own date.
@@ -159,8 +159,8 @@ class SiteWorkbookTemplateTest extends TestCase
         );
     }
 
-    /** Spec «The file»: A picks or types the name (no error alert, a prompt); B and I are blocking lists; rows 3 to the last on every day sheet. */
-    public function test_every_day_sheet_has_the_three_dropdowns(): void
+    /** Spec «The file»: A picks or types the name (no error alert, a prompt); B, D, F and K are blocking lists; rows 3 to the last on every day sheet. */
+    public function test_every_day_sheet_has_the_five_dropdowns(): void
     {
         $this->homeSite($this->employee('day_laborer'), $this->site, '2026-01-01');
         $this->employee('engineer');
@@ -174,12 +174,14 @@ class SiteWorkbookTemplateTest extends TestCase
             $this->assertSame([
                 'A3:A32' => ['list', 'lists!$B$1:$B$2', '0', 'إضافة', self::PROMPT],
                 'B3:B32' => ['list', 'lists!$A$1:$A$'.$statuses, '1', '', ''],
-                'I3:I32' => ['list', 'lists!$C$1:$C$2', '1', '', ''],
+                'D3:D32' => ['list', 'lists!$E$1:$E$2', '1', '', ''],
+                'F3:F32' => ['list', 'lists!$E$1:$E$2', '1', '', ''],
+                'K3:K32' => ['list', 'lists!$C$1:$C$2', '1', '', ''],
             ], $this->validations($i + 1), $day);
         }
     }
 
-    /** Spec «The file»: 30 empty rows, or twice the site's own people; every cell text; A yellow, G–J tinted; widths fit header and list. */
+    /** Spec «The file»: 30 empty rows, or twice the site's own people; every cell text; A yellow, I–L tinted; widths fit header and list. */
     public function test_rows_are_empty_text_cells_with_the_fills(): void
     {
         foreach (range(1, 15) as $n) {
@@ -200,14 +202,14 @@ class SiteWorkbookTemplateTest extends TestCase
         $expected = array_map(fn (string $header) => $fit([$header]), self::COLUMNS);
         $expected[0] = $fit([self::COLUMNS[0], ...array_column($this->names(), 'entry')]);
         $expected[1] = $fit([self::COLUMNS[1], ...$statuses]);
-        $expected[8] = $fit([self::COLUMNS[8], 'Residence-1']);
+        $expected[10] = $fit([self::COLUMNS[10], 'Residence-1']);
         foreach (self::WEEK as $i => $day) {
-            $this->assertSame(array_combine(range(1, 10), $expected), $this->columnWidths($i + 1), $day);
+            $this->assertSame(array_combine(range(1, 12), $expected), $this->columnWidths($i + 1), $day);
         }
     }
 
-    /** Spec «The file»: `lists` A the statuses, B the name list, C the residences, D the site and range; a name is never a formula. */
-    public function test_lists_holds_statuses_names_residences_and_the_site_and_range(): void
+    /** Spec «The file»: `lists` A the statuses, B the name list, C the residences, D the site and range, E ص and م; a name is never a formula. */
+    public function test_lists_holds_statuses_names_residences_the_site_and_range_and_the_periods(): void
     {
         $leave = $this->leaveTypes();
         Site::whereKey($leave['rest'])->update(['active' => false]);
@@ -234,6 +236,7 @@ class SiteWorkbookTemplateTest extends TestCase
         $this->assertStringNotContainsString('<f>', $this->zipEntry('xl/worksheets/sheet8.xml'), 'a name is never written as a formula');
         $this->assertSame(['Residence-A', 'Residence-B'], $this->column($lists, 'C'));
         $this->assertSame([$this->site, '2026-11-07', '2026-11-13'], $this->column($lists, 'D'));
+        $this->assertSame(['ص', 'م'], $this->column($lists, 'E'));
     }
 
     /** W1: the file is Arabic whatever the request language. */
@@ -246,7 +249,7 @@ class SiteWorkbookTemplateTest extends TestCase
         $this->assertSame([...self::WEEK, 'lists'], array_keys($sheets));
         $cells = $this->cells(1);
         $this->assertSame('موقع Site-S — السبت 07-11-2026', $cells['A1']['value']);
-        $this->assertSame(self::COLUMNS, array_map(fn (string $k) => $cells["{$k}2"]['value'], str_split('ABCDEFGHIJ')));
+        $this->assertSame(self::COLUMNS, array_map(fn (string $k) => $cells["{$k}2"]['value'], str_split('ABCDEFGHIJKL')));
         $this->assertContains((string) simplexml_load_string($this->zipEntry('xl/worksheets/sheet1.xml'))->sheetViews->sheetView['rightToLeft'], ['1', 'true']);
         $this->assertSame(['list', 'lists!$B$1:$B$1', '0', 'إضافة', self::PROMPT], $this->validations(1)['A3:A32']);
         $lists = $this->cells(8);
@@ -261,7 +264,11 @@ class SiteWorkbookTemplateTest extends TestCase
 
         $statuses = 1 + Site::where(['kind' => 'leave', 'active' => true])->count();
         foreach (self::WEEK as $i => $day) {
-            $this->assertSame(['B3:B32' => ['list', 'lists!$A$1:$A$'.$statuses, '1', '', '']], $this->validations($i + 1), $day);
+            $this->assertSame([
+                'B3:B32' => ['list', 'lists!$A$1:$A$'.$statuses, '1', '', ''],
+                'D3:D32' => ['list', 'lists!$E$1:$E$2', '1', '', ''],
+                'F3:F32' => ['list', 'lists!$E$1:$E$2', '1', '', ''],
+            ], $this->validations($i + 1), $day);
             $this->assertSame(11.0, $this->columnWidths($i + 1)[1], $day);                          // max(8, «الاسم») + 3
         }
         $lists = $this->cells(8);
@@ -367,18 +374,18 @@ class SiteWorkbookTemplateTest extends TestCase
         return $id;
     }
 
-    /** Every day sheet: the title and header rows, then $n empty data rows (A an empty text cell); every cell text, A yellow, G–J tinted. */
+    /** Every day sheet: the title and header rows, then $n empty data rows (A an empty text cell); every cell text, A yellow, I–L tinted. */
     private function assertRows(int $n): void
     {
         foreach (self::WEEK as $i => $day) {
             $this->assertCount(2 + $n, simplexml_load_string($this->zipEntry('xl/worksheets/sheet'.($i + 1).'.xml'))->sheetData->row, $day);
             $cells = $this->cells($i + 1);
-            $this->assertCount(10 * (2 + $n), $cells, $day);
+            $this->assertCount(12 * (2 + $n), $cells, $day);
             $this->assertSame([], array_keys(array_filter($cells, fn (array $c) => ! $c['text'])), "{$day}: every cell is text (@)");
             foreach (range(3, 2 + $n) as $r) {
                 $this->assertSame(['', 'inlineStr', 'FFF2CC'], [$cells["A{$r}"]['value'], $cells["A{$r}"]['type'], $cells["A{$r}"]['fill']], "{$day} A{$r}");
-                foreach (str_split('BCDEFGHIJ') as $k) {
-                    $this->assertSame([null, $k >= 'G' ? 'FFF9E5' : null], [$cells["{$k}{$r}"]['value'], $cells["{$k}{$r}"]['fill']], "{$day} {$k}{$r}");
+                foreach (str_split('BCDEFGHIJKL') as $k) {
+                    $this->assertSame([null, $k >= 'I' ? 'FFF9E5' : null], [$cells["{$k}{$r}"]['value'], $cells["{$k}{$r}"]['fill']], "{$day} {$k}{$r}");
                 }
             }
         }

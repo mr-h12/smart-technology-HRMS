@@ -66,17 +66,27 @@ final class SiteWorkbookTemplate
             'names' => array_column($names, 'entry'),
             'residences' => $residences,
             'meta' => [$siteId, $from, $to],
+            'periods' => self::periods(),
             'prompt' => ['title' => (string) __('attendance.workbook.prompt_title', [], 'ar'), 'text' => (string) __('attendance.workbook.prompt', [], 'ar')],
         ]);
     }
 
-    /** @return non-empty-list<string> the ten headers of a day sheet, in the order of the owner's rule 4 */
+    /** @return non-empty-list<string> the twelve headers of a day sheet: the owner's rule 4, with a ص/م after each time (2026-11-14) */
     public static function columns(): array
     {
         /** @var non-empty-list<string> $columns */
         $columns = __('attendance.workbook.columns', [], 'ar');
 
         return $columns;
+    }
+
+    /** @return array{string, string} W8: ص (morning) and م (evening), the choices of the ص/م column beside each time */
+    public static function periods(): array
+    {
+        /** @var array{string, string} $periods */
+        $periods = __('attendance.workbook.periods', [], 'ar');
+
+        return $periods;
     }
 
     /** A day sheet's name: the Arabic weekday and `dd-mm`, e.g. «السبت 07-11». */
