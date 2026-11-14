@@ -68,13 +68,15 @@ today; task 2c grants `hr_forms.generate.own` and `hr_forms.view.own` to `manage
 ### `interface PdfDocument` (Application; one class per type)
 ```php
 public function rules(): array;            // Laravel rules for the keys of `fields`, without the `fields.` prefix
+public function normalise(array $fields): array; // the validated fields as the snapshot stores them; a replay compares these
 /** Locks the subject row, checks reach, builds the snapshot. @return array{0: string, 1: array<string, mixed>} [employee_id, snapshot] */
 public function snapshot(string $subjectId, array $fields, ?string $scope, bool $showsPay): array;
 public function subjectColumn(): string;   // a where() column: 'employee_id' or 'snapshot->leave_request_id' etc.
 /** @return array{0: string, 1: array<string, mixed>} [view name, type-specific view data] */
 public function view(array $snapshot): array;
-/** The signer rule: the stamp line for the signed snapshot (null = none); throws the refusal when $actor may not sign. */
-public function approval(stdClass $export, Authenticatable $actor): ?string;
+/** The signer rule: the stamp line for the signed snapshot (null = none); throws the refusal when $actor may not sign.
+ *  $lock: approve locks the subject row; computing `actions` for a read does not. */
+public function approval(stdClass $export, Authenticatable $actor, bool $lock): ?string;
 ```
 `$scope` is the owner id of an own-scope caller (`RequestScope` semantics), null at all scope. `view()` holds today's per-type
 branches of `RenderHrForm::html()` (`RenderHrForm.php:107-157`) verbatim; `RenderPdf` adds the common data (snapshot, serial,
