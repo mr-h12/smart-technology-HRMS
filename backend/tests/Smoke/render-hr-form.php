@@ -5,7 +5,6 @@ declare(strict_types=1);
 use App\Modules\Documents\Application\AttendanceRequestForms;
 use App\Modules\Documents\Application\ExperienceCertificates;
 use App\Modules\Documents\Application\LeaveRequestForms;
-use App\Modules\Documents\Application\ManualHrForms;
 use App\Modules\Documents\Application\RenderHrForm;
 use App\Modules\Documents\Application\SignatureImages;
 use App\Modules\Employees\Application\EmployeeService;
@@ -26,12 +25,6 @@ $app->make(Kernel::class)->bootstrap();
 $leave = getenv('HRMS_SMOKE_FORM') === 'leave-request';
 $advance = getenv('HRMS_SMOKE_FORM') === 'advance-request';
 $overtime = getenv('HRMS_SMOKE_FORM') === 'overtime-request';
-$latePermit = getenv('HRMS_SMOKE_FORM') === 'late-permit';
-$earlyLeave = getenv('HRMS_SMOKE_FORM') === 'early-leave-request';
-$resignation = getenv('HRMS_SMOKE_FORM') === 'resignation';
-$warningNotice = getenv('HRMS_SMOKE_FORM') === 'warning-notice';
-$missionPermit = getenv('HRMS_SMOKE_FORM') === 'mission-permit';
-$departurePermit = getenv('HRMS_SMOKE_FORM') === 'leave-permit';
 try {
     if ($argv[1] === 'setup') {
         $employee = app(EmployeeService::class)->create([
@@ -49,61 +42,6 @@ try {
                 'job_title' => 'مهندسة اختبار', 'reason' => 'سبب تجريبي',
                 ...($advance ? ['repayment_method' => 'cash', 'previous_advance' => false, 'finance_remarks' => 'ملاحظات تجريبية'] : []),
             ], null, $advance ? 'advance' : 'overtime');
-        } elseif ($missionPermit) {
-            Auth::setUser($hr);
-            $row = app(ManualHrForms::class)->create('mission_permit', $employee, $hr->id, (string) Str::uuid7(), [
-                'job_title' => 'مهندسة اختبار',
-                'mission_date' => '2026-11-15',
-                'mission_reason' => 'متابعة موقع الاختبار.',
-                'department_manager' => 'مدير الاختبار',
-            ], null);
-        } elseif (getenv('HRMS_SMOKE_FORM') === 'sim-receipt') {
-            Auth::setUser($hr);
-            $row = app(ManualHrForms::class)->create('sim_receipt', $employee, $hr->id, (string) Str::uuid7(), [
-                'sim_number' => '01000000000', 'issued_on' => '2026-11-15',
-            ], null);
-        } elseif (getenv('HRMS_SMOKE_FORM') === 'job-offer') {
-            Auth::setUser($hr);
-            $row = app(ManualHrForms::class)->create('job_offer', null, $hr->id, (string) Str::uuid7(), [
-                'issued_on' => '2027-02-01', 'candidate_name' => 'نور مثال للاختبار', 'address' => 'شارع الاختبار',
-                'job_title' => 'مهندسة اختبار', 'monthly_salary' => '12345.6', 'evaluation_months' => 4,
-                'reply_deadline' => '2027-02-05', 'start_date' => '2027-02-08',
-            ], null);
-        } elseif (getenv('HRMS_SMOKE_FORM') === 'end-of-service') {
-            Auth::setUser($hr);
-            $row = app(ManualHrForms::class)->create('end_of_service', $employee, $hr->id, (string) Str::uuid7(), [
-                'job_title' => 'مهندسة اختبار', 'last_working_day' => '2026-10-25', 'issued_on' => '2026-10-26',
-                'last_total_wage' => '12345.67', 'wage_month' => '2026-10',
-            ], null);
-        } elseif ($departurePermit) {
-            Auth::setUser($hr);
-            $row = app(ManualHrForms::class)->create('leave_permit', $employee, $hr->id, (string) Str::uuid7(), [
-                'addressee' => 'مدير الاختبار', 'permit_date' => '2026-11-16', 'start_time' => '14:30', 'end_time' => '16:30',
-                'reason' => 'موعد طبي', 'job_title' => 'مهندسة اختبار', 'responsible_manager' => 'مسؤول القسم', 'issued_on' => '2026-11-15',
-            ], null);
-        } elseif ($warningNotice) {
-            Auth::setUser($hr);
-            $row = app(ManualHrForms::class)->create('warning_notice', $employee, $hr->id, (string) Str::uuid7(), [
-                'job_title' => 'مهندسة اختبار', 'warning_date' => '2026-11-15',
-                'warning_incident' => 'لم يتم تسليم ملف الاختبار.', 'warning_period' => 'لمدة يوم واحد.',
-                'warning_prior_occurrence' => 'هذه أول مرة.', 'warning_explanation_request' => 'يرجى توضيح السبب.',
-            ], null);
-        } elseif ($resignation) {
-            Auth::setUser($hr);
-            $row = app(ManualHrForms::class)->create('resignation', $employee, $hr->id, (string) Str::uuid7(), [
-                'confirm_declarations' => 'on',
-            ], null);
-        } elseif ($earlyLeave) {
-            Auth::setUser($hr);
-            $row = app(ManualHrForms::class)->create('early_leave_request', $employee, $hr->id, (string) Str::uuid7(), [
-                'regular_start' => '08:30', 'regular_end' => '17:30', 'requested_end' => '16:00', 'issued_on' => '2026-11-15',
-            ], null);
-        } elseif ($latePermit) {
-            Auth::setUser($hr);
-            $row = app(ManualHrForms::class)->create('late_permit', $employee, $hr->id, (string) Str::uuid7(), [
-                'addressee' => 'مدير الاختبار', 'permit_date' => '2026-11-16', 'start_time' => '09:00', 'end_time' => '11:00',
-                'reason' => 'موعد طبي', 'job_title' => 'مهندسة اختبار', 'responsible_manager' => 'مسؤول القسم', 'issued_on' => '2026-11-15',
-            ], null);
         } elseif ($leave) {
             $requests = app(LeaveRequests::class);
             $from = now('Africa/Cairo')->next('Monday')->toDateString();

@@ -20,6 +20,9 @@ final class ExperienceCertificates
 {
     private const FORM = 'experience_certificate';
 
+    // Rows of the nine postponed form types stay in the table but are never served (owner, 2026-11-13).
+    private const SERVED = [self::FORM, LeaveRequestForms::FORM, AttendanceRequestForms::ADVANCE, AttendanceRequestForms::OVERTIME];
+
     public function __construct(private readonly EmployeeService $employees) {}
 
     public static function standardPraise(string $gender): string
@@ -139,7 +142,7 @@ final class ExperienceCertificates
     {
         return DB::transaction(function () use ($id, $form, $approver): stdClass {
             $export = $this->find($id, lock: true);
-            $stage = AttendanceRequestForms::isUnsignedOnly($form) || isset(ManualFormDefinitions::all()[$form]) ? 'unsigned' : 'signed';
+            $stage = AttendanceRequestForms::isUnsignedOnly($form) ? 'unsigned' : 'signed';
             if ($export->form_type !== $form || $export->stage !== $stage || $export->status !== 'failed'
                 || ($approver !== null && $export->approved_by !== $approver)) {
                 throw new ConcurrencyConflict;
@@ -156,8 +159,9 @@ final class ExperienceCertificates
     public function history(string $employee, ?string $form = null, bool $includePay = false): LengthAwarePaginator
     {
         return DB::table('hr_form_exports')->where('employee_id', $employee)->whereNull('deleted_at')
+            ->whereIn('form_type', self::SERVED)
             ->when($form !== null, fn ($query) => $query->where('form_type', $form))
-            ->when(! $includePay, fn ($query) => $query->whereNotIn('form_type', [AttendanceRequestForms::ADVANCE, ...array_keys(array_filter(ManualFormDefinitions::all(), fn (array $definition): bool => $definition['shows_pay'] ?? false))]))
+            ->when(! $includePay, fn ($query) => $query->where('form_type', '!=', AttendanceRequestForms::ADVANCE))
             ->orderByDesc('created_at')->orderByDesc('id')->paginate(25);
     }
 
@@ -174,7 +178,7 @@ final class ExperienceCertificates
 
     public function find(string $id, bool $lock = false): stdClass
     {
-        return DB::table('hr_form_exports')->where('id', $id)->whereNull('deleted_at')
+        return DB::table('hr_form_exports')->where('id', $id)->whereNull('deleted_at')->whereIn('form_type', self::SERVED)
             ->when($lock, fn ($query) => $query->lockForUpdate())->first() ?? throw new ModelNotFoundException;
     }
 }

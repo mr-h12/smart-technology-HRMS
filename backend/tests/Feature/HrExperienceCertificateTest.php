@@ -58,6 +58,26 @@ class HrExperienceCertificateTest extends TestCase
         $this->assertSame(1, DB::table('audit_log')->where('event', 'GENERATED')->where('entity_id', $id)->count());
     }
 
+    public function test_rows_of_postponed_form_types_are_no_longer_served(): void
+    {
+        Storage::fake('local');
+        $hr = $this->signIn('hr');
+        $employee = $this->employee('office', '2022-01-01');
+        $id = (string) Str::uuid7();
+        DB::table('hr_form_exports')->insert([
+            'id' => $id, 'form_type' => 'end_of_service', 'serial_number' => 1, 'stage' => 'unsigned', 'status' => 'ready',
+            'employee_id' => $employee, 'requested_by' => $hr->id, 'idempotency_key' => (string) Str::uuid7(),
+            'template_version' => 1, 'snapshot' => json_encode(['final_amount' => '6172.835000']),
+            'storage_path' => "hr-forms/{$id}.pdf", 'sha256' => str_repeat('a', 64), 'size_bytes' => 8,
+            'created_by' => $hr->id, 'updated_by' => $hr->id, 'created_at' => now(), 'updated_at' => now(),
+        ]);
+        Storage::disk('local')->put("hr-forms/{$id}.pdf", '%PDF-1.7');
+
+        $this->getJson("/api/v1/hr-form-exports/{$id}")->assertNotFound();
+        $this->get("/api/v1/hr-form-exports/{$id}/download")->assertNotFound();
+        $this->getJson("/api/v1/employees/{$employee}/hr-form-exports")->assertOk()->assertJsonCount(0, 'data');
+    }
+
     public function test_praise_defaults_can_be_edited_or_cleared_in_the_snapshot(): void
     {
         Queue::fake();

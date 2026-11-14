@@ -19,7 +19,7 @@ final class ArabicServiceDuration
         return implode(' و', array_filter($parts));
     }
 
-    public static function months(int $count): string
+    private static function months(int $count): string
     {
         return self::part($count, 'شهر واحد', 'شهران', 'أشهر', 'شهرًا');
     }

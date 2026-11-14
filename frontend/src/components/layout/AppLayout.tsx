@@ -40,7 +40,7 @@ import { TableSkeleton } from './PageSkeleton'
 import { SegmentedControl } from './SegmentedControl'
 
 /** An item shows when the user has any of its `abilities`; App's route guard reads the same list (`navAbilities`). */
-export const NAV: { group: string; items: { path: string; key: string; icon: LucideIcon; abilities: string[]; requires?: string }[] }[] = [
+export const NAV: { group: string; items: { path: string; key: string; icon: LucideIcon; abilities: string[] }[] }[] = [
   {
     group: 'nav.group.hr',
     items: [
@@ -51,7 +51,6 @@ export const NAV: { group: string; items: { path: string; key: string; icon: Luc
       { path: '/attendance-requests', key: 'nav.attendanceRequests', icon: HandCoins, abilities: ['attendance_request.decide'] },
       { path: '/wage-proposals', key: 'nav.wageProposals', icon: HandCoins, abilities: ['employee.approve_wage'] },
       { path: '/hr-form-approvals', key: 'hrForms.approvals', icon: ScrollText, abilities: ['hr_forms.approve'] },
-      { path: '/hr-forms/job-offer', key: 'hrForms.manual.job_offer', icon: ScrollText, abilities: ['hr_forms.view.all', 'hr_forms.generate.all'], requires: 'employee.view.all' },
       { path: '/my-signature', key: 'hrForms.signature', icon: UserCog, abilities: ['hr_signatures.manage'] },
       { path: '/team-fares', key: 'nav.teamFares', icon: Bus, abilities: ['fare.manage', 'employee.view.own'] },
       { path: '/payroll', key: 'nav.payroll', icon: Banknote, abilities: ['payroll.view'] },
@@ -69,8 +68,6 @@ export const NAV: { group: string; items: { path: string; key: string; icon: Luc
   },
 ]
 
-export const navRequirement = (path: string) => NAV.flatMap((g) => g.items).find((n) => n.path === path)?.requires
-
 export const navAbilities = (path: string) => NAV.flatMap((g) => g.items).find((n) => n.path === path)?.abilities ?? []
 
 /**
@@ -78,7 +75,7 @@ export const navAbilities = (path: string) => NAV.flatMap((g) => g.items).find((
  * the first page they may open. The fallback is the 1a landing page.
  */
 export const homePath = (can: (ability: string) => boolean) =>
-  can('attendance.record.own') && !can('attendance.record.all') ? '/site-day' : (NAV.flatMap((g) => g.items).find((n) => n.abilities.some(can) && (!n.requires || can(n.requires)))?.path ?? '/employees')
+  can('attendance.record.own') && !can('attendance.record.all') ? '/site-day' : (NAV.flatMap((g) => g.items).find((n) => n.abilities.some(can))?.path ?? '/employees')
 
 export function LanguageToggle() {
   const { t, i18n } = useTranslation()
@@ -138,7 +135,7 @@ function SidebarNav({ collapsed = false, onNavigate }: { collapsed?: boolean; on
   return (
     <nav aria-label={t('nav.main')} className="flex flex-col">
       {NAV.map(({ group, items }) => {
-        const visible = items.filter((n) => n.abilities.some(can) && (!n.requires || can(n.requires)))
+        const visible = items.filter((n) => n.abilities.some(can))
         if (visible.length === 0) return null
         return (
           <div key={group}>

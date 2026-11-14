@@ -134,10 +134,6 @@ final class RenderHrForm implements ShouldQueue
                 },
             ])->render();
         }
-        $manual = ManualFormDefinitions::all()[$export->form_type] ?? null;
-        if ($manual !== null) {
-            return view($manual['view'], [...$common, 'plainPaper' => true])->render();
-        }
         if ($export->form_type !== 'experience_certificate') {
             throw new RuntimeException('Unknown form template.');
         }

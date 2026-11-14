@@ -6,7 +6,6 @@ namespace App\Modules\Documents\Presentation;
 
 use App\Modules\Documents\Application\AttendanceRequestForms;
 use App\Modules\Documents\Application\ExperienceCertificates;
-use App\Modules\Documents\Application\ManualFormDefinitions;
 use App\Modules\Documents\Application\RenderHrForm;
 use App\Modules\Employees\Application\EmployeeService;
 use App\Modules\Identity\Presentation\RequestScope;
@@ -53,13 +52,9 @@ final class ExperienceCertificateController
     {
         $this->employees->show($employee, RequestScope::ownerId($request));
 
-        $type = $request->query('form_type');
-        $form = is_string($type) && ($type === 'experience_certificate' || isset(ManualFormDefinitions::all()[$type])) ? $type : null;
+        $form = $request->query('form_type') === 'experience_certificate' ? 'experience_certificate' : null;
 
-        $canViewPay = $this->advances->canViewPay($request->user());
-        abort_if($form !== null && ManualFormDefinitions::showsPay($form) && ! $canViewPay, 403);
-
-        return self::list($request, $this->certificates->history($employee, $form, $canViewPay));
+        return self::list($request, $this->certificates->history($employee, $form, $this->advances->canViewPay($request->user())));
     }
 
     public function awaitingApproval(Request $request): JsonResponse
@@ -121,7 +116,7 @@ final class ExperienceCertificateController
     private function scoped(Request $request, string $export): stdClass
     {
         $row = $this->certificates->find($export);
-        abort_if(($row->form_type === AttendanceRequestForms::ADVANCE || ManualFormDefinitions::showsPay((string) $row->form_type)) && ! $this->advances->canViewPay($request->user()), 403);
+        abort_if($row->form_type === AttendanceRequestForms::ADVANCE && ! $this->advances->canViewPay($request->user()), 403);
         $scope = RequestScope::ownerId($request);
         abort_if($scope !== null && ($row->employee_id === null || ! $this->employees->isManagedBy((string) $row->employee_id, $scope)), 404);
 

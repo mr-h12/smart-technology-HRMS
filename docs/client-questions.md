@@ -37,10 +37,10 @@ Every item has a working default already built into the specs (`docs/calculation
 29. دور يملك صلاحية عرض المرتبات (`payroll.view`) وحدها لا يرى في صفحة المرتبات منتقي الفترة (يحتاج `attendance.view`) ولا أسماء المواقع (تحتاج `site.view`). الـHR والمدير التنفيذي يملكون الثلاث اليوم. هل هذا مقبول؟ *(default: نعم، بلا تغيير)*
 
 ## Release 3: requests and forms
-15. مكافأة نهاية الخدمة: هل تُحسب كسور السنة؟ وما هو "الأجر الشامل" (الأساسي + الحوافز)؟ *(النموذج الحالي يتجاهل الشهور الزائدة)*
-16. إذن التأخير: ما الحد الأقصى للمدة (النموذج يقول ساعتين)؟ وكم إذناً مسموحاً في الشهر؟ ونفس السؤال للانصراف المبكر.
-17. نموذج الإنذار: نص حر لكل حالة، أم أنواع مخالفات بنصوص جاهزة؟
-18. هل يريدون النماذج PDF فقط، أم Word أيضاً للتعديل؟
+15. مكافأة نهاية الخدمة: هل تُحسب كسور السنة؟ وما هو "الأجر الشامل" (الأساسي + الحوافز)؟ *(النموذج الحالي يتجاهل الشهور الزائدة)* *(قرار المالك 2026-11-13: نموذج نهاية الخدمة مؤجل مع موديوله؛ السؤال باقٍ لقاعدة المكافأة)*
+16. إذن التأخير: ما الحد الأقصى للمدة (النموذج يقول ساعتين)؟ وكم إذناً مسموحاً في الشهر؟ ونفس السؤال للانصراف المبكر. *(قرار المالك 2026-11-13: نموذجا إذن التأخير والانصراف المبكر مؤجلان مع موديول الطلبات)*
+17. نموذج الإنذار: نص حر لكل حالة، أم أنواع مخالفات بنصوص جاهزة؟ *(قرار المالك 2026-11-13: نموذج الإنذار مؤجل مع موديوله)*
+18. ~~هل يريدون النماذج PDF فقط، أم Word أيضاً للتعديل؟~~ *(قرار المالك 2026-11-13: PDF فقط، بطريقة واحدة لكل نموذج: إنشاء ثم عرض وتنزيل PDF، بلا طباعة من المتصفح)*
 
 ## Client revision 1 (hr-module-edits.pdf, 2026-10-31)
 These come from the client's list of 23 changes; `docs/hrms-module-plan.md` § Client revision 1 maps each one to the code. Unlike the items above, these have **no** default built in. ⛔ marks a question that blocks work.
@@ -88,4 +88,4 @@ These come from the client's list of 23 changes; `docs/hrms-module-plan.md` § C
 - R29. 💰 بدء التشغيل: تاريخ بدء العمل بالنظام، والأرصدة الافتتاحية (السلف، الإجازات)، وهل نستورد أرشيف المرتبات القديم أصلاً؟
 - R32. 💰 تغيير النوع بين دورتين مختلفتين: المهندسون والعمال المثبتون من 26 إلى 25، والمكتب وعمال اليومية من أول الشهر، فلا يوجد يوم يبدأ فترة للنوعين. *(الافتراضي المبني: يبدأ التغيير من أول فترة للنوع الجديد، وتنتهي آخر فترة للنوع القديم في اليوم السابق، وتُخصم أيامها الباقية كأيام عدم تعيين، `docs/calculations.md` §10. ويُقبل أيضاً التغيير من المكتب إلى اليومية يوم 16.)*
 
-- End-of-service print form. Confirm that the suggestion uses only completed years, with zero credit for partial years, and that a 29 February hire completes a year on 1 March in non-leap years.
+- End-of-service print form. Confirm that the suggestion uses only completed years, with zero credit for partial years, and that a 29 February hire completes a year on 1 March in non-leap years. *(Owner, 2026-11-13: the form is postponed and its code deleted; this returns with its module.)*
