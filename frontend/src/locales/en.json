@@ -860,7 +860,8 @@
           "template_mismatch": "The file does not match a site workbook. Download a fresh one and fill it in.",
           "too_many_rows": "A sheet in the file has more than {{max}} rows.",
           "unknown_employee": "This name is not on the site's list for these dates (renamed, moved or archived); download the site workbook again.",
-          "duplicate_row": "This employee appears twice on this sheet."
+          "duplicate_row": "This employee appears twice on this sheet.",
+          "bad_time": "Not a valid time; write it like 9 or 5:30 and choose ص or م beside it."
         }
       },
       "error": {

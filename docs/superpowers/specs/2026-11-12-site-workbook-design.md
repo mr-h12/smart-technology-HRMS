@@ -4,6 +4,7 @@ Date: 2026-11-12. Builds item 10 of the client's revision 1 (Excel attendance pe
 2026-11-12 after a grilling round and four sample files («تمام كده الشكل الحالي مقبول»). A read of the code then settled what the
 rules left open and corrected what the code does differently; each such point is listed under "Differences from the hand-over".
 The rule text is `docs/calculations.md` §14, W1–W17; the decision record is `docs/hrms-module-plan.md` § Site workbook.
+Amended 2026-11-14 (owner): times are typed in 12-hour form, each with a ص/م dropdown column after it (rule 4, W8).
 
 ## Goal
 HR downloads an empty Excel file for one site and a range of days and hands it to the site manager, who fills in, per day, who
@@ -25,8 +26,8 @@ HR.
    template routes (`attendance.view` + `attendance.edit`). Every row is HR's write, source `imported`.
 2. **One site and a from–to range per file,** at most 31 days, the current half-month by default. One sheet per day.
 3. **The file comes out empty:** no roster, nothing prefilled. The site manager fills every row.
-4. **Columns:** الاسم · الحالة · حضور · انصراف · سلفة · ملاحظات · الرقم القومي · الموبايل · محل الإقامة · الأجر المقترح. No ID,
-   type or site column: the file is the site, and «حاضر» means present at it.
+4. **Columns:** الاسم · الحالة · حضور · ص/م · انصراف · ص/م · سلفة · ملاحظات · الرقم القومي · الموبايل · محل الإقامة · الأجر المقترح
+   (the two ص/م columns added 2026-11-14). No ID, type or site column: the file is the site, and «حاضر» means present at it.
 5. **People are chosen by name, never by ID.** الاسم is a dropdown of `name (type) · Employee ID`: this site's own people first
    (workers and office staff whose dated site is this site, engineers of the site's managers), then every other active day
    laborer, permanent worker and engineer, each group sorted by name. Office staff of other sites or of none are not listed. The
@@ -144,20 +145,21 @@ A test can assert every line of this section. It matches the approved sample (`b
 **Day sheets**, one per date of the range, in date order, the first one selected:
 - Name `<weekday> dd-mm` with the Arabic weekday: السبت, الأحد, الاثنين, الثلاثاء, الأربعاء, الخميس, الجمعة (e.g. «السبت 07-11»).
 - Right to left; frozen at B3 (rows 1–2 and column A stay in view).
-- Row 1: `موقع <site name_ar> — <weekday> dd-mm-yyyy` in A1, merged A1:J1; bold, size 14, fill `DDEBF7`.
-- Row 2: the ten headers in A2:J2, bold, in the order of rule 4.
+- Row 1: `موقع <site name_ar> — <weekday> dd-mm-yyyy` in A1, merged A1:L1; bold, size 14, fill `DDEBF7`.
+- Row 2: the twelve headers in A2:L2, bold, in the order of rule 4.
 - Rows 3 to 2 + N, with N = max(30, 2 × the number of the site's own people in the name list): empty. Column A holds an empty
   text cell, since OpenSpout drops a row whose cells are all empty.
 - Every cell has the text format `@`, so times, the national ID and the mobile stay text and a name starting with «=» is never a
   formula.
-- Fills: A3:A(last) `FFF2CC`; G3:J(last) `FFF9E5`; B–F none.
-- Column widths, in characters: max(8, the longest of the header and, for A, B and I, the values of their list) + 3. The title is
+- Fills: A3:A(last) `FFF2CC`; I3:L(last) `FFF9E5`; B–H none.
+- Column widths, in characters: max(8, the longest of the header and, for A, B, D, F and K, the values of their list) + 3. The title is
   not measured.
 - Validations on every day sheet, rows 3 to the last:
   - A: list `lists!$B$1:$B$<names>`, error alert off (`showErrorMessage: false`) so a typed name is kept; prompt title «إضافة»,
     prompt «اختار الاسم من القايمة، أو اكتب اسم عامل يومية جديد وبياناته».
   - B: list `lists!$A$1:$A$<statuses>`, blocking.
-  - I: list `lists!$C$1:$C$<residences>`, blocking.
+  - D and F (ص/م): list `lists!$E$1:$E$2`, blocking.
+  - K: list `lists!$C$1:$C$<residences>`, blocking.
 
 **`lists`**, hidden, after the day sheets:
 
@@ -167,6 +169,7 @@ A test can assert every line of this section. It matches the approved sample (`b
 | B | the name list |
 | C | every residence's name |
 | D | D1 the site id (UUID), D2 `from`, D3 `to` (`Y-m-d`) |
+| E | E1 ص, E2 م |
 
 **The name list**:
 - Entry: `<name_ar> (<type label>) · <Employee ID>`, e.g. «سيد حسن (يومية) · 112». Labels: مهندس, عامل مثبت, يومية, موظف مكتب.
@@ -219,12 +222,12 @@ The file is Arabic whatever the request language. No `versions` sheet.
   refuses the file (`template_mismatch`). A site made inactive since the download is not a file error: each row at it is refused by the write
   (`site_inactive`).
 - Each visible sheet's date is the one date of the range whose `dd-mm` ends the sheet name; a range of at most 31 days never
-  repeats a `dd-mm`. A visible sheet with no date, two sheets for one date, or a row 2 that is not the ten headers (read through
-  `text()`) refuses the file. Row 1 is not read.
+  repeats a `dd-mm`. A visible sheet with no date, two sheets for one date, or a row 2 that is not the twelve headers (read through
+  `text()`) refuses the file; so does a file downloaded before 2026-11-14, with ten headers (HR downloads a fresh one). Row 1 is not read.
 - At most 2000 data rows per sheet (`too_many_rows`).
 - Cell text goes through `XlsxAttendanceReader::text()` (L78-83); on this read path a control character (U+0000–U+001F,
   U+007F–U+009F; Excel writes a NUL as `_x0000_`) also reads as a space before that, so a cell of control characters only is blank
-  (PostgreSQL refuses a NUL in text and in the audit row's `jsonb`; the per-type import's reading is unchanged). Columns C and D
+  (PostgreSQL refuses a NUL in text and in the audit row's `jsonb`; the per-type import's reading is unchanged). Columns C and E
   also accept what Excel makes of a typed time: a time fraction, a `DateTime` or a `DateInterval`. Today `value()` (L115-131) turns those into a date, a decimal string and
   `0 08:30:00`, so the reader gets a time mode for these columns; the per-type reading does not change.
 
@@ -233,13 +236,13 @@ The file is Arabic whatever the request language. No `versions` sheet.
   text up after `text()`. A hit is that employee.
 - No hit, and the text ends in ` · ` and digits: `unknown_employee`.
 - No hit otherwise: a typed name, a new day laborer. Without `employee.create` at all scope it is `new_laborer_not_allowed` at
-  once, before the national ID is looked up. The national ID (G) must be 14 digits (`national_id_required`). It is looked up among
+  once, before the national ID is looked up. The national ID (I) must be 14 digits (`national_id_required`). It is looked up among
   all employees, soft-deleted included (`Employee::withTrashed()`): someone in the name list → that employee,
   `matched_by_national_id` in the preview; anyone else → `national_id_taken`; nobody → new, one person per national ID across the
   file. A later row (date order, then row) whose name differs from the first row's is `national_id_name_mismatch`. A new
   laborer's name longer than 255 characters (`employees.name_ar` is `varchar(255)`) is `name_too_long`.
 - After resolution, the same employee (or the same new national ID) twice on one sheet: the second row is `duplicate_row`.
-- Columns G–J filled on a row whose name is an entry of the list are ignored, with no error: the person exists, and those
+- Columns I–L filled on a row whose name is an entry of the list are ignored, with no error: the person exists, and those
   columns describe a new day laborer only (controller, 2026-11-12).
 
 ## Creating a new day laborer (W5)
@@ -397,7 +400,7 @@ Row (listed in `errors`; the other rows go on):
 | `new_laborer_not_allowed` | a typed name and no `employee.create` at all scope (checked before the national-ID lookup) | new |
 | `duplicate_row` | the same person, or the same new national ID, twice on one sheet | existing |
 | `unknown_status` | a status that is neither the present word nor a leave day-type (an inactive one is `site_inactive`) | new |
-| `bad_time` | a time that is not `H:MM`, `HH:MM` or an Excel time | new |
+| `bad_time` | a time that is not `H`, `HH`, `H:MM` or `HH:MM` with an hour 0–23 (or an Excel time), or a ص/م cell beside an hour 1–12 that is neither ص nor م | new |
 | `times_need_both` | one time without the other | existing code (day rules), new check for every type |
 | `bad_amount` | an advance or proposed wage not a positive amount | new |
 | `note_too_long` | a note longer than 500 characters | new |
@@ -457,7 +460,7 @@ Generalised (the per-type template and import keep their behaviour; their tests 
   laborers created, each linked to their page. A `preview_stale` answer
   clears the preview and its choices and asks HR to preview again.
 - Every string under `attendance.import.*` in `ar.json` and `en.json`. A code with a site-workbook wording
-  (`attendance.import.site.error.<code>`: `template_mismatch`, `too_many_rows`, `unknown_employee`, `duplicate_row`) shows that,
+  (`attendance.import.site.error.<code>`: `template_mismatch`, `too_many_rows`, `unknown_employee`, `duplicate_row`, `bad_time`) shows that,
   else `attendance.import.error.<code>`, else the server's message. `validation_failed` has no key on purpose: the server's field
   details show.
 
@@ -465,13 +468,13 @@ Generalised (the per-type template and import keep their behaviour; their tests 
 `backend/tests/Feature/SiteWorkbookTemplateTest.php` (download read back with OpenSpout and the sheet XML, as
 `AttendanceTemplateTest` does):
 - Sheets: one visible sheet per date named `<weekday> dd-mm`, in order, then the hidden `lists`; right to left, frozen at B3;
-  A1:J1 merged with the title; row 2 the ten headers.
-- Dropdowns: on every day sheet, A on `lists!$B` with the error alert off and the prompt, B on `lists!$A` blocking, I on
-  `lists!$C` blocking.
+  A1:L1 merged with the title; row 2 the twelve headers.
+- Dropdowns: on every day sheet, A on `lists!$B` with the error alert off and the prompt, B on `lists!$A` blocking, D and F on
+  `lists!$E` (ص, م) blocking, K on `lists!$C` blocking.
 - List order: a worker of the site, an office employee of the site and an engineer of one of its managers come first, then the
   others, each group by Arabic name; entries `name (type) · ID`; an archived employee and an office employee of another site are
   absent; a site manager's own employee row is present.
-- Row count max(30, 2 × own), every cell `@`, the fills of A and G–J; `lists!D1:D3`; Arabic with an English request.
+- Row count max(30, 2 × own), every cell `@`, the fills of A and I–L; `lists!D1:D3`; `lists!E1:E2`; Arabic with an English request.
 - Refusals: an inactive or leave site, `from` after `to`, 32 days; a site manager gets 403.
 
 `backend/tests/Feature/SiteWorkbookImportTest.php` (download, edit, rewrite, upload, as `AttendanceImportTest` does):
@@ -489,7 +492,10 @@ Generalised (the per-type template and import keep their behaviour; their tests 
 - Office: «حاضر» stores office present; an advance and a note are refused.
 - A date locked for engineers and open for day laborers; a future date; the same person twice on one sheet; `times_need_both`; a
   time Excel stored as a time value is read.
-- Whole file: a renamed sheet, a missing `lists`, a changed header; `too_many_rows` per sheet.
+- 12-hour times (W8): `9`, `٩`, `٥:٣٠`, 12 with ص and with م, `17:00`, ص chosen on a departure, a blank ص/م's default, a ص/م
+  with no time, `25` and a ص/م cell holding neither.
+- Whole file: a renamed sheet, a missing `lists`, a changed header, the ten headers of a file from before 2026-11-14;
+  `too_many_rows` per sheet.
 - Own scope: 403 on download, preview and confirm, nothing written.
 - A day changed after the preview: 409 `preview_stale`, nothing saved.
 - The preview saves nothing (no employee, day, proposal, crew row or audit row); uploading again after a confirm saves nothing.
@@ -520,6 +526,14 @@ employee's page. One more dropdown column (ذكر/أنثى) remains the alternat
   in the app or the per-type template.
 - A bare date typed in a time cell whose text format was removed (for example by pasting from another workbook) reads as 00:00,
   not `bad_time`.
+- A departure before noon (a night shift) needs ص chosen; with ص/م blank it reads as the afternoon (`6` is 18:00).
+- The mirror case: an arrival at or after noon needs م chosen; with ص/م blank `12:30` reads 00:30 and `1` reads 01:00, which
+  for an engineer or day laborer stores 0 late minutes with no error.
+- A time is `H`, `HH`, `H:MM` or `HH:MM`; a leading zero does not make it 24-hour (`05:00` as a departure reads 17:00).
+- A row whose only filled cells are ص/م (D, F) is a blank row and is skipped.
+- A time cell the user reformatted as an Excel time reads as its 24-hour value and then follows the same W8 rule: 05:00 as a
+  departure with ص/م blank is 17:00.
+- A ص/م typed inside the time cell (`5 م`) is not read; it is `bad_time`. The ص/م column covers it.
 - The API's `unknown_employee` message keeps the per-type wording («الرقم الوظيفي غير موجود.»); the screen shows its own
   (`attendance.import.site.error.unknown_employee`). A client other than the screen reads the per-type wording.
 - An engineer whose own account manages the site is listed in group 2, not group 1 («Differences» 14): order only.

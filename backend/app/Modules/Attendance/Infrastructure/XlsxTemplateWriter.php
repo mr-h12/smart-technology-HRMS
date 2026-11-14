@@ -28,8 +28,8 @@ final class XlsxTemplateWriter
 {
     private const GREY = 'D9D9D9';
 
-    /** Site workbook: day-sheet column => [its list's column in `lists`, the $book key]. A the name, B the status, I the residence. */
-    private const DROPDOWNS = [0 => [1, 'names'], 1 => [0, 'statuses'], 8 => [2, 'residences']];
+    /** Site workbook: day-sheet column => [its list's column in `lists`, the $book key]. A the name, B the status, D and F ص/م, K the residence. */
+    private const DROPDOWNS = [0 => [1, 'names'], 1 => [0, 'statuses'], 3 => [4, 'periods'], 5 => [4, 'periods'], 10 => [2, 'residences']];
 
     /** Site workbook: the first data row of a day sheet (row 1 the title, row 2 the headers). */
     private const FIRST_ROW = 3;
@@ -52,9 +52,9 @@ final class XlsxTemplateWriter
 
     /**
      * The site workbook, laid out as the owner's approved sample: one right-to-left sheet per day with `rows` empty rows, then the
-     * hidden `lists` (A statuses, B names, C residences, D `meta`: the site id, from, to).
+     * hidden `lists` (A statuses, B names, C residences, D `meta`: the site id, from, to, E ص/م).
      *
-     * @param  array{sheets: non-empty-list<array{name: string, title: string}>, columns: non-empty-list<string>, rows: positive-int, statuses: list<string>, names: list<string>, residences: list<string>, meta: list<string>, prompt: array{title: string, text: string}}  $book
+     * @param  array{sheets: non-empty-list<array{name: string, title: string}>, columns: non-empty-list<string>, rows: positive-int, statuses: list<string>, names: list<string>, residences: list<string>, meta: list<string>, periods: list<string>, prompt: array{title: string, text: string}}  $book
      * @return string the path of a temp file; the caller deletes it
      */
     public function writeWorkbook(array $book): string
@@ -66,7 +66,7 @@ final class XlsxTemplateWriter
                 if ($book[$key] === []) {
                     continue;   // a list range of no rows would make the file invalid
                 }
-                // A has no error alert, so Excel keeps a typed name outside the list (a new day laborer); B and I are blocking.
+                // A has no error alert, so Excel keeps a typed name outside the list (a new day laborer); the others are blocking.
                 $display = $column === 0
                     ? new ValidationDisplay(showErrorMessage: false, promptTitle: $book['prompt']['title'], prompt: $book['prompt']['text'])
                     : new ValidationDisplay;
@@ -144,12 +144,12 @@ final class XlsxTemplateWriter
         }
     }
 
-    /** @param  array{sheets: non-empty-list<array{name: string, title: string}>, columns: non-empty-list<string>, rows: positive-int, statuses: list<string>, names: list<string>, residences: list<string>, meta: list<string>, prompt: array{title: string, text: string}}  $book */
+    /** @param  array{sheets: non-empty-list<array{name: string, title: string}>, columns: non-empty-list<string>, rows: positive-int, statuses: list<string>, names: list<string>, residences: list<string>, meta: list<string>, periods: list<string>, prompt: array{title: string, text: string}}  $book */
     private function fillWorkbook(Writer $writer, array $book): void
     {
         $text = new Style(format: '@');
         $name = new Style(backgroundColor: 'FFF2CC', format: '@');      // A: pick or type the name
-        $laborer = new Style(backgroundColor: 'FFF9E5', format: '@');   // G..J: a new day laborer only
+        $laborer = new Style(backgroundColor: 'FFF9E5', format: '@');   // I..L: a new day laborer only
         $title = new Style(fontBold: true, fontSize: 14, backgroundColor: 'DDEBF7', format: '@');
         $bold = new Style(fontBold: true, format: '@');
         $columns = array_keys($book['columns']);
@@ -172,14 +172,14 @@ final class XlsxTemplateWriter
                 // A holds '' rather than nothing: OpenSpout drops a row whose cells are all empty, fills and all.
                 $writer->addRow(new Row(array_map(fn (int $c) => match (true) {
                     $c === 0 => new StringCell('', $name),
-                    $c >= 6 => new EmptyCell(null, $laborer),
+                    $c >= 8 => new EmptyCell(null, $laborer),
                     default => new EmptyCell(null, $text),
                 }, $columns)));
             }
         }
 
         $writer->addNewSheetAndMakeItCurrent()->setName('lists')->setIsVisible(false);
-        $lists = [$book['statuses'], $book['names'], $book['residences'], $book['meta']];
+        $lists = [$book['statuses'], $book['names'], $book['residences'], $book['meta'], $book['periods']];
         for ($r = 0; $r < max(array_map(count(...), $lists)); $r++) {
             $writer->addRow(self::row(array_map(fn (array $values) => $values[$r] ?? null, $lists)));
         }

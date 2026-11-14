@@ -153,6 +153,7 @@ final class SiteWorkbookImport
         $residences = self::residences();
         $settings = $this->rules->all();
         $amount = [...AttendanceDays::FORMAT['advance_amount'], EmployeeRules::POSITIVE];
+        [$am, $pm] = $periods = SiteWorkbookTemplate::periods();
 
         $writes = [];
         $laborers = [];
@@ -162,12 +163,12 @@ final class SiteWorkbookImport
         $firstNames = [];   // a new national ID => the name on its first row (date order)
         foreach ($rows as $r) {
             // Cells arrive through XlsxAttendanceReader::text(), so a national ID or mobile in Arabic-Indic digits reads as ASCII.
-            [$name, $status, $in, $out, $advance, $note, $nationalId, $mobile, $residence, $wage] = array_pad($r['cells'], 10, null);
+            [$name, $status, $in, $inPeriod, $out, $outPeriod, $advance, $note, $nationalId, $mobile, $residence, $wage] = array_pad($r['cells'], 12, null);
             $at = ['sheet' => $r['sheet'], 'row' => $r['row'], 'date' => $r['date'], 'name' => $name];
             $employee = $names[(string) $name] ?? null;
             [$new, $matched, $person] = [null, false, null];     // a new laborer's national ID; found by national ID; the person's refusal
             // W4, W5: a text that is no entry and not shaped like one (`… · <digits>`) is a new day laborer, known by their national ID.
-            // Columns G–J of an entry's row are never read. Without employee.create at all scope the ID is never looked up, so the
+            // Columns I–L of an entry's row are never read. Without employee.create at all scope the ID is never looked up, so the
             // file cannot ask whose it is (security review L2).
             if ($employee === null && $name !== null && $status !== null && preg_match('/ · \d+$/Du', $name) !== 1) {
                 if (! $mayCreate) {
@@ -189,7 +190,7 @@ final class SiteWorkbookImport
             }
             $who = $new ?? ($employee === null ? null : (string) $employee['id']);
             $choice = $statuses[AttendanceImport::key((string) $status)] ?? null;
-            $times = [self::time($in), self::time($out)];
+            $times = [self::time($in, $inPeriod ?? $am, $periods), self::time($out, $outPeriod ?? $pm, $periods)];     // W8: blank is ص in, م out
             $residenceKey = AttendanceImport::key((string) $residence);
             $error = match (true) {
                 $name === null => 'name_required',
@@ -457,8 +458,8 @@ final class SiteWorkbookImport
      */
     private function read(string $path): array
     {
-        // C and D: the arrival and departure (W8); at most a day sheet per date and `lists` (security review A2).
-        $sheets = $this->reader->sheets($path, $this->maxRows, [2, 3], SiteWorkbookTemplate::MAX_DAYS + 1);
+        // C and E: the arrival and departure (W8); at most a day sheet per date and `lists` (security review A2).
+        $sheets = $this->reader->sheets($path, $this->maxRows, [2, 4], SiteWorkbookTemplate::MAX_DAYS + 1);
         $lists = array_column($sheets, 'rows', 'name')['lists'] ?? throw self::mismatch();
         $siteId = $lists[1][3] ?? null;
         $dates = SiteWorkbookTemplate::dates($lists[2][3] ?? null, $lists[3][3] ?? null);
@@ -494,7 +495,8 @@ final class SiteWorkbookImport
             }
             $found[$date] = true;
             foreach ($sheet['rows'] as $n => $cells) {
-                if ($n > 2) {
+                // W3: a row with only ص/م (D, F) filled is blank, as when ص is filled down a column ahead of the names.
+                if ($n > 2 && array_filter(array_diff_key($cells, [3 => true, 5 => true]), fn (?string $c) => $c !== null) !== []) {
                     $rows[] = ['sheet' => $sheet['name'], 'row' => $n, 'date' => $date, 'cells' => $cells];
                 }
             }
@@ -526,17 +528,30 @@ final class SiteWorkbookImport
         ];
     }
 
-    /** W8: `H:MM` or `HH:MM` (the reader turns an Excel time into one) as `HH:MM`; null when blank, false when it is no time of day. */
-    private static function time(?string $value): string|false|null
+    /**
+     * W8: `H` or `H:MM` (the reader turns an Excel time into `HH:MM`) as `HH:MM`; null when blank, false when it is no time of day. An hour
+     * of 1–12 is 12-hour, in $period (ص or م, the cell beside it or the column's default), so 12 ص is 00:MM; 0 and 13–23 are 24-hour.
+     *
+     * @param  array{string, string}  $periods  ص and م
+     */
+    private static function time(?string $value, string $period, array $periods): string|false|null
     {
         if ($value === null) {
             return null;
         }
-        if (preg_match('/^(\d{1,2}):(\d{2})$/D', $value, $m) !== 1 || (int) $m[1] > 23 || (int) $m[2] > 59) {
+        if (preg_match('/^(\d{1,2})(?::(\d{2}))?$/D', $value, $m) !== 1 || (int) $m[1] > 23 || (int) ($m[2] ?? 0) > 59) {
             return false;
         }
+        $hour = (int) $m[1];
+        if ($hour >= 1 && $hour <= 12) {
+            $pm = array_search($period, $periods, true);
+            if ($pm === false) {
+                return false;   // a ص/م cell holding anything else (the dropdown blocks it; a paste does not)
+            }
+            $hour = $hour % 12 + 12 * $pm;
+        }
 
-        return sprintf('%02d:%s', (int) $m[1], $m[2]);
+        return sprintf('%02d:%s', $hour, $m[2] ?? '00');
     }
 
     /**
