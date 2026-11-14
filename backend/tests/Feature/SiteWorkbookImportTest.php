@@ -73,8 +73,8 @@ class SiteWorkbookImportTest extends TestCase
         $path = $this->download();
 
         $data = $this->preview($this->fill($path, [self::SAT => [
-            [$this->entry($worker), 'حاضر', '08:30', '18:00'],
-            [$this->entry($engineer), 'حاضر', '08:30', '18:00'],
+            [$this->entry($worker), 'حاضر', '08:30', '', '18:00'],
+            [$this->entry($engineer), 'حاضر', '08:30', '', '18:00'],
         ]]))->assertOk()->json('data');
 
         $this->assertSame(['id' => $this->site, 'name_ar' => 'Site-S', 'name_en' => null], $data['site']);
@@ -131,21 +131,23 @@ class SiteWorkbookImportTest extends TestCase
     {
         return [
             'a status and no name' => [self::SAT, [['', 'حاضر']], 'name_required', 3],
-            'a name and no status' => [self::SAT, [['E', '', '08:00', '16:00']], 'status_required', 3],
+            'a name and no status' => [self::SAT, [['E', '', '08:00', '', '16:00']], 'status_required', 3],
             'a work site as the status' => [self::SAT, [['E', 'Site-T']], 'unknown_status', 3],
-            '25:00' => [self::SAT, [['E', 'حاضر', '08:00', '25:00']], 'bad_time', 3],
-            '24:00' => [self::SAT, [['E', 'حاضر', '08:00', '24:00']], 'bad_time', 3],
-            '8:60' => [self::SAT, [['E', 'حاضر', '8:60', '16:00']], 'bad_time', 3],
-            '9.30' => [self::SAT, [['E', 'حاضر', '9.30', '16:00']], 'bad_time', 3],
-            'a negative duration' => [self::SAT, [['E', 'حاضر', '0 08:05:00', '16:00']], 'bad_time', 3],
+            '25' => [self::SAT, [['E', 'حاضر', '8', '', '25']], 'bad_time', 3],
+            'a ص/م cell holding neither' => [self::SAT, [['E', 'حاضر', '8', 'AM', '17:00']], 'bad_time', 3],
+            '25:00' => [self::SAT, [['E', 'حاضر', '08:00', '', '25:00']], 'bad_time', 3],
+            '24:00' => [self::SAT, [['E', 'حاضر', '08:00', '', '24:00']], 'bad_time', 3],
+            '8:60' => [self::SAT, [['E', 'حاضر', '8:60', '', '16:00']], 'bad_time', 3],
+            '9.30' => [self::SAT, [['E', 'حاضر', '9.30', '', '16:00']], 'bad_time', 3],
+            'a negative duration' => [self::SAT, [['E', 'حاضر', '0 08:05:00', '', '16:00']], 'bad_time', 3],
             'an arrival only' => [self::SAT, [['E', 'حاضر', '08:00']], 'times_need_both', 3],
-            'a departure only' => [self::SAT, [['E', 'حاضر', '', '16:00']], 'times_need_both', 3],
-            'an advance of 0' => [self::SAT, [['E', 'حاضر', '', '', '0']], 'bad_amount', 3],
-            'an advance of -5' => [self::SAT, [['E', 'حاضر', '', '', '-5']], 'bad_amount', 3],
-            'an advance of abc' => [self::SAT, [['E', 'حاضر', '', '', 'abc']], 'bad_amount', 3],
-            'a 501-character note' => [self::SAT, [['E', 'حاضر', '', '', '', str_repeat('n', 501)]], 'note_too_long', 3],
+            'a departure only' => [self::SAT, [['E', 'حاضر', '', '', '16:00']], 'times_need_both', 3],
+            'an advance of 0' => [self::SAT, [['E', 'حاضر', '', '', '', '', '0']], 'bad_amount', 3],
+            'an advance of -5' => [self::SAT, [['E', 'حاضر', '', '', '', '', '-5']], 'bad_amount', 3],
+            'an advance of abc' => [self::SAT, [['E', 'حاضر', '', '', '', '', 'abc']], 'bad_amount', 3],
+            'a 501-character note' => [self::SAT, [['E', 'حاضر', '', '', '', '', '', str_repeat('n', 501)]], 'note_too_long', 3],
             'the same entry twice on a sheet' => [self::SAT, [['E', 'حاضر'], ['E', 'SICK']], 'duplicate_row', 4],
-            'a leave status with times' => [self::SAT, [['E', 'SICK', '08:00', '16:00']], 'field_not_allowed', 3],
+            'a leave status with times' => [self::SAT, [['E', 'SICK', '08:00', '', '16:00']], 'field_not_allowed', 3],
             'a date after today' => [self::FRI, [['E', 'حاضر']], 'future_date', 3],
         ];
     }
@@ -196,9 +198,9 @@ class SiteWorkbookImportTest extends TestCase
         $office = $this->homed('office', $this->site);
         $path = $this->download();
         $file = fn () => $this->fill($path, [
-            self::SAT => [[$this->entry($office), 'حاضر', '09:00', '17:00']],
-            self::SUN => [[$this->entry($office), 'حاضر', '', '', '100']],
-            'الاثنين 09-11' => [[$this->entry($office), 'حاضر', '', '', '', 'a note']],
+            self::SAT => [[$this->entry($office), 'حاضر', '09:00', '', '17:00']],
+            self::SUN => [[$this->entry($office), 'حاضر', '', '', '', '', '100']],
+            'الاثنين 09-11' => [[$this->entry($office), 'حاضر', '', '', '', '', '', 'a note']],
         ]);
 
         $data = $this->preview($file())->assertOk()->json('data');
@@ -223,19 +225,68 @@ class SiteWorkbookImportTest extends TestCase
         $this->assertSame([[$this->entry($engineer), 'period_locked']], array_map(fn (array $e) => [$e['name'], $e['error']], $data['errors']));
     }
 
-    /** W8: a time Excel stored as a fraction of a day, Arabic-Indic digits and a single-digit hour read as HH:MM. */
+    /**
+     * W8: a time Excel stored as a fraction of a day, Arabic-Indic digits and a single-digit hour read as HH:MM. An Excel time reads as its
+     * 24-hour value and then takes ص/م like a typed one, so 05:00 as a departure with ص/م blank is 17:00 (the documented limit).
+     */
     public function test_times_excel_made_are_read(): void
     {
         $first = $this->homed('day_laborer', $this->site);
         $second = $this->homed('day_laborer', $this->site);
+        $third = $this->homed('day_laborer', $this->site);
         $path = $this->download();
 
         $data = $this->preview($this->fill($path, [self::SAT => [
-            [$this->entry($first), 'حاضر', new NumericCell(0.375), '١٦:٠٠'],
-            [$this->entry($second), 'حاضر', '9:05', '17:00'],
+            [$this->entry($first), 'حاضر', new NumericCell(0.375), '', '١٦:٠٠'],
+            [$this->entry($second), 'حاضر', '9:05', '', '17:00'],
+            [$this->entry($third), 'حاضر', new NumericCell(0.375), '', new NumericCell(0.208333333333)],
         ]]))->assertOk()->json('data');
 
-        $this->assertSame([['09:00', '16:00', 60], ['09:05', '17:00', 65]], array_map(fn (array $c) => [$c['to']['in_time'], $c['to']['out_time'], $c['to']['late_minutes']], $data['changes']));
+        $this->assertSame([['09:00', '16:00', 60], ['09:05', '17:00', 65], ['09:00', '17:00', 60]], array_map(fn (array $c) => [$c['to']['in_time'], $c['to']['out_time'], $c['to']['late_minutes']], $data['changes']));
+    }
+
+    /** @return array<string, array{list<string>, array{string, string}}> arrival, its ص/م, departure, its ص/م; the times stored */
+    public static function twelveHourTimes(): array
+    {
+        return [
+            'an hour alone, ص/م blank: arrival ص, departure م' => [['9', '', '5', ''], ['09:00', '17:00']],
+            'Arabic-Indic digits' => [['٩', '', '٥:٣٠', ''], ['09:00', '17:30']],
+            '12 ص is midnight' => [['12', 'ص', '8', 'ص'], ['00:00', '08:00']],
+            '12 م is noon' => [['12', 'م', '5', ''], ['12:00', '17:00']],
+            'a departure of 12, ص/م blank, is noon' => [['8', '', '12', ''], ['08:00', '12:00']],
+            'ص chosen on a departure before noon' => [['1', '', '6', 'ص'], ['01:00', '06:00']],
+            'م chosen on an arrival' => [['1:30', 'م', '9', 'م'], ['13:30', '21:00']],
+            '24-hour times take no ص/م' => [['0:30', 'م', '17:00', 'ص'], ['00:30', '17:00']],
+        ];
+    }
+
+    /**
+     * W8: a time is `H` or `H:MM`; an hour 1–12 takes its ص/م cell (blank: arrival ص, departure م), 0 and 13–23 are 24-hour.
+     *
+     * @param  list<string>  $cells
+     * @param  array{string, string}  $stored
+     */
+    #[DataProvider('twelveHourTimes')]
+    public function test_twelve_hour_times(array $cells, array $stored): void
+    {
+        $laborer = $this->homed('day_laborer', $this->site);
+
+        $data = $this->preview($this->fill($this->download(), [self::SAT => [[$this->entry($laborer), 'حاضر', ...$cells]]]))->assertOk()->json('data');
+
+        $this->assertSame([], $data['errors']);
+        $this->assertSame($stored, [$data['changes'][0]['to']['in_time'], $data['changes'][0]['to']['out_time']]);
+    }
+
+    /** W8: a ص/م with no time beside it is ignored; the row reads as if it were blank. */
+    public function test_a_period_without_a_time_is_ignored(): void
+    {
+        [$with, $without] = [$this->homed('day_laborer', $this->site), $this->homed('day_laborer', $this->site)];
+
+        $data = $this->preview($this->fill($this->download(), [self::SAT => [[$this->entry($with), 'حاضر', '', 'م', '', 'ص'], [$this->entry($without), 'حاضر']]]))
+            ->assertOk()->json('data');
+
+        $this->assertSame([], $data['errors']);
+        $this->assertSame($data['changes'][1]['to'], $data['changes'][0]['to']);
     }
 
     /** W13: a day stored at another work site is a conflict, shown replaced by the file's row; one the write refuses is an error, not a conflict to choose on. */
@@ -247,7 +298,7 @@ class SiteWorkbookImportTest extends TestCase
         }
         $path = $this->download();
 
-        $data = $this->preview($this->fill($path, [self::SAT => [[$this->entry($laborer), 'حاضر', '08:00', '17:00'], [$this->entry($refused), 'حاضر', '17:00', '08:00']]]))
+        $data = $this->preview($this->fill($path, [self::SAT => [[$this->entry($laborer), 'حاضر', '08:00', '', '17:00'], [$this->entry($refused), 'حاضر', '17:00', '', '08:00', 'ص']]]))
             ->assertOk()->json('data');
 
         $this->assertSame(1, $data['summary']['conflicts']);
@@ -266,7 +317,7 @@ class SiteWorkbookImportTest extends TestCase
         $this->putDay($onLeave, '2026-11-07', ['site_id' => $this->leave['sick']])->assertOk();
         $path = $this->download();
 
-        $data = $this->preview($this->fill($path, [self::SAT => [[$this->entry($here), 'حاضر', '08:00', '17:00'], [$this->entry($onLeave), 'حاضر']]]))->assertOk()->json('data');
+        $data = $this->preview($this->fill($path, [self::SAT => [[$this->entry($here), 'حاضر', '08:00', '', '17:00'], [$this->entry($onLeave), 'حاضر']]]))->assertOk()->json('data');
 
         $this->assertSame(['rows' => 2, 'changes' => 1, 'unchanged' => 1, 'errors' => 0, 'conflicts' => 0], array_slice($data['summary'], 0, 5));
         $this->assertSame([$onLeave, null, 'Leave-sick'], [$data['changes'][0]['employee_id'], $data['changes'][0]['conflict_site'], $data['changes'][0]['from']['site']]);
@@ -279,8 +330,8 @@ class SiteWorkbookImportTest extends TestCase
         $path = $this->download();
 
         $data = $this->preview($this->fill($path, [
-            self::SAT => [[$this->entry($a), 'حاضر', '', '', '500'], [$this->entry($b), 'حاضر', '', '', '200']],
-            self::FRI => [[$this->entry($c), 'حاضر', '', '', '900']],
+            self::SAT => [[$this->entry($a), 'حاضر', '', '', '', '', '500'], [$this->entry($b), 'حاضر', '', '', '', '', '200']],
+            self::FRI => [[$this->entry($c), 'حاضر', '', '', '', '', '900']],
         ]))->assertOk()->json('data');
 
         $this->assertSame('700.000000', $data['summary']['advances_total']);
@@ -292,7 +343,7 @@ class SiteWorkbookImportTest extends TestCase
     public function test_a_control_character_in_a_cell_reads_as_a_space(): void
     {
         $laborer = $this->homed('day_laborer', $this->site);
-        $file = $this->fill($this->download(), [self::SAT => [[$this->entry($laborer), 'حاضر', '', '', '', "x\x00y\x1F"], $this->newRow("N\x00M", self::NID)]]);
+        $file = $this->fill($this->download(), [self::SAT => [[$this->entry($laborer), 'حاضر', '', '', '', '', '', "x\x00y\x1F"], $this->newRow("N\x00M", self::NID)]]);
 
         $data = $this->preview($file)->assertOk()->json('data');
 
@@ -304,12 +355,12 @@ class SiteWorkbookImportTest extends TestCase
     }
 
     /** W4: on a row whose name is an entry, the national ID, mobile, residence and wage columns are ignored. */
-    public function test_columns_g_to_j_on_an_entry_row_are_ignored(): void
+    public function test_columns_i_to_l_on_an_entry_row_are_ignored(): void
     {
         $laborer = $this->homed('day_laborer', $this->site);
         $path = $this->download();
 
-        $data = $this->preview($this->fill($path, [self::SAT => [[$this->entry($laborer), 'حاضر', '', '', '', '', '123', 'not a mobile', 'No such residence', 'x']]]))
+        $data = $this->preview($this->fill($path, [self::SAT => [[$this->entry($laborer), 'حاضر', '', '', '', '', '', '', '123', 'not a mobile', 'No such residence', 'x']]]))
             ->assertOk()->json('data');
 
         $this->assertSame([[$laborer, false]], array_map(fn (array $c) => [$c['employee_id'], $c['new_laborer']], $data['changes']));
@@ -336,6 +387,7 @@ class SiteWorkbookImportTest extends TestCase
             'two sheets for one date' => ['twice'],
             'no lists' => ['no_lists'],
             'a header changed' => ['header'],
+            'the 10 headers of a file from before the ص/م columns' => ['old_columns'],
             'lists D1 a deleted site' => ['deleted_site'],
             'lists D1 a leave day-type' => ['leave_site'],
             'lists D1 not a uuid' => ['not_uuid'],
@@ -363,6 +415,9 @@ class SiteWorkbookImportTest extends TestCase
             'twice' => $this->rewrite($path, fn (string $name, array $rows) => $this->rows($name, $rows, $laborer), [self::SUN => 'نسخة 07-11']),
             'no_lists' => $this->rewrite($path, fn (string $name, array $rows) => $name === 'lists' ? null : $this->rows($name, $rows, $laborer)),
             'header' => $this->rewrite($path, fn (string $name, array $rows) => $name === self::SUN ? $this->setCell($rows, 2, 0, 'Name') : $this->rows($name, $rows, $laborer)),
+            'old_columns' => $this->rewrite($path, fn (string $name, array $rows) => $name === 'lists' ? $rows : [
+                $rows[0], ['الاسم', 'الحالة', 'حضور', 'انصراف', 'سلفة', 'ملاحظات', 'الرقم القومي', 'الموبايل', 'محل الإقامة', 'الأجر المقترح'], ...array_slice($this->rows($name, $rows, $laborer), 2),
+            ]),
             'deleted_site' => $this->rewrite($path, $lists(1, $gone)),
             'leave_site' => $this->rewrite($path, $lists(1, $this->leave['sick'])),
             'not_uuid' => $this->rewrite($path, $lists(1, 'Site-S')),
@@ -470,7 +525,7 @@ class SiteWorkbookImportTest extends TestCase
         Notification::fake();
 
         $this->preview($this->fill($path, [
-            self::SAT => [[$this->entry($laborer), 'حاضر', '08:00', '17:00', '250'], [$this->entry($engineer), 'حاضر']],
+            self::SAT => [[$this->entry($laborer), 'حاضر', '08:00', '', '17:00', '', '250'], [$this->entry($engineer), 'حاضر']],
             self::SUN => [[$this->entry($laborer), 'حاضر']],
         ]))->assertOk()->assertJsonPath('data.summary.changes', 3)->assertJsonPath('data.summary.conflicts', 1);
 
@@ -513,7 +568,7 @@ class SiteWorkbookImportTest extends TestCase
     {
         $worker = $this->homed('permanent_worker', $this->other);
         $engineer = $this->assign($this->employee('engineer'), $this->managerOf($this->other));
-        $file = $this->fill($this->download(), [self::SAT => [[$this->entry($worker), 'حاضر', '08:30', '18:00'], [$this->entry($engineer), 'حاضر', '08:30', '18:00']]]);
+        $file = $this->fill($this->download(), [self::SAT => [[$this->entry($worker), 'حاضر', '08:30', '', '18:00'], [$this->entry($engineer), 'حاضر', '08:30', '', '18:00']]]);
         $tables = ['employee_site_assignments', 'day_crew_changes', 'employee_manager_assignments'];
         $before = array_map(fn (string $t) => DB::table($t)->orderBy('id')->get()->all(), $tables);
 
@@ -535,7 +590,7 @@ class SiteWorkbookImportTest extends TestCase
             $this->putDay($id, '2026-11-07', ['site_id' => $this->other, 'in_time' => '08:00', 'out_time' => '16:00'])->assertOk();
         }
         $before = DB::table('attendance_days')->get()->keyBy('employee_id');
-        $file = $this->fill($this->download(), [self::SAT => array_map(fn (string $id) => [$this->entry($id), 'حاضر', '08:00', '17:00'], [$kept, $replaced, $unchosen, $plain])]);
+        $file = $this->fill($this->download(), [self::SAT => array_map(fn (string $id) => [$this->entry($id), 'حاضر', '08:00', '', '17:00'], [$kept, $replaced, $unchosen, $plain])]);
 
         $data = $this->confirm($file, ["{$kept}/2026-11-07" => 'keep', "{$replaced}/2026-11-07" => 'replace', "{$plain}/2026-11-07" => 'keep'])->assertOk()->json('data');
 
@@ -556,7 +611,7 @@ class SiteWorkbookImportTest extends TestCase
         $day = fn () => DB::table('attendance_days')->where(['employee_id' => $laborer, 'date' => '2026-11-07'])->first(['ot_minutes', 'source']);
         $this->assertEquals((object) ['ot_minutes' => 0, 'source' => 'manager'], $day());
 
-        $this->confirm($this->fill($this->download(), [self::SAT => [[$this->entry($laborer), 'حاضر', '08:00', '18:00']]]))->assertOk()->assertJsonPath('data.applied', 1);
+        $this->confirm($this->fill($this->download(), [self::SAT => [[$this->entry($laborer), 'حاضر', '08:00', '', '18:00']]]))->assertOk()->assertJsonPath('data.applied', 1);
 
         $this->assertEquals((object) ['ot_minutes' => 60, 'source' => 'imported'], $day());
     }
@@ -566,7 +621,7 @@ class SiteWorkbookImportTest extends TestCase
     {
         $laborer = $this->homed('day_laborer', $this->site);
         $this->putDay($laborer, '2026-11-07', ['site_id' => $this->other, 'in_time' => '08:00', 'out_time' => '16:00'])->assertOk();
-        $file = $this->fill($this->download(), [self::SAT => [[$this->entry($laborer), 'حاضر', '17:00', '08:00']]]);
+        $file = $this->fill($this->download(), [self::SAT => [[$this->entry($laborer), 'حاضر', '17:00', '', '08:00', 'ص']]]);
         [$days, $audits] = [DB::table('attendance_days')->get()->all(), DB::table('audit_log')->count()];
         $refused = fn (TestResponse $r) => array_map(fn (array $e) => [$e['name'], $e['error']], $r->json('data.errors'));
 
@@ -584,8 +639,8 @@ class SiteWorkbookImportTest extends TestCase
         [$a, $b, $c, $kept] = array_map(fn () => $this->homed('day_laborer', $this->site), range(1, 4));
         $this->putDay($kept, '2026-11-07', ['site_id' => $this->other, 'in_time' => '08:00', 'out_time' => '16:00'])->assertOk();
         $file = $this->fill($this->download(), [
-            self::SAT => [[$this->entry($a), 'حاضر', '', '', '500'], [$this->entry($b), 'حاضر', '', '', '200'], [$this->entry($kept), 'حاضر', '', '', '300']],
-            self::FRI => [[$this->entry($c), 'حاضر', '', '', '900']],
+            self::SAT => [[$this->entry($a), 'حاضر', '', '', '', '', '500'], [$this->entry($b), 'حاضر', '', '', '', '', '200'], [$this->entry($kept), 'حاضر', '', '', '', '', '300']],
+            self::FRI => [[$this->entry($c), 'حاضر', '', '', '', '', '900']],
         ]);
 
         $this->confirm($file, ["{$kept}/2026-11-07" => 'keep'])->assertOk()
@@ -613,7 +668,7 @@ class SiteWorkbookImportTest extends TestCase
     public function test_uploading_the_same_file_again_saves_nothing(): void
     {
         $laborer = $this->homed('day_laborer', $this->site);
-        $file = $this->fill($this->download(), [self::SAT => [[$this->entry($laborer), 'حاضر', '08:00', '17:00', '500']]]);
+        $file = $this->fill($this->download(), [self::SAT => [[$this->entry($laborer), 'حاضر', '08:00', '', '17:00', '', '500']]]);
         $this->confirm($file)->assertOk()->assertJsonPath('data.applied', 1);
         [$days, $audits] = [DB::table('attendance_days')->get()->all(), DB::table('audit_log')->count()];
 
@@ -630,7 +685,7 @@ class SiteWorkbookImportTest extends TestCase
         $laborer = $this->homed('day_laborer', $this->site);
         $later = $this->homed('day_laborer', $this->site);
         $file = $this->fill($this->download(), [
-            self::SAT => [[$this->entry($office), 'حاضر', '', '', '100'], [$this->entry($laborer), 'حاضر']],
+            self::SAT => [[$this->entry($office), 'حاضر', '', '', '', '', '100'], [$this->entry($laborer), 'حاضر']],
             self::FRI => [[$this->entry($later), 'حاضر']],
         ]);
 
@@ -676,7 +731,7 @@ class SiteWorkbookImportTest extends TestCase
     {
         $residence = (string) Residence::create(['name_ar' => 'Residence-R'])->getKey();
         $file = $this->fill($this->download(), [
-            self::SUN => [['New Laborer', 'حاضر', '08:00', '18:00', '', '', self::NID, '٠١٠١٢٣٤٥٦٧٨', 'Residence-R', '350']],   // mobile in Arabic-Indic digits
+            self::SUN => [['New Laborer', 'حاضر', '08:00', '', '18:00', '', '', '', self::NID, '٠١٠١٢٣٤٥٦٧٨', 'Residence-R', '350']],   // mobile in Arabic-Indic digits
             self::SAT => [$this->newRow('New Laborer', self::NID)],
         ]);
 
@@ -787,7 +842,7 @@ class SiteWorkbookImportTest extends TestCase
         return ['as typed' => [self::NID], 'in Arabic-Indic digits' => [strtr(self::NID, ['٠', '١', '٢', '٣', '٤', '٥', '٦', '٧', '٨', '٩'])]];
     }
 
-    /** W5, Review Focus 2: the national ID of someone in the name list is that employee, flagged; columns H–J are ignored and nobody is created. */
+    /** W5, Review Focus 2: the national ID of someone in the name list is that employee, flagged; columns J–L are ignored and nobody is created. */
     #[DataProvider('listedNationalIds')]
     public function test_a_listed_employees_national_id_is_that_employee(string $typed): void
     {
@@ -922,7 +977,7 @@ class SiteWorkbookImportTest extends TestCase
     /** W5 (ruling B4 m4, owner at Gate B): a new laborer whose rows the write path all refuses is still created, with 0 days and no attendance day. */
     public function test_a_new_laborer_whose_rows_are_all_refused_is_created_with_0_days(): void
     {
-        $file = $this->fill($this->download(), [self::SAT => [['New Laborer', 'حاضر', '17:00', '08:00', '', '', self::NID]]]);
+        $file = $this->fill($this->download(), [self::SAT => [['New Laborer', 'حاضر', '17:00', '', '08:00', 'ص', '', '', self::NID]]]);
 
         $data = $this->preview($file)->assertOk()->json('data');
 
@@ -959,7 +1014,7 @@ class SiteWorkbookImportTest extends TestCase
     {
         $file = $this->fill($this->download(), [
             self::SAT => [$this->newRow('New Laborer', self::NID, null, null, '350')],
-            self::SUN => [['New Laborer', 'حاضر', '08:00', '18:00', '', '', self::NID]],
+            self::SUN => [['New Laborer', 'حاضر', '08:00', '', '18:00', '', '', '', self::NID]],
         ]);
         $this->confirm($file)->assertOk()->assertJsonPath('data.applied', 2);
         $employees = DB::table('employees')->count();
@@ -1009,13 +1064,13 @@ class SiteWorkbookImportTest extends TestCase
     }
 
     /**
-     * A new day laborer's row: the typed name, a status, then from column G the national ID, mobile, residence and proposed wage.
+     * A new day laborer's row: the typed name, a status, then from column I the national ID, mobile, residence and proposed wage.
      *
      * @return list<string>
      */
     private function newRow(string $name, ?string $nationalId, ?string $mobile = null, ?string $residence = null, ?string $wage = null): array
     {
-        return [$name, 'حاضر', '', '', '', '', $nationalId ?? '', $mobile ?? '', $residence ?? '', $wage ?? ''];
+        return [$name, 'حاضر', '', '', '', '', '', '', $nationalId ?? '', $mobile ?? '', $residence ?? '', $wage ?? ''];
     }
 
     /** An employee of $type employed from 2026-01-01 whose home site is $siteId (office: their dated site). */
