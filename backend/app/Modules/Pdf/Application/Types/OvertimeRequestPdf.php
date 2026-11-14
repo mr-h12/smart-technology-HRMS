@@ -26,12 +26,19 @@ final class OvertimeRequestPdf implements PdfDocument
         ];
     }
 
+    public function normalise(array $fields): array
+    {
+        return $fields;
+    }
+
     public function snapshot(string $subjectId, array $fields, ?string $scope, bool $showsPay): array
     {
         $request = DB::table('attendance_requests')->where(['id' => $subjectId, 'type' => 'overtime'])->whereNull('deleted_at')
             ->lockForUpdate()->first() ?? throw new ModelNotFoundException;
         $employeeId = (string) $request->employee_id;
-        abort_if($scope !== null && ! $this->employees->isManagedBy($employeeId, $scope), 404);
+        if ($scope !== null && ! $this->employees->isManagedBy($employeeId, $scope)) {
+            throw new ModelNotFoundException;
+        }
         $employee = $this->employees->show($employeeId, $scope);
 
         return [$employeeId, [
@@ -59,7 +66,7 @@ final class OvertimeRequestPdf implements PdfDocument
     }
 
     /** Never signed. */
-    public function approval(stdClass $export, Authenticatable $actor): ?string
+    public function approval(stdClass $export, Authenticatable $actor, bool $lock): ?string
     {
         throw new ConcurrencyConflict;
     }

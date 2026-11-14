@@ -4,7 +4,7 @@ import { ErrorBanner } from '@/components/form'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { useAuth } from '@/lib/auth'
-import { useList, useSave } from '@/lib/query'
+import { useApi, useSave } from '@/lib/query'
 import { download } from './hr-forms'
 
 type Export = { id: string; serial_number: number; stage: 'unsigned' | 'signed'; status: 'pending' | 'ready' | 'failed'; file_name: string; actions: string[] }
@@ -18,9 +18,8 @@ const fields = [
 export function LeaveRequestPdf({ id }: { id: string }) {
   const { t } = useTranslation()
   const { can } = useAuth()
-  const list = useList(`/hr-form-exports?type=leave_request&subject_id=${id}&per_page=100`)
-  const exports = list.rows as Export[]
-  const reload = list.reload
+  // fresh: approve depends on the leave request's status and decider, which change outside this panel
+  const { data: exports = [], err, reload } = useApi<Export[]>(`/hr-form-exports?type=leave_request&subject_id=${id}&per_page=100`, { fresh: true })
   const save = useSave()
   const [error, setError] = useState<unknown>()
   const [busy, setBusy] = useState(false)
@@ -53,7 +52,7 @@ export function LeaveRequestPdf({ id }: { id: string }) {
   return (
     <section className="space-y-3 border-t pt-3">
       <h3 className="font-semibold">{t('hrForms.leaveRequest')}</h3>
-      <ErrorBanner err={error ?? list.err} shown={[]} />
+      <ErrorBanner err={error ?? err} shown={[]} />
       {can('hr_forms.generate') && (
         <form className="grid gap-3 sm:grid-cols-2" onSubmit={generate}>
           {fields.map(([name, label, limit]) => (

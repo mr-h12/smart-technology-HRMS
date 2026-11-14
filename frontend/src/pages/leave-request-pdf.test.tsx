@@ -39,3 +39,17 @@ test('the leave form panel lists its exports and shows Approve and Retry from th
     fields: { job_title: 'مهندسة اختبار', notification_method: '', manager_opinion: '', substitute: '' },
   })
 })
+
+test('reopening the panel asks the server again, so the sign button follows a decision made meanwhile', async () => {
+  let actions = ['download']
+  mockFetch({ 'GET /api/v1/hr-form-exports': () => json(200, { data: [{ id: 'form-1', serial_number: 1, stage: 'unsigned', status: 'ready', file_name: 'leave-request-1-unsigned.pdf', actions }], meta: { pagination } }) })
+  const permissions = ['hr_forms.view.all', 'hr_forms.approve_leave_request.all']
+  const first = renderWithAuth(<LeaveRequestPdf id="leave-1" />, permissions)
+  await screen.findByRole('button', { name: 'تنزيل الملف' })
+  expect(screen.queryByRole('button', { name: 'اعتماد وتوقيع' })).toBeNull()
+  first.unmount()
+
+  actions = ['download', 'approve']
+  renderWithAuth(<LeaveRequestPdf id="leave-1" />, permissions)
+  expect(await screen.findByRole('button', { name: 'اعتماد وتوقيع' })).toBeInTheDocument()
+})

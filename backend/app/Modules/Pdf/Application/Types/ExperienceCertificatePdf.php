@@ -24,6 +24,11 @@ final class ExperienceCertificatePdf implements PdfDocument
         return ['job_title' => ['required', 'string', 'max:160']];
     }
 
+    public function normalise(array $fields): array
+    {
+        return $fields;
+    }
+
     /** An archived employee gets one too (owner decision 10). */
     public function snapshot(string $subjectId, array $fields, ?string $scope, bool $showsPay): array
     {
@@ -65,7 +70,7 @@ final class ExperienceCertificatePdf implements PdfDocument
     }
 
     /** Any holder of hr_forms.approve signs; the certificate has no stamp line. */
-    public function approval(stdClass $export, Authenticatable $actor): ?string
+    public function approval(stdClass $export, Authenticatable $actor, bool $lock): ?string
     {
         return null;
     }

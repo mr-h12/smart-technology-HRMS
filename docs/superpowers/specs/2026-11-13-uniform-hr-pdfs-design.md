@@ -181,7 +181,9 @@ the four; `subject_id` and `idempotency_key` required uuids; `fields` required a
 prefixed `fields.`; only validated keys are kept. Then, in this order:
 1. Own-scope caller and `!type->ownScope()`: 403 `permission_denied`.
 2. One transaction: lock the caller's `users` row (as today); a row with `(requested_by, idempotency_key)` is a replay: same type,
-   same subject, `unsigned` and `array_intersect_key(snapshot, fields) == fields` → return it, else 409 `concurrency_conflict`.
+   same subject, `unsigned`, not deleted, and the snapshot holds every normalised field (`PdfDocument::normalise`: optional keys
+   filled with `''`, casts applied) with the identical value (type-strict) → return it when it passes the read gates of `visible`
+   (else 404), else 409 `concurrency_conflict`.
 3. `document(type)->snapshot(subject_id, fields, scope, canViewPay(caller))`: locks the subject row, 404 when missing or out of
    reach, 403 for an advance without pay (Step 1), 422 for missing certificate data.
 4. Supersede: the latest (`serial_number desc`) `unsigned` row of the same type and subject (`subjectColumn()`), whatever its
@@ -213,8 +215,9 @@ One transaction, in this order:
 ### `POST hr-form-exports/{export}/retry`
 Failed rows only. One transaction: find with lock; the permission needed is `hr_forms.generate` for an `unsigned` row and the
 type's approve permission for a `signed` row; caller lacks it: 403; `visible` with that permission's scope: 404; `status` not
-`failed`: 409; a `signed` row whose `approved_by` is not the caller: 409. Then `status = pending`, `failure_code = null` (no audit
-row, as today; `GENERATED` follows the render). Who may retry:
+`failed`: 409; a `signed` row whose `approved_by` is not the caller: 409. Then `status = pending`, `failure_code = null`,
+`updated_by` = the caller (the developer while viewing as), and a `RETRIED` audit row (`{status: failed}` → `{status: pending}`);
+`GENERATED` follows the render. Who may retry:
 
 | Row | Who | Today |
 |---|---|---|
@@ -347,6 +350,6 @@ Each keeps today's behaviour unless the owner plan says otherwise; the rejected 
 20. Supersede takes the latest unsigned row of the type and subject whatever its status or approval (today's leave and attendance rule).
 21. `actions.download` means `status = ready`; the file is checked only by the download itself.
 22. Retry of a superseded failed row is allowed (today for advance); approve still refuses a superseded row (today).
-23. Retry writes no audit row (today); not a new `RETRIED` event.
+23. Retry writes a `RETRIED` audit row and sets `updated_by` (`CLAUDE.md`: every update is audited); not today's unaudited update.
 24. `ownScope()`, `approvePermission()` and `fileName()` live on the enum (plan's Contracts line); not on `PdfDocument` (plan's Data shape bullet).
 25. `approval()` returns the stamp line and throws its refusal; `actions` treats a throw as "no approve", so the route and the button share one rule.

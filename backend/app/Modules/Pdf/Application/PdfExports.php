@@ -45,8 +45,9 @@ final class PdfExports
     }
 
     /**
-     * A replay of the caller's idempotency key returns its row (checked before the subject is read again); the same key with
-     * another type, subject or fields is a conflict. The new row supersedes the subject's latest unsigned row.
+     * A replay of the caller's idempotency key returns its row behind the read gates (checked before the subject is read again);
+     * the same key with another type, subject or normalised fields, or on a deleted row, is a conflict. The new row supersedes the
+     * subject's latest unsigned row.
      *
      * @param  array<string, mixed>  $fields  validated with document($type)->rules()
      */
@@ -56,15 +57,20 @@ final class PdfExports
             throw AuthorizationRefused::of('hr_forms.generate');
         }
         $actorId = (string) $actor->getAuthIdentifier();
+        $fields = self::document($type)->normalise($fields);
 
         return DB::transaction(function () use ($type, $subjectId, $key, $fields, $actor, $actorId, $scope): stdClass {
             DB::table('users')->where('id', $actorId)->lockForUpdate()->firstOrFail();
             $unsigned = fn (): Builder => $this->subjectRows($type, $subjectId)->where('stage', 'unsigned');
+            // Deleted rows too: a soft-deleted row still holds its key in the unique (requested_by, idempotency_key) index.
             $existing = DB::table('hr_form_exports')->where('requested_by', $actorId)->where('idempotency_key', $key)->first();
             if ($existing !== null) {
-                $stored = json_decode((string) $existing->snapshot, true, flags: JSON_THROW_ON_ERROR);
-                if (! $unsigned()->where('id', $existing->id)->exists() || array_intersect_key($stored, $fields) != $fields) {
+                if ($existing->deleted_at !== null || ! $unsigned()->where('id', $existing->id)->exists()
+                    || ! self::sameFields(json_decode((string) $existing->snapshot, true, flags: JSON_THROW_ON_ERROR), $fields)) {
                     throw new ConcurrencyConflict;
+                }
+                if (! $this->shows($existing, $actor, $scope)) {
+                    throw new ModelNotFoundException;
                 }
 
                 return $existing;
@@ -89,7 +95,7 @@ final class PdfExports
         return DB::transaction(function () use ($id, $approver): stdClass {
             $approverId = (string) $approver->getAuthIdentifier();
             $source = $this->find($id, lock: true);
-            $stampLine = $this->approval($source, $approver);
+            $stampLine = $this->approval($source, $approver, lock: true);
             $existing = DB::table('hr_form_exports')->where('unsigned_export_id', $id)->first();
             if ($existing !== null) {
                 return $existing;
@@ -106,8 +112,7 @@ final class PdfExports
                     'stamp_line' => $stampLine, 'decider_id' => $approverId, 'signature_version' => (int) $signature->version,
                 ], JSON_THROW_ON_ERROR);
             }
-            $viewer = Auth::user();
-            $impersonator = $viewer instanceof User ? $viewer->viewAs?->byId : null;
+            $impersonator = self::impersonator();
             $signedId = (string) Str::uuid7();
             $now = now();
             DB::table('hr_form_exports')->insert([
@@ -128,14 +133,16 @@ final class PdfExports
         });
     }
 
-    /** Failed rows only, rendered again on the same row. No audit row: GENERATED follows the render. */
+    /** Failed rows only, rendered again on the same row. A RETRIED audit row records who asked; GENERATED follows the render. */
     public function retry(string $id, Authenticatable $actor): stdClass
     {
         return DB::transaction(function () use ($id, $actor): stdClass {
             $this->retryable($this->find($id, lock: true), $actor);
             DB::table('hr_form_exports')->where('id', $id)->update([
-                'status' => 'pending', 'failure_code' => null, 'updated_at' => now(),
+                'status' => 'pending', 'failure_code' => null,
+                'updated_by' => self::impersonator() ?? (string) $actor->getAuthIdentifier(), 'updated_at' => now(),
             ]);
+            AuditLog::record('RETRIED', 'hr_form_exports', $id, ['status' => 'failed'], ['status' => 'pending']);
 
             return $this->find($id);
         });
@@ -202,7 +209,7 @@ final class PdfExports
         $permission = PdfType::from((string) $row->form_type)->approvePermission();
         // ponytail: up to three queries per signable row (successors, the leave request); a page holds at most 100 rows
         if ($row->stage === 'unsigned' && $row->status === 'ready' && $permission !== null && $this->holdsAll($actor, $permission)
-            && self::passes(fn () => $this->approval($row, $actor))
+            && self::passes(fn () => $this->approval($row, $actor, lock: false))
             && ! DB::table('hr_form_exports')->where('unsigned_export_id', $row->id)->exists()) {
             $actions[] = 'approve';
         }
@@ -226,7 +233,7 @@ final class PdfExports
     }
 
     /** Approve's refusals in order: 404 not visible, 409 never signed, 403 no permission, 409 state, then the type's signer rule. */
-    private function approval(stdClass $row, Authenticatable $actor): ?string
+    private function approval(stdClass $row, Authenticatable $actor, bool $lock): ?string
     {
         $type = PdfType::from((string) $row->form_type);
         $permission = $type->approvePermission();
@@ -244,7 +251,7 @@ final class PdfExports
             throw new ConcurrencyConflict;
         }
 
-        return self::document($type)->approval($row, $actor);
+        return self::document($type)->approval($row, $actor, $lock);
     }
 
     /** Retry's refusals in order: 403 no permission (generate for an unsigned row, the type's approve for a signed one), 404 not visible, 409 state or another approver. */
@@ -286,6 +293,29 @@ final class PdfExports
         $decision = $this->authorize->decide($actor, $permission);
 
         return $decision->granted() && ! $decision->allows(Scope::All) ? (string) $actor->getAuthIdentifier() : null;
+    }
+
+    /** The developer behind a view-as session, else null. */
+    private static function impersonator(): ?string
+    {
+        $viewer = Auth::user();
+
+        return $viewer instanceof User ? $viewer->viewAs?->byId : null;
+    }
+
+    /**
+     * Type-strict and in any key order: the snapshot holds every normalised field with the identical value.
+     *
+     * @param  array<string, mixed>  $snapshot
+     * @param  array<string, mixed>  $fields
+     */
+    private static function sameFields(array $snapshot, array $fields): bool
+    {
+        $stored = array_intersect_key($snapshot, $fields);
+        ksort($stored);
+        ksort($fields);
+
+        return $stored === $fields;
     }
 
     private static function passes(callable $check): bool

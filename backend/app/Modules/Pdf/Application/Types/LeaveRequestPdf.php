@@ -30,6 +30,11 @@ final class LeaveRequestPdf implements PdfDocument
         ];
     }
 
+    public function normalise(array $fields): array
+    {
+        return array_map(fn (mixed $value): mixed => $value ?? '', ['notification_method' => null, 'manager_opinion' => null, 'substitute' => null, ...$fields]);
+    }
+
     public function snapshot(string $subjectId, array $fields, ?string $scope, bool $showsPay): array
     {
         $request = DB::table('leave_requests')->where('id', $subjectId)->whereNull('deleted_at')->lockForUpdate()->first()
@@ -40,7 +45,7 @@ final class LeaveRequestPdf implements PdfDocument
 
         return [$employeeId, [
             ...array_intersect_key($employee, array_flip(['name_ar', 'department', 'gender'])),
-            ...array_map(fn (mixed $value): mixed => $value ?? '', ['notification_method' => null, 'manager_opinion' => null, 'substitute' => null, ...$fields]),
+            ...$fields,
             'leave_request_id' => $subjectId, 'kind' => $request->kind, 'from_date' => $request->from_date,
             'to_date' => $request->to_date, 'days' => (int) $request->days, 'reason' => $request->note,
             'balance' => $this->balances->forEmployee($employeeId, $year)['balance'], 'balance_year' => $year,
@@ -68,11 +73,11 @@ final class LeaveRequestPdf implements PdfDocument
     }
 
     /** Only the person who approved the leave request signs its form; the stamp line names who decided it. */
-    public function approval(stdClass $export, Authenticatable $actor): string
+    public function approval(stdClass $export, Authenticatable $actor, bool $lock): string
     {
         $snapshot = json_decode((string) $export->snapshot, true, flags: JSON_THROW_ON_ERROR);
         $request = DB::table('leave_requests')->where('id', $snapshot['leave_request_id'])->whereNull('deleted_at')
-            ->lockForUpdate()->first() ?? throw new ModelNotFoundException;
+            ->when($lock, fn ($query) => $query->lockForUpdate())->first() ?? throw new ModelNotFoundException;
         if ($request->status !== LeaveStatus::Approved->value) {
             throw new ConcurrencyConflict;
         }

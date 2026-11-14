@@ -14,9 +14,17 @@ interface PdfDocument
     public function rules(): array;
 
     /**
-     * Locks the subject row, checks reach and builds the snapshot.
+     * The validated fields as the snapshot stores them (optional keys filled, casts applied); a replay compares these.
      *
      * @param  array<string, mixed>  $fields
+     * @return array<string, mixed>
+     */
+    public function normalise(array $fields): array;
+
+    /**
+     * Locks the subject row, checks reach and builds the snapshot.
+     *
+     * @param  array<string, mixed>  $fields  normalised
      * @return array{0: string, 1: array<string, mixed>} [employee_id, snapshot]
      */
     public function snapshot(string $subjectId, array $fields, ?string $scope, bool $showsPay): array;
@@ -30,6 +38,6 @@ interface PdfDocument
      */
     public function view(array $snapshot): array;
 
-    /** The signer rule: the stamp line for the signed snapshot (null = none); throws the refusal when $actor may not sign. */
-    public function approval(stdClass $export, Authenticatable $actor): ?string;
+    /** The signer rule: the stamp line for the signed snapshot (null = none); throws the refusal when $actor may not sign. $lock: approve's transaction locks the subject row, a read does not. */
+    public function approval(stdClass $export, Authenticatable $actor, bool $lock): ?string;
 }

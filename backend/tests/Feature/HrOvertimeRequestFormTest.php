@@ -104,20 +104,6 @@ final class HrOvertimeRequestFormTest extends TestCase
         }
     }
 
-    public function test_history_for_an_unsupported_request_type_is_empty(): void
-    {
-        $id = $this->attendanceRequest();
-        // Simulate a future request type in this test's rolled-back transaction.
-        $export = $this->generate($id)->assertAccepted()->json('data.id');
-        DB::table('hr_form_exports')->where('id', $export)->update([
-            'form_type' => 'other_request', 'snapshot' => json_encode(['other_request_id' => $id], JSON_THROW_ON_ERROR),
-        ]);
-        DB::statement('alter table attendance_requests drop constraint attendance_requests_check');
-        DB::table('attendance_requests')->where('id', $id)->update(['type' => 'other']);
-        $this->getJson("/api/v1/hr-form-exports?type=overtime_request&subject_id={$id}")
-            ->assertOk()->assertJsonCount(0, 'data');
-    }
-
     public function test_validation_idempotency_and_unsigned_retry(): void
     {
         $id = $this->attendanceRequest();

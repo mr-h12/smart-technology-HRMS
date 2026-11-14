@@ -30,6 +30,11 @@ final class AdvanceRequestPdf implements PdfDocument
         ];
     }
 
+    public function normalise(array $fields): array
+    {
+        return [...$fields, 'previous_advance' => (bool) $fields['previous_advance'], 'finance_remarks' => $fields['finance_remarks'] ?? ''];
+    }
+
     /** The snapshot carries the salary, so a caller without pay may not make one. */
     public function snapshot(string $subjectId, array $fields, ?string $scope, bool $showsPay): array
     {
@@ -39,14 +44,16 @@ final class AdvanceRequestPdf implements PdfDocument
         $request = DB::table('attendance_requests')->where(['id' => $subjectId, 'type' => 'advance'])->whereNull('deleted_at')
             ->lockForUpdate()->first() ?? throw new ModelNotFoundException;
         $employeeId = (string) $request->employee_id;
-        abort_if($scope !== null && ! $this->employees->isManagedBy($employeeId, $scope), 404);
+        if ($scope !== null && ! $this->employees->isManagedBy($employeeId, $scope)) {
+            throw new ModelNotFoundException;
+        }
         $employee = $this->employees->show($employeeId);
         $date = (string) $request->date;
 
         return [$employeeId, [
             ...array_intersect_key($employee, array_flip(['name_ar', 'name_en', 'code', 'department', 'gender'])),
             ...$fields,
-            'previous_advance' => (bool) $fields['previous_advance'], 'finance_remarks' => $fields['finance_remarks'] ?? '', 'shows_pay' => $showsPay,
+            'shows_pay' => $showsPay,
             'hire_date' => $employee['hire_date'],
             'amount' => (string) $request->amount,
             'salary' => EffectiveDated::at($employee['pay_changes'], $date)['salary'] ?? null,
@@ -71,7 +78,7 @@ final class AdvanceRequestPdf implements PdfDocument
     }
 
     /** Never signed. */
-    public function approval(stdClass $export, Authenticatable $actor): ?string
+    public function approval(stdClass $export, Authenticatable $actor, bool $lock): ?string
     {
         throw new ConcurrencyConflict;
     }

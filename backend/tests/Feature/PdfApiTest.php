@@ -107,9 +107,14 @@ final class PdfApiTest extends TestCase
 
         Queue::assertPushedOn('pdf', RenderPdf::class, fn (RenderPdf $job) => $job->exportId === $second);
         $audit = fn (string $id): string => (string) DB::table('audit_log')->where(['event' => 'CREATED', 'entity_type' => 'hr_form_exports', 'entity_id' => $id])->sole()->new_values;
-        $this->assertEquals(['form_type' => $type, 'serial_number' => 1, 'stage' => 'unsigned', 'regenerated_from_id' => null, 'fields' => $fields],
+        $normalised = [...$fields, ...match ($type) {
+            'leave_request' => ['manager_opinion' => '', 'substitute' => ''],
+            'advance_request' => ['finance_remarks' => ''],
+            default => [],
+        }];
+        $this->assertEquals(['form_type' => $type, 'serial_number' => 1, 'stage' => 'unsigned', 'regenerated_from_id' => null, 'fields' => $normalised],
             json_decode($audit($first), true));
-        $this->assertEquals(['form_type' => $type, 'serial_number' => 2, 'stage' => 'unsigned', 'regenerated_from_id' => $first, 'fields' => $fields],
+        $this->assertEquals(['form_type' => $type, 'serial_number' => 2, 'stage' => 'unsigned', 'regenerated_from_id' => $first, 'fields' => $normalised],
             json_decode($audit($second), true));
         $this->assertStringNotContainsString('salary', $audit($second));
         $this->assertStringNotContainsString('8765', $audit($second));
@@ -127,6 +132,41 @@ final class PdfApiTest extends TestCase
         $this->create('experience_certificate', $employee, $fields)->assertUnprocessable()->assertJsonPath('error.code', 'validation_failed');
         $this->create('advance_request', $employee, [...$fields, 'reason' => 'Synthetic reason', 'repayment_method' => 'cash', 'previous_advance' => false], $key)
             ->assertConflict();
+    }
+
+    public function test_a_replay_compares_the_normalised_fields_strictly(): void
+    {
+        $this->signIn('hr');
+        [$leave, $leaveFields] = $this->subject('leave_request');
+        [$advance, $advanceFields] = $this->subject('advance_request');
+        [$employee] = $this->subject('experience_certificate');
+        [$leaveKey, $advanceKey, $certificateKey] = [(string) Str::uuid7(), (string) Str::uuid7(), (string) Str::uuid7()];
+
+        $id = $this->create('leave_request', $leave, [...$leaveFields, 'substitute' => 'Synthetic substitute'], $leaveKey)->assertAccepted()->json('data.id');
+        $this->create('leave_request', $leave, [...$leaveFields, 'substitute' => 'Synthetic substitute'], $leaveKey)->assertAccepted()->assertJsonPath('data.id', $id);
+        $this->create('leave_request', $leave, $leaveFields, $leaveKey)->assertConflict()->assertJsonPath('error.code', 'concurrency_conflict');
+        $this->create('advance_request', $advance, [...$advanceFields, 'finance_remarks' => 'Synthetic remarks'], $advanceKey)->assertAccepted();
+        $this->create('advance_request', $advance, $advanceFields, $advanceKey)->assertConflict();
+        $this->create('experience_certificate', $employee, ['job_title' => '100'], $certificateKey)->assertAccepted();
+        $this->create('experience_certificate', $employee, ['job_title' => '1e2'], $certificateKey)->assertConflict();
+    }
+
+    public function test_a_replay_rechecks_the_read_gates_and_refuses_a_deleted_row(): void
+    {
+        $this->signIn('hr');
+        [$request, $fields] = $this->subject('advance_request');
+        [$employee, $certificateFields] = $this->subject('experience_certificate');
+        $clerk = $this->holder('hr_forms.generate.all', 'hr_forms.view.all', 'employee.view.all');
+        $withoutPay = $this->holder('hr_forms.generate.all', 'hr_forms.view.all');
+        [$advanceKey, $certificateKey] = [(string) Str::uuid7(), (string) Str::uuid7()];
+        $this->actingAs($clerk, 'api');
+        $this->create('advance_request', $request, $fields, $advanceKey)->assertAccepted();
+        $deleted = $this->create('experience_certificate', $employee, $certificateFields, $certificateKey)->assertAccepted()->json('data.id');
+        DB::table('hr_form_exports')->where('id', $deleted)->update(['deleted_at' => now()]);
+
+        $clerk->forceFill(['role_id' => $withoutPay->role_id])->save();
+        $this->create('advance_request', $request, $fields, $advanceKey)->assertNotFound()->assertJsonPath('error.code', 'not_found');
+        $this->create('experience_certificate', $employee, $certificateFields, $certificateKey)->assertConflict()->assertJsonPath('error.code', 'concurrency_conflict');
     }
 
     public function test_a_certificate_is_issued_for_an_archived_employee(): void
@@ -200,13 +240,16 @@ final class PdfApiTest extends TestCase
         $this->create('experience_certificate', $employee, $certificateFields)->assertForbidden()->assertJsonPath('error.code', 'permission_denied');
         $this->create('overtime_request', $overtimeRequest, $overtimeFields)->assertForbidden();
         $this->create('advance_request', $theirs, $fields)->assertNotFound();
-        $own = $this->create('advance_request', $mine, $fields)->assertAccepted()->json('data.id');
+        $key = (string) Str::uuid7();
+        $own = $this->create('advance_request', $mine, $fields, $key)->assertAccepted()->json('data.id');
 
         $this->getJson(self::API)->assertOk()->assertJsonCount(1, 'data')->assertJsonPath('data.0.id', $own);
         foreach ([$hidden, $overtime, $certificate] as $id) {
             $this->getJson(self::API."/{$id}")->assertNotFound();
         }
         $this->getJson(self::API."/{$own}")->assertOk();
+        DB::table('manager_sites')->where('manager_id', $manager->id)->delete();
+        $this->create('advance_request', $mine, $fields, $key)->assertNotFound();
     }
 
     public function test_approve_follows_the_type_permission_and_the_signer_rule(): void
@@ -280,7 +323,38 @@ final class PdfApiTest extends TestCase
         $this->postJson(self::API."/{$leave}/retry")->assertForbidden()->assertJsonPath('error.code', 'permission_denied');
         $this->actingAs($hr, 'api');
         $this->postJson(self::API."/{$signed}/retry")->assertAccepted()->assertJsonPath('data.status', 'pending');
-        $this->assertSame(0, DB::table('audit_log')->where('event', 'like', 'RETR%')->count());
+        foreach ([$certificate, $signed] as $id) {
+            $this->assertEquals([[$hr->id, ['status' => 'failed'], ['status' => 'pending']]], $this->retried($id));
+        }
+    }
+
+    public function test_a_retry_while_viewing_as_records_the_developer(): void
+    {
+        $hr = $this->signIn('hr');
+        [$employee, $fields] = $this->subject('experience_certificate');
+        $certificate = $this->create('experience_certificate', $employee, $fields)->json('data.id');
+        $this->settle($certificate, 'failed');
+        $developer = $this->makeUser('developer');
+        app('auth')->forgetGuards();
+        $token = $this->postJson('/api/v1/auth/login', ['email' => $developer->email, 'password' => 'secret123'])->assertCreated()->json('data.token');
+        $view = $this->withToken($token)->postJson('/api/v1/auth/view-as', ['user_id' => $hr->id, 'reason' => 'Synthetic QA'])->assertCreated()->json('data.token');
+        app('auth')->forgetGuards();
+
+        $this->withToken($view)->postJson(self::API."/{$certificate}/retry")->assertAccepted()->assertJsonPath('data.status', 'pending');
+        $this->assertSame($developer->id, DB::table('hr_form_exports')->where('id', $certificate)->value('updated_by'));
+        $this->assertEquals([[$developer->id, ['status' => 'failed'], ['status' => 'pending']]], $this->retried($certificate));
+        $this->assertSame($hr->id, DB::table('audit_log')->where(['event' => 'RETRIED', 'entity_id' => $certificate])->value('on_behalf_of'));
+    }
+
+    public function test_reading_rows_takes_no_row_lock(): void
+    {
+        $this->signIn('hr');
+        $leave = $this->approvedLeavePdf();
+        DB::enableQueryLog();
+
+        $this->getJson(self::API)->assertOk()->assertJsonPath('data.0.actions', ['download', 'approve']);
+        $this->getJson(self::API."/{$leave}")->assertOk()->assertJsonPath('data.actions', ['download', 'approve']);
+        $this->assertSame([], array_values(array_filter(array_column(DB::getQueryLog(), 'query'), fn (string $sql) => str_contains($sql, 'for update'))));
     }
 
     public function test_actions_are_computed_for_the_caller(): void
@@ -422,10 +496,18 @@ final class PdfApiTest extends TestCase
         ]);
     }
 
+    /** @return list<array{0: string, 1: mixed, 2: mixed}> [user_id, old_values, new_values] of the row's RETRIED audit entries */
+    private function retried(string $id): array
+    {
+        return DB::table('audit_log')->where(['event' => 'RETRIED', 'entity_type' => 'hr_form_exports', 'entity_id' => $id])->get()
+            ->map(fn (object $row) => [$row->user_id, json_decode((string) $row->old_values, true), json_decode((string) $row->new_values, true)])->all();
+    }
+
     /** A user whose role holds exactly these `resource.action.scope` grants. */
     private function holder(string ...$triples): User
     {
-        $role = Role::create(['slug' => 'synthetic-'.Str::lower(Str::random(6)), 'name' => 'Synthetic', 'name_ar' => 'اختبار']);
+        $slug = 'synthetic-'.Str::lower(Str::random(6));
+        $role = Role::create(['slug' => $slug, 'name' => $slug, 'name_ar' => "اختبار {$slug}"]);
         foreach ($triples as $triple) {
             [$resource, $action, $scope] = explode('.', $triple);
             $role->permissions()->attach(Permission::firstOrCreate(compact('resource', 'action', 'scope'))->getKey());
