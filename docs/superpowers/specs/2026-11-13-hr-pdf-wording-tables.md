@@ -1,7 +1,7 @@
 # جداول الصياغة لنماذج الموارد البشرية (للاعتماد من المالك)
 
 > English preface: wording tables for the PDF rebuild (Step 1, task 1b), for the owner to approve before any layout code.
-> Sources: `docs/templates/طلب اجازة.pdf` (read from the page image, cross-checked with `pdftotext`) and `docs/templates/شهاده خبرة.docx` (`word/document.xml`, paragraphs P1-P8); current templates in `backend/resources/views/hr-forms/`.
+> Sources: `docs/templates/طلب اجازة.pdf` (read from the page image, cross-checked with `pdftotext`) and `docs/templates/شهاده خبرة.docx` (`word/document.xml`, paragraphs P1-P8); current templates in `backend/resources/views/pdf/`.
 
 ## كيف تُقرأ هذه الجداول
 
@@ -134,7 +134,7 @@
 
 ## ٣. العبارات المذكرة والمؤنثة في القوالب الحالية (للمقارنة)
 
-ما تطبعه القوالب الحالية اليوم (`backend/resources/views/hr-forms/`)، حتى يرى المالك قائمة واحدة متسقة. القالب يختار الصيغة من جنس الموظف المسجل (`gender = female` ⇒ المؤنث).
+ما تطبعه القوالب الحالية اليوم (`backend/resources/views/pdf/`)، حتى يرى المالك قائمة واحدة متسقة. القالب يختار الصيغة من جنس الموظف المسجل (`gender = female` ⇒ المؤنث).
 
 | # | القالب | المذكر اليوم | المؤنث اليوم | يختلف عن النص الرسمي؟ |
 |---|---|---|---|---|
