@@ -9,12 +9,6 @@ use App\Modules\Attendance\Presentation\SiteDayCrewController;
 use App\Modules\Audit\Presentation\AuditLogController;
 use App\Modules\Audit\Presentation\ErrorLogController;
 use App\Modules\Audit\Presentation\RequestLogController;
-use App\Modules\Documents\Application\ManualFormDefinitions;
-use App\Modules\Documents\Presentation\AttendanceRequestFormController;
-use App\Modules\Documents\Presentation\ExperienceCertificateController;
-use App\Modules\Documents\Presentation\LeaveRequestFormController;
-use App\Modules\Documents\Presentation\ManualHrFormController;
-use App\Modules\Documents\Presentation\SignatureController;
 use App\Modules\Employees\Presentation\EmployeeController;
 use App\Modules\Employees\Presentation\EmployeeDocumentController;
 use App\Modules\Employees\Presentation\WageProposalController;
@@ -25,6 +19,8 @@ use App\Modules\Leave\Presentation\LeaveBalanceController;
 use App\Modules\Leave\Presentation\LeaveRequestController;
 use App\Modules\Notifications\Presentation\NotificationController;
 use App\Modules\Payroll\Presentation\PayrollController;
+use App\Modules\Pdf\Presentation\PdfController;
+use App\Modules\Pdf\Presentation\SignatureController;
 use App\Modules\Settings\Presentation\SettingController;
 use App\Modules\Sites\Presentation\FareController;
 use App\Modules\Sites\Presentation\ResidenceController;
@@ -52,45 +48,15 @@ Route::middleware('auth')->group(function (): void {
         Route::post('me/hr-signature', 'store');
     });
 
-    Route::get('employees/{employee}/hr-forms/experience-certificate/defaults', [ExperienceCertificateController::class, 'defaults'])
-        ->whereUuid('employee')->middleware(['permission:hr_forms.generate', 'employee.scope']);
-    Route::post('employees/{employee}/hr-forms/experience-certificate', [ExperienceCertificateController::class, 'store'])
-        ->whereUuid('employee')->middleware(['permission:hr_forms.generate', 'employee.scope']);
-    Route::get('hr-manual-form-definitions', [ManualHrFormController::class, 'definitions'])
-        ->middleware('permission:hr_forms.view,hr_forms.generate');
-    $candidateForms = array_keys(array_filter(ManualFormDefinitions::all(), fn (array $definition): bool => $definition['candidate'] ?? false));
-    $employeeForms = array_diff(array_keys(ManualFormDefinitions::all()), $candidateForms);
-    Route::post('hr-forms/manual-candidate/{form}', [ManualHrFormController::class, 'storeCandidate'])
-        ->whereIn('form', $candidateForms)->middleware('permission:hr_forms.generate');
-    Route::get('hr-forms/manual-candidate/{form}', [ManualHrFormController::class, 'candidates'])
-        ->whereIn('form', $candidateForms)->middleware('permission:hr_forms.view');
-    Route::post('employees/{employee}/hr-forms/manual/{form}', [ManualHrFormController::class, 'store'])
-        ->whereUuid('employee')->whereIn('form', array_values($employeeForms))
-        ->middleware(['permission:hr_forms.generate', 'employee.scope']);
-    Route::post('hr-form-exports/{export}/retry-manual/{form}', [ManualHrFormController::class, 'retry'])
-        ->whereUuid('export')->whereIn('form', array_keys(ManualFormDefinitions::all()))->middleware('permission:hr_forms.generate');
-    Route::get('employees/{employee}/hr-form-exports', [ExperienceCertificateController::class, 'history'])
-        ->whereUuid('employee')->middleware(['permission:hr_forms.view', 'employee.scope']);
-    Route::get('hr-form-exports/awaiting-approval', [ExperienceCertificateController::class, 'awaitingApproval'])
-        ->middleware('permission:hr_forms.approve');
-    Route::get('hr-form-exports/{export}/download', [ExperienceCertificateController::class, 'download'])
-        ->whereUuid('export')->middleware('permission:hr_forms.view');
-    Route::get('hr-form-exports/{export}', [ExperienceCertificateController::class, 'show'])
-        ->whereUuid('export')->middleware('permission:hr_forms.view');
-
-    Route::post('hr-form-exports/{export}/approve', [ExperienceCertificateController::class, 'approve'])
-        ->whereUuid('export')->middleware('permission:hr_forms.approve');
-    Route::post('hr-form-exports/{export}/retry', [ExperienceCertificateController::class, 'retry'])
-        ->whereUuid('export')->middleware('permission:hr_forms.approve');
-
-    Route::post('leave/requests/{leaveRequest}/hr-forms/leave-request', [LeaveRequestFormController::class, 'store'])
-        ->whereUuid('leaveRequest')->middleware('permission:hr_forms.generate');
-    Route::get('leave/requests/{leaveRequest}/hr-form-exports', [LeaveRequestFormController::class, 'index'])
-        ->whereUuid('leaveRequest')->middleware('permission:hr_forms.view');
-    Route::post('hr-form-exports/{export}/approve-leave-request', [LeaveRequestFormController::class, 'approve'])
-        ->whereUuid('export')->middleware('permission:hr_forms.approve_leave_request');
-    Route::post('hr-form-exports/{export}/retry-leave-request', [LeaveRequestFormController::class, 'retry'])
-        ->whereUuid('export')->middleware('permission:hr_forms.approve_leave_request');
+    Route::prefix('hr-form-exports')->controller(PdfController::class)->whereUuid('export')->group(function (): void {
+        Route::get('/', 'index')->middleware('permission:hr_forms.view');
+        Route::post('/', 'store')->middleware('permission:hr_forms.generate');
+        Route::get('{export}', 'show')->middleware('permission:hr_forms.view');
+        Route::get('{export}/download', 'download')->middleware('permission:hr_forms.view');
+        // Either approve permission passes the route; the use case checks the export type's own.
+        Route::post('{export}/approve', 'approve')->middleware('permission:hr_forms.approve,hr_forms.approve_leave_request');
+        Route::post('{export}/retry', 'retry')->middleware('permission:hr_forms.generate,hr_forms.approve,hr_forms.approve_leave_request');
+    });
 
     Route::prefix('attendance/requests')->controller(AttendanceRequestController::class)->middleware('permission:attendance_request.decide')->whereUuid('id')->group(function (): void {
         Route::get('/', 'index');
@@ -98,18 +64,6 @@ Route::middleware('auth')->group(function (): void {
         Route::post('{id}/approve', 'approve');
         Route::post('{id}/refuse', 'refuse');
     });
-
-    Route::post('attendance/requests/{id}/hr-forms/advance-request', [AttendanceRequestFormController::class, 'store'])
-        ->whereUuid('id')->middleware('permission:hr_forms.generate');
-    Route::get('attendance/requests/{id}/hr-form-exports', [AttendanceRequestFormController::class, 'index'])
-        ->whereUuid('id')->middleware('permission:hr_forms.view');
-    Route::post('hr-form-exports/{export}/retry-advance-request', [AttendanceRequestFormController::class, 'retry'])
-        ->whereUuid('export')->middleware('permission:hr_forms.generate');
-
-    Route::post('attendance/requests/{id}/hr-forms/overtime-request', [AttendanceRequestFormController::class, 'store'])
-        ->whereUuid('id')->defaults('type', 'overtime')->middleware('permission:hr_forms.generate');
-    Route::post('hr-form-exports/{export}/retry-overtime-request', [AttendanceRequestFormController::class, 'retry'])
-        ->whereUuid('export')->defaults('type', 'overtime')->middleware('permission:hr_forms.generate');
 
     Route::prefix('employees/wage-proposals')->controller(WageProposalController::class)->whereUuid('proposal')->group(function (): void {
         Route::get('/', 'index')->middleware('permission:employee.approve_wage');

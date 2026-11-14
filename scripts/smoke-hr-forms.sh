@@ -6,15 +6,6 @@ mkdir -p "$output"
 image="${HRMS_PDF_IMAGE:-hrms-php-forms}"
 form="${HRMS_SMOKE_FORM:-experience-certificate}"
 case "$form" in
-  end-of-service) phrases=('نهاية الخدمة' 'سارة مثال للاختبار' '12345.67' '24691.34' '25/10/2026' '26/10/2026');;
-  job-offer) phrases=('خطاب قبول' 'نور مثال للاختبار' '12345.60' '01/02/2027' '05/02/2027' '08/02/2027' 'المزايا' 'مقر الشركة' 'العرض الوظيفي');;
-  sim-receipt) phrases=('استلام خط موبايل' 'سارة مثال للاختبار' '01000000000' '15/11/2026');;
-  warning-notice) phrases=('نموذج إنذار' 'سارة مثال للاختبار' '15/11/2026' 'ملف الاختبار' 'يوم واحد' 'أول مرة' 'توضيح السبب');;
-  resignation) phrases=('استقالة' 'سارة مثال للاختبار' 'تسليم' 'مسوغات التعيين');;
-  early-leave-request) phrases=('Smart Technology' 'سارة مثال للاختبار' 'طلب انصراف' 'لمدة ساعة' 'واحدة و' '30' 'دقيقة' '08:30' '17:30' '16:00' '15/11/2026');;
-  mission-permit) phrases=('سارة مثال للاختبار' 'إذن مأمورية' '15/11/2026' 'متابعة موقع الاختبار');;
-  leave-permit) phrases=('سارة مثال للاختبار' 'إذن انصراف' 'ساعتان' '16/11/2026' '15/11/2026' '14:30' '16:30' 'موعد طبي');;
-  late-permit) phrases=('سارة مثال للاختبار' 'إذن تأخير' 'ساعتان' '16/11/2026' '15/11/2026' '11:00' 'موعد طبي');;
   overtime-request) phrases=('سارة مثال للاختبار' 'طلب عمل إضافي' 'Overtime Request' 'Checkout Time' '17:35' 'ساعة واحدة');;
   advance-request) phrases=('سارة مثال للاختبار' 'طلب سلفة' 'Employee Salary' '9000.00' '250.50' 'General Manager');;
   leave-request) phrases=('سارة مثال للاختبار' 'نموذج طلب إجازة' 'توقيع مدير الشركة');;
@@ -39,7 +30,7 @@ unsigned=$(docker exec "$app" php tests/Smoke/render-hr-form.php setup)
 docker exec "$app" php artisan queue:work redis --queue=pdf --once --tries=3 -v
 docker exec "$app" php tests/Smoke/render-hr-form.php export "$unsigned" > "$output/unsigned.pdf"
 pdfs=("$output/unsigned.pdf")
-if [[ "$form" != advance-request && "$form" != overtime-request && "$form" != late-permit && "$form" != early-leave-request && "$form" != resignation && "$form" != warning-notice && "$form" != mission-permit && "$form" != leave-permit && "$form" != sim-receipt && "$form" != job-offer && "$form" != end-of-service ]]; then
+if [[ "$form" != advance-request && "$form" != overtime-request ]]; then
   signed=$(docker exec "$app" php tests/Smoke/render-hr-form.php approve "$unsigned")
   docker exec "$app" php artisan queue:work redis --queue=pdf --once --tries=3 -v
   docker exec "$app" php tests/Smoke/render-hr-form.php export "$signed" > "$output/signed.pdf"
@@ -47,11 +38,7 @@ if [[ "$form" != advance-request && "$form" != overtime-request && "$form" != la
 fi
 for pdf in "${pdfs[@]}"; do
   text=$("$pdftotext" -enc UTF-8 "$pdf" -)
-  if [[ "$form" == mission-permit ]]; then
-    # Poppler inserts a space inside this Arabic word at the font's glyph boundary.
-    text=${text//مأمور ية/مأمورية}
-  fi
-  if { [[ "$form" != resignation ]] && ! grep -Eq '[0-9]{2}/[0-9]{2}/[0-9]{4}' <<< "$text"; } || grep -Eq '[0-9]{4}-[0-9]{2}-[0-9]{2}' <<< "$text"; then
+  if ! grep -Eq '[0-9]{2}/[0-9]{2}/[0-9]{4}' <<< "$text" || grep -Eq '[0-9]{4}-[0-9]{2}-[0-9]{2}' <<< "$text"; then
     printf 'Unexpected date format in %s\n' "$pdf" >&2
     exit 1
   fi

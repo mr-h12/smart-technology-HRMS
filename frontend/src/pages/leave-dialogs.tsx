@@ -155,7 +155,7 @@ function DecideBody({ id, close, busy, setBusy }: { id: string; close: () => voi
   const asks = (['cancel', 'refuse', 'escalate'] as const).filter((x) => (x === 'cancel' ? cancellable : actions.includes(x)))
   // a refusal (409 stale or blocked days) also marks the request stale, so it reloads with the server's current status and blocked dates
   const decide = (action: Action, reason?: string) =>
-    send(`${path}/${action}`, { body: { version: r.version, ...(reason && { reason }), ...(action === 'approve' && replace && { replace_dates: replaceDates }) } }, ['/leave', '/attendance', ...(r.employee ? [`/employees/${r.employee.id}/leave`] : [])])
+    send(`${path}/${action}`, { body: { version: r.version, ...(reason && { reason }), ...(action === 'approve' && replace && { replace_dates: replaceDates }) } }, ['/leave', '/attendance', '/hr-form-exports', ...(r.employee ? [`/employees/${r.employee.id}/leave`] : [])])
   // every decision lands here, so a refusal shows in the one banner above the request (the reason form has closed by then)
   const run = async (action: Action, reason?: string) => {
     setBusy(true)

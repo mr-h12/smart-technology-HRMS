@@ -35,7 +35,6 @@ class ViewAsTest extends TestCase
         // approving a form stamps the target's stored signature
         $export = '01a1d56a-0000-7000-8000-000000000001';
         $this->withToken($view)->postJson("/api/v1/hr-form-exports/{$export}/approve")->assertForbidden();
-        $this->withToken($view)->postJson("/api/v1/hr-form-exports/{$export}/approve-leave-request")->assertForbidden();
     }
 
     private function me(string $token): TestResponse

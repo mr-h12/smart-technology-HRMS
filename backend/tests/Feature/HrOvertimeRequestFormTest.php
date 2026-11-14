@@ -2,9 +2,9 @@
 
 namespace Tests\Feature;
 
-use App\Modules\Documents\Application\RenderHrForm;
-use App\Modules\Documents\Domain\FormRenderer;
 use App\Modules\Identity\Infrastructure\Eloquent\Role;
+use App\Modules\Pdf\Application\RenderPdf;
+use App\Modules\Pdf\Domain\Contracts\PdfRendererInterface;
 use Illuminate\Database\QueryException;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\DB;
@@ -52,7 +52,7 @@ final class HrOvertimeRequestFormTest extends TestCase
     {
         $id = $this->attendanceRequest($status, $minutes);
         $source = (array) DB::table('attendance_requests')->where('id', $id)->first();
-        $export = $this->generate($id)->assertAccepted()->assertJsonPath('data.form_type', 'overtime_request')->json('data.id');
+        $export = $this->generate($id)->assertAccepted()->assertJsonPath('data.type', 'overtime_request')->json('data.id');
         $snapshot = json_decode(DB::table('hr_form_exports')->where('id', $export)->value('snapshot'), true, flags: JSON_THROW_ON_ERROR);
         $this->assertEquals([
             'name_ar' => 'سارة مثال للاختبار', 'name_en' => 'Synthetic Worker', 'department' => 'Synthetic QA', 'code' => 1, 'gender' => 'male',
@@ -85,7 +85,7 @@ final class HrOvertimeRequestFormTest extends TestCase
         foreach ([$this->managerOf($this->site), $this->makeUser('hr', ['role_id' => $role->id])] as $user) {
             $this->actingAs($user, 'api');
             $this->generate($id)->assertForbidden();
-            $this->getJson("/api/v1/attendance/requests/{$id}/hr-form-exports")->assertForbidden();
+            $this->getJson("/api/v1/hr-form-exports?type=overtime_request&subject_id={$id}")->assertForbidden();
             $this->getJson("/api/v1/hr-form-exports/{$export}")->assertForbidden();
             $this->get("/api/v1/hr-form-exports/{$export}/download")->assertForbidden();
         }
@@ -104,34 +104,20 @@ final class HrOvertimeRequestFormTest extends TestCase
         }
     }
 
-    public function test_history_for_an_unsupported_request_type_is_empty(): void
-    {
-        $id = $this->attendanceRequest();
-        // Simulate a future request type in this test's rolled-back transaction.
-        $export = $this->generate($id)->assertAccepted()->json('data.id');
-        DB::table('hr_form_exports')->where('id', $export)->update([
-            'form_type' => 'other_request', 'snapshot' => json_encode(['other_request_id' => $id], JSON_THROW_ON_ERROR),
-        ]);
-        DB::statement('alter table attendance_requests drop constraint attendance_requests_check');
-        DB::table('attendance_requests')->where('id', $id)->update(['type' => 'other']);
-        $this->getJson("/api/v1/attendance/requests/{$id}/hr-form-exports")
-            ->assertOk()->assertJsonPath('data.exports', []);
-    }
-
     public function test_validation_idempotency_and_unsigned_retry(): void
     {
         $id = $this->attendanceRequest();
         foreach (['job_title' => 160, 'reason' => 300] as $field => $limit) {
             foreach ([null, '   ', str_repeat('x', $limit + 1)] as $invalid) {
-                $this->generate($id, [$field => $invalid])->assertUnprocessable()->assertJsonPath('error.details.0.field', $field);
+                $this->generate($id, [$field => $invalid])->assertUnprocessable()->assertJsonPath('error.details.0.field', "fields.{$field}");
             }
         }
         $key = (string) Str::uuid7();
         $export = $this->generate($id, key: $key)->assertAccepted()->assertJsonPath('data.serial_number', 1)->json('data.id');
         $this->generate($id, key: $key)->assertAccepted()->assertJsonPath('data.id', $export);
         $this->generate($id, ['reason' => 'A different reason'], $key)->assertConflict();
-        (new RenderHrForm($export))->failed(null);
-        $path = "/api/v1/hr-form-exports/{$export}/retry-overtime-request";
+        (new RenderPdf($export))->failed(null);
+        $path = "/api/v1/hr-form-exports/{$export}/retry";
         $this->postJson($path)->assertAccepted()->assertJsonPath('data.id', $export);
         $this->postJson($path)->assertConflict();
         $this->render($export);
@@ -153,27 +139,27 @@ final class HrOvertimeRequestFormTest extends TestCase
 
     private function generate(string $id, array $fields = [], ?string $key = null): TestResponse
     {
-        return $this->postJson("/api/v1/attendance/requests/{$id}/hr-forms/overtime-request", [
-            'idempotency_key' => $key ?? (string) Str::uuid7(), 'job_title' => '  Synthetic technician  ',
-            'reason' => '  Synthetic overtime reason  ', ...$fields,
+        return $this->postJson('/api/v1/hr-form-exports', [
+            'type' => 'overtime_request', 'subject_id' => $id, 'idempotency_key' => $key ?? (string) Str::uuid7(),
+            'fields' => ['job_title' => '  Synthetic technician  ', 'reason' => '  Synthetic overtime reason  ', ...$fields],
         ]);
     }
 
     private function assertReadable(string $id, string $export): void
     {
-        $this->getJson("/api/v1/attendance/requests/{$id}/hr-form-exports")->assertOk();
+        $this->getJson("/api/v1/hr-form-exports?type=overtime_request&subject_id={$id}")->assertOk();
         $this->getJson("/api/v1/hr-form-exports/{$export}")->assertOk();
         $this->get("/api/v1/hr-form-exports/{$export}/download")->assertOk();
     }
 
     private function render(string $export, string $duration = 'ساعة واحدة'): void
     {
-        $renderer = $this->createMock(FormRenderer::class);
+        $renderer = $this->createMock(PdfRendererInterface::class);
         $renderer->expects($this->once())->method('pdf')->with($this->callback(fn (string $html): bool => str_contains($html, $duration)
             && str_contains($html, 'الخميس الموافق <bdi>22/10/2026</bdi>') && str_contains($html, '<bdi>17:35</bdi>')
             && str_contains($html, 'Synthetic overtime reason') && substr_count($html, 'class="hand"') === 3
             && substr_count($html, '____ / ____ / ____') === 3
             && ! str_contains($html, '<img') && ! str_contains($html, 'Decision reason')))->willReturn('%PDF-1.7 overtime');
-        (new RenderHrForm($export))->handle($renderer);
+        (new RenderPdf($export))->handle($renderer);
     }
 }

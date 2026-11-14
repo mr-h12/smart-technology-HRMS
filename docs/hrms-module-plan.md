@@ -111,6 +111,7 @@ Smart Technology runs HR and payroll today on 6 hand-built Excel workbooks (anal
    - شهادة خبرة (experience certificate)
    - مكافأة نهاية الخدمة (end-of-service bonus; amount entered manually)
    - مفردات مرتب (payslip; delivered in Release 2)
+   - **Status (owner, 2026-11-13):** four PDFs are rebuilt now: experience certificate, leave request, advance request and overtime request. The job offer, late permission, early-leave request, resignation, warning, mobile-line receipt and end-of-service forms, and the mission and departure permits (إذن مأمورية، إذن انصراف) merged in PR #61, are postponed: deleted from the code and rebuilt with their own modules. Clearance and the payslip stay unbuilt. See «HR form PDFs: owner decisions of 2026-11-13».
 3. **HR communication center**:
    - Message types: congratulation, condolence, alert, warning, PDF.
    - Recipient: manager or employee.
@@ -316,6 +317,19 @@ Item 10, approved by the owner after a grilling round and four sample files. Rul
 **Also built** (they follow from the rules above and reopen none):
 14. **Hire date:** a new laborer's rows after today or in a locked day-laborer period are refused first; the hire date is the earliest remaining date, and with no remaining row nobody is created (W5).
 15. **The per-site option is HR's only:** the switch shows it only to a user holding `attendance.view.all` and `attendance.edit.all`, since the three routes refuse an own-scope caller.
+
+### HR form PDFs: owner decisions of 2026-11-13
+The owner rejected the 13 HR form PDFs merged in PR #61: their layouts did not match the company's forms (`docs/templates/`), and each form worked differently. The rebuild runs in four steps; no step starts before the owner approves the one before.
+1. **Scope:** four PDFs: experience certificate, leave request, advance request, overtime request.
+2. **The other nine are deleted from the code now** and rebuilt later with their module: late permission, early-leave request, resignation, warning, mobile-line receipt, job offer, end-of-service, mission permit, departure permit. Clearance and the payslip stay unbuilt. Rows already issued for the nine stay in `hr_form_exports` untouched (no migration) and are no longer served.
+3. **One flow, as in the CRM:** Generate, then View (in an in-app dialog) and Download PDF. No browser print; the advance's print view goes.
+4. **Site manager:** gets the same advance PDF without the salary line.
+5. **Places:** the certificate on the employee file (Documents tab); the leave request in the leave dialog; the advance and overtime requests on Attendance requests, the advance also on the site-day row; plus one HR page, «النماذج الصادرة».
+6. **Serial** stays, small, in the margin. A4 for every form.
+7. **Wording:** the company's wording exactly; only obvious spelling is fixed, from a correction table the owner approves.
+8. **Logo:** the horizontal STIS logo only on the advance and overtime forms. The certificate keeps the company letterhead; the leave request keeps the text «Smart Technology». Amended by the owner on 2026-11-14: the round "ST" logo of that letterhead is not the company's logo, so the certificate carries the STIS logo and the round logo and its watermark are removed from the letterhead.
+9. **Advance and overtime** are designed in the company's framed style; the owner approves each from a rendered image.
+10. **An experience certificate may be issued for an archived employee.**
 
 ### Changes to the work plan
 - **Youssef:**

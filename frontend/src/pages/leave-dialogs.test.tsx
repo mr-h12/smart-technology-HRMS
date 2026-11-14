@@ -313,6 +313,23 @@ test('approve posts the version, says so, and closes', async () => {
   expect(toast.success).toHaveBeenCalledWith('تمت الموافقة على الطلب.')
 })
 
+test('a decision refreshes the open leave form panel, so its sign button follows', async () => {
+  let actions = ['download']
+  mockFetch({
+    [SHOW]: () => json(200, { data: shown() }),
+    'POST /api/v1/leave/requests/r1/approve': () => {
+      actions = ['download', 'approve']
+      return json(200, { data: shown({ status: 'approved' }, null) })
+    },
+    'GET /api/v1/hr-form-exports': () => json(200, { data: [{ id: 'form-1', serial_number: 1, stage: 'unsigned', status: 'ready', file_name: 'leave-request-1-unsigned.pdf', actions }], meta: { pagination } }),
+  })
+  decide([...HR, 'hr_forms.view.all', 'hr_forms.approve_leave_request.all'])
+  await screen.findByRole('button', { name: 'تنزيل الملف' })
+  expect(screen.queryByRole('button', { name: 'اعتماد وتوقيع' })).toBeNull()
+  await user.click(screen.getByRole('button', { name: 'موافقة' }))
+  expect(await screen.findByRole('button', { name: 'اعتماد وتوقيع' })).toBeInTheDocument()
+})
+
 test('an approval refused for blocked days shows the reason and lists the dates', async () => {
   let blocked: string[] = []
   mockFetch({

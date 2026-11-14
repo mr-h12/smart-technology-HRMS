@@ -351,4 +351,4 @@ How HR's per-site file becomes stored days: one site, one sheet per date, and pe
 - Bonuses, negligence deductions, penalties, lateness exemptions, insurance shares and income tax: entered by HR.
 - Bank transfers: HR only marks "paid" and writes how the money was received.
 
-The end-of-service print form suggests half the last total monthly wage for each completed year of service. Partial years contribute zero. For a 29 February hire, a non-leap-year anniversary completes on 1 March. Keep six decimal places in the snapshot and round to two for display. HR may enter a final amount with a reason. The whole-years rule is pending client confirmation.
+The end-of-service form is postponed (owner, 2026-11-13): its code is deleted and it is rebuilt with its module. The bonus suggestion stays as written in §10, with its open question (client question 15).
