@@ -40,6 +40,9 @@ each PDF has View and Download PDF; forms whose module has not started wait.
    `/Users/yousefhasabo/Projects/crm-system/crm/resources/pdf/letterhead/logo.png`,
    1600x351). Certificate keeps the company letterhead; leave request keeps
    the text «Smart Technology».
+   Amended by the owner on 2026-11-14: the round "ST" logo in the certificate's
+   letterhead is not the company's logo. The certificate carries the STIS
+   logo instead, and the watermark of the round logo goes with it.
 9. Advance and overtime are designed in the company's framed style; owner
    approves each from a rendered image.
 10. An experience certificate may be issued for an archived employee.
@@ -136,7 +139,7 @@ manager's and HR's advance PDFs (still in the old layout).
 | Task | What | Check |
 |---|---|---|
 | 3a | Shell `pdf/page.blade.php`, chosen fonts, serial in the margin, leave request rebuilt against `طلب اجازة.pdf` | one page; fonts embedded |
-| 3b | Experience certificate rebuilt against `شهاده خبرة.docx` | one page; letterhead bytes unchanged |
+| 3b | Experience certificate rebuilt against `شهاده خبرة.docx` | one page; letterhead as of 2026-11-14 (STIS logo, no round logo or watermark) |
 
 **Gate 3, owner approves:** side-by-side and overlay images of each form
 against the company's (male / female, unsigned / signed, long values).

@@ -1,6 +1,11 @@
 @extends('pdf.layout')
 
+@section('form-css')
+    .logo { position: fixed; top: 6mm; left: 14.3mm; width: 98mm; }
+@endsection
+
 @section('document')
+<img class="logo" src="{{ $logo }}" alt="">
 <h1>شهادة خبرة</h1>
 <p>اليوم {{ $issuedOn['weekday'] }} &nbsp; التاريخ <bdi>{{ $issuedOn['date'] }}</bdi></p>
 <p>هذه الشهادة مقدمة من شركة سمارت تكنولوجي للأنظمة المتكاملة بأن {{ $feminine ? 'الموظفة المذكورة بياناتها أدناه' : 'الموظف المذكور بياناته أدناه' }}</p>

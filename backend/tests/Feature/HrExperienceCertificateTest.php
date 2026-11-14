@@ -4,6 +4,7 @@ namespace Tests\Feature;
 
 use App\Modules\Pdf\Application\RenderPdf;
 use App\Modules\Pdf\Domain\Contracts\PdfRendererInterface;
+use App\Modules\Pdf\Infrastructure\FilePdfAssets;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Queue;
@@ -13,6 +14,7 @@ use Illuminate\Testing\TestResponse;
 use PHPUnit\Framework\Attributes\DataProvider;
 use Tests\AttendanceFixtures;
 use Tests\TestCase;
+use Throwable;
 
 class HrExperienceCertificateTest extends TestCase
 {
@@ -106,6 +108,23 @@ class HrExperienceCertificateTest extends TestCase
             ? ! str_contains($html, '<p class="praise">')
             : str_contains($html, '<p class="praise">'.e($printed).'</p>')))->willReturn('%PDF-1.7 synthetic');
         (new RenderPdf($id))->handle($renderer);
+    }
+
+    public function test_the_certificate_prints_the_company_logo_and_a_missing_asset_fails_loudly(): void
+    {
+        Queue::fake();
+        Storage::fake('local');
+        $this->signIn('hr');
+        $employee = $this->employee('office', '2022-01-01', ['national_id' => '12345678901234', 'department' => 'QA']);
+        $id = $this->generate($employee)->assertAccepted()->json('data.id');
+        $logo = 'data:image/png;base64,'.base64_encode((string) file_get_contents(resource_path('pdf/letterhead/logo.png')));
+        $renderer = $this->createMock(PdfRendererInterface::class);
+        $renderer->expects($this->once())->method('pdf')->with($this->callback(fn (string $html): bool => str_contains($html, $logo)))
+            ->willReturn('%PDF-1.7 synthetic');
+        (new RenderPdf($id))->handle($renderer);
+
+        $this->expectException(Throwable::class);
+        FilePdfAssets::asset('letterhead/missing.png', 'image/png');
     }
 
     public function test_view_as_cannot_approve_and_approval_retains_the_serial_and_retries_the_same_export(): void

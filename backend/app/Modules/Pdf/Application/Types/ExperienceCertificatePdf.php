@@ -62,6 +62,7 @@ final class ExperienceCertificatePdf implements PdfDocument
         return ['pdf.experience-certificate', [
             'footer' => FilePdfAssets::asset('letterhead/certificate-footer.jpg', 'image/jpeg'),
             'letterhead' => FilePdfAssets::asset('letterhead/certificate-letterhead.png', 'image/png'),
+            'logo' => FilePdfAssets::asset('letterhead/logo.png', 'image/png'),
             'issuedOn' => ArabicFormDate::format($snapshot['issued_on']),
             'service' => $service === '' ? 'أقل من يوم' : $service,
             // A snapshot made while HR could still edit the praise prints it ('' = none); the view prints the standard one otherwise.

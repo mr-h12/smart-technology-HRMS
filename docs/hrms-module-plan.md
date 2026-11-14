@@ -327,7 +327,7 @@ The owner rejected the 13 HR form PDFs merged in PR #61: their layouts did not m
 5. **Places:** the certificate on the employee file (Documents tab); the leave request in the leave dialog; the advance and overtime requests on Attendance requests, the advance also on the site-day row; plus one HR page, «النماذج الصادرة».
 6. **Serial** stays, small, in the margin. A4 for every form.
 7. **Wording:** the company's wording exactly; only obvious spelling is fixed, from a correction table the owner approves.
-8. **Logo:** the horizontal STIS logo only on the advance and overtime forms. The certificate keeps the company letterhead; the leave request keeps the text «Smart Technology».
+8. **Logo:** the horizontal STIS logo only on the advance and overtime forms. The certificate keeps the company letterhead; the leave request keeps the text «Smart Technology». Amended by the owner on 2026-11-14: the round "ST" logo of that letterhead is not the company's logo, so the certificate carries the STIS logo and the round logo and its watermark are removed from the letterhead.
 9. **Advance and overtime** are designed in the company's framed style; the owner approves each from a rendered image.
 10. **An experience certificate may be issued for an archived employee.**
 
