@@ -63,7 +63,7 @@ return [
         'name_required' => 'This row has data but no name.',
         'status_required' => 'Choose a status for this name.',
         'unknown_status' => 'Unknown status; choose Present or a leave day-type.',
-        'bad_time' => 'Not a valid time; write it like 08:30.',
+        'bad_time' => 'Not a valid time; write it like 9 or 5:30 and choose ص or م beside it.',
         'bad_amount' => 'The amount must be a number above zero.',
         'note_too_long' => 'The note is longer than 500 characters.',
         'name_too_long' => 'The name is longer than 255 characters.',

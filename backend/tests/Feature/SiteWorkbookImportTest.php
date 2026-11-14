@@ -252,11 +252,14 @@ class SiteWorkbookImportTest extends TestCase
             'an hour alone, ص/م blank: arrival ص, departure م' => [['9', '', '5', ''], ['09:00', '17:00']],
             'Arabic-Indic digits' => [['٩', '', '٥:٣٠', ''], ['09:00', '17:30']],
             '12 ص is midnight' => [['12', 'ص', '8', 'ص'], ['00:00', '08:00']],
+            'an arrival of 12, ص/م blank, is midnight' => [['12', '', '5', ''], ['00:00', '17:00']],
             '12 م is noon' => [['12', 'م', '5', ''], ['12:00', '17:00']],
             'a departure of 12, ص/م blank, is noon' => [['8', '', '12', ''], ['08:00', '12:00']],
             'ص chosen on a departure before noon' => [['1', '', '6', 'ص'], ['01:00', '06:00']],
             'م chosen on an arrival' => [['1:30', 'م', '9', 'م'], ['13:30', '21:00']],
             '24-hour times take no ص/م' => [['0:30', 'م', '17:00', 'ص'], ['00:30', '17:00']],
+            'a ص/م holding neither beside a 24-hour time is ignored' => [['8', '', '17:00', 'AM'], ['08:00', '17:00']],
+            'a leading zero is not 24-hour' => [['08:00', '', '05:00', ''], ['08:00', '17:00']],
         ];
     }
 
@@ -287,6 +290,18 @@ class SiteWorkbookImportTest extends TestCase
 
         $this->assertSame([], $data['errors']);
         $this->assertSame($data['changes'][1]['to'], $data['changes'][0]['to']);
+    }
+
+    /** W3: a row whose only filled cells are ص/م (D, F), as when ص is filled down a column ahead of the names, is a blank row. */
+    public function test_a_row_of_only_periods_is_blank(): void
+    {
+        $laborer = $this->homed('day_laborer', $this->site);
+
+        $data = $this->preview($this->fill($this->download(), [self::SAT => [['', '', '', 'ص', '', 'م'], [$this->entry($laborer), 'حاضر'], ['', '', '', 'ص']]]))
+            ->assertOk()->json('data');
+
+        $this->assertSame([], $data['errors']);
+        $this->assertSame([1, 1], [$data['summary']['rows'], $data['summary']['changes']]);
     }
 
     /** W13: a day stored at another work site is a conflict, shown replaced by the file's row; one the write refuses is an error, not a conflict to choose on. */

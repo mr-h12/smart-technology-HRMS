@@ -400,7 +400,7 @@ Row (listed in `errors`; the other rows go on):
 | `new_laborer_not_allowed` | a typed name and no `employee.create` at all scope (checked before the national-ID lookup) | new |
 | `duplicate_row` | the same person, or the same new national ID, twice on one sheet | existing |
 | `unknown_status` | a status that is neither the present word nor a leave day-type (an inactive one is `site_inactive`) | new |
-| `bad_time` | a time that is not `H` or `H:MM` with an hour 0–23 (or an Excel time), or a ص/م cell beside an hour 1–12 that is neither ص nor م | new |
+| `bad_time` | a time that is not `H`, `HH`, `H:MM` or `HH:MM` with an hour 0–23 (or an Excel time), or a ص/م cell beside an hour 1–12 that is neither ص nor م | new |
 | `times_need_both` | one time without the other | existing code (day rules), new check for every type |
 | `bad_amount` | an advance or proposed wage not a positive amount | new |
 | `note_too_long` | a note longer than 500 characters | new |
@@ -460,7 +460,7 @@ Generalised (the per-type template and import keep their behaviour; their tests 
   laborers created, each linked to their page. A `preview_stale` answer
   clears the preview and its choices and asks HR to preview again.
 - Every string under `attendance.import.*` in `ar.json` and `en.json`. A code with a site-workbook wording
-  (`attendance.import.site.error.<code>`: `template_mismatch`, `too_many_rows`, `unknown_employee`, `duplicate_row`) shows that,
+  (`attendance.import.site.error.<code>`: `template_mismatch`, `too_many_rows`, `unknown_employee`, `duplicate_row`, `bad_time`) shows that,
   else `attendance.import.error.<code>`, else the server's message. `validation_failed` has no key on purpose: the server's field
   details show.
 
@@ -527,6 +527,10 @@ employee's page. One more dropdown column (ذكر/أنثى) remains the alternat
 - A bare date typed in a time cell whose text format was removed (for example by pasting from another workbook) reads as 00:00,
   not `bad_time`.
 - A departure before noon (a night shift) needs ص chosen; with ص/م blank it reads as the afternoon (`6` is 18:00).
+- The mirror case: an arrival at or after noon needs م chosen; with ص/م blank `12:30` reads 00:30 and `1` reads 01:00, which
+  for an engineer or day laborer stores 0 late minutes with no error.
+- A time is `H`, `HH`, `H:MM` or `HH:MM`; a leading zero does not make it 24-hour (`05:00` as a departure reads 17:00).
+- A row whose only filled cells are ص/م (D, F) is a blank row and is skipped.
 - A time cell the user reformatted as an Excel time reads as its 24-hour value and then follows the same W8 rule: 05:00 as a
   departure with ص/م blank is 17:00.
 - A ص/م typed inside the time cell (`5 م`) is not read; it is `bad_time`. The ص/م column covers it.

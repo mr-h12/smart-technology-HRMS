@@ -495,7 +495,8 @@ final class SiteWorkbookImport
             }
             $found[$date] = true;
             foreach ($sheet['rows'] as $n => $cells) {
-                if ($n > 2) {
+                // W3: a row with only ص/م (D, F) filled is blank, as when ص is filled down a column ahead of the names.
+                if ($n > 2 && array_filter(array_diff_key($cells, [3 => true, 5 => true]), fn (?string $c) => $c !== null) !== []) {
                     $rows[] = ['sheet' => $sheet['name'], 'row' => $n, 'date' => $date, 'cells' => $cells];
                 }
             }
