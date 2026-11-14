@@ -2,15 +2,14 @@
 
 declare(strict_types=1);
 
-use App\Modules\Documents\Application\AttendanceRequestForms;
-use App\Modules\Documents\Application\ExperienceCertificates;
-use App\Modules\Documents\Application\LeaveRequestForms;
-use App\Modules\Documents\Application\RenderHrForm;
-use App\Modules\Documents\Application\SignatureImages;
 use App\Modules\Employees\Application\EmployeeService;
 use App\Modules\Identity\Infrastructure\Eloquent\Role;
 use App\Modules\Identity\Infrastructure\Eloquent\User;
 use App\Modules\Leave\Application\LeaveRequests;
+use App\Modules\Pdf\Application\PdfExports;
+use App\Modules\Pdf\Application\RenderPdf;
+use App\Modules\Pdf\Application\SignatureImages;
+use App\Modules\Pdf\Domain\PdfType;
 use App\Modules\Sites\Infrastructure\Eloquent\Site;
 use Illuminate\Contracts\Console\Kernel;
 use Illuminate\Http\UploadedFile;
@@ -38,23 +37,23 @@ try {
             DB::table('attendance_requests')->insert(['id' => $id, 'employee_id' => $employee, 'site_id' => $site->id,
                 'date' => now('Africa/Cairo')->toDateString(), 'type' => $advance ? 'advance' : 'overtime', 'requested_by' => $hr->id,
                 ...($advance ? ['amount' => '250.5'] : ['minutes' => 95, 'in_time' => '09:00', 'out_time' => '17:35'])]);
-            $row = app(AttendanceRequestForms::class)->create($id, $hr->id, (string) Str::uuid7(), [
+            $row = app(PdfExports::class)->create($advance ? PdfType::AdvanceRequest : PdfType::OvertimeRequest, $id, (string) Str::uuid7(), [
                 'job_title' => 'مهندسة اختبار', 'reason' => 'سبب تجريبي',
                 ...($advance ? ['repayment_method' => 'cash', 'previous_advance' => false, 'finance_remarks' => 'ملاحظات تجريبية'] : []),
-            ], null, $advance ? 'advance' : 'overtime');
+            ], $hr, null);
         } elseif ($leave) {
             $requests = app(LeaveRequests::class);
             $from = now('Africa/Cairo')->next('Monday')->toDateString();
             $request = $requests->submit(['employee_id' => $employee, 'kind' => 'annual', 'from_date' => $from, 'to_date' => $from, 'note' => 'سبب تجريبي'], $hr->id, null);
             Auth::setUser($hr);
             $requests->approve($request['id'], $request['version'], $hr);
-            $row = app(LeaveRequestForms::class)->create($request['id'], $hr->id, null, (string) Str::uuid7(), [
+            $row = app(PdfExports::class)->create(PdfType::LeaveRequest, $request['id'], (string) Str::uuid7(), [
                 'job_title' => 'مهندسة اختبار', 'notification_method' => 'الهاتف', 'manager_opinion' => 'رأي تجريبي', 'substitute' => 'بديل تجريبي',
-            ]);
+            ], $hr, null);
         } else {
-            $row = app(ExperienceCertificates::class)->create($employee, $hr->id, (string) Str::uuid7(), 'مهندسة اختبار', null);
+            $row = app(PdfExports::class)->create(PdfType::ExperienceCertificate, $employee, (string) Str::uuid7(), ['job_title' => 'مهندسة اختبار', 'praise' => null], $hr, null);
         }
-        RenderHrForm::dispatch($row->id);
+        RenderPdf::dispatch($row->id);
         echo $row->id;
     } elseif ($argv[1] === 'approve') {
         $decider = $leave ? User::where('email', 'hr@synthetic.test')->firstOrFail() : User::create(['name' => 'ceo', 'email' => 'ceo@synthetic.test', 'password' => Str::random(24), 'role_id' => Role::where('slug', 'ceo')->value('id'), 'is_active' => true]);
@@ -67,9 +66,8 @@ try {
             unlink($tmp);
         }
         Auth::setUser($decider);
-        $row = $leave ? app(LeaveRequestForms::class)->approve($argv[2], $decider->id)
-            : app(ExperienceCertificates::class)->approve($argv[2], $decider->id);
-        RenderHrForm::dispatch($row->id);
+        $row = app(PdfExports::class)->approve($leave ? PdfType::LeaveRequest : PdfType::ExperienceCertificate, $argv[2], $decider);
+        RenderPdf::dispatch($row->id);
         echo $row->id;
     } elseif ($argv[1] === 'export') {
         $row = DB::table('hr_form_exports')->where('id', $argv[2])->firstOrFail();

@@ -2,9 +2,9 @@
 
 declare(strict_types=1);
 
-namespace App\Modules\Documents\Presentation;
+namespace App\Modules\Pdf\Presentation;
 
-use App\Modules\Documents\Application\SignatureImages;
+use App\Modules\Pdf\Application\SignatureImages;
 use App\Support\Http\ApiEnvelope;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;

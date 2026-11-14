@@ -2,9 +2,9 @@
 
 declare(strict_types=1);
 
-namespace App\Modules\Documents\Domain;
+namespace App\Modules\Pdf\Domain\Contracts;
 
-interface FormRenderer
+interface PdfRendererInterface
 {
     public function pdf(string $html): string;
 }

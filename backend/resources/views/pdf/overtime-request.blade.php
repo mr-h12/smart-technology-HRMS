@@ -1,7 +1,7 @@
-@extends('hr-forms.layout')
+@extends('pdf.layout')
 
 @section('form-css')
-    @include('hr-forms.attendance-request-css')
+    @include('pdf.attendance-request-css')
     .overtime-reason { overflow-wrap: anywhere; white-space: pre-wrap; }
     .signature-row { break-inside: avoid; }
     .hand { display: inline-block; width: 30mm; border-bottom: 1px dotted; }

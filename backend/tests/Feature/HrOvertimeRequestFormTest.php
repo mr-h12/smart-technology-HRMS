@@ -2,9 +2,9 @@
 
 namespace Tests\Feature;
 
-use App\Modules\Documents\Application\RenderHrForm;
-use App\Modules\Documents\Domain\FormRenderer;
 use App\Modules\Identity\Infrastructure\Eloquent\Role;
+use App\Modules\Pdf\Application\RenderPdf;
+use App\Modules\Pdf\Domain\Contracts\PdfRendererInterface;
 use Illuminate\Database\QueryException;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\DB;
@@ -130,7 +130,7 @@ final class HrOvertimeRequestFormTest extends TestCase
         $export = $this->generate($id, key: $key)->assertAccepted()->assertJsonPath('data.serial_number', 1)->json('data.id');
         $this->generate($id, key: $key)->assertAccepted()->assertJsonPath('data.id', $export);
         $this->generate($id, ['reason' => 'A different reason'], $key)->assertConflict();
-        (new RenderHrForm($export))->failed(null);
+        (new RenderPdf($export))->failed(null);
         $path = "/api/v1/hr-form-exports/{$export}/retry-overtime-request";
         $this->postJson($path)->assertAccepted()->assertJsonPath('data.id', $export);
         $this->postJson($path)->assertConflict();
@@ -168,12 +168,12 @@ final class HrOvertimeRequestFormTest extends TestCase
 
     private function render(string $export, string $duration = 'ساعة واحدة'): void
     {
-        $renderer = $this->createMock(FormRenderer::class);
+        $renderer = $this->createMock(PdfRendererInterface::class);
         $renderer->expects($this->once())->method('pdf')->with($this->callback(fn (string $html): bool => str_contains($html, $duration)
             && str_contains($html, 'الخميس الموافق <bdi>22/10/2026</bdi>') && str_contains($html, '<bdi>17:35</bdi>')
             && str_contains($html, 'Synthetic overtime reason') && substr_count($html, 'class="hand"') === 3
             && substr_count($html, '____ / ____ / ____') === 3
             && ! str_contains($html, '<img') && ! str_contains($html, 'Decision reason')))->willReturn('%PDF-1.7 overtime');
-        (new RenderHrForm($export))->handle($renderer);
+        (new RenderPdf($export))->handle($renderer);
     }
 }

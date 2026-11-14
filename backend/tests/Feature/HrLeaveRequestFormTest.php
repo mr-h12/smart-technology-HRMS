@@ -2,9 +2,9 @@
 
 namespace Tests\Feature;
 
-use App\Modules\Documents\Application\RenderHrForm;
-use App\Modules\Documents\Domain\FormRenderer;
 use App\Modules\Leave\Application\LeaveBalances;
+use App\Modules\Pdf\Application\RenderPdf;
+use App\Modules\Pdf\Domain\Contracts\PdfRendererInterface;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
@@ -91,7 +91,7 @@ final class HrLeaveRequestFormTest extends TestCase
         $this->assertSame('hr', $this->snapshot($signed)['stamp_line']);
         $this->assertSame($hr->id, $this->snapshot($signed)['decider_id']);
         $this->assertSame(1, $this->snapshot($signed)['signature_version']);
-        (new RenderHrForm($signed))->failed(null);
+        (new RenderPdf($signed))->failed(null);
         $this->postJson("/api/v1/hr-form-exports/{$signed}/retry-leave-request")->assertAccepted()->assertJsonPath('data.id', $signed);
         $this->assertDatabaseHas('hr_form_exports', ['id' => $signed, 'signature_image_id' => $signature]);
         $this->render($signed, fn (string $html): bool => (bool) preg_match('/data-stamp-line="hr">\s*<div>[^<]+<\/div>\s*<img/', $html));
@@ -179,9 +179,9 @@ final class HrLeaveRequestFormTest extends TestCase
 
     private function render(string $id, ?callable $assertHtml = null): void
     {
-        $renderer = $this->createMock(FormRenderer::class);
+        $renderer = $this->createMock(PdfRendererInterface::class);
         $renderer->expects($this->once())->method('pdf')->with($this->callback($assertHtml ?? fn (string $html) => str_contains($html, 'نموذج طلب إجازة')))->willReturn('%PDF-1.7 leave');
-        (new RenderHrForm($id))->handle($renderer);
+        (new RenderPdf($id))->handle($renderer);
     }
 
     private function signature(string $actor): string

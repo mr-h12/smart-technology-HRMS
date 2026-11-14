@@ -2,7 +2,7 @@
 
 declare(strict_types=1);
 
-namespace App\Modules\Documents\Application;
+namespace App\Modules\Pdf\Application;
 
 use App\Modules\Audit\Infrastructure\AuditLog;
 use finfo;

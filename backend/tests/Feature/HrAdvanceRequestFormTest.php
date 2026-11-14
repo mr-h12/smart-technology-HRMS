@@ -2,12 +2,12 @@
 
 namespace Tests\Feature;
 
-use App\Modules\Documents\Application\RenderHrForm;
-use App\Modules\Documents\Domain\FormRenderer;
 use App\Modules\Employees\Application\EmployeeService;
 use App\Modules\Identity\Infrastructure\Eloquent\Permission;
 use App\Modules\Identity\Infrastructure\Eloquent\Role;
 use App\Modules\Identity\Infrastructure\Eloquent\User;
+use App\Modules\Pdf\Application\RenderPdf;
+use App\Modules\Pdf\Domain\Contracts\PdfRendererInterface;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Queue;
@@ -95,9 +95,9 @@ final class HrAdvanceRequestFormTest extends TestCase
         $certificate = $this->postJson("/api/v1/employees/{$employee}/hr-forms/experience-certificate", [
             'idempotency_key' => (string) Str::uuid7(), 'job_title' => 'Synthetic technician',
         ])->assertAccepted()->json('data.id');
-        $renderer = $this->createMock(FormRenderer::class);
+        $renderer = $this->createMock(PdfRendererInterface::class);
         $renderer->expects($this->once())->method('pdf')->willReturn('%PDF-1.7 synthetic certificate');
-        (new RenderHrForm($certificate))->handle($renderer);
+        (new RenderPdf($certificate))->handle($renderer);
 
         $role = Role::create(['slug' => 'synthetic-forms-reader', 'name' => 'Synthetic forms reader', 'name_ar' => 'قارئ النماذج']);
         $role->permissions()->attach(Permission::where(['resource' => 'hr_forms', 'action' => 'view', 'scope' => 'all'])->sole()->id);
@@ -135,7 +135,7 @@ final class HrAdvanceRequestFormTest extends TestCase
         $this->assertEquals($expected, array_intersect_key($snapshot, $expected));
         $this->postJson("/api/v1/attendance/requests/{$id}/refuse", ['version' => 1, 'reason' => 'Synthetic refusal', 'paper_decision_date' => self::DATE])->assertOk();
         $second = $this->generate($id)->assertAccepted()->assertJsonPath('data.serial_number', 2)->json('data.id');
-        (new RenderHrForm($second))->failed(null);
+        (new RenderPdf($second))->failed(null);
         $retry = "/api/v1/hr-form-exports/{$second}/retry-advance-request";
         $this->postJson($retry)->assertAccepted()->assertJsonPath('data.id', $second);
         $this->postJson($retry)->assertConflict();
@@ -216,11 +216,11 @@ final class HrAdvanceRequestFormTest extends TestCase
 
     private function render(string $id): void
     {
-        $renderer = $this->createMock(FormRenderer::class);
+        $renderer = $this->createMock(PdfRendererInterface::class);
         $renderer->expects($this->once())->method('pdf')->with($this->callback(fn (string $html): bool => str_contains($html, '8765.43')
             && str_contains($html, '250.50') && str_contains($html, '22/10/2026') && str_contains($html, '01/01/2026')
             && str_contains($html, 'Finance &amp; Administration') && ! str_contains($html, '<img src=')))->willReturn('%PDF-1.7 advance');
-        $job = new RenderHrForm($id);
+        $job = new RenderPdf($id);
         $job->handle($renderer);
         $job->handle($renderer);
     }

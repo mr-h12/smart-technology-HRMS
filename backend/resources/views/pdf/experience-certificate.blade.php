@@ -1,4 +1,4 @@
-@extends('hr-forms.layout')
+@extends('pdf.layout')
 
 @section('document')
 <h1>شهادة خبرة</h1>

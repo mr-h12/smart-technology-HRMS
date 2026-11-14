@@ -1,7 +1,7 @@
-@extends('hr-forms.layout')
+@extends('pdf.layout')
 
 @section('form-css')
-    @include('hr-forms.attendance-request-css')
+    @include('pdf.attendance-request-css')
     .pair { display: flex; justify-content: space-between; gap: 3mm; padding: 1mm 2mm; }
     .pair [lang=en] { text-align: left; }
     .box { width: 3mm; height: 3mm; border: 1px solid; display: inline-block; vertical-align: middle; text-align: center; line-height: 2.6mm; }

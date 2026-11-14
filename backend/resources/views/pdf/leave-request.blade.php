@@ -1,4 +1,4 @@
-@extends('hr-forms.layout')
+@extends('pdf.layout')
 
 @section('form-css')
     main { margin: 8mm; padding: 5mm 10mm 11mm; min-height: 280mm; border: 4px double; font-size: 13pt; line-height: 1.65; }

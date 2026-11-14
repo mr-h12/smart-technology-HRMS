@@ -2,8 +2,8 @@
 
 namespace Tests\Feature;
 
-use App\Modules\Documents\Application\RenderHrForm;
-use App\Modules\Documents\Domain\FormRenderer;
+use App\Modules\Pdf\Application\RenderPdf;
+use App\Modules\Pdf\Domain\Contracts\PdfRendererInterface;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Queue;
@@ -37,11 +37,11 @@ class HrExperienceCertificateTest extends TestCase
             'job_title' => 'Synthetic QA', 'idempotency_key' => (string) Str::uuid7(),
         ])->assertAccepted()->json('data.id');
         $this->getJson("/api/v1/hr-form-exports/{$id}/download")->assertNotFound();
-        $renderer = $this->createMock(FormRenderer::class);
+        $renderer = $this->createMock(PdfRendererInterface::class);
         $renderer->expects($this->once())->method('pdf')->with($this->callback(fn (string $html): bool => str_contains($html, 'Synthetic QA')
             && str_contains($html, $wording) && str_contains($html, 'signature-line')))
             ->willReturn('%PDF-1.7 synthetic');
-        $job = new RenderHrForm($id);
+        $job = new RenderPdf($id);
         $job->handle($renderer);
         $job->handle($renderer);
         $this->getJson("/api/v1/hr-form-exports/{$id}")->assertOk()
@@ -95,11 +95,11 @@ class HrExperienceCertificateTest extends TestCase
             ])->assertAccepted()->json('data.id');
             $snapshot = json_decode(DB::table('hr_form_exports')->where('id', $id)->value('snapshot'), true);
             $this->assertSame($praise, $snapshot['praise']);
-            $renderer = $this->createMock(FormRenderer::class);
+            $renderer = $this->createMock(PdfRendererInterface::class);
             $renderer->expects($this->once())->method('pdf')->with($this->callback(fn (string $html): bool => $praise === ''
                 ? ! str_contains($html, '<p class="praise">')
                 : str_contains($html, '<p class="praise">'.e($praise).'</p>')))->willReturn('%PDF-1.7 synthetic');
-            (new RenderHrForm($id))->handle($renderer);
+            (new RenderPdf($id))->handle($renderer);
         }
     }
 
@@ -142,7 +142,7 @@ class HrExperienceCertificateTest extends TestCase
             ->assertAccepted()->assertJsonPath('data.serial_number', 2)->json('data.id');
         $audit = ['event' => 'APPROVED', 'entity_type' => 'hr_form_exports', 'entity_id' => $signed];
         $this->assertDatabaseHas('audit_log', [...$audit, 'user_id' => $ceo->id, 'on_behalf_of' => null]);
-        (new RenderHrForm($signed))->failed(null);
+        (new RenderPdf($signed))->failed(null);
         $this->withToken($own)->getJson("/api/v1/hr-form-exports/{$signed}")->assertOk()
             ->assertJsonPath('data.failure_code', 'render_failed');
         $this->withToken($own)->postJson("/api/v1/hr-form-exports/{$signed}/retry")
@@ -153,6 +153,6 @@ class HrExperienceCertificateTest extends TestCase
         ]);
         $this->assertDatabaseHas('hr_form_exports', ['id' => $unsigned, 'status' => 'ready']);
         $this->assertSame(1, DB::table('audit_log')->where($audit)->count());
-        Queue::assertPushedOn('pdf', RenderHrForm::class, fn (RenderHrForm $job) => $job->exportId === $signed);
+        Queue::assertPushedOn('pdf', RenderPdf::class, fn (RenderPdf $job) => $job->exportId === $signed);
     }
 }

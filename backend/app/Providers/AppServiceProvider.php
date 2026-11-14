@@ -2,13 +2,13 @@
 
 namespace App\Providers;
 
-use App\Modules\Documents\Domain\FormRenderer;
-use App\Modules\Documents\Infrastructure\BrowsershotRenderer;
 use App\Modules\Employees\Application\EmployeeOpenItems;
 use App\Modules\Employees\Infrastructure\Eloquent\Employee;
 use App\Modules\Identity\Infrastructure\BearerSessionResolver;
 use App\Modules\Identity\Infrastructure\RolePermissions;
 use App\Modules\Leave\Application\LeaveRequests;
+use App\Modules\Pdf\Domain\Contracts\PdfRendererInterface;
+use App\Modules\Pdf\Infrastructure\BrowsershotPdfRenderer;
 use App\Modules\Settings\Application\BusinessRules;
 use App\Support\Database\StandardColumns;
 use Illuminate\Cache\RateLimiting\Limit;
@@ -26,7 +26,7 @@ class AppServiceProvider extends ServiceProvider
      */
     public function register(): void
     {
-        $this->app->bind(FormRenderer::class, BrowsershotRenderer::class);
+        $this->app->bind(PdfRendererInterface::class, BrowsershotPdfRenderer::class);
     }
 
     /**

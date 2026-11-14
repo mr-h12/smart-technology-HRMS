@@ -2,12 +2,12 @@
 
 declare(strict_types=1);
 
-namespace App\Modules\Documents\Infrastructure;
+namespace App\Modules\Pdf\Infrastructure;
 
-use App\Modules\Documents\Domain\FormRenderer;
+use App\Modules\Pdf\Domain\Contracts\PdfRendererInterface;
 use Spatie\Browsershot\Browsershot;
 
-final class BrowsershotRenderer implements FormRenderer
+final class BrowsershotPdfRenderer implements PdfRendererInterface
 {
     public function pdf(string $html): string
     {
