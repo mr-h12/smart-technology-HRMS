@@ -22,6 +22,12 @@ enum PdfType: string
         };
     }
 
+    /** Whether a caller holding the route's hr_forms permission at own scope only may use the type (on employees in reach). */
+    public function ownScope(): bool
+    {
+        return $this === self::AdvanceRequest;
+    }
+
     public function fileName(int $serial, string $stage): string
     {
         return str_replace('_', '-', $this->value)."-{$serial}-{$stage}.pdf";

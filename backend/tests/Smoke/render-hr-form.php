@@ -51,7 +51,7 @@ try {
                 'job_title' => 'مهندسة اختبار', 'notification_method' => 'الهاتف', 'manager_opinion' => 'رأي تجريبي', 'substitute' => 'بديل تجريبي',
             ], $hr, null);
         } else {
-            $row = app(PdfExports::class)->create(PdfType::ExperienceCertificate, $employee, (string) Str::uuid7(), ['job_title' => 'مهندسة اختبار', 'praise' => null], $hr, null);
+            $row = app(PdfExports::class)->create(PdfType::ExperienceCertificate, $employee, (string) Str::uuid7(), ['job_title' => 'مهندسة اختبار'], $hr, null);
         }
         RenderPdf::dispatch($row->id);
         echo $row->id;
@@ -66,7 +66,7 @@ try {
             unlink($tmp);
         }
         Auth::setUser($decider);
-        $row = app(PdfExports::class)->approve($leave ? PdfType::LeaveRequest : PdfType::ExperienceCertificate, $argv[2], $decider);
+        $row = app(PdfExports::class)->approve($argv[2], $decider);
         RenderPdf::dispatch($row->id);
         echo $row->id;
     } elseif ($argv[1] === 'export') {

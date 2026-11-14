@@ -78,10 +78,10 @@ final class HrAdvanceRequestFormTest extends TestCase
         $this->manager->update(['role_id' => $role->id]);
         $this->actingAs($this->manager, 'api');
         $this->generate($request)->assertForbidden();
-        $this->getJson("/api/v1/hr-form-exports/{$export}")->assertForbidden();
-        $this->getJson("/api/v1/hr-form-exports/{$export}/download")->assertForbidden();
-        $this->getJson("/api/v1/attendance/requests/{$request}/hr-form-exports")->assertForbidden();
-        $this->getJson("/api/v1/employees/{$this->employeeId}/hr-form-exports")->assertOk()->assertJsonCount(0, 'data');
+        $this->getJson("/api/v1/hr-form-exports/{$export}")->assertNotFound();
+        $this->getJson("/api/v1/hr-form-exports/{$export}/download")->assertNotFound();
+        $this->getJson("/api/v1/hr-form-exports?type=advance_request&subject_id={$request}")->assertOk()->assertJsonCount(0, 'data');
+        $this->getJson("/api/v1/hr-form-exports?employee_id={$this->employeeId}")->assertOk()->assertJsonCount(0, 'data');
     }
 
     public function test_shared_export_routes_allow_certificate_download_without_pay_permission(): void
@@ -92,8 +92,9 @@ final class HrAdvanceRequestFormTest extends TestCase
         $this->render($advance);
 
         $employee = $this->employee('office', '2026-01-01', ['national_id' => '12345678901234', 'department' => 'Synthetic QA']);
-        $certificate = $this->postJson("/api/v1/employees/{$employee}/hr-forms/experience-certificate", [
-            'idempotency_key' => (string) Str::uuid7(), 'job_title' => 'Synthetic technician',
+        $certificate = $this->postJson('/api/v1/hr-form-exports', [
+            'type' => 'experience_certificate', 'subject_id' => $employee, 'idempotency_key' => (string) Str::uuid7(),
+            'fields' => ['job_title' => 'Synthetic technician'],
         ])->assertAccepted()->json('data.id');
         $renderer = $this->createMock(PdfRendererInterface::class);
         $renderer->expects($this->once())->method('pdf')->willReturn('%PDF-1.7 synthetic certificate');
@@ -102,8 +103,8 @@ final class HrAdvanceRequestFormTest extends TestCase
         $role = Role::create(['slug' => 'synthetic-forms-reader', 'name' => 'Synthetic forms reader', 'name_ar' => 'قارئ النماذج']);
         $role->permissions()->attach(Permission::where(['resource' => 'hr_forms', 'action' => 'view', 'scope' => 'all'])->sole()->id);
         $this->actingAs($this->makeUser('hr', ['role_id' => $role->id]), 'api');
-        $this->getJson("/api/v1/hr-form-exports/{$advance}")->assertForbidden();
-        $this->get("/api/v1/hr-form-exports/{$advance}/download")->assertForbidden();
+        $this->getJson("/api/v1/hr-form-exports/{$advance}")->assertNotFound();
+        $this->get("/api/v1/hr-form-exports/{$advance}/download")->assertNotFound();
         $this->getJson("/api/v1/hr-form-exports/{$certificate}")->assertOk();
         $this->assertSame('%PDF-1.7 synthetic certificate', $this->get("/api/v1/hr-form-exports/{$certificate}/download")->assertOk()->streamedContent());
     }
@@ -126,7 +127,7 @@ final class HrAdvanceRequestFormTest extends TestCase
         $this->signIn('hr');
         app(EmployeeService::class)->addPayChange($this->employeeId, ['effective_from' => '2026-10-23', 'salary' => '11000']);
         $key = (string) Str::uuid7();
-        $this->generate($id, ['paper_decision_date' => self::DATE])->assertUnprocessable()->assertJsonPath('error.details.0.field', 'paper_decision_date');
+        $this->generate($id, ['paper_decision_date' => self::DATE])->assertUnprocessable()->assertJsonPath('error.details.0.field', 'fields.paper_decision_date');
         $first = $this->generate($id, key: $key)->assertAccepted()->assertJsonPath('data.serial_number', 1)->json('data.id');
         $this->generate($id, key: $key)->assertAccepted()->assertJsonPath('data.id', $first);
         $snapshot = json_decode(DB::table('hr_form_exports')->where('id', $first)->value('snapshot'), true, flags: JSON_THROW_ON_ERROR);
@@ -136,7 +137,7 @@ final class HrAdvanceRequestFormTest extends TestCase
         $this->postJson("/api/v1/attendance/requests/{$id}/refuse", ['version' => 1, 'reason' => 'Synthetic refusal', 'paper_decision_date' => self::DATE])->assertOk();
         $second = $this->generate($id)->assertAccepted()->assertJsonPath('data.serial_number', 2)->json('data.id');
         (new RenderPdf($second))->failed(null);
-        $retry = "/api/v1/hr-form-exports/{$second}/retry-advance-request";
+        $retry = "/api/v1/hr-form-exports/{$second}/retry";
         $this->postJson($retry)->assertAccepted()->assertJsonPath('data.id', $second);
         $this->postJson($retry)->assertConflict();
         $this->render($second);
@@ -203,8 +204,8 @@ final class HrAdvanceRequestFormTest extends TestCase
 
     private function generate(string $id, array $extra = [], ?string $key = null): TestResponse
     {
-        return $this->postJson("/api/v1/attendance/requests/{$id}/hr-forms/advance-request", [
-            ...self::FIELDS, 'idempotency_key' => $key ?? (string) Str::uuid7(), ...$extra,
+        return $this->postJson('/api/v1/hr-form-exports', [
+            'type' => 'advance_request', 'subject_id' => $id, 'idempotency_key' => $key ?? (string) Str::uuid7(), 'fields' => [...self::FIELDS, ...$extra],
         ]);
     }
 

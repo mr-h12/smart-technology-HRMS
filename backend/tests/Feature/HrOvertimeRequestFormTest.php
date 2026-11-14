@@ -52,7 +52,7 @@ final class HrOvertimeRequestFormTest extends TestCase
     {
         $id = $this->attendanceRequest($status, $minutes);
         $source = (array) DB::table('attendance_requests')->where('id', $id)->first();
-        $export = $this->generate($id)->assertAccepted()->assertJsonPath('data.form_type', 'overtime_request')->json('data.id');
+        $export = $this->generate($id)->assertAccepted()->assertJsonPath('data.type', 'overtime_request')->json('data.id');
         $snapshot = json_decode(DB::table('hr_form_exports')->where('id', $export)->value('snapshot'), true, flags: JSON_THROW_ON_ERROR);
         $this->assertEquals([
             'name_ar' => 'سارة مثال للاختبار', 'name_en' => 'Synthetic Worker', 'department' => 'Synthetic QA', 'code' => 1, 'gender' => 'male',
@@ -85,7 +85,7 @@ final class HrOvertimeRequestFormTest extends TestCase
         foreach ([$this->managerOf($this->site), $this->makeUser('hr', ['role_id' => $role->id])] as $user) {
             $this->actingAs($user, 'api');
             $this->generate($id)->assertForbidden();
-            $this->getJson("/api/v1/attendance/requests/{$id}/hr-form-exports")->assertForbidden();
+            $this->getJson("/api/v1/hr-form-exports?type=overtime_request&subject_id={$id}")->assertForbidden();
             $this->getJson("/api/v1/hr-form-exports/{$export}")->assertForbidden();
             $this->get("/api/v1/hr-form-exports/{$export}/download")->assertForbidden();
         }
@@ -114,8 +114,8 @@ final class HrOvertimeRequestFormTest extends TestCase
         ]);
         DB::statement('alter table attendance_requests drop constraint attendance_requests_check');
         DB::table('attendance_requests')->where('id', $id)->update(['type' => 'other']);
-        $this->getJson("/api/v1/attendance/requests/{$id}/hr-form-exports")
-            ->assertOk()->assertJsonPath('data.exports', []);
+        $this->getJson("/api/v1/hr-form-exports?type=overtime_request&subject_id={$id}")
+            ->assertOk()->assertJsonCount(0, 'data');
     }
 
     public function test_validation_idempotency_and_unsigned_retry(): void
@@ -123,7 +123,7 @@ final class HrOvertimeRequestFormTest extends TestCase
         $id = $this->attendanceRequest();
         foreach (['job_title' => 160, 'reason' => 300] as $field => $limit) {
             foreach ([null, '   ', str_repeat('x', $limit + 1)] as $invalid) {
-                $this->generate($id, [$field => $invalid])->assertUnprocessable()->assertJsonPath('error.details.0.field', $field);
+                $this->generate($id, [$field => $invalid])->assertUnprocessable()->assertJsonPath('error.details.0.field', "fields.{$field}");
             }
         }
         $key = (string) Str::uuid7();
@@ -131,7 +131,7 @@ final class HrOvertimeRequestFormTest extends TestCase
         $this->generate($id, key: $key)->assertAccepted()->assertJsonPath('data.id', $export);
         $this->generate($id, ['reason' => 'A different reason'], $key)->assertConflict();
         (new RenderPdf($export))->failed(null);
-        $path = "/api/v1/hr-form-exports/{$export}/retry-overtime-request";
+        $path = "/api/v1/hr-form-exports/{$export}/retry";
         $this->postJson($path)->assertAccepted()->assertJsonPath('data.id', $export);
         $this->postJson($path)->assertConflict();
         $this->render($export);
@@ -153,15 +153,15 @@ final class HrOvertimeRequestFormTest extends TestCase
 
     private function generate(string $id, array $fields = [], ?string $key = null): TestResponse
     {
-        return $this->postJson("/api/v1/attendance/requests/{$id}/hr-forms/overtime-request", [
-            'idempotency_key' => $key ?? (string) Str::uuid7(), 'job_title' => '  Synthetic technician  ',
-            'reason' => '  Synthetic overtime reason  ', ...$fields,
+        return $this->postJson('/api/v1/hr-form-exports', [
+            'type' => 'overtime_request', 'subject_id' => $id, 'idempotency_key' => $key ?? (string) Str::uuid7(),
+            'fields' => ['job_title' => '  Synthetic technician  ', 'reason' => '  Synthetic overtime reason  ', ...$fields],
         ]);
     }
 
     private function assertReadable(string $id, string $export): void
     {
-        $this->getJson("/api/v1/attendance/requests/{$id}/hr-form-exports")->assertOk();
+        $this->getJson("/api/v1/hr-form-exports?type=overtime_request&subject_id={$id}")->assertOk();
         $this->getJson("/api/v1/hr-form-exports/{$export}")->assertOk();
         $this->get("/api/v1/hr-form-exports/{$export}/download")->assertOk();
     }

@@ -5,11 +5,13 @@ declare(strict_types=1);
 namespace App\Modules\Pdf\Application;
 
 use App\Modules\Audit\Infrastructure\AuditLog;
+use App\Modules\Employees\Application\EmployeeReach;
 use App\Modules\Employees\Application\EmployeeService;
+use App\Modules\Employees\Infrastructure\Eloquent\Employee;
 use App\Modules\Identity\Application\Rbac\AuthorizeAction;
+use App\Modules\Identity\Domain\Rbac\AuthorizationRefused;
 use App\Modules\Identity\Domain\Rbac\Scope;
 use App\Modules\Identity\Infrastructure\Eloquent\User;
-use App\Modules\Leave\Domain\LeaveStatus;
 use App\Modules\Pdf\Application\Types\AdvanceRequestPdf;
 use App\Modules\Pdf\Application\Types\ExperienceCertificatePdf;
 use App\Modules\Pdf\Application\Types\LeaveRequestPdf;
@@ -27,7 +29,7 @@ use Illuminate\Support\Str;
 use Illuminate\Validation\ValidationException;
 use stdClass;
 
-/** The store of `hr_form_exports` rows, shared by every PdfType. */
+/** The store of `hr_form_exports` rows, shared by every PdfType, with every read and write gate on them. */
 final class PdfExports
 {
     public function __construct(private readonly EmployeeService $employees, private readonly AuthorizeAction $authorize) {}
@@ -43,62 +45,51 @@ final class PdfExports
     }
 
     /**
-     * A replay of the caller's idempotency key returns its row; the same key with another payload is a conflict.
-     * The certificate regenerates only from the unsigned row the client names ($regeneratedFrom, or none);
-     * every other type supersedes its subject's latest unsigned row.
+     * A replay of the caller's idempotency key returns its row (checked before the subject is read again); the same key with
+     * another type, subject or fields is a conflict. The new row supersedes the subject's latest unsigned row.
      *
-     * @param  array<string, mixed>  $fields
+     * @param  array<string, mixed>  $fields  validated with document($type)->rules()
      */
-    public function create(PdfType $type, string $subjectId, string $key, array $fields, Authenticatable $actor, ?string $scope, ?string $regeneratedFrom = null): stdClass
+    public function create(PdfType $type, string $subjectId, string $key, array $fields, Authenticatable $actor, ?string $scope): stdClass
     {
-        $document = self::document($type);
+        if ($scope !== null && ! $type->ownScope()) {
+            throw AuthorizationRefused::of('hr_forms.generate');
+        }
         $actorId = (string) $actor->getAuthIdentifier();
-        $showsPay = $this->canViewPay($actor);
-        $named = $type === PdfType::ExperienceCertificate;
 
-        return DB::transaction(function () use ($type, $subjectId, $key, $fields, $actorId, $scope, $showsPay, $regeneratedFrom, $document, $named): stdClass {
+        return DB::transaction(function () use ($type, $subjectId, $key, $fields, $actor, $actorId, $scope): stdClass {
             DB::table('users')->where('id', $actorId)->lockForUpdate()->firstOrFail();
-            [$employeeId, $snapshot] = $document->snapshot($subjectId, $fields, $scope, $showsPay);
             $unsigned = fn (): Builder => $this->subjectRows($type, $subjectId)->where('stage', 'unsigned');
-
             $existing = DB::table('hr_form_exports')->where('requested_by', $actorId)->where('idempotency_key', $key)->first();
             if ($existing !== null) {
-                $asked = array_intersect_key($snapshot, $fields);
-                if (array_intersect_key(json_decode((string) $existing->snapshot, true, flags: JSON_THROW_ON_ERROR), $asked) != $asked
-                    || ($named && $existing->regenerated_from_id !== $regeneratedFrom)
-                    || ! $unsigned()->where('id', $existing->id)->exists()) {
+                $stored = json_decode((string) $existing->snapshot, true, flags: JSON_THROW_ON_ERROR);
+                if (! $unsigned()->where('id', $existing->id)->exists() || array_intersect_key($stored, $fields) != $fields) {
                     throw new ConcurrencyConflict;
                 }
 
                 return $existing;
             }
 
-            if ($named && $regeneratedFrom !== null) {
-                $this->find($regeneratedFrom, lock: true);
-                if (! $unsigned()->where('id', $regeneratedFrom)->exists()
-                    || DB::table('hr_form_exports')->where('regenerated_from_id', $regeneratedFrom)->exists()) {
-                    throw new ConcurrencyConflict;
-                }
-            }
-            $previous = $named ? $regeneratedFrom : $unsigned()->orderByDesc('serial_number')->value('id');
+            [$employeeId, $snapshot] = self::document($type)->snapshot($subjectId, $fields, $scope, $this->canViewPay($actor));
+            $previous = $unsigned()->orderByDesc('serial_number')->value('id');
+            $row = $this->storeUnsigned($type, $employeeId, $actorId, $key, $snapshot, $previous === null ? null : (string) $previous);
+            // The fields only: the snapshot carries the salary.
+            AuditLog::record('CREATED', 'hr_form_exports', (string) $row->id, null, [
+                'form_type' => $type->value, 'serial_number' => $row->serial_number, 'stage' => 'unsigned',
+                'regenerated_from_id' => $row->regenerated_from_id, 'fields' => $fields,
+            ]);
 
-            return $this->storeUnsigned($type, $employeeId, $actorId, $key, $snapshot, $previous === null ? null : (string) $previous);
+            return $row;
         });
     }
 
-    public function approve(PdfType $type, string $id, Authenticatable $approver): stdClass
+    /** Signs the unsigned row with the caller's stored signature; approving it again answers the signed row. */
+    public function approve(string $id, Authenticatable $approver): stdClass
     {
-        return DB::transaction(function () use ($type, $id, $approver): stdClass {
+        return DB::transaction(function () use ($id, $approver): stdClass {
             $approverId = (string) $approver->getAuthIdentifier();
             $source = $this->find($id, lock: true);
-            if ($source->form_type !== $type->value) {
-                throw new ConcurrencyConflict;
-            }
-            $stampLine = self::document($type)->approval($source, $approver);
-            if ($source->stage !== 'unsigned' || $source->status !== 'ready'
-                || DB::table('hr_form_exports')->where('regenerated_from_id', $id)->exists()) {
-                throw new ConcurrencyConflict;
-            }
+            $stampLine = $this->approval($source, $approver);
             $existing = DB::table('hr_form_exports')->where('unsigned_export_id', $id)->first();
             if ($existing !== null) {
                 return $existing;
@@ -137,16 +128,11 @@ final class PdfExports
         });
     }
 
-    /** A type that is never signed retries its unsigned row, a signed type its signed row; $approver, when given, must have signed it. */
-    public function retry(PdfType $type, string $id, ?string $approver = null): stdClass
+    /** Failed rows only, rendered again on the same row. No audit row: GENERATED follows the render. */
+    public function retry(string $id, Authenticatable $actor): stdClass
     {
-        return DB::transaction(function () use ($type, $id, $approver): stdClass {
-            $export = $this->find($id, lock: true);
-            $stage = $type->approvePermission() === null ? 'unsigned' : 'signed';
-            if ($export->form_type !== $type->value || $export->stage !== $stage || $export->status !== 'failed'
-                || ($approver !== null && $export->approved_by !== $approver)) {
-                throw new ConcurrencyConflict;
-            }
+        return DB::transaction(function () use ($id, $actor): stdClass {
+            $this->retryable($this->find($id, lock: true), $actor);
             DB::table('hr_form_exports')->where('id', $id)->update([
                 'status' => 'pending', 'failure_code' => null, 'updated_at' => now(),
             ]);
@@ -155,57 +141,76 @@ final class PdfExports
         });
     }
 
-    /** @return LengthAwarePaginator<int, stdClass> */
-    public function history(string $employee, ?PdfType $type = null, bool $includePay = false): LengthAwarePaginator
+    /**
+     * @param  array<string, mixed>  $filters  type, subject_id (with type), employee_id, stage, status, awaiting_approval, q, page, per_page
+     * @return LengthAwarePaginator<int, stdClass>
+     */
+    public function list(array $filters, Authenticatable $actor, ?string $scope): LengthAwarePaginator
     {
-        return DB::table('hr_form_exports')->where('employee_id', $employee)->whereNull('deleted_at')
-            ->whereIn('form_type', self::served())
-            ->when($type, fn ($query, PdfType $type) => $query->where('form_type', $type->value))
-            ->when(! $includePay, fn ($query) => $query->where('form_type', '!=', PdfType::AdvanceRequest->value))
-            ->orderByDesc('created_at')->orderByDesc('id')->paginate(25);
+        $query = DB::table('hr_form_exports')->whereNull('deleted_at')->whereIn('form_type', self::served());
+        if (! $this->canViewPay($actor)) {
+            $query->whereRaw("not (form_type = ? and coalesce(snapshot->>'shows_pay', 'true') <> 'false')", [PdfType::AdvanceRequest->value]);
+        }
+        if ($scope !== null) {
+            $query->whereIn('form_type', self::served(fn (PdfType $type) => $type->ownScope()))
+                ->whereIn('employee_id', EmployeeReach::ids($scope, now('Africa/Cairo')->toDateString()));
+        }
+        $type = PdfType::tryFrom((string) ($filters['type'] ?? ''));
+        if ($type !== null) {
+            $query->where('form_type', $type->value)
+                ->when($filters['subject_id'] ?? null, fn (Builder $q, string $subject) => $q->where(self::document($type)->subjectColumn(), $subject));
+        }
+        foreach (['employee_id', 'stage', 'status'] as $column) {
+            $query->when($filters[$column] ?? null, fn (Builder $q, string $value) => $q->where($column, $value));
+        }
+        if (! empty($filters['awaiting_approval'])) {
+            $query->whereIn('form_type', self::served(fn (PdfType $type) => ($permission = $type->approvePermission()) !== null && $this->holdsAll($actor, $permission)))
+                ->where('stage', 'unsigned')->where('status', 'ready')
+                ->whereNotExists(fn (Builder $q) => $q->selectRaw('1')->from('hr_form_exports as successor')
+                    ->where(fn (Builder $q) => $q->whereColumn('successor.unsigned_export_id', 'hr_form_exports.id')
+                        ->orWhereColumn('successor.regenerated_from_id', 'hr_form_exports.id')));
+        }
+        $search = (string) ($filters['q'] ?? '');
+        if ($search !== '') {
+            $query->where(fn (Builder $q) => $q->whereIn('employee_id', Employee::query()->matching($search)->select('id'))
+                ->when(preg_match('/^(0|[1-9]\d{0,8})$/D', $search) === 1, fn (Builder $q) => $q->orWhere('serial_number', (int) $search)));
+        }
+
+        return $query->orderByDesc('serial_number')->orderByDesc('stage')->orderByDesc('id')
+            ->paginate((int) ($filters['per_page'] ?? 25), page: (int) ($filters['page'] ?? 1));
     }
 
-    /** @return LengthAwarePaginator<int, stdClass> */
-    public function awaitingApproval(): LengthAwarePaginator
+    /** The row behind every read gate, else 404: missing, deleted, of a type not served, pay-bearing for a caller without pay, or out of an own scope. */
+    public function visible(string $id, Authenticatable $actor, ?string $scope): stdClass
     {
-        return DB::table('hr_form_exports as source')->where('source.form_type', PdfType::ExperienceCertificate->value)
-            ->where('source.stage', 'unsigned')->where('source.status', 'ready')
-            ->whereNull('source.deleted_at')->whereNotExists(fn ($query) => $query->selectRaw('1')
-            ->from('hr_form_exports as successor')
-            ->where(fn ($q) => $q->whereColumn('successor.unsigned_export_id', 'source.id')
-                ->orWhereColumn('successor.regenerated_from_id', 'source.id')))
-            ->orderBy('source.created_at')->orderBy('source.id')->paginate(25, ['source.*']);
+        $row = $this->find($id);
+        if (! $this->shows($row, $actor, $scope)) {
+            throw new ModelNotFoundException;
+        }
+
+        return $row;
     }
 
-    /** @return array<string, mixed> */
-    public function leaveHistory(string $id, ?string $scope, string $actor): array
+    /**
+     * What the caller may do with the row now; approve and retry run the routes' own checks.
+     *
+     * @return list<string>
+     */
+    public function actions(stdClass $row, Authenticatable $actor): array
     {
-        $request = DB::table('leave_requests')->where('id', $id)->whereNull('deleted_at')->first()
-            ?? throw new ModelNotFoundException;
-        $this->employees->show((string) $request->employee_id, $scope);
-        $exports = $this->subjectRows(PdfType::LeaveRequest, $id)->whereNull('deleted_at')
-            ->orderByDesc('serial_number')->orderByDesc('stage')
-            ->get(['id', 'serial_number', 'stage', 'status', 'approved_by', 'unsigned_export_id']);
+        $actions = $row->status === 'ready' ? ['download'] : [];
+        $permission = PdfType::from((string) $row->form_type)->approvePermission();
+        // ponytail: up to three queries per signable row (successors, the leave request); a page holds at most 100 rows
+        if ($row->stage === 'unsigned' && $row->status === 'ready' && $permission !== null && $this->holdsAll($actor, $permission)
+            && self::passes(fn () => $this->approval($row, $actor))
+            && ! DB::table('hr_form_exports')->where('unsigned_export_id', $row->id)->exists()) {
+            $actions[] = 'approve';
+        }
+        if ($row->status === 'failed' && self::passes(fn () => $this->retryable($row, $actor))) {
+            $actions[] = 'retry';
+        }
 
-        return ['exports' => $exports, 'is_decider' => $request->status === LeaveStatus::Approved->value && $request->decided_by === $actor];
-    }
-
-    /** @return list<stdClass> */
-    public function attendanceHistory(string $id, ?string $scope, ?Authenticatable $actor): array
-    {
-        $request = DB::table('attendance_requests')->where('id', $id)->whereNull('deleted_at')->first()
-            ?? throw new ModelNotFoundException;
-        abort_if($scope !== null && ! $this->employees->isManagedBy((string) $request->employee_id, $scope), 404);
-        abort_if($request->type === 'advance' && ! $this->canViewPay($actor), 403);
-
-        $type = match ($request->type) {
-            'advance' => PdfType::AdvanceRequest,
-            'overtime' => PdfType::OvertimeRequest,
-            default => null,
-        };
-
-        return $type === null ? [] : array_values($this->subjectRows($type, $id)->where('stage', 'unsigned')->whereNull('deleted_at')
-            ->orderByDesc('serial_number')->get(['id', 'serial_number', 'stage', 'status'])->all());
+        return $actions;
     }
 
     public function find(string $id, bool $lock = false): stdClass
@@ -215,9 +220,83 @@ final class PdfExports
     }
 
     /** Pay-bearing exports (the advance carries the salary) need employee.view at scope All. */
-    public function canViewPay(?Authenticatable $actor): bool
+    public function canViewPay(Authenticatable $actor): bool
     {
-        return $actor !== null && $this->authorize->decide($actor, 'employee.view')->allows(Scope::All);
+        return $this->holdsAll($actor, 'employee.view');
+    }
+
+    /** Approve's refusals in order: 404 not visible, 409 never signed, 403 no permission, 409 state, then the type's signer rule. */
+    private function approval(stdClass $row, Authenticatable $actor): ?string
+    {
+        $type = PdfType::from((string) $row->form_type);
+        $permission = $type->approvePermission();
+        if (! $this->shows($row, $actor, $permission === null ? null : $this->ownerOf($actor, $permission))) {
+            throw new ModelNotFoundException;
+        }
+        if ($permission === null) {
+            throw new ConcurrencyConflict;
+        }
+        if (! $this->authorize->decide($actor, $permission)->granted()) {
+            throw AuthorizationRefused::of($permission);
+        }
+        if ($row->stage !== 'unsigned' || $row->status !== 'ready'
+            || DB::table('hr_form_exports')->where('regenerated_from_id', $row->id)->exists()) {
+            throw new ConcurrencyConflict;
+        }
+
+        return self::document($type)->approval($row, $actor);
+    }
+
+    /** Retry's refusals in order: 403 no permission (generate for an unsigned row, the type's approve for a signed one), 404 not visible, 409 state or another approver. */
+    private function retryable(stdClass $row, Authenticatable $actor): void
+    {
+        $permission = $row->stage === 'signed'
+            ? (PdfType::from((string) $row->form_type)->approvePermission() ?? throw new ConcurrencyConflict)
+            : 'hr_forms.generate';
+        if (! $this->authorize->decide($actor, $permission)->granted()) {
+            throw AuthorizationRefused::of($permission);
+        }
+        if (! $this->shows($row, $actor, $this->ownerOf($actor, $permission))) {
+            throw new ModelNotFoundException;
+        }
+        if ($row->status !== 'failed' || ($row->stage === 'signed' && $row->approved_by !== (string) $actor->getAuthIdentifier())) {
+            throw new ConcurrencyConflict;
+        }
+    }
+
+    /** The read gates on one row: pay, and for an own-scope caller the type's ownScope() and the employee in reach today. */
+    private function shows(stdClass $row, Authenticatable $actor, ?string $scope): bool
+    {
+        $type = PdfType::from((string) $row->form_type);
+        $bearsPay = $type === PdfType::AdvanceRequest
+            && (json_decode((string) $row->snapshot, true, flags: JSON_THROW_ON_ERROR)['shows_pay'] ?? true) !== false;
+
+        return (! $bearsPay || $this->canViewPay($actor))
+            && ($scope === null || ($type->ownScope() && $row->employee_id !== null && $this->employees->isManagedBy((string) $row->employee_id, $scope)));
+    }
+
+    private function holdsAll(Authenticatable $actor, string $permission): bool
+    {
+        return $this->authorize->decide($actor, $permission)->allows(Scope::All);
+    }
+
+    /** RequestScope semantics for one permission: the caller's id when it is held below All only, else null (not held is refused separately). */
+    private function ownerOf(Authenticatable $actor, string $permission): ?string
+    {
+        $decision = $this->authorize->decide($actor, $permission);
+
+        return $decision->granted() && ! $decision->allows(Scope::All) ? (string) $actor->getAuthIdentifier() : null;
+    }
+
+    private static function passes(callable $check): bool
+    {
+        try {
+            $check();
+
+            return true;
+        } catch (AuthorizationRefused|ConcurrencyConflict|ModelNotFoundException) {
+            return false;
+        }
     }
 
     /** @param array<string, mixed> $snapshot */
@@ -247,12 +326,13 @@ final class PdfExports
     }
 
     /**
-     * Rows of the nine postponed form types stay in the table but are never served (owner, 2026-11-13).
+     * The served types (all four by default). Rows of the nine postponed form types stay in the table but are never served (owner, 2026-11-13).
      *
+     * @param  (callable(PdfType): bool)|null  $which
      * @return list<string>
      */
-    private static function served(): array
+    private static function served(?callable $which = null): array
     {
-        return array_column(PdfType::cases(), 'value');
+        return array_column(array_filter(PdfType::cases(), $which), 'value');
     }
 }

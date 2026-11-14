@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Modules\Pdf\Application\Types;
 
 use App\Modules\Employees\Application\EmployeeService;
+use App\Modules\Identity\Domain\Rbac\AuthorizationRefused;
 use App\Modules\Leave\Application\LeaveBalances;
 use App\Modules\Leave\Domain\LeaveStatus;
 use App\Support\Database\ConcurrencyConflict;
@@ -39,7 +40,7 @@ final class LeaveRequestPdf implements PdfDocument
 
         return [$employeeId, [
             ...array_intersect_key($employee, array_flip(['name_ar', 'department', 'gender'])),
-            ...$fields,
+            ...array_map(fn (mixed $value): mixed => $value ?? '', ['notification_method' => null, 'manager_opinion' => null, 'substitute' => null, ...$fields]),
             'leave_request_id' => $subjectId, 'kind' => $request->kind, 'from_date' => $request->from_date,
             'to_date' => $request->to_date, 'days' => (int) $request->days, 'reason' => $request->note,
             'balance' => $this->balances->forEmployee($employeeId, $year)['balance'], 'balance_year' => $year,
@@ -75,7 +76,9 @@ final class LeaveRequestPdf implements PdfDocument
         if ($request->status !== LeaveStatus::Approved->value) {
             throw new ConcurrencyConflict;
         }
-        abort_unless($request->decided_by === (string) $actor->getAuthIdentifier(), 403);
+        if ($request->decided_by !== (string) $actor->getAuthIdentifier()) {
+            throw AuthorizationRefused::of('hr_forms.approve_leave_request');
+        }
 
         return $request->escalated_at === null ? 'hr' : 'company_manager';
     }

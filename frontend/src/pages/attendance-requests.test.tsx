@@ -54,12 +54,12 @@ test.each([
     amount: '250.00', minutes: 60,
     employee: { id: 'worker1', code: 1043, name_ar: 'عامل اختبار', name_en: null },
   }
-  const generate = vi.fn(() => json(202, { data: { id: 'export1' } }))
+  const generate = vi.fn((_url: string, _init?: RequestInit) => json(202, { data: { id: 'export1' } }))
   mockFetch({
     'GET /api/v1/attendance/requests': () => json(200, { data: [request], meta: { pagination } }),
     'GET /api/v1/attendance/requests/request1': () => json(200, { data: request }),
-    'GET /api/v1/attendance/requests/request1/hr-form-exports': () => json(200, { data: { exports: [] } }),
-    'POST /api/v1/attendance/requests/request1/hr-forms/overtime-request': generate,
+    'GET /api/v1/hr-form-exports': () => json(200, { data: [], meta: { pagination } }),
+    'POST /api/v1/hr-form-exports': generate,
   })
   renderWithAuth(<AttendanceRequestsPage />, [
     'attendance_request.decide.all', 'employee.view.all', 'hr_forms.view.all', ...(canGenerate ? ['hr_forms.generate.all'] : []),
@@ -88,4 +88,8 @@ test.each([
   await user.type(reason, 'Synthetic reason')
   await user.click(submit)
   await waitFor(() => expect(generate).toHaveBeenCalledOnce())
+  expect(JSON.parse(String(generate.mock.calls[0]?.[1]?.body))).toEqual({
+    type: 'overtime_request', subject_id: 'request1', idempotency_key: expect.any(String),
+    fields: { job_title: 'Synthetic technician', reason: 'Synthetic reason' },
+  })
 })

@@ -46,6 +46,7 @@ final class AdvanceRequestPdf implements PdfDocument
         return [$employeeId, [
             ...array_intersect_key($employee, array_flip(['name_ar', 'name_en', 'code', 'department', 'gender'])),
             ...$fields,
+            'previous_advance' => (bool) $fields['previous_advance'], 'finance_remarks' => $fields['finance_remarks'] ?? '', 'shows_pay' => $showsPay,
             'hire_date' => $employee['hire_date'],
             'amount' => (string) $request->amount,
             'salary' => EffectiveDated::at($employee['pay_changes'], $date)['salary'] ?? null,

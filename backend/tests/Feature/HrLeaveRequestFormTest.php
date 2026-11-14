@@ -48,7 +48,7 @@ final class HrLeaveRequestFormTest extends TestCase
         $employee = $this->employee('office', '2020-01-01', ['gender' => $gender, 'department' => 'Test department']);
         $request = $this->submit($employee, $kind);
         $this->signIn('manager');
-        $this->postJson($this->path($request), self::FIELDS)->assertForbidden();
+        $this->create($request)->assertForbidden();
         $this->actingAs($hr, 'api');
         $key = (string) Str::uuid7();
         $id = $this->generate($request, $key);
@@ -63,7 +63,7 @@ final class HrLeaveRequestFormTest extends TestCase
             && substr_count($html, 'الخميس الموافق <bdi>05/11/2026</bdi>') === 2
             && str_contains($html, 'رصيد سنة <bdi>2026</bdi>')
             && ! str_contains($html, '2026-11-05') && ! str_contains($html, '<img src='));
-        $this->postJson("/api/v1/hr-form-exports/{$id}/approve-leave-request")->assertConflict();
+        $this->postJson("/api/v1/hr-form-exports/{$id}/approve")->assertConflict();
         $this->get("/api/v1/hr-form-exports/{$id}/download")->assertOk();
         $this->signIn('manager');
         $this->get("/api/v1/hr-form-exports/{$id}/download")->assertForbidden();
@@ -81,8 +81,8 @@ final class HrLeaveRequestFormTest extends TestCase
         $this->render($older);
         $unsigned = $this->generate($request);
         $this->render($unsigned);
-        $approve = "/api/v1/hr-form-exports/{$unsigned}/approve-leave-request";
-        $this->postJson("/api/v1/hr-form-exports/{$older}/approve-leave-request")->assertConflict();
+        $approve = "/api/v1/hr-form-exports/{$unsigned}/approve";
+        $this->postJson("/api/v1/hr-form-exports/{$older}/approve")->assertConflict();
         $this->signIn('hr');
         $this->postJson($approve)->assertForbidden();
         $this->actingAs($hr, 'api');
@@ -92,14 +92,14 @@ final class HrLeaveRequestFormTest extends TestCase
         $this->assertSame($hr->id, $this->snapshot($signed)['decider_id']);
         $this->assertSame(1, $this->snapshot($signed)['signature_version']);
         (new RenderPdf($signed))->failed(null);
-        $this->postJson("/api/v1/hr-form-exports/{$signed}/retry-leave-request")->assertAccepted()->assertJsonPath('data.id', $signed);
+        $this->postJson("/api/v1/hr-form-exports/{$signed}/retry")->assertAccepted()->assertJsonPath('data.id', $signed);
         $this->assertDatabaseHas('hr_form_exports', ['id' => $signed, 'signature_image_id' => $signature]);
         $this->render($signed, fn (string $html): bool => (bool) preg_match('/data-stamp-line="hr">\s*<div>[^<]+<\/div>\s*<img/', $html));
         $this->decision($request, 'cancel')->assertOk();
         $this->assertSame('%PDF-1.7 leave', $this->get("/api/v1/hr-form-exports/{$signed}/download")->assertOk()->streamedContent());
         $after = $this->generate($request);
         $this->render($after);
-        $this->postJson("/api/v1/hr-form-exports/{$after}/approve-leave-request")->assertConflict();
+        $this->postJson("/api/v1/hr-form-exports/{$after}/approve")->assertConflict();
         $this->assertSame(1, DB::table('audit_log')->where(['entity_id' => $signed, 'event' => 'APPROVED'])->count());
         $this->assertSame(1, DB::table('hr_form_exports')->where('stage', 'signed')->count());
     }
@@ -113,12 +113,12 @@ final class HrLeaveRequestFormTest extends TestCase
         $this->decision($other, 'refuse', ['reason' => 'Synthetic refusal'])->assertOk();
         $refused = $this->generate($other);
         $this->render($refused);
-        $this->postJson("/api/v1/hr-form-exports/{$refused}/approve-leave-request")->assertConflict();
+        $this->postJson("/api/v1/hr-form-exports/{$refused}/approve")->assertConflict();
         $this->decision($request, 'escalate')->assertOk();
         $this->assertDatabaseHas('leave_requests', ['id' => $request, 'escalated_by' => $hr->id]);
         $unsigned = $this->generate($request);
         $this->render($unsigned);
-        $this->postJson("/api/v1/hr-form-exports/{$unsigned}/approve-leave-request")->assertConflict();
+        $this->postJson("/api/v1/hr-form-exports/{$unsigned}/approve")->assertConflict();
         $ceo = $this->signIn('ceo');
         $this->decision($request, 'approve')->assertOk();
 
@@ -136,12 +136,12 @@ final class HrLeaveRequestFormTest extends TestCase
         app('auth')->forgetGuards();
         $view = $this->withToken($token)->postJson('/api/v1/auth/view-as', ['user_id' => $ceo->id, 'reason' => 'Synthetic QA'])->assertCreated()->json('data.token');
         // the developer viewing as the CEO must not stamp the CEO's stored signature
-        $this->withToken($view)->postJson("/api/v1/hr-form-exports/{$unsigned}/approve-leave-request")->assertForbidden();
+        $this->withToken($view)->postJson("/api/v1/hr-form-exports/{$unsigned}/approve")->assertForbidden();
         $this->assertDatabaseHas('hr_form_exports', ['id' => $unsigned, 'approved_by' => null, 'signature_image_id' => null]);
         app('auth')->forgetGuards();
         $own = $this->postJson('/api/v1/auth/login', ['email' => $ceo->email, 'password' => 'secret123'])->assertCreated()->json('data.token');
         app('auth')->forgetGuards();
-        $signed = $this->withToken($own)->postJson("/api/v1/hr-form-exports/{$unsigned}/approve-leave-request")
+        $signed = $this->withToken($own)->postJson("/api/v1/hr-form-exports/{$unsigned}/approve")
             ->assertAccepted()->json('data.id');
         $this->assertSame('company_manager', $this->snapshot($signed)['stamp_line']);
         $this->assertDatabaseHas('audit_log', ['entity_id' => $signed, 'event' => 'APPROVED', 'user_id' => $ceo->id, 'on_behalf_of' => null]);
@@ -161,15 +161,16 @@ final class HrLeaveRequestFormTest extends TestCase
         ]);
     }
 
-    private function path(string $request): string
+    private function create(string $request, ?string $key = null): TestResponse
     {
-        return "/api/v1/leave/requests/{$request}/hr-forms/leave-request";
+        return $this->postJson('/api/v1/hr-form-exports', [
+            'type' => 'leave_request', 'subject_id' => $request, 'idempotency_key' => $key ?? (string) Str::uuid7(), 'fields' => self::FIELDS,
+        ]);
     }
 
     private function generate(string $request, ?string $key = null): string
     {
-        return $this->postJson($this->path($request), [...self::FIELDS, 'idempotency_key' => $key ?? (string) Str::uuid7()])
-            ->assertAccepted()->json('data.id');
+        return $this->create($request, $key)->assertAccepted()->json('data.id');
     }
 
     private function snapshot(string $id): array

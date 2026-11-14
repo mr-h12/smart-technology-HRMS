@@ -9,7 +9,9 @@ use App\Modules\Pdf\Infrastructure\FilePdfAssets;
 use App\Support\Localization\ArabicFormDate;
 use App\Support\Localization\ArabicServiceDuration;
 use Illuminate\Contracts\Auth\Authenticatable;
+use Illuminate\Database\Eloquent\ModelNotFoundException;
 use Illuminate\Support\Carbon;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\ValidationException;
 use stdClass;
 
@@ -17,21 +19,15 @@ final class ExperienceCertificatePdf implements PdfDocument
 {
     public function __construct(private readonly EmployeeService $employees) {}
 
-    public static function standardPraise(string $gender): string
-    {
-        return $gender === 'female'
-            ? 'وكانت من أكفأ الموظفات اللاتي عملن بالشركة، وتميزت في أداء مهامها وتمتعت بالتقدير والاحترام والثقة الكاملة من جميع المسؤولين لدى الشركة.'
-            : 'وكان من أكفأ الموظفين الذين عملوا بالشركة، وتميز في أداء مهامه وتمتع بالتقدير والاحترام والثقة الكاملة من جميع المسؤولين لدى الشركة.';
-    }
-
     public function rules(): array
     {
         return ['job_title' => ['required', 'string', 'max:160']];
     }
 
-    /** $fields['praise']: null takes the standard praise for the employee's gender, '' prints none. */
+    /** An archived employee gets one too (owner decision 10). */
     public function snapshot(string $subjectId, array $fields, ?string $scope, bool $showsPay): array
     {
+        DB::table('employees')->where('id', $subjectId)->whereNull('deleted_at')->lockForUpdate()->first() ?? throw new ModelNotFoundException;
         $employee = $this->employees->show($subjectId);
         foreach (['national_id', 'department', 'gender', 'hire_date'] as $field) {
             if (empty($employee[$field])) {
@@ -41,7 +37,7 @@ final class ExperienceCertificatePdf implements PdfDocument
 
         return [$subjectId, [
             ...array_intersect_key($employee, array_flip(['name_ar', 'national_id', 'department', 'gender', 'hire_date', 'termination_date'])),
-            ...$fields, 'praise' => $fields['praise'] ?? self::standardPraise($employee['gender']),
+            ...$fields,
             'issued_on' => now('Africa/Cairo')->toDateString(),
         ]];
     }
@@ -63,7 +59,8 @@ final class ExperienceCertificatePdf implements PdfDocument
             'letterhead' => FilePdfAssets::asset('letterhead/certificate-letterhead.png', 'image/png'),
             'issuedOn' => ArabicFormDate::format($snapshot['issued_on']),
             'service' => $service === '' ? 'أقل من يوم' : $service,
-            'praise' => $snapshot['praise'] ?? self::standardPraise($snapshot['gender']),
+            // A snapshot made while HR could still edit the praise prints it ('' = none); the view prints the standard one otherwise.
+            'praise' => $snapshot['praise'] ?? null,
         ]];
     }
 

@@ -13,11 +13,11 @@ const signaturePath = '/me/hr-signature'
 type ExportResult = { id: string }
 type Signature = { signature: { version: number } | null }
 
-export async function download(id: string, serial: string, stage: string, form = 'experience-certificate') {
+export async function download(id: string, fileName: string) {
   const url = URL.createObjectURL(await apiBlob(`${exportsPath}/${id}/download`))
   const link = document.createElement('a')
   link.href = url
-  link.download = `${form}-${serial}-${stage}.pdf`
+  link.download = fileName
   link.click()
   window.setTimeout(() => URL.revokeObjectURL(url), 1000)
 }
@@ -26,37 +26,28 @@ export function CertificateDocuments({ employee }: { employee: string }) {
   const { t } = useTranslation()
   const { can } = useAuth()
   const [title, setTitle] = useState('')
-  const [praise, setPraise] = useState<string>()
-  const [source, setSource] = useState<string>()
   const [page, setPage] = useState(1)
   const [error, setError] = useState<Error>()
   const [busy, setBusy] = useState(false)
   const request = useRef<{ payload: string; key: string } | null>(null)
   const saving = useRef(false)
-  const history = `/employees/${employee}/hr-form-exports`
-  const list = useList(`${history}?page=${page}&form_type=experience_certificate`, { refetchInterval: 2500 })
+  const list = useList(`${exportsPath}?type=experience_certificate&subject_id=${employee}&page=${page}`, { refetchInterval: 2500 })
   const save = useSave()
-  const certificatePath = `/employees/${employee}/hr-forms/experience-certificate`
-  const defaults = useApi<{ praise: string }>(can('hr_forms.generate') ? `${certificatePath}/defaults` : null)
-  const praiseText = praise ?? defaults.data?.praise
-  const superseded = new Set(list.rows.map((row) => row.regenerated_from_id).filter(Boolean))
 
   async function generate(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
-    if (saving.current || !title.trim() || praiseText === undefined) return
+    if (saving.current || !title.trim()) return
     saving.current = true
     setBusy(true)
     setError(undefined)
-    const payload = JSON.stringify([employee, title.trim(), source, praiseText.trim()])
+    const payload = JSON.stringify([employee, title.trim()])
     if (request.current?.payload !== payload) request.current = { payload, key: crypto.randomUUID() }
     try {
-      await save(certificatePath, {
-        body: { job_title: title.trim(), praise: praiseText.trim(), regenerated_from_id: source, idempotency_key: request.current.key },
-      }, [history, exportsPath])
+      await save(exportsPath, {
+        body: { type: 'experience_certificate', subject_id: employee, idempotency_key: request.current.key, fields: { job_title: title.trim() } },
+      })
       request.current = null
-      setSource(undefined)
       setTitle('')
-      setPraise(undefined)
       setPage(1)
     } catch (err) {
       setError(err as Error)
@@ -75,18 +66,12 @@ export function CertificateDocuments({ employee }: { employee: string }) {
             <span>{t('hrForms.jobTitle')}</span>
             <Input value={title} onChange={(event) => setTitle(event.target.value)} maxLength={160} required />
           </label>
-          <label className="block space-y-1">
-            <span>{t('hrForms.praise')}</span>
-            <textarea className="block w-full rounded-md border bg-transparent px-3 py-2" value={praiseText ?? ''}
-              disabled={praiseText === undefined || busy} onChange={(event) => setPraise(event.target.value)} rows={4} maxLength={360} />
-          </label>
           <div className="flex flex-wrap gap-2">
-            <Button disabled={busy || praiseText === undefined}>{t(source ? 'hrForms.regenerate' : 'hrForms.generate')}</Button>
-            {source && <Button type="button" variant="outline" disabled={busy} onClick={() => setSource(undefined)}>{t('hrForms.cancel')}</Button>}
+            <Button disabled={busy}>{t('hrForms.generate')}</Button>
           </div>
         </form>
       )}
-      <ErrorBanner shown={[]} err={error ?? defaults.err ?? list.err} />
+      <ErrorBanner shown={[]} err={error ?? list.err} />
       {!list.loading && !list.err && list.rows.length === 0 && <p>{t('hrForms.empty')}</p>}
       <ul className="space-y-2">
         {list.rows.map((row) => {
@@ -98,12 +83,9 @@ export function CertificateDocuments({ employee }: { employee: string }) {
               <span className="me-auto">{t('hrForms.serial', { serial })} · {t(`hrForms.${stage}`)} · {t(`hrForms.${row.status}`)}
                 {row.impersonator_id ? ` · ${t('hrForms.approvedViaViewAs')}` : null}
               </span>
-              {row.status === 'ready' && <Button variant="outline" onClick={() => void download(id, serial, stage).catch(setError)}>{t('hrForms.download')}</Button>}
-              {stage === 'unsigned' && row.status !== 'pending' && !superseded.has(id) && can('hr_forms.generate') && (
-                <Button variant={source === id ? 'default' : 'outline'} disabled={busy} onClick={() => setSource(id)}>{t('hrForms.regenerate')}</Button>
-              )}
-              {stage === 'signed' && row.status === 'failed' && can('hr_forms.approve') && (
-                <Button variant="outline" onClick={() => void save(`${exportsPath}/${id}/retry`, {}, [history, exportsPath]).catch(setError)}>{t('hrForms.retry')}</Button>
+              {row.actions.includes('download') && <Button variant="outline" onClick={() => void download(id, row.file_name).catch(setError)}>{t('hrForms.download')}</Button>}
+              {row.actions.includes('retry') && (
+                <Button variant="outline" onClick={() => void save(`${exportsPath}/${id}/retry`).catch(setError)}>{t('hrForms.retry')}</Button>
               )}
             </li>
           )
@@ -131,7 +113,7 @@ export function FormApprovalsPage() {
   const [busy, setBusy] = useState<string>()
   const [error, setError] = useState<Error>()
   const [approved, setApproved] = useState<string>()
-  const list = useList(`${exportsPath}/awaiting-approval?page=${page}`)
+  const list = useList(`${exportsPath}?awaiting_approval=1&type=experience_certificate&page=${page}`)
   const save = useSave()
   async function approve(id: string) {
     setBusy(id)
@@ -158,7 +140,7 @@ export function FormApprovalsPage() {
           return (
             <li key={id} className="flex flex-wrap items-center gap-2 rounded border p-3">
               <Link className="me-auto underline" to={`/employees/${row.employee_id}`}>{t('hrForms.serial', { serial: row.serial_number })} · {t('hrForms.certificate')}</Link>
-              <Button variant="outline" onClick={() => void download(id, String(row.serial_number), 'unsigned').catch(setError)}>{t('hrForms.download')}</Button>
+              <Button variant="outline" onClick={() => void download(id, row.file_name).catch(setError)}>{t('hrForms.download')}</Button>
               <Button disabled={busy !== undefined} onClick={() => void approve(id)}>{t('hrForms.approve')}</Button>
             </li>
           )
@@ -175,7 +157,7 @@ function ApprovedExport({ id }: { id: string }) {
   const [error, setError] = useState<Error>()
   const [retrying, setRetrying] = useState(false)
   const path = `${exportsPath}/${id}`
-  const { data, err, reload } = useApi<{ status: string; serial_number: number }>(path)
+  const { data, err, reload } = useApi<{ status: string; serial_number: number; file_name: string }>(path)
   const pending = data?.status === 'pending'
   useEffect(() => {
     if (!pending) return
@@ -187,7 +169,7 @@ function ApprovedExport({ id }: { id: string }) {
     <div className="space-y-2 rounded border p-3">
       <ErrorBanner shown={[]} err={error ?? err} />
       {data && <p role="status">{t('hrForms.serial', { serial: data.serial_number })} · {t(`hrForms.${data.status}`)}</p>}
-      {data?.status === 'ready' && <Button variant="outline" onClick={() => void download(id, String(data.serial_number), 'signed').catch(setError)}>{t('hrForms.download')}</Button>}
+      {data?.status === 'ready' && <Button variant="outline" onClick={() => void download(id, data.file_name).catch(setError)}>{t('hrForms.download')}</Button>}
       {data?.status === 'failed' && (
         <Button disabled={retrying} onClick={async () => {
           setRetrying(true)

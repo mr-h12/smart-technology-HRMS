@@ -7,20 +7,19 @@ import { useAuth } from '@/lib/auth'
 import { useApi, useSave } from '@/lib/query'
 import { download } from './hr-forms'
 
-type Export = { id: string; serial_number: number; status: 'pending' | 'ready' | 'failed' }
+type Export = { id: string; serial_number: number; status: 'pending' | 'ready' | 'failed'; file_name: string; actions: string[] }
 
 export function AttendanceRequestPdf({ id, type }: { id: string; type: 'advance' | 'overtime' }) {
   const { t } = useTranslation()
   const { can } = useAuth()
   const advance = type === 'advance'
-  const form = `${type}-request`
-  const path = `/attendance/requests/${id}/hr-form-exports`
-  const { data, err, reload } = useApi<{ exports: Export[] }>(can('hr_forms.view') ? path : null, { fresh: true })
+  const path = `/hr-form-exports?type=${type}_request&subject_id=${id}&per_page=100`
+  const { data, err, reload } = useApi<Export[]>(can('hr_forms.view') ? path : null, { fresh: true })
   const save = useSave()
   const [error, setError] = useState<unknown>()
   const [busy, setBusy] = useState(false)
   const request = useRef<{ body: string; key: string } | undefined>(undefined)
-  const pending = data?.exports.some((row) => row.status === 'pending')
+  const pending = data?.some((row) => row.status === 'pending')
   useEffect(() => {
     if (!pending) return
     const timer = window.setInterval(reload, 2500)
@@ -40,7 +39,7 @@ export function AttendanceRequestPdf({ id, type }: { id: string; type: 'advance'
     const key = JSON.stringify(body)
     void run(async () => {
       if (request.current?.body !== key) request.current = { body: key, key: crypto.randomUUID() }
-      await save(`/attendance/requests/${id}/hr-forms/${form}`, { body: { ...body, idempotency_key: request.current.key } }, [path])
+      await save('/hr-form-exports', { body: { type: `${type}_request`, subject_id: id, idempotency_key: request.current.key, fields: body } })
       request.current = undefined
     })
   }
@@ -72,15 +71,15 @@ export function AttendanceRequestPdf({ id, type }: { id: string; type: 'advance'
           </>}
           <label className="grid gap-1">{t(advance ? 'hrForms.advanceReason' : 'hrForms.overtimeReason')}<Textarea name="reason" maxLength={300} required disabled={busy} /></label>
           {advance && <label className="grid gap-1 sm:col-span-2">{t('hrForms.financeRemarks')}<Textarea name="finance_remarks" maxLength={300} disabled={busy} /></label>}
-          <Button disabled={busy} className="sm:col-span-2">{t(data?.exports.length ? 'hrForms.regenerate' : 'hrForms.generate')}</Button>
+          <Button disabled={busy} className="sm:col-span-2">{t(data?.length ? 'hrForms.regenerate' : 'hrForms.generate')}</Button>
         </form>
       )}
       <ul className="space-y-2">
-        {data?.exports.map((row) => (
+        {data?.map((row) => (
           <li key={row.id} className="flex flex-wrap items-center gap-2 rounded border p-2">
             <span className="me-auto">{t('hrForms.serial', { serial: row.serial_number })} · {t(`hrForms.${row.status}`)}</span>
-            {row.status === 'ready' && <Button type="button" variant="outline" onClick={() => void download(row.id, String(row.serial_number), 'unsigned', form).catch(setError)}>{t('hrForms.download')}</Button>}
-            {row.status === 'failed' && can('hr_forms.generate') && <Button disabled={busy} onClick={() => void run(() => save(`/hr-form-exports/${row.id}/retry-${form}`, {}, [path]))}>{t('hrForms.retry')}</Button>}
+            {row.actions.includes('download') && <Button type="button" variant="outline" onClick={() => void download(row.id, row.file_name).catch(setError)}>{t('hrForms.download')}</Button>}
+            {row.actions.includes('retry') && <Button disabled={busy} onClick={() => void run(() => save(`/hr-form-exports/${row.id}/retry`))}>{t('hrForms.retry')}</Button>}
           </li>
         ))}
       </ul>
