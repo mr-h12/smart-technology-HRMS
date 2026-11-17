@@ -34,6 +34,8 @@ enum AttendanceRefusal: string
     case CrewMovedHasDay = 'crew_moved_has_day';
     // the site workbook's confirm (W15): the stored days changed since the preview
     case PreviewStale = 'preview_stale';
+    // the fingerprint import: no sheet's row 1 is the device's header
+    case NotFingerprintFile = 'not_fingerprint_file';
 
     public function status(): int
     {
@@ -43,7 +45,7 @@ enum AttendanceRefusal: string
             self::FutureDate, self::EmployeeNotActive, self::MissingDaysUnconfirmed, self::PeriodNotLocked, self::LeaveTypeMissing,
             self::TemplateMismatch, self::UnreadableFile, self::TooManyRows, self::SiteNotInReach, self::LeaveNeedsRequest,
             self::OutsideManagerWindow, self::HrDay, self::OpenEarlierDay, self::OpenDays, self::ClearNotAllowed, self::SiteNotForManager,
-            self::ArrivalRequired, self::DepartureOnly, self::CrewOnOtherSite, self::CrewHasDay, self::CrewMovedHasDay => 422,
+            self::ArrivalRequired, self::DepartureOnly, self::CrewOnOtherSite, self::CrewHasDay, self::CrewMovedHasDay, self::NotFingerprintFile => 422,
         };
     }
 }

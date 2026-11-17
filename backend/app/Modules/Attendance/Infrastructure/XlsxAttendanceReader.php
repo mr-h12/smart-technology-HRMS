@@ -18,14 +18,17 @@ use OpenSpout\Reader\XLSX\Reader;
 use OpenSpout\Reader\XLSX\Sheet;
 use Throwable;
 
-/** Reads an uploaded attendance grid (AttendanceTemplate's file, as Excel saved it back: `attendance` and `versions`) or site workbook (its day sheets and `lists`), every cell normalised. */
+/**
+ * Reads an uploaded attendance grid (AttendanceTemplate's file, as Excel saved it back: `attendance` and `versions`) or site workbook
+ * (its day sheets and `lists`), every cell normalised. XlsxPunchFileReader reuses `each()` and these limits for the fingerprint file.
+ */
 final class XlsxAttendanceReader
 {
     /** Excel's last row. The reader walks every row number up to the last row, so a row past this one stops a crafted file early. */
-    private const EXCEL_ROWS = 1048576;
+    public const EXCEL_ROWS = 1048576;
 
     /** Excel's date serials: 1900-01-01 .. 9999-12-31. */
-    private const SERIALS = [1, 2958465];
+    public const SERIALS = [1, 2958465];
 
     private const DIGITS = [
         '٠' => '0', '١' => '1', '٢' => '2', '٣' => '3', '٤' => '4', '٥' => '5', '٦' => '6', '٧' => '7', '٨' => '8', '٩' => '9',
@@ -100,7 +103,7 @@ final class XlsxAttendanceReader
      * @param  Closure(Sheet): (T|null)  $read
      * @return list<T>
      */
-    private function each(string $path, Closure $read): array
+    public function each(string $path, Closure $read): array
     {
         // Empty rows are kept so the iterator's key is the Excel row number (G8).
         // ponytail: a crafted <dimension> (A1:XFD…) makes OpenSpout build that many cells per row, which can exhaust memory_limit

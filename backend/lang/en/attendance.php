@@ -13,6 +13,7 @@ return [
         'template_mismatch' => 'The file does not match this period\'s attendance template.',
         'unreadable_file' => 'The file could not be read.',
         'too_many_rows' => 'The file has more than :max rows.',
+        'not_fingerprint_file' => 'The file is not the fingerprint device\'s export: no sheet starts with its header row (Date, ID Number, Name, IN, OUT).',
         'site_not_in_reach' => 'This site is not one of your sites, or it is not the worker\'s home site on this date.',
         'leave_needs_request' => 'Annual, casual and unpaid leave need a leave request.',
         'outside_manager_window' => 'You can record today, and yesterday until :until; after that, only the departure of an open day.',

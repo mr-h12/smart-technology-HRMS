@@ -47,11 +47,13 @@ trait XlsxFiles
     /**
      * Writes FINGERPRINT_SHEETS (or $sheets in its shape) as the device does: A an Excel date serial (format 14), B a number, C text,
      * D–I day fractions (format 21), J the text "More" linking to a LAN page (a documentation address). A Cell in a row passes through,
-     * for a malformed cell. Returns the temp path.
+     * for a malformed cell. $headers gives a sheet another row 1; the sheets named in $hidden are hidden. Returns the temp path.
      *
      * @param  array<string, list<array{0: string|Cell, 1: int|string|Cell, 2: string|Cell, 3: list<string|Cell>, 4: bool}>>|null  $sheets
+     * @param  array<string, list<string>>  $headers
+     * @param  list<string>  $hidden
      */
-    protected function fingerprintFile(?array $sheets = null): string
+    protected function fingerprintFile(?array $sheets = null, array $headers = [], array $hidden = []): string
     {
         $date = new Style()->withFormat('mm-dd-yy');
         $time = new Style()->withFormat('h:mm:ss');
@@ -61,9 +63,10 @@ trait XlsxFiles
         $writer->openToFile($path);
         $first = true;
         foreach ($sheets ?? self::FINGERPRINT_SHEETS as $name => $rows) {
-            ($first ? $writer->getCurrentSheet() : $writer->addNewSheetAndMakeItCurrent())->setName($name);
+            ($first ? $writer->getCurrentSheet() : $writer->addNewSheetAndMakeItCurrent())->setName($name)
+                ->setIsVisible(! in_array($name, $hidden, true));
             $first = false;
-            $writer->addRow(Row::fromValues(self::FINGERPRINT_HEADER));
+            $writer->addRow(Row::fromValues($headers[$name] ?? self::FINGERPRINT_HEADER));
             foreach ($rows as [$day, $id, $who, $times, $more]) {
                 $cells = [
                     is_string($day) ? new NumericCell((new \DateTimeImmutable('1899-12-30'))->diff(new \DateTimeImmutable($day))->days, $date) : $day,
