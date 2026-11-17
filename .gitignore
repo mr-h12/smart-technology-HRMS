@@ -3,6 +3,9 @@
 .env
 # Client payroll data: salaries, national IDs, bank accounts. Never commit.
 /*.xlsx
+/*.xls
+/*.csv
+/*.dat
 docs/templates/*.xlsx
 # The Excel-difference report's client copy, with names (payroll:excel-differences --names).
 *-client.md
