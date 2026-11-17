@@ -100,7 +100,7 @@ final class XlsxAttendanceReader
      * @param  Closure(Sheet): (T|null)  $read
      * @return list<T>
      */
-    private function each(string $path, Closure $read): array
+    public function each(string $path, Closure $read): array
     {
         // Empty rows are kept so the iterator's key is the Excel row number (G8).
         // ponytail: a crafted <dimension> (A1:XFD…) makes OpenSpout build that many cells per row, which can exhaust memory_limit
