@@ -125,18 +125,21 @@ Issue for Mohanad. Goal. HR's fingerprint import matches each name in the device
 - [ ] Edit `backend/app/Modules/Employees/Application/MasterDataImport.php` (its in-file duplicate check for `fingerprint_name`).
 - [ ] Create one migration `backend/database/migrations/<Y_m_d_His>_normalise_fingerprint_name_unique.php`, named with the full time you create it.
 - [ ] Create `backend/tests/Feature/FingerprintNameTest.php`.
+- [ ] Edit `backend/tests/Feature/ImportMasterDataTest.php` to add the in-file duplicate case; it holds the workbook helpers (the private `workbook()` and `employee()`).
 - [ ] Touch nothing else. In particular not `backend/app/Modules/Attendance/*`, `backend/app/Modules/Leave/*`, `backend/routes/api.php`, `backend/lang/*`, `frontend/*`, other migrations, or `national_id`'s uniqueness.
 
 **Build.**
 
 - [ ] `EmployeeRules::fingerprintKey(string $name): string` returns `mb_strtolower((string) preg_replace('/[ \t\n\r\f\x0B]+/', '', $name))`. That removes the six ASCII whitespace characters (space, tab, line feed, carriage return, form feed, vertical tab), inner ones included, then lower-cases. It is the one normalisation the PHP code below uses. The database's form is `lower(regexp_replace(fingerprint_name, '[ \t\n\r\f\v]+', '', 'g'))`, and that SQL expression is the source of truth for uniqueness. Every other character is part of the name, a no-break space (U+00A0) included.
   - [ ] Copy both strings exactly. The PHP pattern sits in single quotes. Write the SQL in a single-quoted PHP string (each `'` escaped as `\'`) or a nowdoc, never a double-quoted one, so the index, the lookup and the rule hold the same text and each backslash reaches PostgreSQL. PHP writes the vertical tab as `\x0B`, not `\v`, because PCRE's `\v` also matches the byte 0x85 inside UTF-8 letters such as Arabic `م`; PostgreSQL's `\v` is the vertical tab alone. The two classes are the same six bytes.
-- [ ] `EmployeeRoster::byFingerprintNames(array $names): array` takes `list<string>` and returns `array<string, array<string, mixed>>` keyed by each name exactly as given. Each value is the row `EmployeeRoster::row()` builds, the same shape `find()` returns. A name with no employee is left out. Archived employees match. Soft-deleted employees never match. All names are looked up in one query, with the same eager-loaded relations as `find()`.
+- [ ] `EmployeeRoster::byFingerprintNames(array $names): array` takes `list<string>` and returns `array<string, array<string, mixed>>` keyed by each name exactly as given. Each value is the row `EmployeeRoster::row()` builds, the same shape `find()` returns. A name with no employee is left out. Archived employees match. Soft-deleted employees never match. The lookup takes one query for the employees plus one per eager-loaded relation (`EmployeeRoster::RELATIONS`, four today), whatever the number of names, with the same eager-loaded relations as `find()`.
   - [ ] Query `Employee::with(self::RELATIONS)` directly, as `find()` (`EmployeeRoster.php:176-181`) and `findMany()` do. Do not start from the private `employees()` builder (line 252), which leaves archived employees out unless `withArchived()` was called. Eloquent's soft-delete scope already leaves soft-deleted employees out; do not add `withTrashed()`. Match in SQL with `whereIn(DB::raw(<the SQL expression above>), <the fingerprintKey() of each name>)`, then map each given name to its row by `fingerprintKey()`.
+  - [ ] Add `byFingerprintNames` to the `EmployeeRoster` class docblock's list of reads that include archived employees (`EmployeeRoster.php:24-25`, "the by-id reads (find, findMany, names) and hiredBetween are unchanged").
   - [ ] Example. An employee holds `NadimFares`. `byFingerprintNames(['nadimfares', ' NADIMFARES ', 'Nadim Fares', 'Nobody'])` returns three keys, `nadimfares`, ` NADIMFARES ` and `Nadim Fares`, each that employee's row. `Nobody` is absent.
   - [ ] Example. An employee holds `Sara  Nabil` (two spaces). `saranabil` and `sara nabil` both match.
   - [ ] Example. An employee holds `Sara Nabil` (an ordinary space). `Sara` U+00A0 `Nabil` (a no-break space, `"Sara\u{00A0}Nabil"` in PHP) does not match it.
-- [ ] The migration replaces the unique index `employees_fingerprint_name_unique` with a unique expression index on `lower(regexp_replace(fingerprint_name, '[ \t\n\r\f\v]+', '', 'g'))` for rows where `deleted_at is null and fingerprint_name is not null`. Before it drops the old index, it runs the collision query below and, when any row comes back, throws a `RuntimeException` whose message names each colliding normalised name and its count and says to fix those employees first. It never changes, merges or drops an employee row. Its `down()` drops the new index and restores `unique(fingerprint_name)`.
+- [ ] The migration replaces the unique constraint `employees_fingerprint_name_unique` with a unique expression index on `lower(regexp_replace(fingerprint_name, '[ \t\n\r\f\v]+', '', 'g'))` for rows where `deleted_at is null and fingerprint_name is not null`. The old one comes from `->unique()` in `2026_10_16_000001_create_employees_tables.php` (line 16), so PostgreSQL holds it as a constraint, not an index. Drop it with `$table->dropUnique('employees_fingerprint_name_unique')` or `alter table employees drop constraint employees_fingerprint_name_unique`, never `drop index`, as `2026_11_03_000002_make_employee_code_unique_deferrable.php` drops `employees_code_unique`. Before it drops the old constraint, it runs the collision query below and, when any row comes back, throws a `RuntimeException` whose message names each colliding normalised name and its count and says to fix those employees first. It never changes, merges or drops an employee row. Its `down()` drops the new index and restores `unique(fingerprint_name)`.
+  - [ ] Before restoring `unique(fingerprint_name)`, `down()` looks for a fingerprint name (exact text) held by more than one row, soft-deleted rows included, because the new rule lets a new employee take a soft-deleted employee's name and the old constraint refuses that. When any exist, it throws a `RuntimeException` naming each and its count, and changes no row, as `up()` does.
 - [ ] `EmployeeRules::identity()` refuses a `fingerprint_name` whose `fingerprintKey()` equals another employee's, among employees not soft-deleted (archived ones included), ignoring the employee being edited. Check it in SQL with the same `lower(regexp_replace(...))` expression the index uses. The error is the existing `validation.unique` message on `fingerprint_name`.
   - [ ] Example. `NadimFares` exists. Creating another employee with `nadimfares` or `Nadim Fares` is a 422 on `fingerprint_name`. Editing the first employee to `NADIMFARES` is accepted. After the first employee is soft-deleted, a new employee may take `NadimFares`. An archived (terminated) employee still blocks it.
   - [ ] Example. `Sara Nabil` (an ordinary space) exists. Creating another employee with `Sara` U+00A0 `Nabil` is accepted, because the no-break space is part of the name.
@@ -145,14 +148,15 @@ Issue for Mohanad. Goal. HR's fingerprint import matches each name in the device
 
 **You see.**
 
-- [ ] `FingerprintNameTest` passes with every example above as its own test.
+- [ ] `FingerprintNameTest` and `ImportMasterDataTest` pass, with each case of every example above as its own test (the rule's first example holds four cases).
 
 **Verify, unit.** Tests alone are not sufficient verification. A PR is verified only when its unit, live, and perf boxes are all checked.
 
-- [ ] `FingerprintNameTest` covers the case-and-space match, the inner space that matches, an unknown name absent, keys exactly as given, an archived match, a soft-deleted non-match, the row having `id`, `code`, `types` and `shifts`, a no-break space (U+00A0) that does not match an ordinary space, the same number of queries for 1 name and for 5 names (`DB::enableQueryLog()`), the create, edit, soft-delete and archived cases of the rule, the no-break-space name the rule accepts beside the ordinary-space one, the in-file duplicate in the master-data import, and a raw insert of a duplicate normalised name throwing `UniqueConstraintViolationException`. Run `docker compose exec app php artisan test --filter=FingerprintNameTest`.
+- [ ] `FingerprintNameTest` covers the case-and-space match, the inner space that matches, an unknown name absent, keys exactly as given, an archived match, a soft-deleted non-match, the row having `id`, `code`, `types` and `shifts`, a no-break space (U+00A0) that does not match an ordinary space, the same number of queries for 1 name and for 5 names, every name matching an employee (`DB::enableQueryLog()`), the create, edit, soft-delete and archived cases of the rule, the no-break-space name the rule accepts beside the ordinary-space one, and a raw insert of a duplicate normalised name throwing `UniqueConstraintViolationException`. Run `docker compose exec app php artisan test --filter=FingerprintNameTest`.
+- [ ] `ImportMasterDataTest` gains the in-file duplicate case. Run `docker compose exec app php artisan test --filter=ImportMasterDataTest`.
 - [ ] Run the whole suite and the static gates. `docker compose exec app php artisan test`, `docker compose exec app vendor/bin/pint --test`, `docker compose exec app vendor/bin/phpstan analyse`, `docker compose exec app vendor/bin/deptrac analyse --config-file=deptrac.layers.yaml`.
 - [ ] Run `docker compose exec app php artisan migrate:rollback --step=1` then `docker compose exec app php artisan migrate`, and paste both outputs.
-- [ ] Prove the migration refuses collisions. After `migrate:rollback --step=1`, give two existing employees the fingerprint names `Nadim Fares` and `nadimfares` directly, in `docker compose exec app php artisan tinker` or in SQL (`update employees set fingerprint_name = 'Nadim Fares' where id = '<id>'`), because your rule in `EmployeeRules::identity()` refuses the second through the API; the old exact-text index allows both. Run `docker compose exec app php artisan migrate`, and paste its failure naming `nadimfares`. Clear one of the two names the same way, migrate again, and paste the success. Both employees still exist afterwards.
+- [ ] Prove the migration refuses collisions. A fresh dev database has no employees (`DatabaseSeeder` calls only `SitesSeeder`), so if there are none, create two first, in the employee form or through the API. After `migrate:rollback --step=1`, give two existing employees the fingerprint names `Nadim Fares` and `nadimfares` directly, in `docker compose exec app php artisan tinker` or in SQL (`update employees set fingerprint_name = 'Nadim Fares' where id = '<id>'`), because your rule in `EmployeeRules::identity()` refuses the second through the API; the old exact-text index allows both. Run `docker compose exec app php artisan migrate`, and paste its failure naming `nadimfares`. Clear one of the two names the same way, migrate again, and paste the success. Both employees still exist afterwards.
 
 **Verify, live.** Tests alone are not sufficient verification. A PR is verified only when its unit, live, and perf boxes are all checked. No new screen, so no lanes (owner-approved adaptation).
 
@@ -170,9 +174,9 @@ Issue for Mohanad. Goal. HR's fingerprint import matches each name in the device
 **Merge.**
 
 - [ ] Work on branch `feature/fingerprint-name-lookup` in your fork, from the latest `main`.
-- [ ] Run `code-review` on the branch (FP-2 also `security-review`) and resolve its findings. Rebase onto current `main` before asking for review. Re-date your migration if `main` gained a later one.
+- [ ] Run the `code-review` and `security-review` skills on the branch if your Claude setup has them, and resolve their findings. They are Claude Code skills, not in the repo; if your setup lacks them, say so in the PR body and the owner runs them. Rebase onto current `main` before asking for review. Re-date your migration if `main` gained a later one.
 - [ ] Open a PR into `main` from your fork. Its body says `Closes #<issue>` and pastes the tail of every gate above.
-- [ ] Done when every box above is checked, the PR is green, and the owner has reviewed it. The owner merges.
+- [ ] Done when every box above is checked, the tail of every gate is pasted in the PR body and passes, and the owner has reviewed it. The owner merges.
 
 ## Reduce one day's punches to an office day (FP-3)
 
@@ -188,7 +192,8 @@ Issue for Mohanad. Goal. Turn one office employee's punches on one date into tha
 
 **Build.**
 
-- [ ] `final class OfficePunches` with `public const DOUBLE_TAP_SECONDS = 120;` and `public static function reduce(array $times, string $shiftStart, string $shiftEnd): PunchedDay`. `$times` is a non-empty `list<string>` of distinct `H:i:s` in any order. The shifts are `H:i`. The file imports nothing from `Illuminate` (deptrac fails otherwise).
+- [ ] `final class OfficePunches` with `public const DOUBLE_TAP_SECONDS = 120;` and `public static function reduce(array $times, string $shiftStart, string $shiftEnd): PunchedDay`, whose docblock is `/** @param non-empty-list<string> $times */` (phpstan runs at level 8 and needs the array's value type). `$times` is a non-empty `list<string>` of distinct `H:i:s` in any order. The shifts are `H:i`. The file depends on nothing outside plain PHP and `Attendance/Domain` (`backend/deptrac.layers.yaml` gives the Domain layer no allowed dependency, so deptrac fails on `Illuminate`, `App\Support` or another layer).
+- [ ] `DOUBLE_TAP_SECONDS` is a technical constant, not a setting (spec, "FP-0's calls", Double tap). The rule in `docs/coding-standards.md` §5 that business numbers are settings does not apply; keep it as the class constant.
 - [ ] `punchCount` is the number of times given. Sort the times. The result's times are `H:i`, the seconds cut off, never rounded. Every comparison below (distance to the shift, earlier than the shift end) uses that truncated `H:i`, never the time with seconds. Only the double-tap test uses seconds.
 - [ ] One time, or the latest less than `DOUBLE_TAP_SECONDS` after the earliest (in seconds), is a one-punch day. Classify it from the earliest time's `H:i`. It is a check-in when its absolute distance in whole minutes to `$shiftStart` is smaller than to `$shiftEnd`, otherwise check-out. A tie is check-out. A check-in gives `inTime` = the earliest time; a check-out gives `outTime` = the latest time. The flag `missing_punch` is set.
   - [ ] Why the latest for a check-out. A departure double tap at `16:59:58, 17:00:01` with shift end `17:00` must give out `17:00` and no `early_leave`; the earliest would give `16:59` and a false `early_leave`.
@@ -205,6 +210,7 @@ Issue for Mohanad. Goal. Turn one office employee's punches on one date into tha
   - [ ] `['08:59:59', '09:00:01']` is a double tap classified as check-in from `08:59` and gives in `08:59`, out null, `[missing_punch]`, count 2.
   - [ ] `['08:50:00', '08:51:59']` is 119 seconds apart and gives in `08:50`, out null, `[missing_punch]`, count 2.
   - [ ] `['08:50:00', '08:52:00']` is 120 seconds apart and gives in `08:50`, out `08:52`, `[early_leave]`, count 2.
+  - [ ] `['08:50:59', '08:52:00']` is 61 seconds apart and gives in `08:50`, out null, `[missing_punch]`, count 2. Its truncated minutes are two apart, so it shows the double-tap window is measured in seconds, not in truncated minutes.
   - [ ] `['08:51:58', '08:51:59', '17:27:01', '17:27:02']` gives in `08:51`, out `17:27`, `[]`, count 4.
   - [ ] `['08:52:04', '15:59:04', '16:00:08']` gives in `08:52`, out `16:00`, `[early_leave]`, count 3.
   - [ ] `['17:30:00', '08:59:59']` (unsorted) gives in `08:59`, out `17:30`, `[]`, count 2.
@@ -237,9 +243,9 @@ Issue for Mohanad. Goal. Turn one office employee's punches on one date into tha
 **Merge.**
 
 - [ ] Work on branch `feature/fingerprint-office-punches` in your fork, from the latest `main`.
-- [ ] Run `code-review` on the branch and resolve its findings. Rebase onto current `main` before asking for review.
+- [ ] Run the `code-review` skill on the branch if your Claude setup has it, and resolve its findings. It is a Claude Code skill, not in the repo; if your setup lacks it, say so in the PR body and the owner runs it. Rebase onto current `main` before asking for review.
 - [ ] Open a PR into `main` from your fork. Its body says `Closes #<issue>` and pastes the tail of every gate above.
-- [ ] Done when every box above is checked, the PR is green, and the owner has reviewed it. The owner merges.
+- [ ] Done when every box above is checked, the tail of every gate is pasted in the PR body and passes, and the owner has reviewed it. The owner merges.
 
 ## Import the file with preview and confirm (FP-4)
 
@@ -261,7 +267,7 @@ Issue for Mohanad. Goal. Turn one office employee's punches on one date into tha
 
 - [ ] The migration adds `fingerprint` to `attendance_days_source_check`, following `2026_11_04_200000_add_manager_attendance_rules.php`. Its `down()` turns `fingerprint` rows into `entered` first.
 - [ ] `FingerprintImport::preview(string $path)` and `confirm(string $path, list<array{employee_id, date, version}> $replace)` return the spec's shapes. `MAX_ROWS = 5000`. It passes `EffectiveDays::today()` to the reader as `$today` and returns the reader's errors, `future_date` included; it raises no row error itself.
-- [ ] Match device names through `EmployeeRoster::byFingerprintNames()`, then group punches by employee and date and pass `array_values(array_unique($times))` to `OfficePunches::reduce()`, because two device ids can resolve to one employee and both may hold the same time. Unmatched names go to `unmatched`, once per normalised name.
+- [ ] Match device names through `EmployeeRoster::byFingerprintNames()`, then group punches by employee and date and pass `array_values(array_unique($times))` to `OfficePunches::reduce()`, because two device ids can resolve to one employee and both may hold the same time. Unmatched names go to `unmatched`, once per normalised name. A device name made only of digits comes back as an int key (PHP array keys), so look each name up with `$rows[$name]` and never pass an iterated key to a `string` parameter.
 - [ ] Per person-day, take the status from the spec's table in its order. Read the stored day's site with `Site::withTrashed()`, as `AttendanceDays::write()` reads its kind (`AttendanceDays.php:328`), so a leave type whose site was deleted still gives `leave`. Office checks use `Employment::typeOn()`, the shift `Employment::shiftOn()` or `office_shift_start` and `office_shift_end`, `OfficePunches::reduce()` and `DayRules::officeLateMinutes()` with `office_grace_minutes`.
 - [ ] Write every day through `AttendanceDays::writeCell()` with source `fingerprint`, `$ownerId` null, `site_id` null and both `in_time` and `out_time` keys always present. Preview is the same call with `$dryRun` true. Confirm writes in one transaction in (employee id, date) order and reports refused writes in `errors`.
 - [ ] On a `refresh` day send the file's `in_time` when it has one, else the stored `in_time`; `out_time` likewise (spec, planner's call "A refresh never clears a stored time"). The preview row shows that merged day, with flags and late minutes computed from the merged times.
@@ -353,9 +359,9 @@ Issue for Mohanad. Goal. HR uploads the device's Excel file, sees a preview of e
 **Merge.**
 
 - [ ] Work on branch `feature/fingerprint-import-screen` in your fork, from the latest `main`.
-- [ ] Run `code-review` on the branch and resolve its findings. Rebase onto current `main` before asking for review.
+- [ ] Run the `code-review` skill on the branch if your Claude setup has it, and resolve its findings. It is a Claude Code skill, not in the repo; if your setup lacks it, say so in the PR body and the owner runs it. Rebase onto current `main` before asking for review.
 - [ ] Open a PR into `main` from your fork. Its body says `Closes #<issue>` and pastes the tail of every gate above.
-- [ ] Done when every box above is checked, the PR is green, and the owner has reviewed it. The owner merges.
+- [ ] Done when every box above is checked, the tail of every gate is pasted in the PR body and passes, and the owner has reviewed it. The owner merges.
 
 ## Connect the screen and verify with the real file (FP-6)
 
