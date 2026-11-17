@@ -98,6 +98,10 @@ Either a one-day permission to leave before shift end, or a permanent change to 
 One employee's record for one date: one site, one leave day-type, or (office) present. A day with none is a missing day, never an absence.
 _Avoid_: timesheet row, punch
 
+**Punch** (بصمة):
+One time the fingerprint device recorded for one person, read from its Excel export. The fingerprint import reduces one office employee's punches on a date to that attendance day's in and out times; a punch is never an attendance day.
+_Avoid_: check-in (for the raw record), swipe
+
 **Open day** (يوم مفتوح):
 A field day (engineer, permanent worker, day laborer) with an arrival and no departure, in a period that is not locked. The site manager records no later day for that person until it is completed; past the yesterday window they may still add its departure, and HR hears of it at once. A period with an open day cannot be locked. Office days are never open days.
 _Avoid_: incomplete day, missing checkout

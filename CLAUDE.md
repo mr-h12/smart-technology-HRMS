@@ -71,11 +71,14 @@ Payroll must reproduce the Excel results. The October 2026 totals (engineers net
 - Backups are not configured; they are manual until the owner confirms. Do not add backup automation unprompted.
 - Out of scope for the 4 months: employee self-service, a WhatsApp API, a live fingerprint-device connection, CRM integration (an optional `crm_user_id` on the employee is allowed).
 
-## Claude workflow (agreed 2026-10-31)
+## Claude workflow (agreed 2026-10-31, revised 2026-11-17)
 Both developers use the same skills, committed to `.claude/skills/` so that every account and machine loads the same set. (They are added in a follow-up PR, after PR #4 merges, because PR #4 changes `.gitignore` to allow that folder.)
 - **Settle open questions:** `grill-with-docs`, against `docs/client-questions.md` and this file. Record answers in the spec docs, and record terms with `domain-modeling` in `CONTEXT.md` / `docs/adr/`.
-- **Design and plan:** `superpowers:brainstorming` → a spec in `docs/superpowers/specs/`, then `superpowers:writing-plans` → a plan in `docs/superpowers/plans/`.
-- **Build:** `superpowers:subagent-driven-development` or `superpowers:test-driven-development`, always following `ponytail` and `andrej-karpathy-skills:karpathy-guidelines` and `docs/coding-standards.md`.
-- **Review before the PR:** `code-review` (standards and spec), plus `security-review` for uploads, permissions and imports. The other developer still reviews the PR.
-- **End of session and account switch:** run `handoff`, which updates `CLAUDE_HANDOFF.md`, then commit and push the branch. Nothing a session needs may live only in a Claude account's memory or conversations: a new session (any account) starts by reading this file and `CLAUDE_HANDOFF.md`.
+- **Plan a module:** the owner's main chat plans it and splits it into features with pstack `poteto-mode` (the multi-phase-plan playbook for the plan, the feature playbook for building). Specs and plans stay in `docs/superpowers/specs/` and `docs/superpowers/plans/`.
+- **Contract first:** a contract PR (spec, plan, shared types) merges before any parallel work on the module starts.
+- **One feature = one GitHub issue = one branch = one PR.** Mohanad builds one issue at a time and opens a PR from his fork that closes it. Our features are built by fresh subagents.
+- **Every agent** follows `ponytail`, `andrej-karpathy-skills:karpathy-guidelines` and `docs/coding-standards.md`.
+- **Shared files** (`backend/routes/api.php`, `frontend/src/App.tsx`, `AppLayout.tsx`, the locale files, `lib/api.ts`, `lib/query.ts`, `components/ui/*`) are edited only by the owner's side.
+- **Before merge:** every PR gets `code-review`, plus `security-review` for uploads, permissions and imports, and passes the gates in `backend/CLAUDE.md` and `frontend/CLAUDE.md`. The other developer still reviews the PR.
+- **End of session and account switch:** run `session-end`, which updates `CLAUDE_HANDOFF.md`, then commit and push the branch. Nothing a session needs may live only in a Claude account's memory or conversations: a new session (any account) starts by reading this file and `CLAUDE_HANDOFF.md`.
 - **Git identity:** set `user.name` and `user.email` in each clone to your GitHub account before the first commit.
