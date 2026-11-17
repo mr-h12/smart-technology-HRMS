@@ -103,6 +103,20 @@ All under `backend/app/Modules/Attendance/Domain/`. Domain imports nothing from 
 
 The interface sits in `Contracts/` as `Pdf/Domain/Contracts/PdfRendererInterface.php` does, and is required by `docs/coding-standards.md` §12 (fingerprint-file parsing behind an adapter). FP-4 binds it to FP-1's class in `app/Providers/AppServiceProvider.php`.
 
+### The FP-1 reader (built in FP-1)
+`Attendance/Infrastructure/XlsxPunchFileReader.php` reads the file through `XlsxAttendanceReader::each()`. Its rules:
+- A device sheet is one whose row 1, A to I, equals `Date, ID Number, Name, IN, OUT, IN, OUT, IN, OUT` after PHP's default `trim()` and ASCII lower-casing only, so a no-break space in a header cell makes the sheet not a device sheet.
+- A row is blank, and skipped without an error, when A to I are all empty or whitespace-only text.
+- Column A is a date cell or a date serial read as `Y-m-d`; a date before 1900-01-01 or a time-only cell in column A is `bad_date`.
+- Column B must be an integer cell greater than 0; text such as "7" is `bad_device_user_id`.
+- Column C, the device name, reaches the caller as the file spells it: a control character (Unicode Cc, as Excel's `_x0000_` for a NUL) reads as a space because PostgreSQL refuses a NUL in text, the cell is `missing_name` when `XlsxAttendanceReader::text()` finds it empty, and otherwise only leading and trailing ASCII whitespace is trimmed (`trim($name, " \t\n\r\f\x0B")`), so inner spaces, a no-break space (U+00A0) and Arabic digits are kept; ignoring ASCII whitespace and letter case is `EmployeeRules::fingerprintKey()`'s job in FP-2 (decision 1), never the reader's. An integer cell reads as its digits.
+- In D to I, a date-time whose date part is not the spreadsheet's time base (1899-12-30, or 1904-01-01 in the 1904 date system) is `bad_time`.
+- In D to I, an untyped number from 0 to under 1 is a fraction of a day rounded to the second, and one that rounds to 86400 s reads as 23:59:59.
+- In D to I, text `H:MM` and `H:MM:SS` (Arabic digits allowed) is accepted, and a cell formatted as a duration (`[h]:mm:ss`) is `bad_time`.
+- A row dated after `$today` is `future_date` even when it holds no time; any other row with no time gives no punch and no error.
+- A row's error is the first in the order `bad_date`, `bad_device_user_id`, `missing_name`, `bad_time`, `future_date`, and the row gives no punches.
+- Punches are de-duplicated on (device user ID, date, time) in file order, and the first row's name spelling is the one kept.
+
 ### The FP-3 seam (built in FP-3)
 `Attendance/Domain/OfficePunches.php`:
 
