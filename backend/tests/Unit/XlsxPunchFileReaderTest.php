@@ -79,6 +79,8 @@ class XlsxPunchFileReaderTest extends TestCase
             ['2026-10-26', 7, 'SaraNabil', ['08:00:00'], true],
             ['2026-09-28', 7, 'SaraNabil', [], false],
             ['2026-09-29', 7, ' Sara   Nabil ', ['09:00:00', new StringCell('8:05')], true],
+            ['2026-10-26', 7, '  ', [new StringCell('25:00')], true],
+            ['2026-10-26', 7, 'SaraNabil', [new StringCell('25:00')], true],
         ]]));
 
         $this->assertSame([
@@ -88,9 +90,35 @@ class XlsxPunchFileReaderTest extends TestCase
             ['sheet' => 'Sheet1', 'row' => 6, 'code' => PunchRowError::MissingName],
             ['sheet' => 'Sheet1', 'row' => 7, 'code' => PunchRowError::BadTime],
             ['sheet' => 'Sheet1', 'row' => 8, 'code' => PunchRowError::FutureDate],
+            ['sheet' => 'Sheet1', 'row' => 11, 'code' => PunchRowError::MissingName],
+            ['sheet' => 'Sheet1', 'row' => 12, 'code' => PunchRowError::BadTime],
         ], $read['errors'], 'the first code in order; the blank row 5 and the row with no time give no error');
-        $this->assertSame([[7, 'Sara Nabil', '2026-09-29', '09:00:00'], [7, 'Sara Nabil', '2026-09-29', '08:05:00']], $this->punches($read['punches']),
+        $this->assertSame([[7, 'Sara   Nabil', '2026-09-29', '09:00:00'], [7, 'Sara   Nabil', '2026-09-29', '08:05:00']], $this->punches($read['punches']),
             'a text time 8:05 reads as 08:05:00');
+    }
+
+    public function test_the_name_reaches_the_caller_as_the_file_spells_it(): void
+    {
+        $read = $this->read($this->fingerprintFile(['Sheet1' => [
+            ['2026-09-27', 1, "Sara\u{00A0}Nabil", ['08:00:00'], true],
+            ['2026-09-27', 2, "Ali\u{0663}", ['08:00:00'], true],
+            ['2026-09-27', 3, 'Sara  Nabil', ['08:00:00'], true],
+            ['2026-09-27', 4, " \t Sara Nabil \n", ['08:00:00'], true],
+            ['2026-09-27', 5, "Sara\x00Nabil", ['08:00:00'], true],
+            ['2026-09-27', 6, 1234, ['08:00:00'], true],
+        ]]));
+
+        $this->assertSame(["Sara\u{00A0}Nabil", "Ali\u{0663}", 'Sara  Nabil', 'Sara Nabil', 'Sara Nabil', '1234'],
+            array_map(fn (Punch $p) => $p->deviceName, $read['punches']),
+            'only outer ASCII whitespace is trimmed and a control character reads as a space; matching ignores the rest in FP-2');
+    }
+
+    public function test_a_duplicate_punch_keeps_the_first_rows_spelling(): void
+    {
+        $read = $this->read($this->fingerprintFile(['Sheet1' => [['2026-09-27', 7, 'SaraNabil', ['08:00:00'], true]],
+            'Page 2' => [['2026-09-27', 7, 'saranabil', ['08:00:00'], true]]]));
+
+        $this->assertSame([[7, 'SaraNabil', '2026-09-27', '08:00:00']], $this->punches($read['punches']));
     }
 
     public function test_rows_dated_after_today_are_future_date(): void

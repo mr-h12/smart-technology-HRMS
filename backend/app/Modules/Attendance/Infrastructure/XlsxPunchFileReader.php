@@ -21,12 +21,6 @@ final class XlsxPunchFileReader implements PunchFileReaderInterface
     /** Row 1 of a device sheet, trimmed and lower-cased; J (`More`, a link into the LAN) is never read. */
     private const HEADER = ['date', 'id number', 'name', 'in', 'out', 'in', 'out', 'in', 'out'];
 
-    /** Excel's last row. The iterator walks every row number, so a row past this one stops a crafted file early. */
-    private const EXCEL_ROWS = 1048576;
-
-    /** Excel's date serials: 1900-01-01 .. 9999-12-31. */
-    private const SERIALS = [1, 2958465];
-
     /** The date OpenSpout gives a time cell (a fraction of a day) in the 1900 and the 1904 date systems. */
     private const TIME_DATES = ['1899-12-30', '1904-01-01'];
 
@@ -35,17 +29,18 @@ final class XlsxPunchFileReader implements PunchFileReaderInterface
         $data = 0;
         $sheets = new XlsxAttendanceReader()->each($path, function (Sheet $sheet) use ($maxRows, $today, &$data): ?array {
             $rows = [];
+            $isDeviceSheet = false;
             foreach ($sheet->getRowIterator() as $n => $row) {
                 $cells = array_map(fn (int $i) => self::value($row->cells[$i] ?? null), range(0, 8));
-                if (! isset($header)) {
-                    $header = $n === 1 && array_map(fn ($v) => is_string($v) ? strtolower(trim($v)) : $v, $cells) === self::HEADER;
-                    if (! $header) {
+                if (! $isDeviceSheet) {
+                    if ($n !== 1 || array_map(fn ($v) => is_string($v) ? strtolower(trim($v)) : $v, $cells) !== self::HEADER) {
                         return null;
                     }
+                    $isDeviceSheet = true;
 
                     continue;
                 }
-                if ($n > self::EXCEL_ROWS) {
+                if ($n > XlsxAttendanceReader::EXCEL_ROWS) {
                     throw AttendanceRefused::because(AttendanceRefusal::UnreadableFile);
                 }
                 if (array_filter($cells, fn ($v) => ! self::blank($v)) === []) {
@@ -57,7 +52,7 @@ final class XlsxPunchFileReader implements PunchFileReaderInterface
                 $rows[] = ['sheet' => $sheet->getName(), 'row' => $n, 'read' => self::row($cells, $today)];
             }
 
-            return isset($header) ? $rows : null;
+            return $isDeviceSheet ? $rows : null;
         });
         if ($sheets === []) {
             throw AttendanceRefused::because(AttendanceRefusal::NotFingerprintFile);
@@ -89,10 +84,10 @@ final class XlsxPunchFileReader implements PunchFileReaderInterface
     {
         $date = self::date($cells[0]);
         $id = $cells[1];
-        // A control character reads as a space, as in the site workbook: PostgreSQL refuses a NUL in text.
-        $name = is_string($cells[2]) || is_int($cells[2])
-            ? XlsxAttendanceReader::text((string) preg_replace('/\p{Cc}/u', ' ', (string) $cells[2]))
-            : null;
+        // A control character reads as a space, as in the site workbook: PostgreSQL refuses a NUL in text. Otherwise the name is
+        // kept as the file spells it (decision 1): FP-2's fingerprintKey() ignores ASCII whitespace and case, nothing else.
+        $name = is_string($cells[2]) || is_int($cells[2]) ? (string) preg_replace('/\p{Cc}/u', ' ', (string) $cells[2]) : '';
+        $name = XlsxAttendanceReader::text($name) === null ? null : trim($name, " \t\n\r\f\x0B");
         if ($date === null) {
             return PunchRowError::BadDate;
         }
@@ -125,7 +120,7 @@ final class XlsxPunchFileReader implements PunchFileReaderInterface
     {
         return match (true) {
             $v instanceof DateTimeInterface => $v->format('Y-m-d') >= '1900-01-01' ? $v->format('Y-m-d') : null,
-            (is_int($v) || is_float($v)) && $v >= self::SERIALS[0] && $v < self::SERIALS[1] + 1 => (new DateTimeImmutable('1899-12-30'))->modify('+'.(int) floor($v).' days')->format('Y-m-d'),
+            (is_int($v) || is_float($v)) && $v >= XlsxAttendanceReader::SERIALS[0] && $v <= XlsxAttendanceReader::SERIALS[1] => (new DateTimeImmutable('1899-12-30'))->modify('+'.(int) floor($v).' days')->format('Y-m-d'),
             default => null,
         };
     }
