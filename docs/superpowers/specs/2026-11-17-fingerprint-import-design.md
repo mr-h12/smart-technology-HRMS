@@ -9,9 +9,9 @@ FP-0. Line numbers are as of `main` at `b6c8162`. Paths are under `backend/app/M
 - الـHR ترفع ملف جهاز البصمة (Excel) زي ما بيطلع، والنظام يحوّل البصمات لحضور وانصراف لموظفي المكتب.
 - المطابقة بـ«اسم البصمة» اللي في ملف الموظف، من غير فرق بين الحروف الكبيرة والصغيرة والمسافات. الاسم اللي مالوش موظف يظهر مرة واحدة في قائمة، وصفوفه تتساب، والاستيراد يكمل.
 - قبل الحفظ فيه معاينة: كل يوم بحالته (جديد، تحديث، بدون تغيير، تعارض، إجازة، فترة مقفولة، مش موظف مكتب)، والتأخير، وتنبيه «بصمة ناقصة» و«انصراف مبكر».
-- اليوم اللي اتكتب قبل كده من البصمة يتحدّث لوحده. اليوم اللي كتبته الـHR أو مدير الموقع، أو يوم إجازة، يفضل زي ما هو ويظهر تعارض بخانة اختيار؛ الحفظ يستبدل اللي اتعلّم عليه بس.
-- يوم فيه بصمة واحدة: تتحسب حضور لو أقرب لبداية الوردية، وانصراف لو أقرب لنهايتها، ويتعلّم «بصمة ناقصة». أكتر من بصمة: أول بصمة حضور وآخر بصمة انصراف.
-- استبدال يوم إجازة معتمدة: رصيد الإجازة يرجع لوحده (الرصيد بيتحسب من أيام الحضور)، وطلب الإجازة نفسه يفضل بعدد أيامه وحالته الأصلية (قرارك).
+- اليوم اللي اتكتب قبل كده من البصمة يتحدّث لوحده. اليوم اللي كتبته الـHR أو مدير الموقع يفضل زي ما هو ويظهر «تعارض»، ويوم الإجازة يفضل ويظهر «إجازة»، وكل واحد بخانة اختيار؛ الحفظ يستبدل اللي اتعلّم عليه بس.
+- يوم فيه بصمة واحدة: تتحسب حضور لو أقرب لبداية الوردية، وانصراف لو أقرب لنهايتها، ويتعلّم «بصمة ناقصة». أكتر من بصمة: أول بصمة حضور وآخر بصمة انصراف. بصمتين بينهم أقل من دقيقتين يتحسبوا بصمة واحدة.
+- استبدال يوم إجازة معتمدة: رصيد الإجازة يرجع لوحده (الرصيد بيتحسب من أيام الحضور)، وطلب الإجازة ونموذجه المطبوع يفضلوا من غير تغيير، بعدد الأيام والحالة الأصلية (قرارك).
 - مش داخل في الشغل ده: اقتراح الإضافي، طلب إذن التأخير، والربط المباشر بالجهاز.
 
 ## Context
@@ -37,8 +37,8 @@ The client's export for October 2026 (`سحب بصمه شهر 10.xlsx`, kept out
 - Absent days and weekends have no row. The file runs 2026-09-27 to 2026-10-25: 548 rows, 959 punch cells (857 after de-duplication), 446 person-days, 28 people. One device user ID always carries the same name.
 
 ## Decisions settled with the owner (2026-11-17)
-1. **Match by fingerprint name.** The file's name (column C) matches `employees.fingerprint_name`, ignoring letter case and every whitespace character, inner spaces included: `Sara Nabil`, ` saranabil` and `SARANABIL` are one name. The normalised form is every whitespace character removed, then lower-cased ("The FP-2 seam" gives the PHP and SQL). The device user ID is not stored on the employee; it is shown only.
-2. **Existing days.** A day the import wrote before (source `fingerprint`) is refreshed from the new file without asking. A day HR or a site manager entered (any other source except `derived`) is kept and listed as a conflict. HR ticks the days the file should replace; confirm replaces only those.
+1. **Match by fingerprint name.** The file's name (column C) matches `employees.fingerprint_name`, ignoring letter case and the six ASCII whitespace characters (space, tab, line feed, carriage return, form feed, vertical tab), inner ones included: `Sara Nabil`, ` saranabil` and `SARANABIL` are one name. Every other character, a no-break space (U+00A0) included, is part of the name. The normalised form is those six characters removed, then lower-cased ("The FP-2 seam" gives the PHP and SQL). The device user ID is not stored on the employee; it is shown only.
+2. **Existing days.** A day the import wrote before (source `fingerprint`) is refreshed from the new file without asking. A day HR or a site manager entered (any other source except `derived`) is kept and listed as `conflict` (`leave` when it sits on a leave day-type, `unchanged` when its times already equal the file's). HR ticks the days the file should replace; confirm replaces only those.
 3. **One-punch day.** It is imported. The punch is `in_time` when it is closer to the employee's shift start than to the shift end, otherwise `out_time`; the other time stays empty and the day is flagged `missing_punch`. With 2 or more punches, `in_time` is the earliest and `out_time` the latest; the rest are ignored. (A double tap counts as one punch; "The FP-3 seam" has the exact rules.)
 4. **Leave days are replaceable.** A leave day the file has punches for is listed with status `leave` and a tick box, exactly like a typed day. Confirm replaces only the ticked ones; unticked leave days are kept. What a replacement does to the leave request and the balance is in "Replacing a leave day" below.
 5. **A replaced leave day leaves its request as it was.** The leave request keeps its original `days` count and its status, its leave-request PDF keeps printing that count, and its unpaid split stays as it was; only the balance changes (it follows attendance). No operation to release one day of an approved request is built in the Leave module. Attendance is the ledger; the request records what was approved.
@@ -95,8 +95,8 @@ All under `backend/app/Modules/Attendance/Domain/`. Domain imports nothing from 
 | Type | File | Shape |
 |---|---|---|
 | `Punch` | `Punch.php` | readonly `{int deviceUserId, string deviceName, string date (Y-m-d), string time (H:i:s)}` |
-| `PunchFileReaderInterface` | `Contracts/PunchFileReaderInterface.php` | `read(string $path, int $maxRows): array{punches: list<Punch>, errors: list<array{sheet: string, row: int, code: PunchRowError}>}` |
-| `PunchRowError` | `PunchRowError.php` | enum `bad_date`, `bad_device_user_id`, `missing_name`, `bad_time` (the reader's), `future_date` (the import's) |
+| `PunchFileReaderInterface` | `Contracts/PunchFileReaderInterface.php` | `read(string $path, int $maxRows, string $today): array{punches: list<Punch>, errors: list<array{sheet: string, row: int, code: PunchRowError}>}`; a row dated after `$today` (Y-m-d) gives a `future_date` error and no punches |
+| `PunchRowError` | `PunchRowError.php` | enum `bad_date`, `bad_device_user_id`, `missing_name`, `bad_time`, `future_date`, all raised by the reader. `future_date` is the reader's too, because a `Punch` has no sheet or row and only the reader can give the error a position; the import passes `EffectiveDays::today()` as `$today` |
 | `PunchedDay` | `PunchedDay.php` | readonly `{?string inTime (H:i), ?string outTime (H:i), list<PunchFlag> flags, int punchCount}` |
 | `PunchFlag` | `PunchFlag.php` | enum `missing_punch`, `early_leave` |
 | `FingerprintDayStatus` | `FingerprintDayStatus.php` | enum `new`, `refresh`, `unchanged`, `conflict`, `leave`, `locked`, `not_office` |
@@ -147,10 +147,10 @@ Rules, applied in order. `punchCount` is `count($times)`. Times sort ascending. 
 public function byFingerprintNames(array $names): array;
 ```
 
-- A name matches when both sides are equal after normalising: every whitespace character removed, then lower-cased. In PHP that is `mb_strtolower(preg_replace('/\s+/u', '', $name))` (`EmployeeRules::fingerprintKey()`); in PostgreSQL `lower(regexp_replace(fingerprint_name, '\s+', '', 'g'))`. The database expression is the source of truth for uniqueness; the PHP form must agree with it on every name HR can type. Archived employees match; soft-deleted ones never do. The lookup queries `Employee::with(...)` directly as `find()` does (`EmployeeRoster.php:176-181`), not through the private `employees()` builder (line 252), which leaves archived employees out unless `withArchived()`. Normalised uniqueness (below) guarantees at most one match.
+- A name matches when both sides are equal after normalising: the six ASCII whitespace characters (space, tab, line feed, carriage return, form feed, vertical tab) removed, then lower-cased. In PHP that is `mb_strtolower((string) preg_replace('/[ \t\n\r\f\x0B]+/', '', $name))` (`EmployeeRules::fingerprintKey()`); in PostgreSQL `lower(regexp_replace(fingerprint_name, '[ \t\n\r\f\v]+', '', 'g'))`. Both strings are written as the code holds them, the PHP pattern in single quotes and the SQL with `standard_conforming_strings` on (PostgreSQL's default), so each backslash reaches the regex engine. The two classes are the same six bytes. PHP writes the vertical tab as `\x0B` because PCRE's `\v` also matches other vertical space, and without the `u` flag that includes the byte 0x85 inside UTF-8 letters such as Arabic `م` (D9 85); PostgreSQL's `\v` is the vertical tab alone. A no-break space (U+00A0) and every other non-ASCII space are therefore part of the name on both sides: `Sara` U+00A0 `Nabil` does not match `Sara Nabil`. Checked on the dev database on 2026-11-17: the SQL above removes a space, a tab and a newline and keeps U+00A0. The database expression is the source of truth for uniqueness; the PHP form must agree with it on every name HR can type. Archived employees match; soft-deleted ones never do. The lookup queries `Employee::with(...)` directly as `find()` does (`EmployeeRoster.php:176-181`), not through the private `employees()` builder (line 252), which leaves archived employees out unless `withArchived()`. Normalised uniqueness (below) guarantees at most one match.
 - Each value is the standard roster row, `EmployeeRoster::row()` (lines 267-298): `id, code, name_ar, name_en, department, hire_date, termination_date, archived, types, shifts, pays, sites, crew`. That is what `writeCell()` takes as `$employee`, what `Employment::typeOn()` reads for the office check and `Employment::shiftOn()` for the shift, so the import needs no second query per employee.
 - One query for all names, eager-loading the same relations as `find()`.
-- `fingerprint_name` is unique on the normalised value among rows with `deleted_at` null, in the database (a unique expression index on `lower(regexp_replace(fingerprint_name, '\s+', '', 'g'))` replacing `employees_fingerprint_name_unique`), in `EmployeeRules::identity()` (line 62) and in `MasterDataImport`'s in-file check (`DISTINCT`, lines 59 and 248-257). This closes 11-F6 and the fingerprint half of 13-E7. The migration first counts names that collide after normalising and, if any do, fails with a message naming each colliding normalised name, so no row is changed or dropped; the owner runs the same check on the server before deploying (plan, FP-2 Merge).
+- `fingerprint_name` is unique on the normalised value among rows with `deleted_at` null, in the database (a unique expression index on `lower(regexp_replace(fingerprint_name, '[ \t\n\r\f\v]+', '', 'g'))` replacing `employees_fingerprint_name_unique`), in `EmployeeRules::identity()` (line 62) and in `MasterDataImport`'s in-file check (`DISTINCT`, lines 59 and 248-257). This closes 11-F6 and the fingerprint half of 13-E7. The migration first counts names that collide after normalising and, if any do, fails with a message naming each colliding normalised name, so no row is changed or dropped; the owner runs the same check on the servers before merging and deploying (plan, "Verdict and merge").
 
 ### API (built in FP-4)
 Both routes sit in the existing `Route::prefix('attendance')` block of `backend/routes/api.php` with the grid import's middleware, `['permission:attendance.view', 'permission:attendance.edit']` (`routes/api.php:144-145`). They call two new actions, `fingerprintPreview` and `fingerprintConfirm`, in the existing `Attendance/Presentation/AttendanceController.php` (no new controller), and each action starts with the controller's `assertAllScope()` check (`AttendanceController.php:208-213`), as `siteWorkbookPreview` does. Office staff are in no site manager's reach, so only holders of both permissions at `.all` scope may import. The upload rule is the controller's private `FILE`, `['required', 'file', 'max:5120', 'mimes:xlsx', 'extensions:xlsx']` (`AttendanceController.php:32`): 5 MB, `.xlsx` only, read from PHP's temp path and never stored. No new permission.
@@ -172,6 +172,8 @@ days[]                  {employee {id, code, name_ar, name_en}, date, in_time, o
 errors[]                {sheet, row, code, message}, in file order
 ```
 
+The `summary` counts. `punches` is every punch read after de-duplication, matched or not, so an unmatched name's punches count. `days` is `days.length`. `unmatched` is the number of unmatched device names, `unmatched.length`. `errors` is `errors.length`. `new`, `refresh`, `unchanged`, `conflict`, `leave`, `locked` and `not_office` each count the `days` rows with that status, so the seven add up to `days`.
+
 A **stored day** is the employee's `attendance_days` row for the date that is not soft-deleted (`deleted_at` null). A soft-deleted row and a stored `derived` row count as no day. The **times to write** are the reduced day's times (`OfficePunches::reduce()`), except on a stored `fingerprint` day, where they are the refresh merge (planner's call "A refresh never clears a stored time"). Times compare as `H:i`. A person-day's status is the first row that applies:
 
 | # | Status | When | Confirm does |
@@ -181,7 +183,7 @@ A **stored day** is the employee's `attendance_days` row for the date that is no
 | 3 | `new` | no stored day, or the stored day has source `derived` | writes the day |
 | 4 | `unchanged` | the stored day is office present (`site_id` null) and holds exactly the times to write | nothing |
 | 5 | `refresh` | the stored day has source `fingerprint` | writes the merged times |
-| 6 | `leave` | the stored day is on a leave day-type (its site's kind is `leave`) | replaces it when ticked |
+| 6 | `leave` | the stored day is on a leave day-type (its site's kind is `leave`, a soft-deleted site included) | replaces it when ticked |
 | 7 | `conflict` | the stored day has source `entered`, `imported` or `manager` | replaces it when ticked |
 
 Every stored-day state maps to exactly one status. The sources are `entered`, `imported`, `derived`, `leave`, `manager` and `fingerprint`. With rows 1 and 2 not applying:
@@ -197,6 +199,8 @@ Every stored-day state maps to exactly one status. The sources are `entered`, `i
 | source `entered`, `imported` or `manager`, office present, the file's times equal to the stored ones | `unchanged` (4) |
 | source `entered`, `imported` or `manager`, office present, other times | `conflict` (7) |
 | source `entered`, `imported` or `manager`, on a work site (the employee's type changed) | `conflict` (7) |
+
+The `leave` row reads the stored day's site with soft-deleted sites included, so a leave type whose site was deleted still gives `leave`. FP-4 reads it through `Site::withTrashed()`, as `AttendanceDays::write()` reads the stored day's kind (`AttendanceDays.php:328`).
 
 A `fingerprint` day is always office present: the import writes only office present, and any other writer that changes the day stores its own source (`AttendanceDays::write()`, line 421; line 422 skips a write that changes nothing), so a day HR retypes stops being `fingerprint`. A leave day is never office present, so it is never `unchanged`.
 

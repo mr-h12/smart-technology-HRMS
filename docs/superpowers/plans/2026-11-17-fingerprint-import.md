@@ -52,6 +52,8 @@ Each section for Mohanad (FP-2, FP-3, FP-5) is written to be copied whole into i
 
 - [ ] The reviewer reruns the PR's gates at the head SHA and reads the diff against the spec. Clean only when every gate passes and every spec rule the PR owns is met.
 - [ ] Findings go back to the PR's owner. A new head is verified again.
+- [ ] Mohanad reviews FP-1, FP-4 and FP-6; the owner reviews FP-2, FP-3 and FP-5.
+- [ ] The owner's step for FP-2. Before merging FP-2, and again before deploying it, the owner runs FP-2's collision query (FP-2, Build) on the test server's database and on production. Pass when it returns no rows. When it returns rows, the owner fixes those employees' fingerprint names first.
 - [ ] The owner merges. Nobody else merges into `main`.
 
 ### Boot recipe, for every live check
@@ -78,7 +80,7 @@ Each section for Mohanad (FP-2, FP-3, FP-5) is written to be copied whole into i
 
 - [ ] Read every sheet whose row 1 starts with `Date, ID Number, Name, IN, OUT, IN, OUT, IN, OUT`, compared after trimming and ignoring case. Ignore column J and its hyperlink. Ignore other sheets. No matching sheet throws `not_fingerprint_file`.
 - [ ] Per data row, A is a date cell or a date serial read as `Y-m-d`, B a positive whole number, C a name normalised with `XlsxAttendanceReader::text()`, and each filled cell of D to I a time read as `H:i:s` (a time cell, or a fraction of a day under 1 rounded to the second). A blank row is skipped. A row with no time gives no punch and no error.
-- [ ] A row with a bad cell gives no punches and one error with its sheet name, Excel row number and the first code, checked in the order `bad_date`, `bad_device_user_id`, `missing_name`, `bad_time`.
+- [ ] A row with a bad cell gives no punches and one error with its sheet name, Excel row number and the first code, checked in the order `bad_date`, `bad_device_user_id`, `missing_name`, `bad_time`, `future_date`. `future_date` is a valid date after the `$today` (`Y-m-d`) that `read()` is given. The reader raises it, not the import, because a `Punch` has no sheet or row.
 - [ ] De-duplicate punches on (device user ID, date, time) across sheets, keeping the first. A `Punch` has no sheet or row; only `errors` carries a file position. Count data rows across sheets against `$maxRows` and throw `too_many_rows` past it. A file OpenSpout cannot open is `unreadable_file`.
 
 **You see.**
@@ -88,6 +90,7 @@ Each section for Mohanad (FP-2, FP-3, FP-5) is written to be copied whole into i
 **Verify, unit.** Tests alone are not sufficient verification. A PR is verified only when its unit, live, and perf boxes are all checked.
 
 - [ ] `XlsxPunchFileReaderTest` gains the 13 punches of the default workbook, a hidden sheet read like a visible one, a sheet with another header ignored, a file with none refused with `not_fingerprint_file`, each row error code once, `too_many_rows`, and a text time `8:05` read as `08:05:00`. Run `docker compose exec app php artisan test --filter=XlsxPunchFileReaderTest`.
+- [ ] `XlsxPunchFileReaderTest` proves `future_date`. With `$today` `2026-09-28`, the default workbook's rows dated 2026-09-29 and 2026-09-30 each give one `future_date` error with their sheet and row and no punches, and the rows dated 2026-09-27 and 2026-09-28 read as in the spec's table.
 - [ ] Run `docker compose exec app vendor/bin/pint --test`, `docker compose exec app vendor/bin/phpstan analyse` and `docker compose exec app vendor/bin/deptrac analyse --config-file=deptrac.layers.yaml`.
 
 **Verify, live.** Tests alone are not sufficient verification. A PR is verified only when its unit, live, and perf boxes are all checked. No screen, so no lanes (owner-approved adaptation).
@@ -111,7 +114,7 @@ Each section for Mohanad (FP-2, FP-3, FP-5) is written to be copied whole into i
 
 ## Look employees up by fingerprint name (FP-2)
 
-Issue for Mohanad. Goal. HR's fingerprint import matches each name in the device's file to an employee's fingerprint name, ignoring letter case and every space. Build that lookup, and make the fingerprint name unique in the same normalised form, ignoring deleted employees. This closes review items 11-F6 and the fingerprint half of 13-E7 in `docs/reviews/2026-11-08-release-1-review.md`. Read `docs/superpowers/specs/2026-11-17-fingerprint-import-design.md` (section "The FP-2 seam") and `docs/coding-standards.md` first.
+Issue for Mohanad. Goal. HR's fingerprint import matches each name in the device's file to an employee's fingerprint name, ignoring letter case and ASCII whitespace. Build that lookup, and make the fingerprint name unique in the same normalised form, ignoring deleted employees. This closes review items 11-F6 and the fingerprint half of 13-E7 in `docs/reviews/2026-11-08-release-1-review.md`. Read `docs/superpowers/specs/2026-11-17-fingerprint-import-design.md` (section "The FP-2 seam") and `docs/coding-standards.md` first.
 
 **Depends on.** FP-0, merged in `main`. Nothing else.
 
@@ -126,16 +129,19 @@ Issue for Mohanad. Goal. HR's fingerprint import matches each name in the device
 
 **Build.**
 
-- [ ] `EmployeeRules::fingerprintKey(string $name): string` returns `mb_strtolower((string) preg_replace('/\s+/u', '', $name))`. That removes every whitespace character, inner spaces included, then lower-cases. It is the one normalisation the PHP code below uses. The database's form is `lower(regexp_replace(fingerprint_name, '\s+', '', 'g'))`, and that SQL expression is the source of truth for uniqueness.
+- [ ] `EmployeeRules::fingerprintKey(string $name): string` returns `mb_strtolower((string) preg_replace('/[ \t\n\r\f\x0B]+/', '', $name))`. That removes the six ASCII whitespace characters (space, tab, line feed, carriage return, form feed, vertical tab), inner ones included, then lower-cases. It is the one normalisation the PHP code below uses. The database's form is `lower(regexp_replace(fingerprint_name, '[ \t\n\r\f\v]+', '', 'g'))`, and that SQL expression is the source of truth for uniqueness. Every other character is part of the name, a no-break space (U+00A0) included.
+  - [ ] Copy both strings exactly. The PHP pattern sits in single quotes. Write the SQL in a single-quoted PHP string (each `'` escaped as `\'`) or a nowdoc, never a double-quoted one, so the index, the lookup and the rule hold the same text and each backslash reaches PostgreSQL. PHP writes the vertical tab as `\x0B`, not `\v`, because PCRE's `\v` also matches the byte 0x85 inside UTF-8 letters such as Arabic `م`; PostgreSQL's `\v` is the vertical tab alone. The two classes are the same six bytes.
 - [ ] `EmployeeRoster::byFingerprintNames(array $names): array` takes `list<string>` and returns `array<string, array<string, mixed>>` keyed by each name exactly as given. Each value is the row `EmployeeRoster::row()` builds, the same shape `find()` returns. A name with no employee is left out. Archived employees match. Soft-deleted employees never match. All names are looked up in one query, with the same eager-loaded relations as `find()`.
-  - [ ] Query `Employee::with(self::RELATIONS)` directly, as `find()` (`EmployeeRoster.php:176-181`) and `findMany()` do. Do not start from the private `employees()` builder (line 252), which leaves archived employees out unless `withArchived()` was called. Eloquent's soft-delete scope already leaves soft-deleted employees out; do not add `withTrashed()`. Match in SQL with `whereIn(DB::raw("lower(regexp_replace(fingerprint_name, '\s+', '', 'g'))"), <the fingerprintKey() of each name>)`, then map each given name to its row by `fingerprintKey()`.
+  - [ ] Query `Employee::with(self::RELATIONS)` directly, as `find()` (`EmployeeRoster.php:176-181`) and `findMany()` do. Do not start from the private `employees()` builder (line 252), which leaves archived employees out unless `withArchived()` was called. Eloquent's soft-delete scope already leaves soft-deleted employees out; do not add `withTrashed()`. Match in SQL with `whereIn(DB::raw(<the SQL expression above>), <the fingerprintKey() of each name>)`, then map each given name to its row by `fingerprintKey()`.
   - [ ] Example. An employee holds `NadimFares`. `byFingerprintNames(['nadimfares', ' NADIMFARES ', 'Nadim Fares', 'Nobody'])` returns three keys, `nadimfares`, ` NADIMFARES ` and `Nadim Fares`, each that employee's row. `Nobody` is absent.
   - [ ] Example. An employee holds `Sara  Nabil` (two spaces). `saranabil` and `sara nabil` both match.
-- [ ] The migration replaces the unique index `employees_fingerprint_name_unique` with a unique expression index on `lower(regexp_replace(fingerprint_name, '\s+', '', 'g'))` for rows where `deleted_at is null and fingerprint_name is not null`. Before it drops the old index, it runs the collision query below and, when any row comes back, throws a `RuntimeException` whose message names each colliding normalised name and its count and says to fix those employees first. It never changes, merges or drops an employee row. Its `down()` drops the new index and restores `unique(fingerprint_name)`.
+  - [ ] Example. An employee holds `Sara Nabil` (an ordinary space). `Sara` U+00A0 `Nabil` (a no-break space, `"Sara\u{00A0}Nabil"` in PHP) does not match it.
+- [ ] The migration replaces the unique index `employees_fingerprint_name_unique` with a unique expression index on `lower(regexp_replace(fingerprint_name, '[ \t\n\r\f\v]+', '', 'g'))` for rows where `deleted_at is null and fingerprint_name is not null`. Before it drops the old index, it runs the collision query below and, when any row comes back, throws a `RuntimeException` whose message names each colliding normalised name and its count and says to fix those employees first. It never changes, merges or drops an employee row. Its `down()` drops the new index and restores `unique(fingerprint_name)`.
 - [ ] `EmployeeRules::identity()` refuses a `fingerprint_name` whose `fingerprintKey()` equals another employee's, among employees not soft-deleted (archived ones included), ignoring the employee being edited. Check it in SQL with the same `lower(regexp_replace(...))` expression the index uses. The error is the existing `validation.unique` message on `fingerprint_name`.
   - [ ] Example. `NadimFares` exists. Creating another employee with `nadimfares` or `Nadim Fares` is a 422 on `fingerprint_name`. Editing the first employee to `NADIMFARES` is accepted. After the first employee is soft-deleted, a new employee may take `NadimFares`. An archived (terminated) employee still blocks it.
+  - [ ] Example. `Sara Nabil` (an ordinary space) exists. Creating another employee with `Sara` U+00A0 `Nabil` is accepted, because the no-break space is part of the name.
 - [ ] `MasterDataImport` compares `fingerprint_name` within one file by `fingerprintKey()`, so rows `NadimFares` and `nadim fares` in the same workbook give the existing `validation.distinct` error on the second.
-- [ ] The collision query, used by the migration and by the owner's pre-deploy box below, is `select lower(regexp_replace(fingerprint_name, '\s+', '', 'g')) k, count(*) from employees where deleted_at is null and fingerprint_name is not null group by 1 having count(*) > 1`.
+- [ ] The collision query, used by the migration (the owner also runs it on the servers before merge and deploy), is `select lower(regexp_replace(fingerprint_name, '[ \t\n\r\f\v]+', '', 'g')) k, count(*) from employees where deleted_at is null and fingerprint_name is not null group by 1 having count(*) > 1`.
 
 **You see.**
 
@@ -143,10 +149,10 @@ Issue for Mohanad. Goal. HR's fingerprint import matches each name in the device
 
 **Verify, unit.** Tests alone are not sufficient verification. A PR is verified only when its unit, live, and perf boxes are all checked.
 
-- [ ] `FingerprintNameTest` covers the case-and-space match, the inner space that matches, an unknown name absent, keys exactly as given, an archived match, a soft-deleted non-match, the row having `id`, `code`, `types` and `shifts`, the same number of queries for 1 name and for 5 names (`DB::enableQueryLog()`), the create, edit, soft-delete and archived cases of the rule, the in-file duplicate in the master-data import, and a raw insert of a duplicate normalised name throwing `UniqueConstraintViolationException`. Run `docker compose exec app php artisan test --filter=FingerprintNameTest`.
+- [ ] `FingerprintNameTest` covers the case-and-space match, the inner space that matches, an unknown name absent, keys exactly as given, an archived match, a soft-deleted non-match, the row having `id`, `code`, `types` and `shifts`, a no-break space (U+00A0) that does not match an ordinary space, the same number of queries for 1 name and for 5 names (`DB::enableQueryLog()`), the create, edit, soft-delete and archived cases of the rule, the no-break-space name the rule accepts beside the ordinary-space one, the in-file duplicate in the master-data import, and a raw insert of a duplicate normalised name throwing `UniqueConstraintViolationException`. Run `docker compose exec app php artisan test --filter=FingerprintNameTest`.
 - [ ] Run the whole suite and the static gates. `docker compose exec app php artisan test`, `docker compose exec app vendor/bin/pint --test`, `docker compose exec app vendor/bin/phpstan analyse`, `docker compose exec app vendor/bin/deptrac analyse --config-file=deptrac.layers.yaml`.
 - [ ] Run `docker compose exec app php artisan migrate:rollback --step=1` then `docker compose exec app php artisan migrate`, and paste both outputs.
-- [ ] Prove the migration refuses collisions. After `migrate:rollback --step=1`, create two employees with fingerprint names `Nadim Fares` and `nadimfares` (the old exact-text index allows both), run `docker compose exec app php artisan migrate`, and paste its failure naming `nadimfares`. Clear one of the two names, migrate again, and paste the success. Both employees still exist afterwards.
+- [ ] Prove the migration refuses collisions. After `migrate:rollback --step=1`, give two existing employees the fingerprint names `Nadim Fares` and `nadimfares` directly, in `docker compose exec app php artisan tinker` or in SQL (`update employees set fingerprint_name = 'Nadim Fares' where id = '<id>'`), because your rule in `EmployeeRules::identity()` refuses the second through the API; the old exact-text index allows both. Run `docker compose exec app php artisan migrate`, and paste its failure naming `nadimfares`. Clear one of the two names the same way, migrate again, and paste the success. Both employees still exist afterwards.
 
 **Verify, live.** Tests alone are not sufficient verification. A PR is verified only when its unit, live, and perf boxes are all checked. No new screen, so no lanes (owner-approved adaptation).
 
@@ -164,9 +170,9 @@ Issue for Mohanad. Goal. HR's fingerprint import matches each name in the device
 **Merge.**
 
 - [ ] Work on branch `feature/fingerprint-name-lookup` in your fork, from the latest `main`.
+- [ ] Run `code-review` on the branch (FP-2 also `security-review`) and resolve its findings. Rebase onto current `main` before asking for review. Re-date your migration if `main` gained a later one.
 - [ ] Open a PR into `main` from your fork. Its body says `Closes #<issue>` and pastes the tail of every gate above.
 - [ ] Done when every box above is checked, the PR is green, and the owner has reviewed it. The owner merges.
-- [ ] The owner's box, not the issue assignee's. Before merging, and again before deploying, the owner runs the collision query above on the test server's database and on production. Pass when it returns no rows. When it returns rows, the owner fixes those employees' fingerprint names first.
 
 ## Reduce one day's punches to an office day (FP-3)
 
@@ -231,6 +237,7 @@ Issue for Mohanad. Goal. Turn one office employee's punches on one date into tha
 **Merge.**
 
 - [ ] Work on branch `feature/fingerprint-office-punches` in your fork, from the latest `main`.
+- [ ] Run `code-review` on the branch and resolve its findings. Rebase onto current `main` before asking for review.
 - [ ] Open a PR into `main` from your fork. Its body says `Closes #<issue>` and pastes the tail of every gate above.
 - [ ] Done when every box above is checked, the PR is green, and the owner has reviewed it. The owner merges.
 
@@ -253,9 +260,9 @@ Issue for Mohanad. Goal. Turn one office employee's punches on one date into tha
 **Build.**
 
 - [ ] The migration adds `fingerprint` to `attendance_days_source_check`, following `2026_11_04_200000_add_manager_attendance_rules.php`. Its `down()` turns `fingerprint` rows into `entered` first.
-- [ ] `FingerprintImport::preview(string $path)` and `confirm(string $path, list<array{employee_id, date, version}> $replace)` return the spec's shapes. `MAX_ROWS = 5000`. Punches dated after today in Cairo become `future_date` errors.
-- [ ] Group punches by matched employee and date through `EmployeeRoster::byFingerprintNames()`. Unmatched names go to `unmatched`, once per normalised name.
-- [ ] Per person-day, take the status from the spec's table in its order. Office checks use `Employment::typeOn()`, the shift `Employment::shiftOn()` or `office_shift_start` and `office_shift_end`, `OfficePunches::reduce()` and `DayRules::officeLateMinutes()` with `office_grace_minutes`.
+- [ ] `FingerprintImport::preview(string $path)` and `confirm(string $path, list<array{employee_id, date, version}> $replace)` return the spec's shapes. `MAX_ROWS = 5000`. It passes `EffectiveDays::today()` to the reader as `$today` and returns the reader's errors, `future_date` included; it raises no row error itself.
+- [ ] Match device names through `EmployeeRoster::byFingerprintNames()`, then group punches by employee and date and pass `array_values(array_unique($times))` to `OfficePunches::reduce()`, because two device ids can resolve to one employee and both may hold the same time. Unmatched names go to `unmatched`, once per normalised name.
+- [ ] Per person-day, take the status from the spec's table in its order. Read the stored day's site with `Site::withTrashed()`, as `AttendanceDays::write()` reads its kind (`AttendanceDays.php:328`), so a leave type whose site was deleted still gives `leave`. Office checks use `Employment::typeOn()`, the shift `Employment::shiftOn()` or `office_shift_start` and `office_shift_end`, `OfficePunches::reduce()` and `DayRules::officeLateMinutes()` with `office_grace_minutes`.
 - [ ] Write every day through `AttendanceDays::writeCell()` with source `fingerprint`, `$ownerId` null, `site_id` null and both `in_time` and `out_time` keys always present. Preview is the same call with `$dryRun` true. Confirm writes in one transaction in (employee id, date) order and reports refused writes in `errors`.
 - [ ] On a `refresh` day send the file's `in_time` when it has one, else the stored `in_time`; `out_time` likewise (spec, planner's call "A refresh never clears a stored time"). The preview row shows that merged day, with flags and late minutes computed from the merged times.
 - [ ] Every write sends `version` = the stored day's version, or null when there is no row or it is soft-deleted (`assertVersion()`, `AttendanceDays.php:497-503`). A `derived` day that becomes `new` sends its row's version.
@@ -346,6 +353,7 @@ Issue for Mohanad. Goal. HR uploads the device's Excel file, sees a preview of e
 **Merge.**
 
 - [ ] Work on branch `feature/fingerprint-import-screen` in your fork, from the latest `main`.
+- [ ] Run `code-review` on the branch and resolve its findings. Rebase onto current `main` before asking for review.
 - [ ] Open a PR into `main` from your fork. Its body says `Closes #<issue>` and pastes the tail of every gate above.
 - [ ] Done when every box above is checked, the PR is green, and the owner has reviewed it. The owner merges.
 
@@ -424,7 +432,7 @@ Unproven until FP-6, whether the real 28 names match the client's employee recor
 
 ## Appendix C. Risks
 
-- FP-2's migration fails on an existing database whose fingerprint names collide after normalising. It fails with a message naming the collisions and changes no row; the owner runs the collision query on the servers before merge and deploy (FP-2, Merge).
+- FP-2's migration fails on an existing database whose fingerprint names collide after normalising. It fails with a message naming the collisions and changes no row; the owner runs the collision query on the servers before merge and deploy ("Verdict and merge").
 - A pending leave request becomes unapprovable over dates the import filled. FP-4's preview cannot see it. HR sees the refusal on approval.
 - The client sends the six-paste workbook every month (question F3). Overlaps are merged, but a day cut mid-day becomes a one-punch day until a later file refreshes it.
 - FP-5 is built without the live API. FP-6 is where a contract mismatch shows; the shared types make it a compile error first.

@@ -4,7 +4,7 @@ declare(strict_types=1);
 
 namespace App\Modules\Attendance\Domain;
 
-/** Why a fingerprint file row gave no punches; the value is the API error code. The reader gives all but FutureDate, which the import adds. */
+/** Why a fingerprint file row gave no punches; the value is the API error code. The reader gives every case, FutureDate for a row dated after the $today it is given. */
 enum PunchRowError: string
 {
     case BadDate = 'bad_date';

@@ -20,10 +20,11 @@ const days: FingerprintDay[] = [
   { employee: ziad, date: '2026-09-28', in_time: '08:40', out_time: '16:00', punch_count: 2, late_minutes: null, flags: [], status: 'not_office', existing: null },
 ]
 
+/** `summary.punches` counts every punch read: the 19 of `days` plus the unmatched Guest01's 4 (two punches on each of its 2 days, within from and to). */
 export const fingerprintPreview: FingerprintPreview = {
   from: '2026-08-31',
   to: '2026-09-30',
-  summary: { punches: 19, days: 9, unmatched: 1, errors: 1, new: 3, refresh: 1, unchanged: 1, conflict: 1, leave: 1, locked: 1, not_office: 1 },
+  summary: { punches: 23, days: 9, unmatched: 1, errors: 1, new: 3, refresh: 1, unchanged: 1, conflict: 1, leave: 1, locked: 1, not_office: 1 },
   unmatched: [{ device_name: 'Guest01', device_user_ids: [19], days: 2 }],
   days,
   errors: [{ sheet: 'Sheet1', row: 9, code: 'bad_time', message: 'وقت غير صالح في هذا الصف.' }],
