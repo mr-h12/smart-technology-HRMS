@@ -189,7 +189,8 @@ final class PdfExports
             $query->where(function (Builder $q) use ($actor): void {
                 $q->whereRaw('false');
                 foreach (self::served(fn (PdfType $type) => ($permission = $type->approvePermission()) !== null && $this->holdsAll($actor, $permission)) as $type) {
-                    $q->orWhere(fn (Builder $q) => self::document(PdfType::from($type))->signable($q->where('form_type', $type), $actor));
+                    $q->orWhere(fn (Builder $q) => self::document(PdfType::from($type))
+                        ->signable($q->where('form_type', $type)->where('template_version', PdfType::from($type)->templateVersion()), $actor));
                 }
             })
                 ->where('stage', 'unsigned')->where('status', 'ready')
@@ -263,7 +264,7 @@ final class PdfExports
         return $this->holdsAll($actor, 'employee.view');
     }
 
-    /** Approve's refusals in order: 404 not visible, 409 never signed, 403 no permission, 409 state, then the type's signer rule. */
+    /** Approve's refusals in order: 404 not visible, 409 never signed, 403 no permission, 409 state or old layout, then the type's signer rule. */
     private function approval(stdClass $row, Authenticatable $actor, bool $lock): ?string
     {
         $type = PdfType::from((string) $row->form_type);
@@ -277,7 +278,7 @@ final class PdfExports
         if (! $this->authorize->decide($actor, $permission)->granted()) {
             throw AuthorizationRefused::of($permission);
         }
-        if ($row->stage !== 'unsigned' || $row->status !== 'ready'
+        if ($row->stage !== 'unsigned' || $row->status !== 'ready' || ! self::currentLayout($row)
             || DB::table('hr_form_exports')->where('regenerated_from_id', $row->id)->exists()) {
             throw new ConcurrencyConflict;
         }
@@ -285,7 +286,7 @@ final class PdfExports
         return self::document($type)->approval($row, $actor, $lock);
     }
 
-    /** Retry's refusals in order: 403 no permission (generate for an unsigned row, the type's approve for a signed one), 404 not visible, 409 state or another approver. */
+    /** Retry's refusals in order: 403 no permission (generate for an unsigned row, the type's approve for a signed one), 404 not visible, 409 state, another approver or old layout. */
     private function retryable(stdClass $row, Authenticatable $actor): void
     {
         $permission = $row->stage === 'signed'
@@ -297,9 +298,16 @@ final class PdfExports
         if (! $this->shows($row, $actor, $this->ownerOf($actor, $permission))) {
             throw new ModelNotFoundException;
         }
-        if ($row->status !== 'failed' || ($row->stage === 'signed' && $row->approved_by !== (string) $actor->getAuthIdentifier())) {
+        if ($row->status !== 'failed' || ($row->stage === 'signed' && $row->approved_by !== (string) $actor->getAuthIdentifier())
+            || ! self::currentLayout($row)) {
             throw new ConcurrencyConflict;
         }
+    }
+
+    /** A row renders, is signed and is retried only in the layout version it was made for (the awaiting filter says it in SQL). */
+    private static function currentLayout(stdClass $row): bool
+    {
+        return (int) $row->template_version === PdfType::from((string) $row->form_type)->templateVersion();
     }
 
     /** True or false for an advance (the copy with or without the salary; a snapshot older than the flag has the salary), null for the types that never carry pay. */
@@ -384,7 +392,7 @@ final class PdfExports
         DB::table('hr_form_exports')->insert([
             'id' => $id, 'form_type' => $type->value, 'serial_number' => $serial,
             'stage' => 'unsigned', 'status' => 'pending', 'employee_id' => $employee,
-            'requested_by' => $actor, 'idempotency_key' => $key, 'template_version' => 1,
+            'requested_by' => $actor, 'idempotency_key' => $key, 'template_version' => $type->templateVersion(),
             'snapshot' => json_encode($snapshot, JSON_THROW_ON_ERROR),
             'storage_path' => "hr-forms/{$id}.pdf", 'regenerated_from_id' => $previousId,
             'created_by' => $actor, 'updated_by' => $actor, 'created_at' => $now, 'updated_at' => $now,

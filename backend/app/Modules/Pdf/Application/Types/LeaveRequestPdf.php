@@ -4,10 +4,14 @@ declare(strict_types=1);
 
 namespace App\Modules\Pdf\Application\Types;
 
+use App\Modules\Employees\Application\EmployeeRoster;
 use App\Modules\Employees\Application\EmployeeService;
 use App\Modules\Identity\Domain\Rbac\AuthorizationRefused;
 use App\Modules\Leave\Application\LeaveBalances;
+use App\Modules\Leave\Application\LeaveDays;
+use App\Modules\Leave\Application\LeaveRequests;
 use App\Modules\Leave\Domain\LeaveStatus;
+use App\Modules\Pdf\Domain\ValueSize;
 use App\Support\Database\ConcurrencyConflict;
 use App\Support\Localization\ArabicFormDate;
 use App\Support\Localization\ArabicServiceDuration;
@@ -15,19 +19,38 @@ use Illuminate\Contracts\Auth\Authenticatable;
 use Illuminate\Database\Eloquent\ModelNotFoundException;
 use Illuminate\Database\Query\Builder;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Validation\ValidationException;
 use stdClass;
 
 final class LeaveRequestPdf implements PdfDocument
 {
-    public function __construct(private readonly EmployeeService $employees, private readonly LeaveBalances $balances) {}
+    /** Printable limits by snapshot key (option A): every value at its limit still holds the one page at the smallest value size. */
+    public const LIMITS = ['name_ar' => 90, 'department' => 90, 'job_title' => 60, 'notification_method' => 60, 'substitute' => 60,
+        'manager_opinion' => 130, 'reason' => LeaveRequests::NOTE_MAX];
+
+    /** The longest value that stays on one line at 16 pt; the job title and the notification method never take a second one. */
+    public const ONE_LINE_AT_16 = ['name_ar' => 47, 'department' => 62, 'substitute' => 28, 'manager_opinion' => 38];
+
+    /** The reason fits its first 25 characters after «لظروف» and up to 100 in one more line at 16 pt. */
+    public const REASON_AT_16 = [25, 100];
+
+    /** Below 16 pt: the fullest value's share of its limit, up to; the size every value of the copy prints at. */
+    public const SIZES = [[0.45, 13], [0.6, 11], [0.65, 10], [1.0, 9]];
+
+    public function __construct(
+        private readonly EmployeeService $employees,
+        private readonly EmployeeRoster $roster,
+        private readonly LeaveBalances $balances,
+        private readonly LeaveDays $days,
+    ) {}
 
     public function rules(): array
     {
         return [
-            'job_title' => ['required', 'string', 'max:160'],
-            'notification_method' => ['nullable', 'string', 'max:160'],
-            'manager_opinion' => ['nullable', 'string', 'max:360'],
-            'substitute' => ['nullable', 'string', 'max:160'],
+            'job_title' => ['required', 'string', 'max:'.self::LIMITS['job_title']],
+            'notification_method' => ['nullable', 'string', 'max:'.self::LIMITS['notification_method']],
+            'manager_opinion' => ['nullable', 'string', 'max:'.self::LIMITS['manager_opinion']],
+            'substitute' => ['nullable', 'string', 'max:'.self::LIMITS['substitute']],
         ];
     }
 
@@ -42,14 +65,23 @@ final class LeaveRequestPdf implements PdfDocument
             ?? throw new ModelNotFoundException;
         $employeeId = (string) $request->employee_id;
         $employee = $this->employees->show($employeeId, $scope);
+        // A value typed elsewhere (the employee record, the request's note) is refused here; HR shortens the record.
+        foreach (['name_ar' => [self::LIMITS['name_ar'], $employee['name_ar']], 'department' => [self::LIMITS['department'], $employee['department']],
+            'note' => [self::LIMITS['reason'], $request->note]] as $field => [$limit, $value]) {
+            if (mb_strlen((string) $value) > $limit) {
+                throw ValidationException::withMessages([$field => __('errors.leave_form_value_too_long', ['attribute' => __("validation.attributes.{$field}"), 'max' => $limit])]);
+            }
+        }
         $year = (int) substr((string) $request->from_date, 0, 4);
+        // Without this request's own dates, which its approval writes as leave days: the balance before this leave.
+        $dates = $this->days->dates($this->roster->find($employeeId) ?? throw new ModelNotFoundException, (string) $request->from_date, (string) $request->to_date);
 
         return [$employeeId, [
             ...array_intersect_key($employee, array_flip(['name_ar', 'department', 'gender'])),
             ...$fields,
             'leave_request_id' => $subjectId, 'kind' => $request->kind, 'from_date' => $request->from_date,
             'to_date' => $request->to_date, 'days' => (int) $request->days, 'reason' => $request->note,
-            'balance' => $this->balances->forEmployee($employeeId, $year)['balance'], 'balance_year' => $year,
+            'balance' => $this->balances->forEmployee($employeeId, $year, $dates)['balance'], 'balance_year' => $year,
         ]];
     }
 
@@ -61,15 +93,21 @@ final class LeaveRequestPdf implements PdfDocument
     public function view(array $snapshot): array
     {
         $remaining = $snapshot['balance']['remaining'] ?? null;
+        $lengths = array_map(fn (string $key): int => mb_strlen((string) ($snapshot[$key] ?? '')), array_combine(array_keys(self::LIMITS), array_keys(self::LIMITS)));
+        // 16 pt is chosen by lines, not by share: on the render a value within its one-line length costs no room, however near its limit.
+        $spills = (int) ($lengths['reason'] > self::REASON_AT_16[0])
+            + array_sum(array_map(fn (string $key, int $line): int => intdiv(max($lengths[$key] - 1, 0), $line), array_keys(self::ONE_LINE_AT_16), self::ONE_LINE_AT_16));
+        $days = (int) $snapshot['days'];
 
         return ['pdf.leave-request', [
-            'plainPaper' => true,
             'title' => 'نموذج طلب إجازة',
-            'duration' => ArabicServiceDuration::days((int) $snapshot['days']),
-            'from' => ArabicFormDate::format($snapshot['from_date']),
-            'to' => ArabicFormDate::format($snapshot['to_date']),
+            'valueSize' => $spills <= 1 && $lengths['reason'] <= self::REASON_AT_16[1] ? 16 : ValueSize::byShare($lengths, self::LIMITS, self::SIZES)[1],
+            // The genitive after «لمدة»; days() prints the nominative «يومان».
+            'duration' => $days === 2 ? 'يومين' : ArabicServiceDuration::days($days),
+            'from' => ArabicFormDate::spaced($snapshot['from_date']),
+            'to' => ArabicFormDate::spaced($snapshot['to_date']),
             'balanceDays' => match ($remaining) {
-                null => 'غير متاح', 0 => '0 يوم', default => ArabicServiceDuration::days((int) $remaining)
+                null => null, 0 => '0 يوم', default => ArabicServiceDuration::days((int) $remaining)
             },
         ]];
     }

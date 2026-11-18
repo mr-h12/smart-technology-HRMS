@@ -7,6 +7,7 @@ use App\Modules\Identity\Infrastructure\Eloquent\Role;
 use App\Modules\Identity\Infrastructure\Eloquent\User;
 use App\Modules\Pdf\Application\RenderPdf;
 use App\Modules\Pdf\Domain\Contracts\PdfRendererInterface;
+use App\Modules\Pdf\Domain\PdfType;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Routing\Route as RouteDefinition;
 use Illuminate\Support\Facades\Bus;
@@ -145,6 +146,135 @@ final class PdfApiTest extends TestCase
 
         $name = ['experience_certificate' => 'شهادة خبرة', 'leave_request' => 'نموذج طلب إجازة', 'advance_request' => 'طلب سلفة', 'overtime_request' => 'طلب عمل إضافي'][$type];
         $this->assertStringContainsString("<title>{$name} - الرقم المسلسل 2</title>", $html);
+    }
+
+    public function test_new_rows_store_their_types_layout_version(): void
+    {
+        $this->signIn('hr');
+        // Spec section 3, "Layout version"; the certificate moves to 2 in slice 2.
+        foreach (['experience_certificate' => 1, 'leave_request' => 2, 'advance_request' => 1, 'overtime_request' => 1] as $type => $version) {
+            [$subject, $fields] = $this->subject($type);
+            $id = $this->create($type, $subject, $fields)->assertAccepted()->json('data.id');
+            $this->assertSame($version, $this->layout($id), $type);
+        }
+    }
+
+    public function test_a_signed_row_copies_its_unsigned_rows_layout_version(): void
+    {
+        $hr = $this->signIn('hr');
+        $this->signature($hr->id);
+        $unsigned = $this->approvedLeavePdf();
+        $signed = $this->postJson(self::API."/{$unsigned}/approve")->assertAccepted()->json('data.id');
+
+        $this->assertSame([PdfType::LeaveRequest->templateVersion(), $this->layout($unsigned)], [$this->layout($unsigned), $this->layout($signed)]);
+    }
+
+    public function test_the_worker_refuses_a_row_outside_its_types_layout_version(): void
+    {
+        $this->signIn('hr');
+        [$request, $fields] = $this->subject('leave_request');
+        $id = $this->create('leave_request', $request, $fields)->assertAccepted()->json('data.id');
+        $this->oldLayout($id);
+        $renderer = $this->createMock(PdfRendererInterface::class);
+        $renderer->expects($this->never())->method('pdf');
+
+        try {
+            (new RenderPdf($id))->handle($renderer);
+            $this->fail('the worker rendered a row outside its layout version');
+        } catch (RuntimeException $e) {
+            $this->assertSame('hr_form_render_failed', $e->getMessage());
+        }
+        Storage::disk('local')->assertMissing("hr-forms/{$id}.pdf");
+        $this->assertDatabaseHas('hr_form_exports', ['id' => $id, 'status' => 'pending']);
+    }
+
+    public function test_approve_on_an_old_layout_row_answers_404_and_403_before_409(): void
+    {
+        $hr = $this->signIn('hr');
+        $this->signature($hr->id);
+        $old = $this->approvedLeavePdf();
+        $this->oldLayout($old);
+
+        $this->actingAs($this->holder('hr_forms.approve_leave_request.own'), 'api');
+        $this->postJson(self::API."/{$old}/approve")->assertNotFound();
+        $this->actingAs($this->holder('hr_forms.approve.all', 'hr_forms.view.all'), 'api');
+        $this->postJson(self::API."/{$old}/approve")->assertForbidden()->assertJsonPath('error.code', 'permission_denied');
+        $this->actingAs($hr, 'api');
+        $this->postJson(self::API."/{$old}/approve")->assertConflict()->assertJsonPath('error.code', 'concurrency_conflict');
+        $this->assertDatabaseMissing('hr_form_exports', ['stage' => 'signed']);
+    }
+
+    public function test_retry_on_an_old_layout_row_answers_409_and_lists_no_action(): void
+    {
+        $hr = $this->signIn('hr');
+        [$employee, $fields] = $this->subject('experience_certificate');
+        $old = $this->create('experience_certificate', $employee, $fields)->json('data.id');
+        $this->settle($old, 'failed');
+        $this->oldLayout($old);
+
+        $this->actingAs($this->holder('hr_forms.generate.own'), 'api');
+        $this->postJson(self::API."/{$old}/retry")->assertNotFound();
+        $this->actingAs($hr, 'api');
+        $this->getJson(self::API."/{$old}")->assertOk()->assertJsonPath('data.actions', []);
+        $this->postJson(self::API."/{$old}/retry")->assertConflict()->assertJsonPath('error.code', 'concurrency_conflict');
+        $this->assertDatabaseHas('hr_form_exports', ['id' => $old, 'status' => 'failed']);
+    }
+
+    public function test_the_awaiting_approval_filter_skips_an_old_layout_row(): void
+    {
+        $this->signIn('hr');
+        $old = $this->approvedLeavePdf();
+        $this->oldLayout($old);
+        $current = $this->approvedLeavePdf();
+
+        $this->assertSame([$current], $this->awaitingMatchesActions());
+    }
+
+    public function test_an_old_layout_ready_row_still_downloads(): void
+    {
+        $this->signIn('hr');
+        $old = $this->approvedLeavePdf();
+        $this->oldLayout($old);
+
+        $this->getJson(self::API."/{$old}")->assertOk()->assertJsonPath('data.actions', ['download']);
+        $this->get(self::API."/{$old}/download")->assertOk();
+    }
+
+    public function test_a_version_1_leave_row_is_view_only(): void
+    {
+        $hr = $this->signIn('hr');
+        $this->signature($hr->id);
+        $old = $this->approvedLeavePdf();
+        DB::table('hr_form_exports')->where('id', $old)->update(['template_version' => 1]);
+
+        $this->assertSame(2, PdfType::LeaveRequest->templateVersion());
+        $this->getJson(self::API."/{$old}")->assertOk()->assertJsonPath('data.actions', ['download']);
+        $this->get(self::API."/{$old}/download")->assertOk();
+        $this->postJson(self::API."/{$old}/approve")->assertConflict()->assertJsonPath('error.code', 'concurrency_conflict');
+        $this->settle($old, 'failed');
+        $this->getJson(self::API."/{$old}")->assertOk()->assertJsonPath('data.actions', []);
+        $this->postJson(self::API."/{$old}/retry")->assertConflict()->assertJsonPath('error.code', 'concurrency_conflict');
+        $this->assertDatabaseMissing('hr_form_exports', ['stage' => 'signed']);
+    }
+
+    public function test_advance_and_overtime_html_still_holds_plex_arabic(): void
+    {
+        $this->signIn('hr');
+        foreach (['advance_request', 'overtime_request'] as $type) {
+            [$subject, $fields] = $this->subject($type);
+            $id = $this->create($type, $subject, $fields)->assertAccepted()->json('data.id');
+            $html = '';
+            $renderer = $this->createMock(PdfRendererInterface::class);
+            $renderer->expects($this->once())->method('pdf')->willReturnCallback(function (string $page) use (&$html): string {
+                $html = $page;
+
+                return '%PDF-1.7 synthetic';
+            });
+            (new RenderPdf($id))->handle($renderer);
+
+            $this->assertStringContainsString('PlexArabic', $html, $type);
+            $this->assertStringNotContainsString('MarkaziArabic', $html, $type);
+        }
     }
 
     public function test_a_replay_answers_before_the_subject_is_read_again(): void
@@ -655,6 +785,18 @@ final class PdfApiTest extends TestCase
             'id' => $id, 'owner_id' => $owner, 'version' => 1, 'storage_path' => "hr-signatures/{$id}.png",
             'mime_type' => 'image/png', 'checksum' => str_repeat('b', 64), 'created_at' => now(), 'updated_at' => now(),
         ]);
+    }
+
+    private function layout(string $id): int
+    {
+        return (int) DB::table('hr_form_exports')->where('id', $id)->value('template_version');
+    }
+
+    /** The row as one issued before its type's current layout. */
+    private function oldLayout(string $id): void
+    {
+        $type = PdfType::from((string) DB::table('hr_form_exports')->where('id', $id)->value('form_type'));
+        DB::table('hr_form_exports')->where('id', $id)->update(['template_version' => $type->templateVersion() - 1]);
     }
 
     /** @return list<array{0: string, 1: mixed, 2: mixed}> [user_id, old_values, new_values] of the row's RETRIED audit entries */

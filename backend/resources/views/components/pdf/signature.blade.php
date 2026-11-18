@@ -1,0 +1,2 @@
+@props(['label', 'image' => null, 'dots' => null])
+<div {{ $attributes }}><div>{{ $label }}</div>@if ($image)<img src="{{ $image }}" alt="{{ $label }}">@elseif ($dots)<div class="dots">{{ str_repeat('.', $dots) }}</div>@endif</div>
