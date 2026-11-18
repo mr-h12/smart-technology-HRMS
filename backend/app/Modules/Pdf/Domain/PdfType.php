@@ -32,8 +32,8 @@ enum PdfType: string
     public function templateVersion(): int
     {
         return match ($this) {
-            self::LeaveRequest => 2,
-            self::ExperienceCertificate, self::AdvanceRequest, self::OvertimeRequest => 1,
+            self::LeaveRequest, self::ExperienceCertificate => 2,
+            self::AdvanceRequest, self::OvertimeRequest => 1,
         };
     }
 

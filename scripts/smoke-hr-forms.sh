@@ -18,7 +18,8 @@ case "$form" in
     absent=('راتب الموظف' 'راتب الموظفة' 'Employee Salary' 'غير متاح' 'Unavailable' '9000' 'Synthetic finance remarks');;
   # Written as Poppler extracts a correct page: it reverses some of Markazi's two-letter ligatures.
   leave-request) fonts='MarkaziText-Bold|Carlito-Bold'; phrases=('نموذج طلب إجازة' 'برجاء من سيادتكم' 'توقيع مدير الشركة' 'توقيع الموارد البشرية' 'Smart Technology');;
-  experience-certificate) fonts='MarkaziText-Bold'; phrases=('شهادة خبرة' 'الشركة');;
+  # «أدىن»: Poppler extracts Markazi's «نى» ligature of a correct «أدنى» in this order.
+  experience-certificate) fonts='MarkaziText-Bold'; phrases=('شهـــادة خبرة' 'هذه الشهادة مقدمة من شركة' 'دون أدىن مسئولية من الشركة' 'مدير الشركة');;
   *) printf 'Unknown form: %s\n' "$form" >&2; exit 1;;
 esac
 pdftotext="${PDFTOTEXT:-pdftotext}"

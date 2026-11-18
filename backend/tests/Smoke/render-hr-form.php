@@ -9,6 +9,7 @@ use App\Modules\Leave\Application\LeaveRequests;
 use App\Modules\Pdf\Application\PdfExports;
 use App\Modules\Pdf\Application\RenderPdf;
 use App\Modules\Pdf\Application\SignatureImages;
+use App\Modules\Pdf\Application\Types\ExperienceCertificatePdf;
 use App\Modules\Pdf\Application\Types\LeaveRequestPdf;
 use App\Modules\Pdf\Domain\PdfType;
 use App\Modules\Sites\Infrastructure\Eloquent\Site;
@@ -29,6 +30,7 @@ $app->make(Kernel::class)->bootstrap();
 // fresh database. A case without an approved twin says 'twin' => false: with HRMS_SMOKE_GOLDENS set, every other case must have one.
 const DEFAULTS = [
     'twin' => true, 'gender' => 'female', 'kind' => 'annual', 'archived' => false, 'escalate' => false, 'national_id' => '12345678901234', 'today' => '2026-11-17', 'long' => null,
+    'hired' => '2022-01-01',
     'values' => [
         'name_ar' => 'سارة مثال للاختبار', 'department' => 'اختبار', 'reason' => 'سبب تجريبي', 'job_title' => 'مهندسة اختبار',
         'notification_method' => 'الهاتف', 'manager_opinion' => 'رأي تجريبي', 'substitute' => 'بديل تجريبي',
@@ -66,6 +68,16 @@ const CASES = [
         'male' => ['gender' => 'male', 'values' => MALE, 'national_id' => '26569523878298', 'today' => '2026-11-18'],
         'archived-female' => ['archived' => true, 'national_id' => '67247010871558', 'today' => '2026-11-18'],
         'archived-male' => ['gender' => 'male', 'values' => MALE, 'archived' => true, 'national_id' => '94782826867964', 'today' => '2026-11-18'],
+        // A run per size step, in one database in the approved order, each with its approved national ID. The name leads with one
+        // unbroken token of 60 «ص» (a [lead, pattern] pair), and the long service starts in 2010.
+        'long' => ['gender' => 'male', 'hired' => '2010-03-01', 'today' => '2026-11-18',
+            'national_id' => ['0.25' => '59390832739947', '0.6' => '75742786499134', '1' => '21823199372246'], 'long' => [
+                'name_ar' => ['صصصصصصصصصصصصصصصصصصصصصصصصصصصصصصصصصصصصصصصصصصصصصصصصصصصصصصصصصصصص ', 'أحمد عبد الرحمن محمود مثال للاختبار '],
+                'department' => 'إدارة المشروعات والتشغيل (Site 2) ', 'job_title' => 'QA/QC Engineer (Site) مهندس جودة ',
+            ]],
+        // The name's last word wraps by under 7 pt, so it would stand on the first line beside «المسمى» without the pair's gutter;
+        // the national ID beside it is always 14 digits.
+        'halves-full' => ['twin' => false, 'today' => '2026-11-18', 'values' => ['name_ar' => 'سارة عبد الرحمن محمود عبد العزيز إبراهيم محمود']],
     ],
     'overtime-request' => ['female' => ['twin' => false]],
     'advance-request' => ['female' => ['twin' => false]],
@@ -83,15 +95,18 @@ if ($entry === null) {
 $case = [...DEFAULTS, ...$entry, 'values' => [...DEFAULTS['values'], ...$entry['values'] ?? []]];
 $values = $case['values'];
 $run = getenv('HRMS_SMOKE_RUN') ?: '.';
+$leave = $form === 'leave-request';
 if ($case['long'] !== null && $run !== '.') {
     $share = (float) str_replace('-wrap', '', $run);
     $patterns = [...$case['long'], ...(str_ends_with($run, '-wrap') ? ['reason' => $case['long']['wrap']] : [])];
-    foreach (LeaveRequestPdf::LIMITS as $key => $limit) {
-        $values[$key] = mb_substr(str_repeat($patterns[$key], 40), 0, (int) floor($limit * $share));
+    foreach ($leave ? LeaveRequestPdf::LIMITS : ExperienceCertificatePdf::LIMITS as $key => $limit) {
+        [$lead, $pattern] = is_array($patterns[$key]) ? $patterns[$key] : ['', $patterns[$key]];
+        $value = mb_substr($lead.str_repeat($pattern, 40), 0, (int) floor($limit * $share));
+        // The approved certificate runs were trimmed, as the API trims what it stores; the approved leave runs were not.
+        $values[$key] = $leave ? $value : rtrim($value);
     }
 }
 Carbon::setTestNow(Carbon::parse((getenv('HRMS_SMOKE_TODAY') ?: $case['today']).' 12:00', 'Africa/Cairo'));
-$leave = $form === 'leave-request';
 $noPay = $form === 'advance-request-no-pay';
 $advance = $noPay || $form === 'advance-request';
 $overtime = $form === 'overtime-request';
@@ -99,17 +114,23 @@ $ceo = fn (): User => User::firstOrCreate(['email' => 'ceo@synthetic.test'], ['n
 try {
     if ($argv[1] === 'runs') {
         // The runs of the case, each rendered into its own folder under the case's ("." is the case's folder itself). The long
-        // runs are the top of every value-size step (the 16 pt one is the longest reason it takes), in the approved order.
+        // runs are the top of every value-size step (the leave's 16 pt one is the longest reason it takes), in the approved order;
+        // the leave's each have a -wrap copy.
         $shares = [LeaveRequestPdf::REASON_AT_16[1] / LeaveRequestPdf::LIMITS['reason'], ...array_column(LeaveRequestPdf::SIZES, 0)];
-        echo $case['long'] === null ? '.' : implode(' ', array_merge(...array_map(fn (float $share): array => [$share, "{$share}-wrap"], $shares)));
+        echo match (true) {
+            $case['long'] === null => '.',
+            $leave => implode(' ', array_merge(...array_map(fn (float $share): array => [$share, "{$share}-wrap"], $shares))),
+            default => implode(' ', array_column(ExperienceCertificatePdf::SIZES, 0)),
+        };
     } elseif ($argv[1] === 'twin') {
         echo $case['twin'] ? 'yes' : 'no';
     } elseif ($argv[1] === 'setup') {
         $employee = app(EmployeeService::class)->create([
-            'name_ar' => $values['name_ar'], 'gender' => $case['gender'], 'type' => $noPay ? 'permanent_worker' : 'office', 'effective_from' => '2022-01-01',
-            'hire_date' => '2022-01-01', 'salary' => '9000',
-            // The runs of one case share a database: each later run's employee takes the next ID (the leave prints none).
-            'national_id' => (string) ((int) $case['national_id'] + DB::table('employees')->count()), 'department' => $values['department'],
+            'name_ar' => $values['name_ar'], 'gender' => $case['gender'], 'type' => $noPay ? 'permanent_worker' : 'office', 'effective_from' => $case['hired'],
+            'hire_date' => $case['hired'], 'salary' => '9000',
+            // The runs of one case share a database: a run takes its own approved ID, else the next ID (the leave prints none).
+            'national_id' => is_array($case['national_id']) ? $case['national_id'][$run]
+                : (string) ((int) $case['national_id'] + DB::table('employees')->count()), 'department' => $values['department'],
             ...($case['archived'] ? ['termination_date' => now('Africa/Cairo')->subMonth()->toDateString()] : []),
         ])['id'];
         $hr = User::firstOrCreate(['email' => 'hr@synthetic.test'], ['name' => 'hr', 'password' => Str::random(24), 'role_id' => Role::where('slug', 'hr')->value('id'), 'is_active' => true]);

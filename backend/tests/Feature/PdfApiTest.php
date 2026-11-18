@@ -151,8 +151,8 @@ final class PdfApiTest extends TestCase
     public function test_new_rows_store_their_types_layout_version(): void
     {
         $this->signIn('hr');
-        // Spec section 3, "Layout version"; the certificate moves to 2 in slice 2.
-        foreach (['experience_certificate' => 1, 'leave_request' => 2, 'advance_request' => 1, 'overtime_request' => 1] as $type => $version) {
+        // Spec section 3, "Layout version".
+        foreach (['experience_certificate' => 2, 'leave_request' => 2, 'advance_request' => 1, 'overtime_request' => 1] as $type => $version) {
             [$subject, $fields] = $this->subject($type);
             $id = $this->create($type, $subject, $fields)->assertAccepted()->json('data.id');
             $this->assertSame($version, $this->layout($id), $type);
@@ -251,6 +251,27 @@ final class PdfApiTest extends TestCase
         $this->getJson(self::API."/{$old}")->assertOk()->assertJsonPath('data.actions', ['download']);
         $this->get(self::API."/{$old}/download")->assertOk();
         $this->postJson(self::API."/{$old}/approve")->assertConflict()->assertJsonPath('error.code', 'concurrency_conflict');
+        $this->settle($old, 'failed');
+        $this->getJson(self::API."/{$old}")->assertOk()->assertJsonPath('data.actions', []);
+        $this->postJson(self::API."/{$old}/retry")->assertConflict()->assertJsonPath('error.code', 'concurrency_conflict');
+        $this->assertDatabaseMissing('hr_form_exports', ['stage' => 'signed']);
+    }
+
+    public function test_a_version_1_certificate_row_is_view_only(): void
+    {
+        $this->signIn('hr');
+        [$employee, $fields] = $this->subject('experience_certificate');
+        $old = $this->create('experience_certificate', $employee, $fields)->assertAccepted()->json('data.id');
+        $this->settle($old);
+        DB::table('hr_form_exports')->where('id', $old)->update(['template_version' => 1]);
+
+        $this->assertSame(2, PdfType::ExperienceCertificate->templateVersion());
+        $ceo = $this->signIn('ceo');
+        $this->signature($ceo->id);
+        $this->getJson(self::API."/{$old}")->assertOk()->assertJsonPath('data.actions', ['download']);
+        $this->get(self::API."/{$old}/download")->assertOk();
+        $this->postJson(self::API."/{$old}/approve")->assertConflict()->assertJsonPath('error.code', 'concurrency_conflict');
+        $this->signIn('hr');
         $this->settle($old, 'failed');
         $this->getJson(self::API."/{$old}")->assertOk()->assertJsonPath('data.actions', []);
         $this->postJson(self::API."/{$old}/retry")->assertConflict()->assertJsonPath('error.code', 'concurrency_conflict');
