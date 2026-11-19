@@ -1,0 +1,2 @@
+@props(['width' => null, 'circle', 'gap', 'marked' => false])
+<span {{ $attributes->class(['choice']) }}@if ($width !== null) style="width: {{ $width }}pt"@endif>{{ $slot }} <span class="circle{{ $marked ? ' marked' : '' }}" style="width: {{ $circle[0] }}pt; height: {{ $circle[1] }}pt; margin-inline-start: {{ $gap }}pt"></span></span>
