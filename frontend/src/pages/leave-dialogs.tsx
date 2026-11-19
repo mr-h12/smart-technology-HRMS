@@ -22,7 +22,8 @@ export const STATUS: Record<string, BadgeVariant> = { pending: 'warning', escala
 const KINDS = ['annual', 'casual', 'sick', 'unpaid'] as const
 
 /** `GET /leave/requests/preview`: the server's count and split; the dialog shows these numbers and computes none. */
-type Preview = { days: number; unpaid: number; remaining_after: number | null }
+// a site manager's preview has the days only: the balance, what remains and the unpaid split are HR's (owner, 2026-11-20)
+type Preview = { days: number; unpaid?: number; remaining_after?: number | null }
 
 const FIELDS = ['employee_id', 'kind', 'from_date', 'to_date', 'note']
 
@@ -79,9 +80,9 @@ function PreviewLine({ values: v }: { values: Row }) {
       <p role="status" className="text-sm">
         {t('leave.request.days', { count: p.days })} {t('leave.request.excluded')}
         {/* ltr: in Arabic text a leading minus would otherwise land after the digits */}
-        {p.remaining_after !== null && <Trans i18nKey="leave.request.after" components={{ n: <bdi dir="ltr">{String(p.remaining_after)}</bdi> }} />}
+        {p.remaining_after != null && <Trans i18nKey="leave.request.after" components={{ n: <bdi dir="ltr">{String(p.remaining_after)}</bdi> }} />}
       </p>
-      {p.unpaid > 0 && <Alert tone="warning">{t('leave.request.unpaid', { count: p.unpaid })}</Alert>}
+      {!!p.unpaid && <Alert tone="warning">{t('leave.request.unpaid', { count: p.unpaid })}</Alert>}
     </>
   )
 }

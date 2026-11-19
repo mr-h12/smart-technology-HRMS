@@ -59,7 +59,9 @@ export function LeavePage() {
   // the navigation whose request dialog was closed: every new link to a request, the same one again included, opens it
   const [closed, setClosed] = useState<string>()
   const request = params.get('request')
-  const tab = params.get('tab') === 'balances' && !request ? 'balances' : 'requests'
+  // balances are HR's: a site manager (own scope) files leave and reads each request's status only (owner, 2026-11-20)
+  const balances = can('leave.view.all')
+  const tab = balances && params.get('tab') === 'balances' && !request ? 'balances' : 'requests'
   const thisYear = Number(cairoToday().slice(0, 4))
   const picked = params.get('year') // the balances year, in the URL so Back restores it; Requests keeps its own year filter
   const year = picked ?? String(thisYear)
@@ -77,10 +79,10 @@ export function LeavePage() {
       <Tabs value={tab} onValueChange={(v) => setParams({ ...(v === 'balances' && { tab: v }), ...(picked && { year: picked }) }, { replace: true })}>
         <TabsList>
           <TabsTrigger value="requests"><ClipboardList className="size-4" aria-hidden /> {t('leave.tab.requests')}</TabsTrigger>
-          <TabsTrigger value="balances"><Scale className="size-4" aria-hidden /> {t('leave.tab.balances')}</TabsTrigger>
+          {balances && <TabsTrigger value="balances"><Scale className="size-4" aria-hidden /> {t('leave.tab.balances')}</TabsTrigger>}
         </TabsList>
         <TabsContent value="requests"><Requests thisYear={thisYear} highlight={request} /></TabsContent>
-        <TabsContent value="balances"><Balances thisYear={thisYear} year={year} /></TabsContent>
+        {balances && <TabsContent value="balances"><Balances thisYear={thisYear} year={year} /></TabsContent>}
       </Tabs>
     </div>
   )
@@ -141,7 +143,6 @@ function Requests({ thisYear, highlight }: { thisYear: number; highlight: string
 /** `GET /leave/balances`: one row per monthly employee, every number the server's (docs/calculations.md §7). The year is the page's: the header names it. */
 function Balances({ thisYear, year }: { thisYear: number; year: string }) {
   const { t, i18n } = useTranslation()
-  const { can } = useAuth()
   const today = cairoToday()
   // the filters and page live in the URL, so going back from an employee shows the same list; a default ('') leaves its key out
   const [params, setParams] = useSearchParams()
@@ -166,7 +167,7 @@ function Balances({ thisYear, year }: { thisYear: number; year: string }) {
     <Card className="overflow-hidden">
       <div className="flex flex-wrap items-center gap-3 border-b p-4">
         <SearchInput value={q} onChange={(v) => { setQ(v); filter({ q: v }) }} placeholder={t('leave.search')} className="sm:w-full sm:max-w-md" />
-        <FilterSelect value={type} onChange={(v) => filter({ type: v })} label={t('employee.type')} allLabel={t('employee.allTypes')} options={MONTHLY_TYPES.filter((v) => v !== 'office' || can('leave.view.all')).map((v) => [v, t(`enum.type.${v}`)])} />
+        <FilterSelect value={type} onChange={(v) => filter({ type: v })} label={t('employee.type')} allLabel={t('employee.allTypes')} options={MONTHLY_TYPES.map((v) => [v, t(`enum.type.${v}`)])} />
         <SegmentedControl
           label={t('leave.year')}
           value={year}

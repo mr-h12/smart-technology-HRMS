@@ -125,16 +125,16 @@ class LeaveBalancesTest extends TestCase
         $this->balance((string) Str::uuid7())->assertNotFound();
     }
 
-    public function test_a_manager_reads_only_employees_in_reach(): void
+    public function test_a_site_manager_reads_no_balance_not_even_of_an_employee_in_reach(): void
     {
         $mine = $this->employee('engineer', '2020-01-01');
         $other = $this->employee('engineer', '2020-01-01');
         $manager = $this->makeUser('manager');
         app(EmployeeService::class)->assignManager($mine, ['manager_id' => $manager->id, 'effective_from' => '2026-01-01']);
 
-        $this->actingAs($manager, 'api');
-        $this->balance($mine)->assertOk()->assertJsonPath('data.balance.entitlement', 21);
-        $this->balance($other)->assertNotFound();
+        $this->actingAs($manager, 'api');   // balances are HR's (owner, 2026-11-20)
+        $this->balance($mine)->assertForbidden();
+        $this->balance($other)->assertNotFound();   // out of reach stays a 404, so it confirms nothing
     }
 
     public function test_reading_needs_leave_view(): void
@@ -222,7 +222,7 @@ class LeaveBalancesTest extends TestCase
         $this->getJson('/api/v1/leave/balances?per_page=101')->assertStatus(422);
     }
 
-    public function test_a_managers_list_holds_only_employees_in_reach_and_a_manager_cannot_adjust(): void
+    public function test_a_site_manager_gets_no_balance_list_and_cannot_adjust(): void
     {
         $mine = $this->employee('engineer', '2020-01-01');
         $this->employee('engineer', '2020-01-01');
@@ -231,7 +231,7 @@ class LeaveBalancesTest extends TestCase
         app(EmployeeService::class)->assignManager($mine, ['manager_id' => $manager->id, 'effective_from' => '2026-01-01']);
 
         $this->actingAs($manager, 'api');
-        $this->assertSame([$mine], $this->listed());
+        $this->getJson('/api/v1/leave/balances')->assertForbidden();
         $this->adjust($mine, ['entitlement' => 30, 'opening_used' => 0, 'opening_casual_used' => 0, 'reason' => 'Reason-1'])->assertForbidden();
         $this->assertSame(0, DB::table('leave_year_adjustments')->count());
     }
@@ -409,7 +409,7 @@ class LeaveBalancesTest extends TestCase
         $this->getJson('/api/v1/leave/balances')->assertOk()->assertJsonPath('data.*.termination_date', [null, '2026-10-20']);
     }
 
-    public function test_a_managers_list_for_last_year_holds_only_employees_in_reach_today(): void
+    public function test_last_years_balances_stay_hrs(): void
     {
         $mine = $this->employee('engineer', '2020-01-01');
         $was = $this->employee('engineer', '2020-01-01');
@@ -420,7 +420,10 @@ class LeaveBalancesTest extends TestCase
         $service->assignManager($was, ['manager_id' => $this->makeUser('manager')->id, 'effective_from' => '2026-01-01']);
 
         $this->actingAs($manager, 'api');
-        $this->assertSame([$mine], $this->listed('?year=2025'));
+        $this->getJson('/api/v1/leave/balances?year=2025')->assertForbidden();   // no year opens it
+        $this->signIn('hr');
+        $this->assertContains($mine, $this->listed('?year=2025'));
+        $this->assertContains($was, $this->listed('?year=2025'));
     }
 
     public function test_the_list_runs_the_same_queries_for_one_or_twenty_employees(): void

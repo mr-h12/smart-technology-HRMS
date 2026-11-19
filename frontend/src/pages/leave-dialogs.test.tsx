@@ -548,3 +548,12 @@ test.each([
   expect(onOpenChange).not.toHaveBeenCalled()
   expect(within(outer).getByRole('button', { name: 'إلغاء الطلب' })).toBeEnabled()
 })
+
+test('a site manager\'s preview has the counted days only: no balance after and no unpaid warning (owner, 2026-11-20)', async () => {
+  mockFetch({ [PREVIEW]: () => json(200, { data: { dates: ['2026-11-10', '2026-11-11', '2026-11-12', '2026-11-15'], days: 4 } }) })
+  renderWithAuth(<RequestDialog open onOpenChange={vi.fn()} employee={sami} />, ['leave.request.own', 'leave.view.own'])
+  dates('2026-11-10', '2026-11-15')
+  await waitFor(() => expect(screen.getByRole('status')).toHaveTextContent(/^4 أيام محسوبة \(أيام الراحة الأسبوعية والإجازات الرسمية غير محسوبة\)$/))
+  expect(screen.queryByText(/الرصيد/)).toBeNull()
+  expect(screen.queryByText(/^(يوم واحد|يومان|[0-9]+ (أيام|يومًا|يوم)) بدون أجر$/)).toBeNull()
+})

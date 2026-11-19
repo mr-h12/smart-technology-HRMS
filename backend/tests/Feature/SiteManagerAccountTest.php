@@ -524,12 +524,14 @@ class SiteManagerAccountTest extends TestCase
         $lists = [
             'employees' => $this->getJson('/api/v1/employees')->assertOk()->json('data.*.id'),
             'leave requests' => $this->getJson('/api/v1/leave/requests')->assertOk()->json('data.*.employee.id'),
-            'leave balances' => $this->getJson('/api/v1/leave/balances')->assertOk()->json('data.*.id'),
             'team fares' => $this->getJson('/api/v1/team-fares')->assertOk()->json('data.rows.*.employee_id'),
             'notifications' => array_values(array_filter($this->getJson('/api/v1/notifications')->assertOk()->json('data.*.employee.id'))),
         ];
         $this->assertSame(array_fill_keys(array_keys($lists), [$worker]), $lists);
         $this->assertSame(1, $this->getJson('/api/v1/employees/summary')->assertOk()->json('data.permanent_worker'));
+        $this->getJson('/api/v1/leave/balances')->assertForbidden();   // balances are HR's (owner, 2026-11-20)
+        $this->getJson("/api/v1/employees/{$worker}/leave")->assertForbidden();
+        $this->getJson("/api/v1/employees/{$self}/leave")->assertNotFound();   // never their own record
     }
 
     public function test_crew_search_never_finds_the_site_managers_own_record(): void

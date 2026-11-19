@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Modules\Leave\Presentation;
 
 use App\Modules\Employees\Domain\EmployeeType;
+use App\Modules\Identity\Domain\Rbac\AuthorizationRefused;
 use App\Modules\Identity\Presentation\RequestScope;
 use App\Modules\Leave\Application\LeaveBalances;
 use App\Support\Http\ApiEnvelope;
@@ -22,6 +23,7 @@ final class LeaveBalanceController
 
     public function index(Request $request): JsonResponse
     {
+        self::refuseOwnScope($request);
         $v = $request->validate([
             'year' => self::YEAR,
             'type' => ['sometimes', Rule::enum(EmployeeType::class)->only(EmployeeType::monthly())],
@@ -39,6 +41,7 @@ final class LeaveBalanceController
 
     public function show(Request $request, string $employee): JsonResponse
     {
+        self::refuseOwnScope($request);
         $q = $request->validate(['year' => self::YEAR]);
 
         return ApiEnvelope::single($request, $this->balances->forEmployee($employee, (int) ($q['year'] ?? now('Africa/Cairo')->year)));
@@ -58,5 +61,16 @@ final class LeaveBalanceController
         return ApiEnvelope::single($request, $this->balances->adjust(
             $employee, (int) $year, Arr::only($data, ['entitlement', 'opening_used', 'opening_casual_used', 'reason']), isset($data['version']) ? (int) $data['version'] : null,
         ));
+    }
+
+    /**
+     * Balances are HR's: a site manager (own scope) reads no one's, their own included (owner, 2026-11-20). They still file leave and
+     * read each request's status through leave.view.own.
+     */
+    private static function refuseOwnScope(Request $request): void
+    {
+        if (RequestScope::ownerId($request) !== null) {
+            throw AuthorizationRefused::of('leave.view');
+        }
     }
 }
