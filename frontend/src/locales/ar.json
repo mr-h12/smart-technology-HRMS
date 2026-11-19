@@ -1148,7 +1148,6 @@
     "lateCount": "متأخر: {{count}}",
     "openDay": "افتح يوم {{date}} وسجّل الانصراف",
     "backToToday": "العودة إلى اليوم",
-    "likeYesterday": "زي امبارح ({{count}})",
     "addNote": "إضافة ملاحظة",
     "noteShown": "ملاحظة: {{note}}",
     "noteOf": "ملاحظة {{name}}",
