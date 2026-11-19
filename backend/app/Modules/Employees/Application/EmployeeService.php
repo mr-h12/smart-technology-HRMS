@@ -103,7 +103,8 @@ final class EmployeeService
             ->groupBy('type')->pluck('n', 'type');
         $byType = array_map(fn (EmployeeType $t) => (int) ($counts[$t->value] ?? 0), array_column(EmployeeType::cases(), null, 'value'));
 
-        return ['total' => (int) $counts->sum(), ...$byType];
+        // a site manager reads the total only: the per-type tiles are HR's (review of #72; the list and profile hide types too)
+        return $ownerId === null ? ['total' => (int) $counts->sum(), ...$byType] : ['total' => (int) $counts->sum()];
     }
 
     /**

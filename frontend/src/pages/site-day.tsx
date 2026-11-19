@@ -5,7 +5,7 @@ import { useTranslation } from 'react-i18next'
 import { useSearchParams } from 'react-router-dom'
 import { Alert } from '@/components/common/Alert'
 import { EmptyState } from '@/components/common/EmptyState'
-import { ErrorBanner, intlLocale, isHhmm, localName, type Row, stopAtMissingPeriod } from '@/components/form'
+import { asciiDigits, ErrorBanner, intlLocale, isHhmm, localName, type Row, stopAtMissingPeriod } from '@/components/form'
 import { TableSkeleton } from '@/components/layout/PageSkeleton'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -178,7 +178,8 @@ export function SiteDayPage() {
   )
 
   const staleNames = stale.at === key ? rows.filter((r) => stale.ids.includes(r.employee.id)).map((r) => localName(r.employee as Row, lang)) : []
-  const needle = filter.trim().toLowerCase()
+  // by name or code, a code typed in Arabic or Persian digits too (Youssef, 2026-11-19)
+  const needle = asciiDigits(filter).trim().toLowerCase()
   const shown = needle ? rows.filter((r) => `${r.employee.name_ar} ${r.employee.name_en ?? ''} ${r.employee.code}`.toLowerCase().includes(needle)) : rows
   const workers = shown.filter((r) => r.section === 'workers')
   const engineers = shown.filter((r) => r.section === 'engineers')
@@ -247,12 +248,11 @@ export function SiteDayPage() {
           )}
         </div>
       )}
-      {rows.length > 6 && (
-        <div className="relative">
-          <Search className="pointer-events-none absolute start-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" aria-hidden />
-          <Input type="search" value={filter} onChange={(e) => setFilter(e.target.value)} placeholder={t('siteDay.find')} aria-label={t('siteDay.find')} className="min-h-11 ps-9" />
-        </div>
-      )}
+      {/* always shown, whatever the site's size (Youssef, 2026-11-19); «حضور الكل» and «انصراف الكل» still act on every row */}
+      <div className="relative">
+        <Search className="pointer-events-none absolute start-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" aria-hidden />
+        <Input type="search" value={filter} onChange={(e) => setFilter(e.target.value)} placeholder={t('siteDay.find')} aria-label={t('siteDay.find')} className="min-h-11 ps-9" />
+      </div>
       {saveErr !== undefined && (saveErr instanceof ApiError && saveErr.status === 409 ? (
         <Alert tone="danger">
           <p>{staleNames.length ? t('siteDay.conflictRows', { names: new Intl.ListFormat(intlLocale(lang)).format(staleNames) }) : t('siteDay.conflict')}</p>

@@ -1,7 +1,7 @@
 import { UserPlus } from 'lucide-react'
 import { useState } from 'react'
 import { useTranslation } from 'react-i18next'
-import { ErrorBanner, localName, type Row, toErrs } from '@/components/form'
+import { asciiDigits, ErrorBanner, localName, type Row, toErrs } from '@/components/form'
 import { Button } from '@/components/ui/button'
 import { Dialog, DialogBody, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { Input } from '@/components/ui/input'
@@ -15,8 +15,14 @@ type Found = { match: Match | null; ambiguous: boolean }
 
 const GENDERS = ['male', 'female'] as const
 
-/** A new form id per form: the API returns the first answer for a repeat, so a double tap or a retry adds one worker (owner, 2026-11-19). */
-const newRequestId = () => (globalThis.crypto?.randomUUID ? globalThis.crypto.randomUUID() : `${Date.now().toString(16)}-${Math.random().toString(16).slice(2)}`)
+/**
+ * A new form id per form: the API returns the first answer for a repeat, so a double tap or a retry adds one worker (owner, 2026-11-19).
+ * A v4 UUID either way: crypto.randomUUID needs a secure context (HTTPS or localhost) and a recent browser, getRandomValues works on plain
+ * HTTP and old phones too, and the API validates the id as a UUID (review of #72, Youssef 2026-11-19).
+ */
+export const newRequestId = (): string =>
+  globalThis.crypto?.randomUUID?.() ??
+  '10000000-1000-4000-8000-100000000000'.replace(/[018]/g, (c) => (+c ^ (crypto.getRandomValues(new Uint8Array(1))[0] & (15 >> (+c / 4)))).toString(16))
 
 /**
  * Find a day laborer by their code or full name to add to today's crew, or add a new one with a proposed daily wage for HR to review.
@@ -34,13 +40,17 @@ export function AddLaborer({ siteId, siteName, canAdd, canPropose, onDone }: { s
   const [wage, setWage] = useState('')
   const [phone, setPhone] = useState('')
   const [nid, setNid] = useState('')
-  const [different, setDifferent] = useState(false)
+  // «شخص آخر بنفس الاسم» holds for the name it was chosen for only: a new name that matches someone asks again (review of #72)
+  const [differentFrom, setDifferentFrom] = useState<string | null>(null)
   const [requestId, setRequestId] = useState(newRequestId)
   const [err, setErr] = useState<unknown>()
   const [busy, setBusy] = useState(false)
-  const search = useDebounced(q.trim().replace(/\s+/g, ' '), 300)
+  // Arabic and Persian digits made ASCII here, so «١٢» is a code for byCode, the three-part check and the request alike
+  const search = useDebounced(asciiDigits(q).trim().replace(/\s+/g, ' '), 300)
+  const different = differentFrom !== null && differentFrom === search
   const byCode = /^\d+$/.test(search)
-  const { data: found, loading } = useApi<Found>(open && search ? `/attendance/site-day/laborers?${new URLSearchParams({ site_id: siteId, search })}` : null)
+  // keep: the last answer stays while the next search loads, so the form below does not unmount and jump under the finger (Youssef, 2026-11-19)
+  const { data: found, loading } = useApi<Found>(open && search ? `/attendance/site-day/laborers?${new URLSearchParams({ site_id: siteId, search })}` : null, { keep: true })
   const m = found?.match ?? null
   const reset = () => {
     setQ('')
@@ -48,7 +58,7 @@ export function AddLaborer({ siteId, siteName, canAdd, canPropose, onDone }: { s
     setWage('')
     setPhone('')
     setNid('')
-    setDifferent(false)
+    setDifferentFrom(null)
     setRequestId(newRequestId())
     setErr(undefined)
   }
@@ -91,12 +101,12 @@ export function AddLaborer({ siteId, siteName, canAdd, canPropose, onDone }: { s
   )
 
   let result = null
-  if (loading) result = <p className="text-sm text-muted-foreground">{t('siteDay.searching')}</p>
+  if (loading && !found) result = <p className="text-sm text-muted-foreground">{t('siteDay.searching')}</p>
   else if (found?.ambiguous) result = <p className="text-sm text-warning">{t('siteDay.sameName')}</p>
   else if (found && !m) result = <p className="text-sm text-muted-foreground">{t('siteDay.noMatches')}</p>
   else if (m) result = card(m)
   // a name already taken: the manager checked the match and says it is someone else
-  const offerDifferent = canPropose && !byCode && !different && ((found && (m || found.ambiguous)) || exists?.reason === 'name')
+  const offerDifferent = canPropose && !!search && !byCode && !different && ((found && (m || found.ambiguous)) || exists?.reason === 'name')
   const showNew = canPropose && search && !byCode && found && ((!m && !found.ambiguous) || different)
 
   return (
@@ -115,7 +125,7 @@ export function AddLaborer({ siteId, siteName, canAdd, canPropose, onDone }: { s
           </label>
           {search && <section aria-label={t('siteDay.matches')} aria-live="polite" className="grid gap-2">{result}</section>}
           {offerDifferent && (
-            <Button type="button" variant="outline" className="min-h-11" onClick={() => { setDifferent(true); setErr(undefined) }}>{t('siteDay.differentPerson')}</Button>
+            <Button type="button" variant="outline" className="min-h-11" onClick={() => { setDifferentFrom(search); setErr(undefined) }}>{t('siteDay.differentPerson')}</Button>
           )}
           {showNew && (
             <section aria-label={t('siteDay.newLaborer')} className="grid gap-3 rounded-lg border border-dashed p-3">

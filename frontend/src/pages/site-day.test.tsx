@@ -613,3 +613,75 @@ test('a long note shows on one line, cut short, so the card keeps its width', as
   expect(label).toHaveClass('truncate')
   expect(label.closest('button')).toHaveClass('max-w-full')
 })
+
+test('the filter box shows on a small site too and finds a code typed in Arabic digits (Youssef, 2026-11-19)', async () => {
+  const rows = [row('w1', 'Worker-1', 'day_laborer', 'workers', {}, {}), { ...row('w2', 'Worker-2', 'permanent_worker', 'workers'), employee: { id: 'w2', code: 12, name_ar: 'Worker-2', name_en: 'Worker-2', type: 'permanent_worker' } }]
+  routes([S1], { s1: rows })
+  render()
+  await enter()
+  const box = await screen.findByRole('searchbox', { name: 'ابحث بالاسم أو الرقم الوظيفي' })
+  await user.type(box, '١٢')
+  const names = () => within(screen.getByRole('list', { name: 'العاملون بالموقع' })).getAllByRole('group').map((g) => g.getAttribute('aria-label'))
+  expect(names()).toEqual(['Worker-2'])
+})
+
+test('«إضافة عامل يومية»: «١٢» is a code, so a match by code never offers «شخص آخر بنفس الاسم» (moved from #69)', async () => {
+  const search = vi.fn((url: string) => json(200, {
+    data: new URL(url, 'http://x').searchParams.get('search') === '12'
+      ? { match: { id: 'f1', code: 12, name_ar: 'سعيد علي حسن', name_en: null, site: null, here: false, can_add: true }, ambiguous: false }
+      : { match: null, ambiguous: false },
+  }))
+  routes([S1], { s1: S1_ROWS }, { 'GET /api/v1/attendance/site-day/laborers': search })
+  render()
+  await enter()
+  await user.click(await screen.findByRole('button', { name: 'إضافة عامل يومية' }))
+  const dialog = await screen.findByRole('dialog')
+  await user.type(within(dialog).getByRole('textbox', { name: /الرقم الوظيفي أو الاسم الكامل/ }), '١٢')
+  expect(await within(dialog).findByText('سعيد علي حسن')).toBeInTheDocument()   // searched as code 12
+  expect(within(dialog).queryByRole('button', { name: 'شخص آخر بنفس الاسم: إضافة عامل جديد' })).toBeNull()
+  expect(within(dialog).queryByRole('region', { name: 'عامل جديد' })).toBeNull()
+})
+
+test('«شخص آخر بنفس الاسم» holds for its name only: a new matching name asks again and sends no confirm_new (review of #72)', async () => {
+  const match = (name: string) => ({ id: name, code: 7, name_ar: name, name_en: null, site: null, here: false, can_add: false })
+  const create = vi.fn((_url: string, _init?: RequestInit) => json(201, { data: { id: 'n1', code: 9, name_ar: 'x' } }))
+  routes([S1], { s1: S1_ROWS }, {
+    'GET /api/v1/attendance/site-day/laborers': (url: string) => json(200, { data: { match: match(new URL(url, 'http://x').searchParams.get('search')!), ambiguous: false } }),
+    'POST /api/v1/attendance/site-day/laborers': create,
+  })
+  render()
+  await enter()
+  await user.click(await screen.findByRole('button', { name: 'إضافة عامل يومية' }))
+  const dialog = await screen.findByRole('dialog')
+  const box = within(dialog).getByRole('textbox', { name: /الرقم الوظيفي أو الاسم الكامل/ })
+  await user.type(box, 'محمد أحمد علي')
+  await user.click(await within(dialog).findByRole('button', { name: 'شخص آخر بنفس الاسم: إضافة عامل جديد' }))
+  expect(await within(dialog).findByRole('region', { name: 'عامل جديد' })).toBeInTheDocument()
+  await user.clear(box)
+  await user.type(box, 'محمد أحمد حسن')                                                // another name, another existing laborer
+  expect(await within(dialog).findByRole('button', { name: 'شخص آخر بنفس الاسم: إضافة عامل جديد' })).toBeInTheDocument()
+  await waitFor(() => expect(within(dialog).queryByRole('region', { name: 'عامل جديد' })).toBeNull())
+  expect(create).not.toHaveBeenCalled()
+})
+
+test('typing more of a name keeps the new-laborer form in place while the next search loads (no flash, Youssef 2026-11-19)', async () => {
+  let release: (r: Response) => void = () => {}
+  const search = vi.fn((url: string) => {
+    const q = new URL(url, 'http://x').searchParams.get('search')
+    if (q === 'محمد علي') return json(200, { data: { match: null, ambiguous: false } })
+    return new Promise<Response>((resolve) => { release = resolve }) as unknown as Response   // the second search stays pending
+  })
+  routes([S1], { s1: S1_ROWS }, { 'GET /api/v1/attendance/site-day/laborers': search })
+  render()
+  await enter()
+  await user.click(await screen.findByRole('button', { name: 'إضافة عامل يومية' }))
+  const dialog = await screen.findByRole('dialog')
+  const box = within(dialog).getByRole('textbox', { name: /الرقم الوظيفي أو الاسم الكامل/ })
+  await user.type(box, 'محمد علي')
+  expect(await within(dialog).findByRole('region', { name: 'عامل جديد' })).toBeInTheDocument()
+  await user.type(box, ' حسن')
+  await waitFor(() => expect(search).toHaveBeenCalledTimes(2))
+  expect(within(dialog).getByRole('region', { name: 'عامل جديد' })).toBeInTheDocument()   // still mounted while the request is pending
+  expect(within(dialog).queryByText('جارٍ البحث…')).toBeNull()
+  release(json(200, { data: { match: null, ambiguous: false } }))
+})

@@ -9,6 +9,7 @@ use App\Modules\Attendance\Domain\AttendanceRefused;
 use App\Modules\Attendance\Presentation\AlertMissingDaysCommand;
 use App\Modules\Audit\Infrastructure\SystemLog;
 use App\Modules\Audit\Presentation\PruneLogsCommand;
+use App\Modules\Employees\Domain\ClientRequestReused;
 use App\Modules\Employees\Domain\EmployeeArchived;
 use App\Modules\Employees\Domain\EmployeeCodeTaken;
 use App\Modules\Employees\Domain\EmployeeHasOpenItems;
@@ -117,7 +118,7 @@ return Application::configure(basePath: dirname(__DIR__))
             $request, $e->reason->status(), $e->reason->value, __('leave.refusal.'.$e->reason->value, $e->params), extra: $e->dates === [] ? [] : ['dates' => $e->dates],
         ));
 
-        $exceptions->dontReport([EmployeeCodeTaken::class, EmployeeArchived::class, EmployeeHasOpenItems::class, LaborerExists::class, FareRequestPending::class]);
+        $exceptions->dontReport([EmployeeCodeTaken::class, EmployeeArchived::class, EmployeeHasOpenItems::class, LaborerExists::class, FareRequestPending::class, ClientRequestReused::class]);
 
         // The message never names a national ID; `match` is the crew search's row, or null when HR is the contact.
         $exceptions->render(fn (LaborerExists $e, Request $request) => ApiEnvelope::error(
@@ -128,6 +129,10 @@ return Application::configure(basePath: dirname(__DIR__))
         // The waiting request goes with the refusal, so the screen opens it instead of sending a second one.
         $exceptions->render(fn (FareRequestPending $e, Request $request) => ApiEnvelope::error(
             $request, 409, 'fare_request_pending', __('errors.fare_request_pending'), extra: ['pending' => $e->pending],
+        ));
+
+        $exceptions->render(fn (ClientRequestReused $e, Request $request) => ApiEnvelope::error(
+            $request, 409, 'client_request_reused', __('errors.client_request_reused'),
         ));
 
         $exceptions->render(fn (EmployeeHasOpenItems $e, Request $request) => ApiEnvelope::error(

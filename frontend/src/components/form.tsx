@@ -142,7 +142,7 @@ export function TextField({ name, label, values, set, errs, ns = '', ...rest }: 
         rest.type === 'time' ? (
           <TimeInput {...p} label={label} disabled={rest.disabled} value={values[name] ?? ''} onChange={(v) => set(name, v)} />
         ) : (
-          <Input {...p} {...rest} value={values[name] ?? ''} onChange={(e) => set(name, rest.inputMode === 'decimal' || rest.inputMode === 'numeric' ? asciiDigits(e.target.value) : e.target.value)} />
+          <Input {...p} {...rest} value={values[name] ?? ''} onChange={(e) => set(name, e.target.value)} />
         )
       }
     </Field>

@@ -3,7 +3,9 @@
 namespace Tests\Feature;
 
 use App\Http\Middleware\NormalizeDigits;
+use App\Modules\Employees\Application\DayCrew;
 use App\Modules\Identity\Infrastructure\Eloquent\User;
+use App\Modules\Settings\Presentation\SettingController;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Http\Request;
 use Illuminate\Http\Response;
@@ -127,6 +129,11 @@ class SiteManagerWorkflowTest extends TestCase
         $this->assertSame(1, DB::table('employees')->where('name_ar', 'عامل ضغطتين سريعتين')->count());
         $this->assertSame(1, DB::table('employee_wage_proposals')->count());
         $this->assertSame(1, DB::table('notifications')->where('type', 'wage_proposed')->count());
+        // a replay that changes the wage or the phone is not the same request: refused, nothing changes (review of #72)
+        $this->propose(['name_ar' => 'عامل ضغطتين سريعتين', 'client_request_id' => $key, 'daily_wage' => '٣٦٠'])->assertStatus(409)->assertJsonPath('error.code', 'client_request_reused');
+        $this->propose(['name_ar' => 'عامل ضغطتين سريعتين', 'client_request_id' => $key, 'phone' => '01012345678'])->assertStatus(409);
+        $this->propose(['name_ar' => 'عامل ضغطتين سريعتين', 'client_request_id' => $key, 'daily_wage' => '350.000'])->assertCreated();   // the same wage, written another way
+        $this->assertSame('350.000000', (string) DB::table('employee_wage_proposals')->value('daily_wage'));
 
         $this->actingAs($this->other, 'api');   // another manager never replays someone else's answer
         $this->postJson('/api/v1/attendance/site-day/laborers', ['site_id' => $this->s3, 'name_ar' => 'عامل ضغطتين سريعتين', 'gender' => 'male', 'daily_wage' => '300', 'client_request_id' => $key])->assertNotFound();
@@ -211,8 +218,14 @@ class SiteManagerWorkflowTest extends TestCase
         $theirs = $this->postJson('/api/v1/attendance/site-day/laborers', ['site_id' => $this->s3, 'name_ar' => 'عامل المدير الثاني', 'gender' => 'male', 'daily_wage' => '300'])->assertCreated()->json('data');
 
         $this->actingAs($this->m, 'api');
-        $this->getJson('/api/v1/employees/wage-proposals/mine')->assertOk()->assertJsonCount(1, 'data')->assertJsonPath('data.0.id', $mine['proposal_id'])
+        $list = $this->getJson('/api/v1/employees/wage-proposals/mine')->assertOk()->assertJsonCount(1, 'data')->assertJsonPath('data.0.id', $mine['proposal_id'])
             ->assertJsonPath('data.0.site.name_ar', 'Site-1');
+        // no figure in the list (Youssef, 2026-11-19): not in the screen and not in the response; the opened request has it
+        foreach (['proposed_wage', 'approved_wage', 'refusal_reason'] as $key) {
+            $list->assertJsonMissingPath("data.0.{$key}");
+        }
+        $this->assertStringNotContainsString('350', $list->getContent());
+        $this->getJson("/api/v1/employees/wage-proposals/mine/{$mine['proposal_id']}")->assertOk()->assertJsonPath('data.proposed_wage', '350.000000');
         $this->getJson("/api/v1/employees/wage-proposals/mine/{$theirs['proposal_id']}")->assertNotFound();
         $this->getJson('/api/v1/employees/wage-proposals')->assertForbidden();   // HR's queue stays HR's
         $this->postJson("/api/v1/employees/wage-proposals/{$mine['proposal_id']}/approve", ['version' => 1])->assertForbidden();
@@ -287,6 +300,41 @@ class SiteManagerWorkflowTest extends TestCase
     }
 
     /** @param  array<string, mixed>  $over */
+    public function test_a_proposal_hrs_workbook_import_made_tells_no_one_that_their_wage_was_decided(): void
+    {
+        // HR's site-workbook import proposes inside HR's own request, so created_by is the HR user (review of #72)
+        $this->actingAs($this->hr, 'api');
+        $made = app(DayCrew::class)->propose(['name_ar' => 'عامل من الإكسيل', 'gender' => 'male', 'phone' => null], $this->s1, '2026-10-22', '300');
+        $this->postJson("/api/v1/employees/wage-proposals/{$made['proposal_id']}/approve", ['version' => 1])->assertOk();
+        $this->assertSame(0, DB::table('notifications')->whereIn('type', ['wage_approved', 'wage_refused'])->count());
+
+        $this->actingAs($this->m, 'api');   // a site manager's own proposal still hears back
+        $mine = $this->propose(['name_ar' => 'عامل المدير نفسه'])->assertCreated()->json('data');
+        $this->actingAs($this->hr, 'api');
+        $this->postJson("/api/v1/employees/wage-proposals/{$mine['proposal_id']}/refuse", ['version' => 1, 'reason' => 'سبب'])->assertOk();
+        $this->assertSame(1, DB::table('notifications')->where(['type' => 'wage_refused', 'user_id' => $this->m->id])->count());
+    }
+
+    public function test_a_site_manager_reads_the_employee_total_only(): void
+    {
+        $this->homeSite($this->employee('permanent_worker'), $this->s1, '2026-01-01');
+        $this->actingAs($this->m, 'api');
+        $this->assertSame(['total' => 1], $this->getJson('/api/v1/employees/summary')->assertOk()->json('data'));
+    }
+
+    public function test_every_settings_rule_and_the_range_and_search_keys_read_any_digits(): void
+    {
+        $key = (new \ReflectionClassConstant(NormalizeDigits::class, 'NUMERIC_KEY'))->getValue();
+        // every numeric settings rule (the weekly days off are weekday names, not numbers)
+        $numeric = array_keys(array_filter(SettingController::RULES, fn (string $rule) => $rule !== (new \ReflectionClassConstant(SettingController::class, 'DAYS'))->getValue()));
+        foreach ([...$numeric, 'from', 'to', 'q', 'returns_on', 'expires_at'] as $name) {
+            $this->assertSame(1, preg_match($key, $name), "{$name} is not normalized");
+        }
+        foreach (['name_ar', 'note', 'reason', 'password', 'email'] as $name) {
+            $this->assertSame(0, preg_match($key, $name), "{$name} must stay as typed");
+        }
+    }
+
     private function propose(array $over = []): TestResponse
     {
         return $this->postJson('/api/v1/attendance/site-day/laborers', ['site_id' => $this->s1, 'name_ar' => 'عامل جديد أول', 'gender' => 'male', 'daily_wage' => '350', ...$over]);

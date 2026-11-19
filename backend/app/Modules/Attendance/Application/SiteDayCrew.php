@@ -9,6 +9,7 @@ use App\Modules\Attendance\Domain\AttendanceRefused;
 use App\Modules\Attendance\Infrastructure\Eloquent\AttendanceDay;
 use App\Modules\Employees\Application\DayCrew;
 use App\Modules\Employees\Application\EmployeeReach;
+use App\Modules\Employees\Application\EmployeeRoster;
 use App\Modules\Employees\Domain\LaborerExists;
 use App\Modules\Identity\Application\Rbac\PermissionHolders;
 use App\Modules\Notifications\Application\Notifier;
@@ -28,6 +29,7 @@ final class SiteDayCrew
         private readonly SiteService $sites,
         private readonly Notifier $notifier,
         private readonly PermissionHolders $holders,
+        private readonly EmployeeRoster $roster,
     ) {}
 
     /**
@@ -108,7 +110,7 @@ final class SiteDayCrew
         $this->mySites($siteId, $managerId);
         $today = EffectiveDays::today();
         $key = $data['client_request_id'] ?? null;
-        if ($key !== null && ($first = $this->crew->byClientRequest($key, $managerId)) !== null) {
+        if ($key !== null && ($first = $this->crew->byClientRequest($key, $managerId, $data)) !== null) {
             return $first;
         }
         $nationalId = $data['national_id'] ?? null;
@@ -126,7 +128,7 @@ final class SiteDayCrew
             $made = $this->crew->propose($identity, $siteId, $today, $data['daily_wage'], $key);
         } catch (UniqueConstraintViolationException $e) {
             // Lost a race: the same form id (replay the winner's answer) or the same national ID (refuse as above).
-            if ($key !== null && ($first = $this->crew->byClientRequest($key, $managerId)) !== null) {
+            if ($key !== null && ($first = $this->crew->byClientRequest($key, $managerId, $data)) !== null) {
                 return $first;
             }
             if ($nationalId !== null) {
@@ -149,7 +151,7 @@ final class SiteDayCrew
     /** Throws when an employee already holds $nationalId: their crew-search row when this manager reaches them, else none (HR is the contact). */
     private function refuseTakenNationalId(string $nationalId, string $siteId, string $managerId, string $today): void
     {
-        $holder = $this->crew->nationalIdHolder($nationalId);
+        $holder = $this->roster->idWithNationalId($nationalId);
         if ($holder === null) {
             return;
         }

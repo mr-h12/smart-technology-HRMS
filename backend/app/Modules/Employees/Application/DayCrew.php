@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Modules\Employees\Application;
 
+use App\Modules\Employees\Domain\ClientRequestReused;
 use App\Modules\Employees\Domain\EffectiveDated;
 use App\Modules\Employees\Domain\EmployeeType;
 use App\Modules\Employees\Domain\WageProposalStatus;
@@ -11,15 +12,18 @@ use App\Modules\Employees\Infrastructure\Eloquent\DayCrewChange;
 use App\Modules\Employees\Infrastructure\Eloquent\Employee;
 use App\Modules\Employees\Infrastructure\Eloquent\EmployeeSiteAssignment;
 use App\Modules\Employees\Infrastructure\Eloquent\EmployeeWageProposal;
+use App\Modules\Identity\Application\Rbac\PermissionHolders;
 use App\Modules\Identity\Infrastructure\Eloquent\User;
 use App\Modules\Notifications\Application\Notifier;
 use App\Modules\Sites\Application\SiteService;
 use App\Support\Database\ConcurrencyConflict;
 use App\Support\Http\Paginates;
+use App\Support\Money\Decimal;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\ModelNotFoundException;
 use Illuminate\Database\UniqueConstraintViolationException;
+use Illuminate\Support\Arr;
 use Illuminate\Support\Facades\DB;
 
 /**
@@ -33,7 +37,7 @@ final class DayCrew
 {
     use Paginates;
 
-    public function __construct(private readonly SiteService $sites, private readonly Notifier $notifier) {}
+    public function __construct(private readonly SiteService $sites, private readonly Notifier $notifier, private readonly PermissionHolders $holders) {}
 
     /**
      * The site a proposal's laborer was added to: their first crew change, kept after a refusal took them off every crew (soft-deleted).
@@ -241,7 +245,9 @@ final class DayCrew
         $decided = $this->decideInTransaction($proposalId, $version, $approve, $wage, $hrId, $today, $reason);
         // After the commit, so a rolled-back decision tells nobody. Ids only, never the wage or the reason (§9; owner, 2026-11-19): the
         // site manager reads both on their request. notifyOnce keys on the proposal, so a retry adds nothing.
-        if ($decided['proposed_by'] !== null) {
+        // Only a site manager's own proposal: HR's site-workbook import also proposes, inside HR's request, and its importer has no
+        // «مقترحات الأجور» to open (review of #72).
+        if ($decided['proposed_by'] !== null && in_array($decided['proposed_by'], $this->holders->userIds('employee.propose_laborer.own'), true)) {
             $this->notifier->notifyOnce($decided['proposed_by'], $approve ? 'wage_approved' : 'wage_refused', $today, ['employee_id' => $decided['employee_id'], 'proposal_id' => $proposalId], $proposalId);
         }
 
@@ -282,11 +288,13 @@ final class DayCrew
 
     /**
      * The first answer to a site manager's "new day laborer" request with this form id, for a double tap or a retry; null when there is
-     * none yet. Another user's id is never replayed (a 404 for them).
+     * none yet. Another user's id is never replayed (a 404 for them). A replay is the same request: when its name, wage or phone differ
+     * from what was saved, it is refused (409 client_request_reused) instead of answering as if the correction was saved (review of #72).
      *
+     * @param  array{name_ar?: string, daily_wage?: string, phone?: ?string}|null  $data  the replayed request
      * @return array{id: string, code: int, name_ar: string, proposal_id: string}|null
      */
-    public function byClientRequest(string $clientRequestId, string $managerId): ?array
+    public function byClientRequest(string $clientRequestId, string $managerId, ?array $data = null): ?array
     {
         $p = EmployeeWageProposal::with('employee')->where('client_request_id', $clientRequestId)->first();
         if ($p === null) {
@@ -294,6 +302,13 @@ final class DayCrew
         }
         if ($p->created_by !== $managerId || $p->employee === null) {
             throw new ModelNotFoundException;
+        }
+        if ($data !== null && (
+            (isset($data['name_ar']) && $data['name_ar'] !== (string) $p->employee->name_ar)
+            || (isset($data['daily_wage']) && bccomp(Decimal::of($data['daily_wage'], 'daily_wage'), Decimal::of((string) $p->daily_wage, 'daily_wage'), 6) !== 0)
+            || (array_key_exists('phone', $data) && ($data['phone'] ?? null) !== $p->employee->phone)
+        )) {
+            throw new ClientRequestReused;
         }
 
         return ['id' => (string) $p->employee_id, 'code' => (int) $p->employee->code, 'name_ar' => (string) $p->employee->name_ar, 'proposal_id' => (string) $p->id];
@@ -305,14 +320,6 @@ final class DayCrew
         $e = Employee::withTrashed()->findOrFail($employeeId);
 
         return ['id' => (string) $e->id, 'code' => (int) $e->code, 'name_ar' => (string) $e->name_ar, 'name_en' => $e->name_en];
-    }
-
-    /** The employee holding this national ID, archived or deleted ones too (the column is unique across them all); null when none. */
-    public function nationalIdHolder(string $nationalId): ?string
-    {
-        $id = Employee::withTrashed()->where('national_id', $nationalId)->value('id');
-
-        return $id === null ? null : (string) $id;
     }
 
     /**
@@ -327,7 +334,8 @@ final class DayCrew
             ->paginate(min(max($perPage, 1), 100), ['*'], 'page', max($page, 1));
 
         return [
-            'data' => $this->named(array_values($p->getCollection()->map(fn (EmployeeWageProposal $m) => $this->outcome($m))->all())),
+            // no figure in the list (Youssef, 2026-11-19): the amounts come with the opened request (mineOne), so the browser never holds them
+            'data' => $this->named(array_values($p->getCollection()->map(fn (EmployeeWageProposal $m) => Arr::except($this->outcome($m), ['proposed_wage', 'approved_wage', 'refusal_reason']))->all())),
             'pagination' => [
                 'page' => $p->currentPage(), 'per_page' => $p->perPage(), 'total' => $p->total(), 'total_pages' => $p->lastPage(),
                 'has_next_page' => $p->hasMorePages(), 'has_previous_page' => $p->currentPage() > 1,
