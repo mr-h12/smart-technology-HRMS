@@ -9,6 +9,7 @@ use App\Modules\Attendance\Domain\AttendanceRefused;
 use App\Modules\Attendance\Presentation\AlertMissingDaysCommand;
 use App\Modules\Audit\Infrastructure\SystemLog;
 use App\Modules\Audit\Presentation\PruneLogsCommand;
+use App\Modules\Employees\Domain\ClientRequestReused;
 use App\Modules\Employees\Domain\EmployeeArchived;
 use App\Modules\Employees\Domain\EmployeeCodeTaken;
 use App\Modules\Employees\Domain\EmployeeHasOpenItems;
@@ -116,12 +117,16 @@ return Application::configure(basePath: dirname(__DIR__))
             $request, $e->reason->status(), $e->reason->value, __('leave.refusal.'.$e->reason->value, $e->params), extra: $e->dates === [] ? [] : ['dates' => $e->dates],
         ));
 
-        $exceptions->dontReport([EmployeeCodeTaken::class, EmployeeArchived::class, EmployeeHasOpenItems::class, LaborerExists::class]);
+        $exceptions->dontReport([EmployeeCodeTaken::class, EmployeeArchived::class, EmployeeHasOpenItems::class, LaborerExists::class, ClientRequestReused::class]);
 
         // The message never names a national ID; `match` is the crew search's row, or null when HR is the contact.
         $exceptions->render(fn (LaborerExists $e, Request $request) => ApiEnvelope::error(
             $request, 409, 'laborer_exists', __('errors.laborer_exists.'.($e->match === null && ! $e->ambiguous && $e->reason === LaborerExists::NATIONAL_ID ? 'national_id_hr' : ($e->ambiguous ? 'name_ambiguous' : $e->reason))),
             extra: ['reason' => $e->reason, 'match' => $e->match, 'ambiguous' => $e->ambiguous],
+        ));
+
+        $exceptions->render(fn (ClientRequestReused $e, Request $request) => ApiEnvelope::error(
+            $request, 409, 'client_request_reused', __('errors.client_request_reused'),
         ));
 
         $exceptions->render(fn (EmployeeHasOpenItems $e, Request $request) => ApiEnvelope::error(

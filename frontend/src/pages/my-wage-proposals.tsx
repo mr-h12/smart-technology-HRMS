@@ -11,18 +11,17 @@ import { Card } from '@/components/ui/card'
 import { Dialog, DialogBody, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { useApi, useList } from '@/lib/query'
 
-/** A row of `GET /employees/wage-proposals/mine`: a daily wage this site manager proposed, and once HR decided, its outcome. */
-export type MyProposal = {
+/** A row of `GET /employees/wage-proposals/mine`: no figure in the list (Youssef, 2026-11-19); the amounts come with the opened request. */
+export type MyProposalRow = {
   id: string
   status: 'pending' | 'approved' | 'refused'
-  proposed_wage: string
-  approved_wage: string | null
-  refusal_reason: string | null
   created_at: string
   decided_at: string | null
   site: { id: string; name_ar: string; name_en: string | null } | null
   employee: { id: string; code: number; name_ar: string; name_en: string | null }
 }
+/** `GET /employees/wage-proposals/mine/{id}`: one proposal with the wage proposed and, once HR decided, the approved wage or the reason. */
+export type MyProposal = MyProposalRow & { proposed_wage: string; approved_wage: string | null; refusal_reason: string | null }
 
 const STATUS: Record<MyProposal['status'], BadgeVariant> = { pending: 'warning', approved: 'success', refused: 'danger' }
 
@@ -33,12 +32,11 @@ const STATUS: Record<MyProposal['status'], BadgeVariant> = { pending: 'warning',
  */
 export function MyWageProposalsPage() {
   const { t, i18n } = useTranslation()
-  const money = useMoney()
   const time = useCairoTime()
   const [params, setParams] = useSearchParams()
   const [page, setPage] = useState(1)
   const { rows, total, err, loading } = useList(`/employees/wage-proposals/mine?${new URLSearchParams({ page: String(page), per_page: '20' })}`)
-  const list = rows as MyProposal[]
+  const list = rows as MyProposalRow[]
   const id = params.get('proposal')
 
   return (
@@ -46,7 +44,7 @@ export function MyWageProposalsPage() {
       <PageHeader title={t('wages.mine.page')} description={t('wages.mine.description')} />
       {id && <ProposalDialog id={id} close={() => setParams({}, { replace: true })} />}
       <Card className="overflow-hidden">
-        <DataList<MyProposal>
+        <DataList<MyProposalRow>
           label={t('wages.mine.list')}
           rows={list}
           rowKey={(r) => r.id}
@@ -60,9 +58,7 @@ export function MyWageProposalsPage() {
           status={{ header: t('common.status'), cell: (r) => <StatusBadge variant={STATUS[r.status]} label={t(`wages.mine.status.${r.status}`)} /> }}
           fields={[
             { header: t('wages.site'), tableFrom: 'md', cell: (r) => (r.site ? localName(r.site, i18n.language) : '—') },
-            { header: t('wages.proposedAt'), tableFrom: 'lg', cell: (r) => time(r.created_at) },
-            { header: t('wages.proposed'), cell: (r) => money(r.proposed_wage) },
-            { header: t('wages.mine.approvedWage'), cell: (r) => (r.approved_wage ? money(r.approved_wage) : '—') },
+            { header: t('wages.proposedAt'), cell: (r) => time(r.created_at) },
           ]}
         />
       </Card>

@@ -16,7 +16,7 @@ use Symfony\Component\HttpFoundation\Response;
  */
 final class NormalizeDigits
 {
-    private const NUMERIC_KEY = '/^(?:daily_wage|salary|raise|insured_basic|amount|advance_request|advance_amount|phone|national_id|insurance_no|code|search|value|bonus|deduction|negligence|advances|income_tax|insurance_employee|insurance_company|entitlement|opening_used|opening_casual_used|version|page|per_page|year|date|in_time|out_time|scheduled_in|scheduled_out|effective_from)$|_(?:minutes|days|hours|multiplier|percent|amount|start|end|until|date)$/D';
+    private const NUMERIC_KEY = '/^(?:from|to|q|returns_on|expires_at|daily_wage|salary|raise|insured_basic|amount|advance_request|advance_amount|phone|national_id|insurance_no|code|search|value|bonus|deduction|negligence|advances|income_tax|insurance_employee|insurance_company|entitlement|opening_used|opening_casual_used|version|page|per_page|year|date|in_time|out_time|scheduled_in|scheduled_out|effective_from)$|_(?:minutes|days|hours|multiplier|percent|amount|start|end|until|date)$|^(?:lateness_multiplier_|leave_days_)/D';
 
     /**
      * @param  Closure(Request): Response  $next

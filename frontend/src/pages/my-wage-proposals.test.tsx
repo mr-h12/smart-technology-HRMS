@@ -25,16 +25,26 @@ const refused = row({ id: 'p3', status: 'refused', refusal_reason: 'الأجر �
 const render = (path = '/my-wage-proposals') =>
   renderWithAuth(<Routes><Route path="my-wage-proposals" element={<MyWageProposalsPage />} /></Routes>, ['employee.propose_laborer.own'], { path })
 
-test('the site manager sees each proposal with its status, the wage proposed and the wage HR approved', async () => {
-  mockFetch({ 'GET /api/v1/employees/wage-proposals/mine': () => json(200, { data: [row(), approved, refused], meta: { pagination: { ...pagination, total: 3 } } }) })
+test('the list shows each proposal with its status and no wage figure; the opened request has the figures (Youssef, 2026-11-19)', async () => {
+  const strip = ({ proposed_wage: _p, approved_wage: _a, refusal_reason: _r, ...rest }: ReturnType<typeof row>) => rest
+  mockFetch({
+    'GET /api/v1/employees/wage-proposals/mine': () => json(200, { data: [row(), approved, refused].map(strip), meta: { pagination: { ...pagination, total: 3 } } }),
+    'GET /api/v1/employees/wage-proposals/mine/p2': () => json(200, { data: approved }),
+  })
   render()
   const pending = (await screen.findByText('عامل جديد أول')).closest('tr')!
   expect(pending).toHaveTextContent('قيد المراجعة')
-  expect(pending).toHaveTextContent('350.50')
   const ok = screen.getByText('عامل جديد ثان').closest('tr')!
   expect(ok).toHaveTextContent('معتمد')
-  expect(ok).toHaveTextContent('325.25')
   expect(screen.getByText('عامل جديد ثالث').closest('tr')!).toHaveTextContent('مرفوض')
+  const table = screen.getByRole('table')
+  expect(table).not.toHaveTextContent('350.50')
+  expect(table).not.toHaveTextContent('325.25')
+  await user.click(screen.getByRole('link', { name: /عامل جديد ثان/ }))
+  const dialog = await screen.findByRole('dialog', { name: 'طلب أجر يومي' })
+  expect(await within(dialog).findByText('الأجر المعتمد')).toBeInTheDocument()
+  expect(dialog).toHaveTextContent('325.25')
+  expect(dialog).toHaveTextContent('350.50')
 })
 
 test('a refused request shows HR\'s reason, and an approved one its approved wage', async () => {

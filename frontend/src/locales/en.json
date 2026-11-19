@@ -920,22 +920,22 @@
   },
   "wages": {
     "mine": {
-        "page": "Wage proposals",
-        "description": "The daily wages you proposed for new day laborers, and HR's decision on each.",
-        "list": "Wage proposals",
-        "empty": "You have not proposed a wage yet.",
-        "request": "Daily wage request",
-        "approvedWage": "Approved wage",
-        "decidedAt": "Decided on",
-        "reason": "Reason for refusing",
-        "gone": "This request is not available.",
-        "loading": "Loading…",
-        "status": {
-          "pending": "Pending",
-          "approved": "Approved",
-          "refused": "Refused"
-        }
-      },
+      "page": "Wage proposals",
+      "description": "The daily wages you proposed for new day laborers, and HR's decision on each.",
+      "list": "Wage proposals",
+      "empty": "You have not proposed a wage yet.",
+      "request": "Daily wage request",
+      "approvedWage": "Approved wage",
+      "decidedAt": "Decided on",
+      "reason": "Reason for refusing",
+      "gone": "This request is not available.",
+      "loading": "Loading…",
+      "status": {
+        "pending": "Pending",
+        "approved": "Approved",
+        "refused": "Refused"
+      }
+    },
     "page": "Proposed wages",
     "description": "A daily wage a site manager proposed for a day laborer they added. It is not paid until you approve it.",
     "list": "Proposed wages waiting",
