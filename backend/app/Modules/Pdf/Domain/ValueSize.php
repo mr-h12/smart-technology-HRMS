@@ -8,10 +8,12 @@ namespace App\Modules\Pdf\Domain;
 final class ValueSize
 {
     /**
+     * @template T of array{0: float, 1: int, 2?: float}
+     *
      * @param  array<string, int>  $lengths  characters per value
      * @param  non-empty-array<string, int>  $limits  the printable limit per value
-     * @param  non-empty-list<array{0: float, 1: int, 2?: float}>  $steps  share bound, size, optional line spacing
-     * @return array{0: float, 1: int, 2?: float} the first step whose bound holds the fullest share, else the last
+     * @param  non-empty-list<T>  $steps  share bound, size, optional line spacing
+     * @return T the first step whose bound holds the fullest share, else the last
      */
     public static function byShare(array $lengths, array $limits, array $steps): array
     {

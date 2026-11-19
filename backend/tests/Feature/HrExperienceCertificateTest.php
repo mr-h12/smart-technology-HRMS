@@ -273,7 +273,6 @@ class HrExperienceCertificateTest extends TestCase
         return $this->create($employee)->assertAccepted()->json('data.id');
     }
 
-    /** The HTML the worker hands the renderer for the row. */
     private function html(string $id): string
     {
         $html = '';
@@ -288,7 +287,6 @@ class HrExperienceCertificateTest extends TestCase
         return $html;
     }
 
-    /** The page's text as a reader sees it: the body without tags, each run of whitespace one space. */
     private function text(string $html): string
     {
         return (string) preg_replace('/\s+/u', ' ', html_entity_decode(strip_tags(substr($html, (int) strpos($html, '<body>')))));

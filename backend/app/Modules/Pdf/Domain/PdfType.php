@@ -28,7 +28,7 @@ enum PdfType: string
         return $this === self::AdvanceRequest;
     }
 
-    /** The layout new rows of this type are made with. A row renders, is signed and is retried only in its own version. */
+    /** The layout new rows of this type are made with. */
     public function templateVersion(): int
     {
         return match ($this) {

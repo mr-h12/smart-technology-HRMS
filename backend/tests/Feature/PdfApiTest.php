@@ -813,7 +813,6 @@ final class PdfApiTest extends TestCase
         return (int) DB::table('hr_form_exports')->where('id', $id)->value('template_version');
     }
 
-    /** The row as one issued before its type's current layout. */
     private function oldLayout(string $id): void
     {
         $type = PdfType::from((string) DB::table('hr_form_exports')->where('id', $id)->value('form_type'));

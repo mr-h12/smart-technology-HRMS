@@ -304,7 +304,6 @@ final class PdfExports
         }
     }
 
-    /** A row renders, is signed and is retried only in the layout version it was made for (the awaiting filter says it in SQL). */
     private static function currentLayout(stdClass $row): bool
     {
         return (int) $row->template_version === PdfType::from((string) $row->form_type)->templateVersion();

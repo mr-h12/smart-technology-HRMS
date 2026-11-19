@@ -7,7 +7,6 @@ use Illuminate\Support\Facades\Blade;
 use PHPUnit\Framework\Attributes\DataProvider;
 use Tests\TestCase;
 
-/** The layout rules of the forms on the page shell, as a build failure: a value never moves a neighbour, dots come only from components. */
 final class HrFormViewsTest extends TestCase
 {
     /**

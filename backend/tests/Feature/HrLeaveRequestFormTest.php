@@ -300,11 +300,25 @@ final class HrLeaveRequestFormTest extends TestCase
 
     public static function recordValues(): array
     {
-        return [['name_ar', 'employees', 90], ['department', 'employees', 90], ['note', 'leave_requests', 360]];
+        return [
+            ['name_ar', 'employees', 90, [
+                'ar' => 'قيمة «الاسم بالعربية» أطول مما يتسع له نموذج طلب الإجازة (90 حرفًا على الأكثر). اختصرها في السجل ثم أنشئ النموذج.',
+                'en' => 'Arabic name is longer than the leave form can print (90 characters at most). Shorten it in the record, then generate the form.',
+            ]],
+            ['department', 'employees', 90, [
+                'ar' => 'قيمة «القسم» أطول مما يتسع له نموذج طلب الإجازة (90 حرفًا على الأكثر). اختصرها في السجل ثم أنشئ النموذج.',
+                'en' => 'Department is longer than the leave form can print (90 characters at most). Shorten it in the record, then generate the form.',
+            ]],
+            ['note', 'leave_requests', 360, [
+                'ar' => 'ملاحظة الطلب أطول مما يتسع له نموذج طلب الإجازة (360 حرفًا على الأكثر). لا يمكن تعديل ملاحظة طلب بعد تقديمه، لذلك لا يمكن إنشاء نموذج هذا الطلب.',
+                'en' => "The request's note is longer than the leave form can print (360 characters at most). A filed request's note cannot be changed, so this request's form cannot be generated.",
+            ]],
+        ];
     }
 
+    /** @param  array<string, string>  $messages  by locale */
     #[DataProvider('recordValues')]
-    public function test_a_name_or_department_over_90_or_a_stored_note_over_360_refuses_generation_with_no_row(string $column, string $table, int $limit): void
+    public function test_a_name_or_department_over_90_or_a_stored_note_over_360_refuses_generation_with_no_row(string $column, string $table, int $limit, array $messages): void
     {
         $this->signIn('hr');
         $employee = $this->employee('office', '2020-01-01');
@@ -314,9 +328,10 @@ final class HrLeaveRequestFormTest extends TestCase
         $this->generate($request);
         DB::table($table)->where('id', $row)->update([$column => str_repeat('ب', $limit + 1)]);
 
-        $this->create($request)->assertUnprocessable()->assertJsonPath('error.code', 'validation_failed')
-            ->assertJsonPath('error.details.0.field', $column)
-            ->assertJsonPath('error.details.0.message', __('errors.leave_form_value_too_long', ['attribute' => __("validation.attributes.{$column}", [], 'en'), 'max' => $limit], 'en'));
+        foreach ($messages as $locale => $message) {
+            $this->withHeader('Accept-Language', $locale)->create($request)->assertUnprocessable()->assertJsonPath('error.code', 'validation_failed')
+                ->assertJsonPath('error.details.0.field', $column)->assertJsonPath('error.details.0.message', $message);
+        }
         $this->assertSame(1, DB::table('hr_form_exports')->count());
         $this->assertSame(1, (int) DB::table('hr_form_serial_counters')->where('form_type', 'leave_request')->value('last_serial'));
     }
@@ -359,7 +374,6 @@ final class HrLeaveRequestFormTest extends TestCase
         return $this->create($request, $key, $fields)->assertAccepted()->json('data.id');
     }
 
-    /** The HTML the worker hands the renderer for the row. */
     private function html(string $id): string
     {
         $html = '';

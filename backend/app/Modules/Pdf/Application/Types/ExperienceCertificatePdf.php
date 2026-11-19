@@ -19,7 +19,7 @@ use stdClass;
 
 final class ExperienceCertificatePdf implements PdfDocument
 {
-    /** The record limits of the three values; the certificate refuses nothing, they only pick the size step. */
+    /** The record limits of the three values; they pick the size step. */
     public const LIMITS = ['name_ar' => 255, 'department' => 255, 'job_title' => 160];
 
     /** The fullest value's share of its limit, up to; the value size in pt; the body's line spacing in the Word file's terms. */
@@ -66,7 +66,6 @@ final class ExperienceCertificatePdf implements PdfDocument
         $start = Carbon::parse($snapshot['hire_date'], 'Africa/Cairo');
         $end = $snapshot['termination_date'] === null ? $issued : Carbon::parse($snapshot['termination_date'], 'Africa/Cairo');
         $lengths = array_map(fn (string $key): int => mb_strlen((string) $snapshot[$key]), array_combine(array_keys(self::LIMITS), array_keys(self::LIMITS)));
-        /** @var array{0: float, 1: int, 2: float} $step every step of SIZES has a line spacing */
         $step = ValueSize::byShare($lengths, self::LIMITS, self::SIZES);
         [, $size, $spacing] = $step;
 

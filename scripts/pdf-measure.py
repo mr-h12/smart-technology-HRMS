@@ -1,16 +1,16 @@
 #!/usr/bin/python3
 """True-point measurement of one-page form PDFs (Poppler + /usr/bin/python3's Pillow; nothing is stretched).
 
-  measure.py table PDF
+  pdf-measure.py table PDF
       page size, page count, fonts; every text word, image and vector shape with its box in PDF points
       (x from the left edge, cx = box centre from the page's vertical centre line, y from the top);
       the white between neighbouring words on each row.
-  measure.py compare BASELINE CANDIDATE [--out DIR] [--tol 0.1] [--yscale 1] [--dpi 100]
+  pdf-measure.py compare BASELINE CANDIDATE [--out DIR] [--tol 0.1] [--yscale 1] [--dpi 100]
       page size and count, fonts, each element's shift, changed white between neighbours, raster diff.
       x is compared from each page's centre line, y from each page's top; --yscale multiplies the baseline's
       y (only for the US Letter company form, which the approved build placed at y * 841.92 / 792).
-      Exit 0 when nothing differs beyond --tol and no pixel differs, else 1.
-  measure.py check FORM PDF
+      Exit 0 when nothing differs beyond --tol and no pixel differs, else 1 (also when no Pillow ran the pixel compare).
+  pdf-measure.py check FORM PDF
       the approved layout rules a copy with no approved twin must keep (FORM is leave-request or experience-certificate):
       no two words of a row closer than 1 pt, except a value and its leader; on the leave request, after each typed
       value on a hand-written row no dot or at least five, the last dot's box edge on the rows' left edge and 0.7 to 0.9 pt
@@ -229,7 +229,7 @@ def compare(base, cand, out, tol, yscale, dpi):
         from PIL import Image, ImageChops
     except ImportError:
         print('\nRASTER  not run: Pillow is not importable from %s' % sys.executable)
-        return diffs
+        return diffs, False
     with tempfile.TemporaryDirectory() as d:
         for n, p in (('b', base), ('c', cand)):
             subprocess.run(['pdftoppm', '-f', '1', '-l', '1', '-r', str(dpi), '-gray', '-png', '-singlefile', p, '%s/%s' % (d, n)], check=True)
@@ -250,7 +250,7 @@ def compare(base, cand, out, tol, yscale, dpi):
         if bbox:
             s = 72 / dpi
             print('        changed area x %.1f..%.1f y %.1f..%.1f pt (x from the left of the wider page)' % (bbox[0] * s, bbox[2] * s, bbox[1] * s, bbox[3] * s))
-    return diffs
+    return diffs, True
 
 
 # The approved renders' numbers (leave on 55aebe3, certificate on 1c247fd), in true points from the page's left edge.
@@ -350,6 +350,7 @@ if __name__ == '__main__':
     else:
         if len(a.pdfs) != 2:
             ap.error('compare takes a baseline and a candidate')
-        n = compare(a.pdfs[0], a.pdfs[1], a.out, a.tol, a.yscale, a.dpi)
-        print('\nRESULT  %s' % ('identical within %.2f pt and 0 pixels' % a.tol if n == 0 else '%d difference(s)' % n))
-        sys.exit(1 if n else 0)
+        n, raster = compare(a.pdfs[0], a.pdfs[1], a.out, a.tol, a.yscale, a.dpi)
+        result = '%d difference(s)' % n if n else 'identical within %.2f pt' % a.tol + (' and 0 pixels' if raster else '')
+        print('\nRESULT  %s%s' % (result, '' if raster else '; pixel compare not run'))
+        sys.exit(1 if n or not raster else 0)

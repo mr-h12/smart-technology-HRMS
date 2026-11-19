@@ -65,11 +65,12 @@ final class LeaveRequestPdf implements PdfDocument
             ?? throw new ModelNotFoundException;
         $employeeId = (string) $request->employee_id;
         $employee = $this->employees->show($employeeId, $scope);
-        // A value typed elsewhere (the employee record, the request's note) is refused here; HR shortens the record.
+        // A value typed elsewhere (the employee record, the request's note) is refused here; HR can shorten the record, never a filed note.
         foreach (['name_ar' => [self::LIMITS['name_ar'], $employee['name_ar']], 'department' => [self::LIMITS['department'], $employee['department']],
             'note' => [self::LIMITS['reason'], $request->note]] as $field => [$limit, $value]) {
             if (mb_strlen((string) $value) > $limit) {
-                throw ValidationException::withMessages([$field => __('errors.leave_form_value_too_long', ['attribute' => __("validation.attributes.{$field}"), 'max' => $limit])]);
+                $key = $field === 'note' ? 'errors.leave_form_note_too_long' : 'errors.leave_form_value_too_long';
+                throw ValidationException::withMessages([$field => __($key, ['attribute' => __("validation.attributes.{$field}"), 'max' => $limit])]);
             }
         }
         $year = (int) substr((string) $request->from_date, 0, 4);
