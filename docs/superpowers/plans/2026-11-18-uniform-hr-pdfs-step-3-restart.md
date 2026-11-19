@@ -349,7 +349,7 @@ These stay unproven until slice 1 renders.
 | Fixture data differs from the twins (dates, IDs, fixture strings, serials) | Steps 1, 3, 4, 6 | `ELEMENTS` lines that show changed text. Fix `CASES`, never the tolerance. |
 | The derived leader count renders differently from 30 periods | Step 4 | The compare on every twin with a typed value. Fall back to 30. |
 | `text-wrap: pretty` and `text-justify: inter-character` change with Chromium | Every lane | The version check in the boot recipe. A rebuilt `hrms-php` image stops the run. |
-| `pdf-measure.py` runs under a Python without Pillow and prints `RASTER not run` | Step 1, every lane | The smoke calls `/usr/bin/python3`. A lane that prints `RASTER not run` fails. |
+| `pdf-measure.py` runs under a Python without Pillow, prints `RASTER not run` and exits 1 | Step 1, every lane | The smoke calls `/usr/bin/python3`. A lane that prints `RASTER not run` fails. |
 | Slice 2 edits a shared component and moves the leave request | Step 6 | Lane 9 of slice 2 renders all 32 leave twins again. |
 | An old worker refuses every version 2 row after deploy | Deploy | The deploy note restarts `worker-pdf`. |
 | Old leave notes over 360 or names over 90 now answer 422 | Deploy | The deploy note counts them before HR meets them. |

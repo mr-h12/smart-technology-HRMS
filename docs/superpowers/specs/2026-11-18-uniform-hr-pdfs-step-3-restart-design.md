@@ -185,7 +185,8 @@ to «عشرة أشهر», 11 «أحد عشر شهرًا». Years and months join
 
 ### Lang
 
-`lang/ar/errors.php` and `lang/en/errors.php`: `leave_form_value_too_long`, naming the field and the limit.
+`lang/ar/errors.php` and `lang/en/errors.php`: `leave_form_value_too_long`, naming the field and the limit, and
+`leave_form_note_too_long` for the stored note, which cannot be edited.
 
 ### Views
 
@@ -327,7 +328,8 @@ Deploy note (PR body, run by whoever deploys):
 2. After the deploy, run `docker compose restart worker-pdf`. An old worker refuses every version 2 row.
 3. Run the listing below. HR generates each listed form again, and the decider signs the new copy.
 4. Count the leave requests whose note is over 360 characters and the employees whose `name_ar` or `department` is over 90.
-   A leave form for them answers 422 until HR shortens the record.
+   A leave form for them answers 422 until HR shortens the name or the department. A filed note cannot be edited, so that
+   request's form stays refused.
 
 ```sql
 select u.form_type, u.serial_number, u.employee_id, u.status, s.status as signed_status, u.created_at
@@ -346,7 +348,7 @@ signed `pending` and `failed` rows. The first attempt's listing missed the last 
 ## 7. Printable limits (option A)
 
 - Generation refuses a leave form when `name_ar` or `department` is over 90 characters or the stored note is over 360
-  (422 `errors.leave_form_value_too_long`, no row, no serial taken).
+  (422 `errors.leave_form_value_too_long`, or `errors.leave_form_note_too_long` for the note, no row, no serial taken).
 - The leave form fields refuse more than 60, 60, 130 and 60 characters (job title, notification method, opinion, substitute).
 - A new leave note refuses more than 360 characters at submit.
 - The certificate takes no new refusal. Its record limits (255, 255, 160) only pick the size step.
@@ -386,8 +388,8 @@ the golden paths, and fails on the first of these:
 Without `HRMS_SMOKE_GOLDENS`, a twin case still checks one A4 page, the embedded fonts, the title and the phrases, and the
 smoke prints that it ran no golden compare.
 
-The smoke runs `pdf-measure.py` with `/usr/bin/python3`, the Python that has Pillow. Under another Python the compare prints
-"RASTER not run" and the 0-pixel half of the proof is missing.
+The smoke runs `pdf-measure.py` with `/usr/bin/python3`, the Python that has Pillow. Under a Python without Pillow the compare prints
+"RASTER not run", claims nothing about pixels and exits 1.
 
 ## 9. Verification
 
@@ -530,8 +532,8 @@ Known limits, accepted:
 - `RenderPdf` reads about 730 KB of the three new fonts for every form, the advance and overtime included, until Step 4c.
 - The advance PDF still embeds DejaVu for Latin (Step 4).
 - An old copy issued before this PR keeps its old look, and HR generates a new one to sign it (section 6).
-- `pdf-measure.py` needs Poppler and a Python with Pillow on the host. Without Pillow it prints "RASTER not run", and the
-  0-pixel half of the proof is missing.
+- `pdf-measure.py` needs Poppler and a Python with Pillow on the host. Without Pillow it prints "RASTER not run", claims
+  nothing about pixels and exits 1.
 
 ## 13. Decisions for the controller
 
