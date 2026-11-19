@@ -200,7 +200,7 @@ test('a dialog opened from a row menu resets on reopen and leaves the page click
   expect(screen.getByRole('tab', { name: 'محل الإقامة' })).toHaveAttribute('aria-selected', 'true')
 })
 
-test('site managers dialog pre-checks current managers and saves the ticked ids', async () => {
+test('site manager dialog pre-checks the current manager and a new tick replaces it', async () => {
   const put = vi.fn(() => json(200, { data: { ...sites[0], managers: [] } }))
   mockFetch({
     'GET /api/v1/sites': list([sites[0]]),
@@ -210,18 +210,47 @@ test('site managers dialog pre-checks current managers and saves the ticked ids'
   })
   renderWithAuth(<SettingsPage />, [...MANAGE, 'site.assign_manager.all'])
   await rowMenu('موقع أ')
-  await user.click(await screen.findByRole('menuitem', { name: 'مديرو الموقع' }))
+  await user.click(await screen.findByRole('menuitem', { name: 'مدير الموقع' }))
   // two accounts with one name: the email, read left to right, tells them apart
   expect(await screen.findByRole('checkbox', { name: 'خالد khaled@smart.test' })).toBeChecked()
   expect(screen.getByRole('checkbox', { name: 'خالد khaled.ali@smart.test' })).not.toBeChecked()
   expect(screen.getByText('khaled.ali@smart.test')).toHaveAttribute('dir', 'ltr')
   expect(screen.getByRole('checkbox', { name: 'سامي sami@smart.test' })).not.toBeChecked()
+  expect(screen.getByText('للموقع مدير واحد فقط. لتغيير المدير اختر المدير الجديد مكانه.')).toBeInTheDocument()
+  // one manager per site: ticking another account puts it in place of the current one
   await user.click(screen.getByRole('checkbox', { name: 'سامي sami@smart.test' }))
+  expect(screen.getByRole('checkbox', { name: 'خالد khaled@smart.test' })).not.toBeChecked()
   await user.click(screen.getByRole('button', { name: 'حفظ' }))
-  expect(body(put)).toEqual({ manager_ids: ['u1', 'u2'] })
+  expect(body(put)).toEqual({ manager_ids: ['u2'] })
   // The server offers only the accounts that can manage a site (their role sees its own sites), never the whole users list.
   expect(urlWith('/manager-candidates')).toBe('/api/v1/sites/manager-candidates')
   expect(vi.mocked(fetch).mock.calls.some(([u]) => String(u).includes('/users'))).toBe(false)
+})
+
+test('HR sees the sites that still have several managers and removes one, and the list then refetches', async () => {
+  let conflicts = [{ id: 's1', name_ar: 'موقع أ', name_en: null, managers: [{ id: 'u1', name: 'خالد', email: 'khaled@smart.test' }, { id: 'u2', name: 'سامي', email: 'sami@smart.test' }] }]
+  const put = vi.fn(() => { conflicts = []; return json(200, { data: { ...sites[0], managers: [{ id: 'u2', name: 'سامي' }] } }) })
+  mockFetch({ 'GET /api/v1/sites': list([sites[0]]), 'GET /api/v1/sites/manager-conflicts': () => json(200, { data: conflicts }), 'PUT /api/v1/sites/s1/managers': put })
+  renderWithAuth(<SettingsPage />, [...MANAGE, 'site.assign_manager.all'])
+  const card = await screen.findByRole('region', { name: 'مواقع لها أكثر من مدير' })
+  expect(within(card).getByText('موقع أ')).toBeInTheDocument()
+  expect(within(card).getByText('sami@smart.test')).toHaveAttribute('dir', 'ltr')
+  await user.click(within(card).getByRole('button', { name: 'إزالة خالد من موقع أ' }))
+  expect(body(put)).toEqual({ manager_ids: ['u2'] })
+  await waitFor(() => expect(screen.queryByRole('region', { name: 'مواقع لها أكثر من مدير' })).toBeNull())
+})
+
+test('no conflict card without site.assign_manager, nor when every site has one manager', async () => {
+  mockFetch({ 'GET /api/v1/sites': list([sites[0]]), 'GET /api/v1/sites/manager-conflicts': () => json(200, { data: [] }) })
+  const { unmount } = renderWithAuth(<SettingsPage />, [...MANAGE, 'site.assign_manager.all'])
+  expect(await screen.findByText('موقع أ')).toBeInTheDocument()
+  await waitFor(() => expect(urlWith('/manager-conflicts')).toBeDefined())
+  expect(screen.queryByRole('region', { name: 'مواقع لها أكثر من مدير' })).toBeNull()
+  unmount()
+  vi.mocked(fetch).mockClear()
+  renderWithAuth(<SettingsPage />, MANAGE)
+  expect(await screen.findByText('موقع أ')).toBeInTheDocument()
+  expect(vi.mocked(fetch).mock.calls.some(([u]) => String(u).includes('manager-conflicts'))).toBe(false)
 })
 
 test('a work site lists its workers today', async () => {
@@ -261,7 +290,7 @@ test('site.manage alone shows no managers action', async () => {
   renderWithAuth(<SettingsPage />, MANAGE)
   await rowMenu('موقع أ')
   expect(await screen.findByRole('menuitem', { name: 'تعديل' })).toBeInTheDocument()
-  expect(screen.queryByRole('menuitem', { name: 'مديرو الموقع' })).toBeNull()
+  expect(screen.queryByRole('menuitem', { name: 'مدير الموقع' })).toBeNull()
 })
 
 const rules = {
@@ -385,7 +414,7 @@ test('the managers dialog ticks the managers as they are now, not as cached', as
     'GET /api/v1/sites/manager-candidates': () => json(200, { data: [{ id: 'u1', name: 'خالد', email: 'khaled@smart.test' }, { id: 'u2', name: 'سامي', email: 'sami@smart.test' }] }),
   })
   renderWithAuth(<SettingsPage />, [...MANAGE, 'site.assign_manager.all'])
-  const open = async () => { await rowMenu('موقع أ'); await user.click(await screen.findByRole('menuitem', { name: 'مديرو الموقع' })) }
+  const open = async () => { await rowMenu('موقع أ'); await user.click(await screen.findByRole('menuitem', { name: 'مدير الموقع' })) }
   await open()
   expect(await screen.findByRole('checkbox', { name: 'سامي sami@smart.test' })).not.toBeChecked()
   await user.keyboard('{Escape}')
