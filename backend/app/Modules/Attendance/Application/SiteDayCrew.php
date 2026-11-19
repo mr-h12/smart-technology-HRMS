@@ -8,10 +8,13 @@ use App\Modules\Attendance\Domain\AttendanceRefusal;
 use App\Modules\Attendance\Domain\AttendanceRefused;
 use App\Modules\Attendance\Infrastructure\Eloquent\AttendanceDay;
 use App\Modules\Employees\Application\DayCrew;
+use App\Modules\Employees\Application\EmployeeReach;
+use App\Modules\Employees\Domain\LaborerExists;
 use App\Modules\Identity\Application\Rbac\PermissionHolders;
 use App\Modules\Notifications\Application\Notifier;
 use App\Modules\Sites\Application\SiteService;
 use Illuminate\Database\Eloquent\ModelNotFoundException;
+use Illuminate\Database\UniqueConstraintViolationException;
 
 /**
  * The site manager's changes to today's day-labor crew on one of their sites (owner, 2026-11-04; approved as built 2026-11-05). Only today, Cairo; only day laborers;
@@ -91,23 +94,71 @@ final class SiteDayCrew
     }
 
     /**
-     * @param  array{name_ar: string, gender: string, phone?: ?string, daily_wage: string}  $data
+     * A new day laborer on today's crew with a proposed wage for HR (owner, 2026-11-19 for the checks):
+     * - the same form id again (a double tap, a retry, or two at once) returns the first answer and adds nobody;
+     * - a national ID someone already holds is refused, naming them only when they are in this manager's reach;
+     * - a day laborer with the same full name is shown first (or `ambiguous` when several share it), unless $data['confirm_new'] says
+     *   the manager checked and it is someone else.
+     *
+     * @param  array{name_ar: string, gender: string, phone?: ?string, national_id?: ?string, daily_wage: string, client_request_id?: ?string, confirm_new?: bool}  $data
      * @return array{id: string, code: int, name_ar: string, proposal_id: string}
      */
     public function propose(string $siteId, array $data, string $managerId): array
     {
         $this->mySites($siteId, $managerId);
         $today = EffectiveDays::today();
-        $made = $this->crew->propose(['name_ar' => $data['name_ar'], 'gender' => $data['gender'], 'phone' => $data['phone'] ?? null], $siteId, $today, $data['daily_wage']);
-        // A proposed wage is a request, so HR hears of it at once (CLAUDE.md: every manager action notifies HR).
+        $key = $data['client_request_id'] ?? null;
+        if ($key !== null && ($first = $this->crew->byClientRequest($key, $managerId)) !== null) {
+            return $first;
+        }
+        $nationalId = $data['national_id'] ?? null;
+        if ($nationalId !== null) {
+            $this->refuseTakenNationalId($nationalId, $siteId, $managerId, $today);
+        }
+        if (! ($data['confirm_new'] ?? false)) {
+            $same = $this->search($siteId, $data['name_ar'], $managerId);
+            if ($same['match'] !== null || $same['ambiguous']) {
+                throw new LaborerExists(LaborerExists::NAME, $same['match'], $same['ambiguous']);
+            }
+        }
+        $identity = ['name_ar' => $data['name_ar'], 'gender' => $data['gender'], 'phone' => $data['phone'] ?? null, ...($nationalId === null ? [] : ['national_id' => $nationalId])];
+        try {
+            $made = $this->crew->propose($identity, $siteId, $today, $data['daily_wage'], $key);
+        } catch (UniqueConstraintViolationException $e) {
+            // Lost a race: the same form id (replay the winner's answer) or the same national ID (refuse as above).
+            if ($key !== null && ($first = $this->crew->byClientRequest($key, $managerId)) !== null) {
+                return $first;
+            }
+            if ($nationalId !== null) {
+                $this->refuseTakenNationalId($nationalId, $siteId, $managerId, $today);
+            }
+            throw $e;
+        }
+        // A proposed wage is a request, so HR hears of it at once (CLAUDE.md: every manager action notifies HR). No amount in the
+        // payload (owner, 2026-11-19): HR reads the wage on the proposal itself.
         $site = $this->sites->names([$siteId])[$siteId] ?? null;
         foreach ($this->holders->userIds('employee.approve_wage.all') as $id) {
             $this->notifier->notifyOnce($id, 'wage_proposed', $today, [
-                'employee_id' => $made['id'], 'daily_wage' => $data['daily_wage'], 'site_name_ar' => (string) ($site['name_ar'] ?? ''), 'site_name_en' => $site['name_en'] ?? null,
+                'employee_id' => $made['id'], 'site_name_ar' => (string) ($site['name_ar'] ?? ''), 'site_name_en' => $site['name_en'] ?? null,
             ], $made['proposal_id']);
         }
 
         return $made;
+    }
+
+    /** Throws when an employee already holds $nationalId: their crew-search row when this manager reaches them, else none (HR is the contact). */
+    private function refuseTakenNationalId(string $nationalId, string $siteId, string $managerId, string $today): void
+    {
+        $holder = $this->crew->nationalIdHolder($nationalId);
+        if ($holder === null) {
+            return;
+        }
+        if (! EmployeeReach::reaches($holder, $managerId, $today)) {
+            throw new LaborerExists(LaborerExists::NATIONAL_ID, null);
+        }
+        $e = $this->crew->identityOf($holder);
+        $found = $this->search($siteId, (string) $e['code'], $managerId)['match'];
+        throw new LaborerExists(LaborerExists::NATIONAL_ID, $found ?? [...$e, 'site' => null, 'here' => false, 'can_add' => false]);
     }
 
     private static function refused(AttendanceRefusal $reason): AttendanceRefused

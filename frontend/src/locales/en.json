@@ -47,6 +47,7 @@
     "siteDay": "Site attendance",
     "leave": "Leave",
     "wageProposals": "Proposed wages",
+    "myWageProposals": "Wage proposals",
     "teamFares": "Team transport",
     "logs": "System logs",
     "payroll": "Payroll",
@@ -73,6 +74,7 @@
   "employee": {
     "add": "Add employee",
     "search": "Search name or ID",
+    "searchNameCode": "Search name or employee ID",
     "allTypes": "All types",
     "code": "Employee ID",
     "name_ar": "Name (Arabic)",
@@ -917,6 +919,23 @@
     "deleteConfirm": "Delete the official holiday \"{{name}}\"?"
   },
   "wages": {
+    "mine": {
+        "page": "Wage proposals",
+        "description": "The daily wages you proposed for new day laborers, and HR's decision on each.",
+        "list": "Wage proposals",
+        "empty": "You have not proposed a wage yet.",
+        "request": "Daily wage request",
+        "approvedWage": "Approved wage",
+        "decidedAt": "Decided on",
+        "reason": "Reason for refusing",
+        "gone": "This request is not available.",
+        "loading": "Loading…",
+        "status": {
+          "pending": "Pending",
+          "approved": "Approved",
+          "refused": "Refused"
+        }
+      },
     "page": "Proposed wages",
     "description": "A daily wage a site manager proposed for a day laborer they added. It is not paid until you approve it.",
     "list": "Proposed wages waiting",
@@ -941,6 +960,7 @@
       "open": "Refuse",
       "back": "Back",
       "yes": "Confirm refusal",
+      "reason": "Reason for refusing (the site manager sees it)",
       "confirm": "The laborer ends today and leaves every crew. Their recorded days stay for you to decide: a wage for those days only, or cancel them.",
       "done": "Refused the proposed wage for {{name}}"
     }
@@ -986,9 +1006,17 @@
     },
     "wageProposed": {
       "line": "Proposed daily wage for <name/> (<code/>)",
-      "unknown": "Proposed daily wage for a day laborer",
-      "detail": "{{amount}} · {{site}}"
+      "unknown": "Proposed daily wage for a day laborer"
     },
+    "wageApproved": {
+      "line": "The daily wage you proposed for <name/> (<code/>) was approved",
+      "unknown": "The daily wage you proposed was approved"
+    },
+    "wageRefused": {
+      "line": "The daily wage you proposed for <name/> (<code/>) was refused",
+      "unknown": "The daily wage you proposed was refused"
+    },
+    "wageDecidedDetail": "Open the request for the approved wage or the reason",
     "leaveCancelled": {
       "line": "Leave request for <name/> (<code/>) cancelled",
       "unknown": "A leave request was cancelled"
@@ -1014,6 +1042,12 @@
     "site": "Site",
     "today": "Today",
     "engineers": "Engineers",
+    "workers": "Workers",
+    "threePartName": "Enter at least a three-part name to add a new laborer.",
+    "nationalId": "National ID (optional)",
+    "nationalIdLength": "A national ID has 14 digits.",
+    "differentPerson": "Someone else with this name: add a new laborer",
+    "alreadyRecorded": "The laborer already recorded",
     "present": "Present",
     "absent": "Absent",
     "sick": "Sick",

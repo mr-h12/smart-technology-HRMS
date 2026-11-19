@@ -92,7 +92,8 @@ class ManagerScopeTest extends TestCase
         $this->travelTo('2026-10-17 21:30:00');                               // 2026-10-18 00:30 in Cairo
         $this->getJson("/api/v1/employees/$e")->assertNotFound();
         $this->actingAs($b, 'api');
-        $this->getJson("/api/v1/employees/$e")->assertOk()->assertJsonPath('data.current_manager.id', $b->id);
+        // a site manager's profile carries no manager assignment (owner, 2026-11-19): reaching the employee is the check
+        $this->getJson("/api/v1/employees/$e")->assertOk()->assertJsonPath('data.id', $e);
     }
 
     public function test_only_active_users_can_be_assigned(): void

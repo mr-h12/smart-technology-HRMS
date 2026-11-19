@@ -62,7 +62,9 @@ class EmployeesApiTest extends TestCase
             $this->postJson('/api/v1/employees', $this->payload(['phone' => $phone]))->assertCreated()->assertJsonPath('data.phone', $phone);
         }
         $this->postJson('/api/v1/employees', $this->payload(['phone' => null]))->assertCreated()->assertJsonPath('data.phone', null);
-        foreach (['0100', '01312345678', '0101234567', '010123456789', '031234567', '+201012345678', '010 1234 5678', '٠١٠١٢٣٤٥٦٧٨'] as $phone) {
+        // Arabic and Persian digits read as English ones (owner, 2026-11-19), stored as text with the leading zero
+        $this->postJson('/api/v1/employees', $this->payload(['phone' => '٠١٠۱۲۳٤٥٦٧٩']))->assertCreated()->assertJsonPath('data.phone', '01012345679');
+        foreach (['0100', '01312345678', '0101234567', '010123456789', '031234567', '+201012345678', '010 1234 5678'] as $phone) {
             $this->postJson('/api/v1/employees', $this->payload(['phone' => $phone]))->assertStatus(422)->assertJsonPath('error.code', 'validation_failed');
         }
         // TrimStrings would hide the newline before the rule sees it.

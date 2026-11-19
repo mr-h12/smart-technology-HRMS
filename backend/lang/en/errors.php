@@ -58,4 +58,12 @@ return [
     'advance_paper_date_future' => 'The paper decision date cannot be after today in Cairo.',
     'advance_paper_date_before_request' => 'The paper decision date cannot be before the request date.',
     'advance_paper_date_pending' => 'Enter the paper decision date when approving or refusing the advance.',
+    'name_three_parts' => 'Enter at least a three-part name: three words, such as “Mohamed Ahmed Ali”.',
+    'laborer_exists' => [
+        'name' => 'A day laborer with this full name is already recorded. Add them if it is the same person, or confirm it is someone else.',
+        'name_ambiguous' => 'More than one day laborer has this full name. Search by employee ID to choose, or confirm it is someone else.',
+        'national_id' => 'This national ID already belongs to one of your workers.',
+        'national_id_hr' => 'This national ID is already recorded. Contact HR.',
+    ],
+    'refusal_reason_required' => 'Enter the reason for refusing.',
 ];

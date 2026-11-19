@@ -198,14 +198,20 @@ export function SiteDayPage() {
   else if (!rows.length) body = <EmptyState icon={Users} title={t('siteDay.empty')} />
   else
     body = (
+      // engineers first, then the workers (owner, 2026-11-19); each section keeps the server's order inside it
       <ul aria-label={t('siteDay.rows')} className="flex flex-col gap-2">
-        {workers.map((r) => person(r, isToday && can('employee.crew') && r.employee.type === 'day_laborer' && r.day.state !== 'stored' && !drafts[r.employee.id]))}
         {engineers.length > 0 && (
-          <li className="pt-2">
+          <li>
             <h2 className="flex items-center gap-2 text-section-title"><HardHat className="size-4 text-muted-foreground" aria-hidden />{t('siteDay.engineers')}</h2>
           </li>
         )}
         {engineers.map((r) => person(r, false))}
+        {engineers.length > 0 && workers.length > 0 && (
+          <li className="pt-2">
+            <h2 className="flex items-center gap-2 text-section-title"><Users className="size-4 text-muted-foreground" aria-hidden />{t('siteDay.workers')}</h2>
+          </li>
+        )}
+        {workers.map((r) => person(r, isToday && can('employee.crew') && r.employee.type === 'day_laborer' && r.day.state !== 'stored' && !drafts[r.employee.id]))}
       </ul>
     )
 

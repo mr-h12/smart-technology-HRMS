@@ -31,7 +31,7 @@ class RefusedLaborerEdgeTest extends TestCase
     {
         $this->actingAs($this->m, 'api');
 
-        return $this->postJson('/api/v1/attendance/site-day/laborers', ['site_id' => $this->s1, 'name_ar' => 'عامل جديد', 'gender' => 'male', 'daily_wage' => '350'])->assertCreated()->json('data');
+        return $this->postJson('/api/v1/attendance/site-day/laborers', ['site_id' => $this->s1, 'name_ar' => 'عامل جديد أول', 'gender' => 'male', 'daily_wage' => '350'])->assertCreated()->json('data');
     }
 
     public function test_after_a_refusal_the_site_manager_records_no_new_day_in_the_yesterday_window(): void
@@ -39,7 +39,7 @@ class RefusedLaborerEdgeTest extends TestCase
         $made = $this->proposeOne();                                                                    // on 10-22's crew, nothing recorded
         $this->cairo('2026-10-23 09:00');
         $this->actingAs($this->makeUser('hr'), 'api');
-        $this->postJson("/api/v1/employees/wage-proposals/{$made['proposal_id']}/refuse", ['version' => 1])->assertOk();
+        $this->postJson("/api/v1/employees/wage-proposals/{$made['proposal_id']}/refuse", ['version' => 1, 'reason' => 'لا يوجد احتياج'])->assertOk();
 
         $this->actingAs($this->m, 'api');
         $this->cairo('2026-10-23 10:00');                                                               // still before noon: 10-22 is open to the manager
@@ -54,7 +54,7 @@ class RefusedLaborerEdgeTest extends TestCase
         DB::table('employees')->where('id', $made['id'])->update(['termination_date' => '2026-10-22']);   // HR ended them on the record first
         $this->cairo('2026-10-24 09:00');
         $this->actingAs($this->makeUser('hr'), 'api');
-        $this->postJson("/api/v1/employees/wage-proposals/{$made['proposal_id']}/refuse", ['version' => 1])->assertOk();
+        $this->postJson("/api/v1/employees/wage-proposals/{$made['proposal_id']}/refuse", ['version' => 1, 'reason' => 'لا يوجد احتياج'])->assertOk();
         $this->assertSame('2026-10-22', (string) DB::table('employees')->where('id', $made['id'])->value('termination_date'));
     }
 }
