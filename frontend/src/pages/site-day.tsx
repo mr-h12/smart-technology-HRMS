@@ -40,6 +40,31 @@ const writeWorking = (ids: string[]) => {
   }
 }
 
+/**
+ * Unsaved changes for this tab, per user: they survive leaving the page (another screen, back, reload) and are gone when the tab
+ * closes, which `beforeunload` still warns about. Saving or «تحميل الأحدث» clears them as before.
+ */
+const draftsKey = (userId: string) => `hrms.siteDay.drafts.${userId}`
+const isDrafts = (v: unknown): v is Drafts =>
+  typeof v === 'object' && v !== null && Object.values(v).every((d) => typeof d === 'object' && d !== null && 'site_id' in d && 'in_time' in d && 'out_time' in d)
+const readDrafts = (userId: string): Record<string, Drafts> => {
+  try {
+    const v: unknown = JSON.parse(sessionStorage.getItem(draftsKey(userId)) ?? '{}')
+    return typeof v === 'object' && v !== null ? Object.fromEntries(Object.entries(v).filter((e): e is [string, Drafts] => isDrafts(e[1]))) : {}
+  } catch {
+    return {}
+  }
+}
+const writeDrafts = (userId: string, all: Record<string, Drafts>) => {
+  try {
+    const kept = Object.fromEntries(Object.entries(all).filter(([, d]) => Object.keys(d).length > 0))
+    if (Object.keys(kept).length) sessionStorage.setItem(draftsKey(userId), JSON.stringify(kept))
+    else sessionStorage.removeItem(draftsKey(userId))
+  } catch {
+    // storage blocked: changes live only while the page is open, as before
+  }
+}
+
 const omit = (d: Drafts, ...ids: string[]): Drafts => Object.fromEntries(Object.entries(d).filter(([k]) => !ids.includes(k)))
 
 /**
@@ -51,17 +76,22 @@ const omit = (d: Drafts, ...ids: string[]): Drafts => Object.fromEntries(Object.
 export function SiteDayPage() {
   const { t, i18n } = useTranslation()
   const lang = i18n.language
-  const { can } = useAuth()
+  const { can, me } = useAuth()
+  const userId = me?.id ?? ''
   const allowed = can('attendance.record')
   const [params, setParams] = useSearchParams()
   const { data: mine = [], err: sitesErr, loading: sitesLoading } = useApi<Row[]>(allowed ? MY_SITES : null)
-  const [working, setWorking] = useState<string[] | null>(null) // null: the picker is open
+  // null: the picker is open. A link or reload with `?site=` reopens that site with the last working list, skipping the picker.
+  const [working, setWorking] = useState<string[] | null>(() => {
+    const open = params.get('site')
+    return open ? [...new Set([...readWorking(), open])] : null
+  })
   const chosen = working === null ? [] : mine.filter((s) => working.includes(s.id))
   const site = chosen.find((s) => s.id === params.get('site')) ?? chosen[0]
   const date = params.get('date')
   const path = allowed && site ? dayPath(site.id, date) : null
   const { data, err, loading, reload } = useApi<SiteDay>(path)
-  const [all, setAll] = useState<Record<string, Drafts>>({})
+  const [all, setAll] = useState<Record<string, Drafts>>(() => (userId ? readDrafts(userId) : {}))
   const [filter, setFilter] = useState('')
   const [saveErr, setSaveErr] = useState<unknown>()
   const [savingKey, setSavingKey] = useState<string | null>(null)
@@ -72,6 +102,9 @@ export function SiteDayPage() {
   const qc = useQueryClient()
   const siteId: string = site?.id ?? ''
   const dirty = Object.values(all).some((d) => Object.keys(d).length > 0)
+  useEffect(() => {
+    if (userId) writeDrafts(userId, all)
+  }, [userId, all])
   useEffect(() => {
     if (!dirty) return
     const warn = (e: BeforeUnloadEvent) => e.preventDefault()
@@ -95,7 +128,8 @@ export function SiteDayPage() {
   if (sitesErr) return <div className="mx-auto w-full max-w-3xl"><ErrorBanner err={sitesErr} shown={[]} /></div>
   if (sitesLoading) return <div className="mx-auto w-full max-w-3xl"><TableSkeleton rows={4} /></div>
   if (!mine.length) return <div className="mx-auto w-full max-w-3xl"><EmptyState icon={MapPinOff} title={t('siteDay.noSites')} /></div>
-  if (working === null) {
+  // the picker also opens when the URL's site is not (or no longer) one of the manager's
+  if (working === null || !chosen.length) {
     const assigned = mine.map((s) => s.id)
     const previous = readWorking().filter((id) => assigned.includes(id))
     return (
