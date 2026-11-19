@@ -23,6 +23,7 @@ use App\Modules\Pdf\Presentation\PdfController;
 use App\Modules\Pdf\Presentation\SignatureController;
 use App\Modules\Settings\Presentation\SettingController;
 use App\Modules\Sites\Presentation\FareController;
+use App\Modules\Sites\Presentation\FareRequestController;
 use App\Modules\Sites\Presentation\ResidenceController;
 use App\Modules\Sites\Presentation\SiteController;
 use App\Support\Http\ApiEnvelope;
@@ -136,6 +137,16 @@ Route::middleware('auth')->group(function (): void {
     });
 
     Route::get('team-fares', [FareController::class, 'team'])->middleware('permission:employee.view');
+    Route::get('team-fares/site', [FareRequestController::class, 'site'])->middleware('permission:employee.view');
+    Route::prefix('fare-requests')->controller(FareRequestController::class)->whereUuid('fareRequest')->group(function (): void {
+        Route::get('/', 'index')->middleware('permission:fare.manage');
+        Route::post('/', 'store')->middleware('permission:fare.request');
+        Route::get('mine', 'mine')->middleware('permission:fare.request');
+        Route::get('mine/{fareRequest}', 'mineOne')->middleware('permission:fare.request');
+        Route::get('{fareRequest}', 'show')->middleware('permission:fare.manage');
+        Route::post('{fareRequest}/approve', 'approve')->middleware('permission:fare.manage');
+        Route::post('{fareRequest}/refuse', 'refuse')->middleware('permission:fare.manage');
+    });
 
     Route::prefix('attendance')->controller(AttendanceController::class)->group(function (): void {
         Route::get('period', 'period')->middleware('permission:attendance.view');

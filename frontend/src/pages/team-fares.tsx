@@ -13,6 +13,7 @@ import { Card } from '@/components/ui/card'
 import { useAuth } from '@/lib/auth'
 import { RESIDENCES, useApi, useSave } from '@/lib/query'
 import { NotFoundPage } from './pages'
+import { SiteFaresView } from './site-fares'
 import { ResidenceDialog as AddResidence } from './sites'
 
 export type Ref = { id: string; name: string }
@@ -40,9 +41,11 @@ export function TeamFaresPage() {
   const picked = params.get('manager') ?? ''
   const leads = useApi<(Ref & { email: string })[]>(allowed && pick ? '/sites/manager-candidates' : null)
   const lead = picked || leads.data?.[0]?.id
-  const path = !allowed ? null : pick ? (lead ? `/team-fares?manager_id=${lead}` : null) : '/team-fares'
+  const path = !allowed || (!pick && !edit && can('fare.request')) ? null : pick ? (lead ? `/team-fares?manager_id=${lead}` : null) : '/team-fares'
   const { data, err, loading } = useApi<TeamFares>(path)
   if (!allowed) return <NotFoundPage />
+  // a site manager who can ask HR for changes works one site at a time (owner, 2026-11-20); HR keeps the whole team per manager
+  if (!pick && !edit && can('fare.request')) return <SiteFaresView />
   return (
     <div className="space-y-4">
       <PageHeader title={t('teamFare.title')} description={t(edit ? 'teamFare.subtitle' : 'teamFare.subtitleView')} />

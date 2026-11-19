@@ -51,7 +51,9 @@
     "teamFares": "Team transport",
     "logs": "System logs",
     "payroll": "Payroll",
-    "attendanceRequests": "Attendance requests"
+    "attendanceRequests": "Attendance requests",
+    "fareRequests": "Transport requests",
+    "myFareRequests": "My transport requests"
   },
   "toggle": {
     "language": "Language",
@@ -920,22 +922,22 @@
   },
   "wages": {
     "mine": {
-        "page": "Wage proposals",
-        "description": "The daily wages you proposed for new day laborers, and HR's decision on each.",
-        "list": "Wage proposals",
-        "empty": "You have not proposed a wage yet.",
-        "request": "Daily wage request",
-        "approvedWage": "Approved wage",
-        "decidedAt": "Decided on",
-        "reason": "Reason for refusing",
-        "gone": "This request is not available.",
-        "loading": "Loading…",
-        "status": {
-          "pending": "Pending",
-          "approved": "Approved",
-          "refused": "Refused"
-        }
-      },
+      "page": "Wage proposals",
+      "description": "The daily wages you proposed for new day laborers, and HR's decision on each.",
+      "list": "Wage proposals",
+      "empty": "You have not proposed a wage yet.",
+      "request": "Daily wage request",
+      "approvedWage": "Approved wage",
+      "decidedAt": "Decided on",
+      "reason": "Reason for refusing",
+      "gone": "This request is not available.",
+      "loading": "Loading…",
+      "status": {
+        "pending": "Pending",
+        "approved": "Approved",
+        "refused": "Refused"
+      }
+    },
     "page": "Proposed wages",
     "description": "A daily wage a site manager proposed for a day laborer they added. It is not paid until you approve it.",
     "list": "Proposed wages waiting",
@@ -1025,7 +1027,20 @@
       "line": "Departure of <name/> (<code/>) for {{date}}, after the window",
       "unknown": "A departure entered after the window for {{date}}",
       "detail": "{{time}} · {{site}}"
-    }
+    },
+    "fareRequested": {
+      "line": "Transport request for <name/> (<code/>)",
+      "unknown": "New transport request"
+    },
+    "fareApproved": {
+      "line": "Transport request for <name/> (<code/>) approved",
+      "unknown": "A transport request was approved"
+    },
+    "fareRefused": {
+      "line": "Transport request for <name/> (<code/>) rejected",
+      "unknown": "A transport request was rejected"
+    },
+    "fareDecidedDetail": "Open the request for the approved amount or the reason"
   },
   "time": {
     "am": "AM",
@@ -1485,5 +1500,73 @@
     "invalidAmount": "Enter a positive advance amount with up to six decimal places.",
     "newNotification": "New attendance request",
     "advancePdf": "Advance form"
+  },
+  "fareRequest": {
+    "siteTitle": "Site transport",
+    "siteSubtitle": "Pick a site to see the transport allowance of everyone working with you there, and ask HR to change anyone's.",
+    "sites": "Your sites",
+    "empty": "No one from your team is at this site today.",
+    "unset": "Not set",
+    "zero": "Zero (set)",
+    "pendingBadge": "Request pending: {{amount}}",
+    "pendingOther": "Pending request from another manager",
+    "request": "Request change",
+    "requestFor": "Request a transport change for {{name}}",
+    "viewPending": "View request",
+    "dialogTitle": "Transport change request · {{name}} · {{site}}",
+    "current": "Current allowance",
+    "amount": "Requested daily amount",
+    "reason": "Reason",
+    "badAmount": "Enter a valid amount (zero or more, up to 6 decimals).",
+    "keepsCurrent": "The current allowance stays in effect until HR approves.",
+    "send": "Send request",
+    "sent": "The transport request for {{name}} was sent to HR.",
+    "alreadyPending": "This employee already has a request at this site waiting for HR ({{amount}}).",
+    "mine": {
+      "title": "Transport requests",
+      "list": "Transport requests",
+      "empty": "You have not sent any transport requests yet.",
+      "gone": "This request is not available.",
+      "loading": "Loading…"
+    },
+    "outcome": {
+      "pending": "Pending",
+      "approved": "Approved as requested",
+      "revised": "Approved with a revised amount",
+      "refused": "Rejected"
+    },
+    "col": {
+      "employee": "Employee",
+      "site": "Site",
+      "requested": "Requested",
+      "approved": "Approved",
+      "current": "Before",
+      "askedAt": "Requested on",
+      "decidedAt": "Decided on",
+      "from": "Effective from",
+      "requestedBy": "Requested by",
+      "reason": "Reason",
+      "response": "HR's response"
+    },
+    "detail": "Transport request",
+    "review": {
+      "page": "Transport requests",
+      "description": "Site managers' requests to change an employee's transport allowance at a site. Approve the requested amount or revise it, or reject with a reason.",
+      "list": "Pending transport requests",
+      "empty": "No transport requests are pending.",
+      "more": "Showing {{shown}} of {{total}} requests.",
+      "gone": "This request is no longer pending.",
+      "title": "Decide the transport request",
+      "approvedAmount": "Approved amount",
+      "from": "Effective from",
+      "approve": "Approve",
+      "refuse": "Reject",
+      "refuseReason": "Reason for rejecting (the site manager reads it)",
+      "refuseYes": "Confirm rejection",
+      "back": "Back",
+      "approved": "The transport allowance of {{name}} was approved.",
+      "refused": "The transport request of {{name}} was rejected."
+    },
+    "reasonRequired": "Enter the reason for the request."
   }
 }

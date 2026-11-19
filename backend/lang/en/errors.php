@@ -43,6 +43,8 @@ return [
     'type_change_not_period_start' => 'A type change must start on the first day of a period of the new type.',
     'payroll_field_not_used' => ':attribute is not used for :type.',
     'already_site_manager' => 'This employee already has a site manager account.',
+    'fare_request_pending' => 'This employee already has a transport allowance request at this site waiting for HR.',
+    'fare_request_reason_required' => 'Enter the reason for the request.',
     'site_manager_role' => 'The site manager role cannot be chosen: exactly one role must see only its own sites. Ask the developer to review the roles.',
     'not_site_manager_account' => 'This account is not an active site manager account.',
     'account_linked' => 'This account is already linked to another employee.',

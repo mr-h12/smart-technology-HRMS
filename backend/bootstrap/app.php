@@ -23,6 +23,7 @@ use App\Modules\Leave\Domain\LeaveRefused;
 use App\Modules\Leave\Domain\NoLeaveBalance;
 use App\Modules\Leave\Presentation\AlertAnniversaryCommand;
 use App\Modules\Payroll\Presentation\Console\ExcelDifferencesCommand;
+use App\Modules\Sites\Domain\FareRequestPending;
 use App\Support\Database\ConcurrencyConflict;
 use App\Support\Http\ApiEnvelope;
 use Illuminate\Auth\AuthenticationException;
@@ -116,12 +117,17 @@ return Application::configure(basePath: dirname(__DIR__))
             $request, $e->reason->status(), $e->reason->value, __('leave.refusal.'.$e->reason->value, $e->params), extra: $e->dates === [] ? [] : ['dates' => $e->dates],
         ));
 
-        $exceptions->dontReport([EmployeeCodeTaken::class, EmployeeArchived::class, EmployeeHasOpenItems::class, LaborerExists::class]);
+        $exceptions->dontReport([EmployeeCodeTaken::class, EmployeeArchived::class, EmployeeHasOpenItems::class, LaborerExists::class, FareRequestPending::class]);
 
         // The message never names a national ID; `match` is the crew search's row, or null when HR is the contact.
         $exceptions->render(fn (LaborerExists $e, Request $request) => ApiEnvelope::error(
             $request, 409, 'laborer_exists', __('errors.laborer_exists.'.($e->match === null && ! $e->ambiguous && $e->reason === LaborerExists::NATIONAL_ID ? 'national_id_hr' : ($e->ambiguous ? 'name_ambiguous' : $e->reason))),
             extra: ['reason' => $e->reason, 'match' => $e->match, 'ambiguous' => $e->ambiguous],
+        ));
+
+        // The waiting request goes with the refusal, so the screen opens it instead of sending a second one.
+        $exceptions->render(fn (FareRequestPending $e, Request $request) => ApiEnvelope::error(
+            $request, 409, 'fare_request_pending', __('errors.fare_request_pending'), extra: ['pending' => $e->pending],
         ));
 
         $exceptions->render(fn (EmployeeHasOpenItems $e, Request $request) => ApiEnvelope::error(
