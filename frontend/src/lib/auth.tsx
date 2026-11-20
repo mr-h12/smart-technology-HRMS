@@ -76,6 +76,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     endViewAs: () => signIn('/auth/view-as/end'),
     logout: async () => {
       await api('/auth/logout', { method: 'POST' }).catch(() => {})
+      // a deliberate logout leaves no unsaved site-day drafts behind on a shared device; a 401 re-login keeps them (Youssef, 2026-11-19)
+      try {
+        for (const k of Object.keys(sessionStorage)) if (k.startsWith('hrms.siteDay.drafts.')) sessionStorage.removeItem(k)
+      } catch {
+        // storage blocked: there is nothing stored to clear
+      }
       setToken(null)
       queryClient.clear()
       setMe(null)

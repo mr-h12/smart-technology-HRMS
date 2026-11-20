@@ -7,6 +7,7 @@ import { SiteDayPage } from './site-day'
 
 const user = userEvent.setup()
 afterEach(() => {
+  vi.useRealTimers()
   vi.unstubAllGlobals()
   localStorage.clear()
   sessionStorage.clear()
@@ -260,6 +261,8 @@ test('a ?site= that is not one of the manager\'s sites opens the picker', async 
 })
 
 test('unsaved changes survive leaving the page and coming back, and saving clears them', async () => {
+  vi.useFakeTimers({ toFake: ['Date'] })
+  vi.setSystemTime(new Date('2026-10-22T09:00:00Z'))   // the fixture's day: older drafts are dropped on restore
   const { post } = routes([S1], { s1: S1_ROWS })
   const first = render()
   await enter()
@@ -575,4 +578,52 @@ test('a long note shows on one line, cut short, so the card keeps its width', as
   const label = await screen.findByText(`ملاحظة: ${long}`)
   expect(label).toHaveClass('truncate')
   expect(label.closest('button')).toHaveClass('max-w-full')
+})
+
+const DRAFTS = 'hrms.siteDay.drafts.u1'   // me() is user u1
+const storeDraft = (at: string, id: string, draft: object) => sessionStorage.setItem(DRAFTS, JSON.stringify({ [at]: { [id]: draft } }))
+
+test('a restored draft is sent with the version it was made against, so a newer save meanwhile is a 409, not overwritten (review of #73)', async () => {
+  vi.useFakeTimers({ toFake: ['Date'] })
+  vi.setSystemTime(new Date('2026-10-22T09:00:00Z'))
+  storeDraft('s1|2026-10-22', 'w1', { site_id: 's1', in_time: '08:00', out_time: null, version: 1 })
+  const newer = [{ ...S1_ROWS[0], day: { ...S1_ROWS[0].day, version: 2, out_time: '17:00' } }, S1_ROWS[1], S1_ROWS[2]]
+  const { post } = routes([S1], { s1: newer })
+  render('/site-day?site=s1')
+  await user.click(await screen.findByRole('button', { name: 'حفظ اليوم' }))
+  await waitFor(() => expect(post).toHaveBeenCalledTimes(1))
+  expect(bodyOf(post).rows).toEqual([expect.objectContaining({ employee_id: 'w1', version: 1, out_time: null })])
+})
+
+test('a restored draft on a row that became read-only is dropped and named, and the other rows still save (review of #73)', async () => {
+  vi.useFakeTimers({ toFake: ['Date'] })
+  vi.setSystemTime(new Date('2026-10-22T09:00:00Z'))
+  storeDraft('s1|2026-10-22', 'w2', { site_id: 'leave-sick', in_time: null, out_time: null, version: 1 })
+  const rows = [S1_ROWS[0], { ...S1_ROWS[1], can_edit: false, why_not: 'hr_day' }, S1_ROWS[2]]
+  const { post } = routes([S1], { s1: rows })
+  render('/site-day?site=s1')
+  expect(await screen.findByText(/لم يعد بالإمكان تعديل هذه الصفوف/)).toHaveTextContent('Worker-2')
+  await waitFor(() => expect(JSON.parse(sessionStorage.getItem(DRAFTS) ?? '{}')['s1|2026-10-22']?.w2).toBeUndefined())
+  await user.click(within(screen.getByRole('group', { name: 'Engineer-1' })).getByRole('button', { name: 'حاضر' }))
+  await user.click(screen.getByRole('button', { name: 'حفظ اليوم' }))
+  await waitFor(() => expect(post).toHaveBeenCalledTimes(1))
+  expect(bodyOf(post).rows.map((r: { employee_id: string }) => r.employee_id)).toEqual(['e1'])
+})
+
+test('drafts of days older than yesterday are not restored, so an old day never keeps the tab unsaved', async () => {
+  vi.useFakeTimers({ toFake: ['Date'] })
+  vi.setSystemTime(new Date('2026-10-22T09:00:00Z'))
+  sessionStorage.setItem(DRAFTS, JSON.stringify({ 's1|2026-10-01': { w1: { site_id: 's1', in_time: '08:00', out_time: null } }, 's1|2026-10-21': { w1: { site_id: 's1', in_time: '08:00', out_time: null } } }))
+  routes([S1], { s1: S1_ROWS })
+  render('/site-day?site=s1')
+  await screen.findByRole('group', { name: 'Engineer-1' })
+  await waitFor(() => expect(Object.keys(JSON.parse(sessionStorage.getItem(DRAFTS) ?? '{}'))).toEqual(['s1|2026-10-21']))
+})
+
+test('a ?site= that is not the manager\'s opens the picker even with a remembered working list (review of #73)', async () => {
+  localStorage.setItem('hrms.siteDay.sites', JSON.stringify(['s1']))
+  routes([S1], { s1: S1_ROWS })
+  render('/site-day?site=s9')
+  expect(await screen.findByRole('list', { name: 'المواقع التي ستعمل عليها' })).toBeInTheDocument()
+  expect(screen.queryByRole('group', { name: 'Engineer-1' })).toBeNull()
 })
