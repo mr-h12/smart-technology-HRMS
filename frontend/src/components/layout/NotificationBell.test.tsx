@@ -319,3 +319,22 @@ test('a proposed wage opens that proposal on the proposed-wages page', async () 
   await user.click(await screen.findByRole('menuitem', { name: /أجر يومي مقترح/ }))
   expect(screen.getByRole('status')).toHaveTextContent('/wage-proposals?proposal=p1')
 })
+
+test('wage notifications carry no amount: an old one with daily_wage never shows it, and a decision opens the manager\'s request', async () => {
+  mockFetch({
+    'GET /api/v1/notifications': inbox([
+      { id: 'w1', type: 'wage_proposed', date: '2026-11-04', ref: 'p1', read_at: null, data: { employee_id: 'e1', daily_wage: '350.75', site_name_ar: 'Site-1', site_name_en: null }, employee: ahmed },
+      { id: 'w2', type: 'wage_approved', date: '2026-11-05', ref: 'p2', read_at: null, data: { employee_id: 'e1', proposal_id: 'p2' }, employee: ahmed },
+      // a refusal ends the laborer, so the reader can no longer name them: the request is still theirs to open
+      { id: 'w3', type: 'wage_refused', date: '2026-11-05', ref: 'p3', read_at: null, data: { employee_id: 'e1', proposal_id: 'p3' }, employee: null },
+    ]),
+    'PATCH /api/v1/notifications/w3/read': () => json(200, { data: {} }),
+  })
+  renderWithAuth(<><NotificationBell /><Where /></>, [])
+  await user.click(await screen.findByRole('button', { name: /فتح الإشعارات/ }))
+  const items = (await screen.findAllByRole('menuitem')).map((i) => i.textContent ?? '')
+  expect(items.some((i) => i.includes('350'))).toBe(false)
+  expect(items.some((i) => i.includes('اعتُمد الأجر اليومي الذي اقترحته لـ أحمد علي (1042)'))).toBe(true)
+  await user.click(screen.getByRole('menuitem', { name: /رُفض الأجر اليومي/ }))
+  expect(screen.getByRole('status')).toHaveTextContent('/my-wage-proposals?proposal=p3')
+})

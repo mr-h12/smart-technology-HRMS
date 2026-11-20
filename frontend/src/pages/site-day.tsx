@@ -5,7 +5,7 @@ import { useTranslation } from 'react-i18next'
 import { useSearchParams } from 'react-router-dom'
 import { Alert } from '@/components/common/Alert'
 import { EmptyState } from '@/components/common/EmptyState'
-import { ErrorBanner, intlLocale, isHhmm, localName, type Row, stopAtMissingPeriod } from '@/components/form'
+import { asciiDigits, ErrorBanner, intlLocale, isHhmm, localName, type Row, stopAtMissingPeriod } from '@/components/form'
 import { TableSkeleton } from '@/components/layout/PageSkeleton'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -178,7 +178,8 @@ export function SiteDayPage() {
   )
 
   const staleNames = stale.at === key ? rows.filter((r) => stale.ids.includes(r.employee.id)).map((r) => localName(r.employee as Row, lang)) : []
-  const needle = filter.trim().toLowerCase()
+  // by name or code, a code typed in Arabic or Persian digits too (Youssef, 2026-11-19)
+  const needle = asciiDigits(filter).trim().toLowerCase()
   const shown = needle ? rows.filter((r) => `${r.employee.name_ar} ${r.employee.name_en ?? ''} ${r.employee.code}`.toLowerCase().includes(needle)) : rows
   const workers = shown.filter((r) => r.section === 'workers')
   const engineers = shown.filter((r) => r.section === 'engineers')
@@ -198,14 +199,20 @@ export function SiteDayPage() {
   else if (!rows.length) body = <EmptyState icon={Users} title={t('siteDay.empty')} />
   else
     body = (
+      // engineers first, then the workers (owner, 2026-11-19); each section keeps the server's order inside it
       <ul aria-label={t('siteDay.rows')} className="flex flex-col gap-2">
-        {workers.map((r) => person(r, isToday && can('employee.crew') && r.employee.type === 'day_laborer' && r.day.state !== 'stored' && !drafts[r.employee.id]))}
         {engineers.length > 0 && (
-          <li className="pt-2">
+          <li>
             <h2 className="flex items-center gap-2 text-section-title"><HardHat className="size-4 text-muted-foreground" aria-hidden />{t('siteDay.engineers')}</h2>
           </li>
         )}
         {engineers.map((r) => person(r, false))}
+        {engineers.length > 0 && workers.length > 0 && (
+          <li className="pt-2">
+            <h2 className="flex items-center gap-2 text-section-title"><Users className="size-4 text-muted-foreground" aria-hidden />{t('siteDay.workers')}</h2>
+          </li>
+        )}
+        {workers.map((r) => person(r, isToday && can('employee.crew') && r.employee.type === 'day_laborer' && r.day.state !== 'stored' && !drafts[r.employee.id]))}
       </ul>
     )
 
@@ -245,12 +252,11 @@ export function SiteDayPage() {
           )}
         </div>
       )}
-      {rows.length > 6 && (
-        <div className="relative">
-          <Search className="pointer-events-none absolute start-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" aria-hidden />
-          <Input type="search" value={filter} onChange={(e) => setFilter(e.target.value)} placeholder={t('siteDay.find')} aria-label={t('siteDay.find')} className="min-h-11 ps-9" />
-        </div>
-      )}
+      {/* always shown, whatever the site's size (Youssef, 2026-11-19); «حضور الكل» and «انصراف الكل» still act on every row */}
+      <div className="relative">
+        <Search className="pointer-events-none absolute start-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" aria-hidden />
+        <Input type="search" value={filter} onChange={(e) => setFilter(e.target.value)} placeholder={t('siteDay.find')} aria-label={t('siteDay.find')} className="min-h-11 ps-9" />
+      </div>
       {saveErr !== undefined && (saveErr instanceof ApiError && saveErr.status === 409 ? (
         <Alert tone="danger">
           <p>{staleNames.length ? t('siteDay.conflictRows', { names: new Intl.ListFormat(intlLocale(lang)).format(staleNames) }) : t('siteDay.conflict')}</p>

@@ -17,7 +17,7 @@ final class LogMasker
     private const SECRET_FRAGMENTS = ['password', 'token', 'secret', 'authorization', 'cookie'];
 
     /** Exact names, not fragments: `pay`/`rate`/`basic` would also hide `pay_method`, `allowance_mode` and `fares`. */
-    private const SENSITIVE_KEYS = ['salary', 'raise', 'insured_basic', 'daily_wage', 'value', 'amount', 'advance_request', 'advance_amount', 'current_pay', 'national_id',
+    private const SENSITIVE_KEYS = ['salary', 'raise', 'insured_basic', 'daily_wage', 'value', 'amount', 'advance_request', 'advance_amount', 'current_pay', 'proposed_wage', 'approved_wage', 'national_id',
         'insurance_no', 'bank_account', 'phone', 'address'];
 
     /** Western, Arabic-Indic and Persian digits, mixed in one run too: HR types on Arabic keyboards. `/u` is safe after mb_scrub. */

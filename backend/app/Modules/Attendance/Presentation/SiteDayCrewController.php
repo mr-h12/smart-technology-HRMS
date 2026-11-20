@@ -35,16 +35,28 @@ final class SiteDayCrewController
         return ApiEnvelope::single($request, ['employee_id' => $q['employee_id'], 'action' => $q['action']]);
     }
 
+    /**
+     * A new day laborer (owner, 2026-11-19): a name of at least three words (spaces trimmed and collapsed, and stored that way), an
+     * optional 14-digit national ID kept as text, and the form's `client_request_id` so a retry adds nobody. NormalizeDigits has
+     * already read Arabic and Persian digits in the wage, phone and national ID.
+     */
     public function store(Request $request): JsonResponse
     {
-        /** @var array{site_id: string, name_ar: string, gender: string, phone?: ?string, daily_wage: string} $data */
+        if (is_string($name = $request->input('name_ar'))) {
+            $request->merge(['name_ar' => trim((string) preg_replace('/\s+/u', ' ', $name))]);
+        }
+        /** @var array{site_id: string, name_ar: string, gender: string, phone?: ?string, national_id?: ?string, daily_wage: string, client_request_id?: ?string, confirm_new?: bool} $data */
         $data = $request->validate([
             'site_id' => ['required', 'uuid'],
-            'name_ar' => ['required', 'string', 'max:150'],
+            'name_ar' => ['required', 'string', 'max:150', EmployeeRules::THREE_PART_NAME],
             'gender' => ['required', Rule::enum(Gender::class)],
             'phone' => ['nullable', 'string', EmployeeRules::MOBILE],
+            'national_id' => ['nullable', 'string', 'digits:14'],
             'daily_wage' => ['required', 'string', EmployeeRules::MONEY, EmployeeRules::POSITIVE],
-        ]);
+            'client_request_id' => ['nullable', 'uuid'],
+            'confirm_new' => ['sometimes', 'boolean'],
+        ], ['name_ar.regex' => __('errors.name_three_parts')]);
+        $data['confirm_new'] = $request->boolean('confirm_new');
 
         return ApiEnvelope::single($request, $this->crew->propose($data['site_id'], $data, $this->manager($request)))->setStatusCode(201);
     }
