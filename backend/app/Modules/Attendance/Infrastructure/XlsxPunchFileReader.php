@@ -27,7 +27,7 @@ final class XlsxPunchFileReader implements PunchFileReaderInterface
     public function read(string $path, int $maxRows, string $today): array
     {
         $data = 0;
-        $sheets = new XlsxAttendanceReader()->each($path, function (Sheet $sheet) use ($maxRows, $today, &$data): ?array {
+        $sheets = (new XlsxAttendanceReader)->each($path, function (Sheet $sheet) use ($maxRows, $today, &$data): ?array {
             $rows = [];
             $isDeviceSheet = false;
             foreach ($sheet->getRowIterator() as $n => $row) {
