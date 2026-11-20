@@ -6,7 +6,7 @@ use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Schema;
 use Illuminate\Support\Str;
 
-// A site manager asks HR to change one employee's daily transport fare at one of their sites (owner, 2026-11-20). The fare in force
+// A site manager asks HR to change one employee's daily transport fare at one of their sites (owner, 2026-11-19). The fare in force
 // stays until HR approves: approving writes an employee_fare_overrides row from the date HR picks (today by default). The request keeps
 // the amount asked for and the amount HR approved apart, and HR's reason when refused.
 return new class extends Migration
@@ -35,7 +35,9 @@ return new class extends Migration
         DB::statement('alter table fare_change_requests add constraint fare_change_requests_amounts_check check (requested_amount >= 0 and (approved_amount is null or approved_amount >= 0))');
         DB::statement("create unique index fare_change_requests_one_pending on fare_change_requests (employee_id, site_id) where status = 'pending' and deleted_at is null");
         DB::statement('create unique index fare_change_requests_client_request on fare_change_requests (client_request_id) where client_request_id is not null');
-        DB::statement('create index fare_change_requests_created_by on fare_change_requests (created_by)');
+        // the decision's facts are in the row: an approval has its amount and date, a refusal its reason (review of #76)
+        DB::statement("alter table fare_change_requests add constraint fare_change_requests_approved_check check (status <> 'approved' or (approved_amount is not null and effective_from is not null))");
+        DB::statement("alter table fare_change_requests add constraint fare_change_requests_refused_check check (status <> 'refused' or refusal_reason is not null)");
 
         $now = now();
         $roles = DB::table('roles')->pluck('id', 'slug');

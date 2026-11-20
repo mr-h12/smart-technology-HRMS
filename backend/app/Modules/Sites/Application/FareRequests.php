@@ -4,12 +4,14 @@ declare(strict_types=1);
 
 namespace App\Modules\Sites\Application;
 
+use App\Modules\Employees\Domain\ClientRequestReused;
 use App\Modules\Employees\Infrastructure\Eloquent\Employee;
 use App\Modules\Identity\Application\Rbac\PermissionHolders;
 use App\Modules\Identity\Infrastructure\Eloquent\User;
 use App\Modules\Notifications\Application\Notifier;
 use App\Modules\Sites\Domain\FareRequestPending;
 use App\Modules\Sites\Domain\FareRequestStatus;
+use App\Modules\Sites\Infrastructure\Eloquent\EmployeeFareOverride;
 use App\Modules\Sites\Infrastructure\Eloquent\FareChangeRequest;
 use App\Modules\Sites\Infrastructure\Eloquent\Site;
 use App\Support\Database\ConcurrencyConflict;
@@ -18,9 +20,10 @@ use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\ModelNotFoundException;
 use Illuminate\Database\UniqueConstraintViolationException;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Validation\ValidationException;
 
 /**
- * A site manager's requests to change one employee's daily transport fare at one of their sites, and HR's decision (owner, 2026-11-20).
+ * A site manager's requests to change one employee's daily transport fare at one of their sites, and HR's decision (owner, 2026-11-19).
  * The fare in force holds until HR approves; approving writes an employee override through FareService::saveOverride (its period lock
  * and same-key update), from the date HR picks. Notifications carry ids and the site's name only, never an amount (§9).
  */
@@ -49,7 +52,9 @@ final class FareRequests
 
     /**
      * The site manager's request for one employee of their team at one of their sites, on today's team. A retry with the same form id
-     * answers the first request; another manager's form id, a site not theirs or an employee not on that site's list is a 404.
+     * answers the first request (and makes sure HR heard of it); a retry that changes the employee, site or amount is a 409
+     * client_request_reused, so a correction is never answered as saved (review of #76). Another manager's form id, a site not theirs or
+     * an employee not on that site's list is a 404.
      *
      * @param  array{employee_id: string, site_id: string, amount: string, reason: string, client_request_id?: ?string}  $data
      * @return array<string, mixed> the request as the manager reads it
@@ -58,7 +63,7 @@ final class FareRequests
     {
         $key = $data['client_request_id'] ?? null;
         if ($key !== null && ($first = FareChangeRequest::where('client_request_id', $key)->first()) !== null) {
-            return $first->created_by === $managerId ? $this->outcome($first) : throw new ModelNotFoundException;
+            return $this->replay($first, $managerId, $data, $today);
         }
         $row = collect($this->fares->siteTeam($managerId, $data['site_id'], $today)['rows'])->firstWhere('employee_id', $data['employee_id'])
             ?? throw new ModelNotFoundException;
@@ -74,43 +79,59 @@ final class FareRequests
             });
         } catch (UniqueConstraintViolationException $e) {
             // Lost a race: the same form id (a double tap) or another pending request for this employee and site.
-            if ($key !== null && ($first = FareChangeRequest::where('client_request_id', $key)->first()) !== null && $first->created_by === $managerId) {
-                return $this->outcome($first);
+            if ($key !== null && ($first = FareChangeRequest::where('client_request_id', $key)->first()) !== null) {
+                return $this->replay($first, $managerId, $data, $today);
             }
             $this->refuseWhilePending($data['employee_id'], $data['site_id'], $managerId);
             throw $e;
         }
 
-        $site = Site::withTrashed()->find($data['site_id']);
-        foreach ($this->holders->userIds('fare.manage.all') as $id) {
-            $this->notifier->notifyOnce($id, 'fare_requested', $today, [
-                'employee_id' => $data['employee_id'], 'request_id' => (string) $request->id,
-                'site_name_ar' => (string) $site?->name_ar, 'site_name_en' => $site?->name_en,
-            ], (string) $request->id);
-        }
+        $this->tellHr($request, $today);
 
         return $this->outcome($request->refresh());
     }
 
     /**
-     * HR's list, newest first: pending only by default.
+     * The first answer for a repeated form id, when it is the same request; HR is told again if the first send died before telling them
+     * (notifyOnce adds nothing when they were).
+     *
+     * @param  array{employee_id: string, site_id: string, amount: string}  $data
+     * @return array<string, mixed>
+     */
+    private function replay(FareChangeRequest $first, string $managerId, array $data, string $today): array
+    {
+        if ($first->created_by !== $managerId) {
+            throw new ModelNotFoundException;
+        }
+        if ($data['employee_id'] !== (string) $first->employee_id || $data['site_id'] !== (string) $first->site_id
+            || bccomp(Decimal::of($data['amount'], 'amount'), Decimal::of((string) $first->requested_amount, 'requested_amount'), 6) !== 0) {
+            throw new ClientRequestReused('fare_request_reused');
+        }
+        $this->tellHr($first, $today);
+
+        return $this->outcome($first);
+    }
+
+    /** Every holder of fare.manage.all hears of a request at once: ids and the site name, never the amount (§9). */
+    private function tellHr(FareChangeRequest $request, string $today): void
+    {
+        $site = Site::withTrashed()->find($request->site_id);
+        foreach ($this->holders->userIds('fare.manage.all') as $id) {
+            $this->notifier->notifyOnce($id, 'fare_requested', $today, [
+                'employee_id' => (string) $request->employee_id, 'request_id' => (string) $request->id,
+                'site_name_ar' => (string) $site?->name_ar, 'site_name_en' => $site?->name_en,
+            ], (string) $request->id);
+        }
+    }
+
+    /**
+     * HR's queue: the pending requests, newest first.
      *
      * @return array{data: list<array<string, mixed>>, pagination: array{page: int, per_page: int, total: int, total_pages: int, has_next_page: bool, has_previous_page: bool}}
      */
-    public function list(?string $status, int $perPage, int $page): array
+    public function pending(int $perPage, int $page): array
     {
-        $q = FareChangeRequest::query()->orderByDesc('id');
-        if ($status !== 'all') {
-            $q->where('status', $status ?? FareRequestStatus::Pending->value);
-        }
-
-        return $this->paged($q, $perPage, $page, true);
-    }
-
-    /** @return array<string, mixed> one request as HR reads it (who asked included) */
-    public function show(string $id): array
-    {
-        return $this->outcome(FareChangeRequest::findOrFail($id), true);
+        return $this->paged(FareChangeRequest::where('status', FareRequestStatus::Pending)->orderByDesc('id'), $perPage, $page, true);
     }
 
     /**
@@ -144,6 +165,13 @@ final class FareRequests
             }
             if ($approve) {
                 $approved = $amount ?? (string) $r->requested_amount;
+                // A later override would take over again from its own date while this request reads approved: refuse, naming that date,
+                // so HR picks one on or after it (Youssef, 2026-11-19).
+                $later = EmployeeFareOverride::where(['employee_id' => $r->employee_id, 'site_id' => $r->site_id])->where('effective_from', '>', (string) $from)
+                    ->orderBy('effective_from')->value('effective_from');
+                if ($later !== null) {
+                    throw ValidationException::withMessages(['effective_from' => __('errors.fare_later_override', ['date' => (string) $later])]);
+                }
                 $this->fares->saveOverride((string) $r->employee_id, ['site_id' => (string) $r->site_id, 'effective_from' => (string) $from, 'amount' => $approved]);
                 $r->fill(['status' => FareRequestStatus::Approved, 'approved_amount' => $approved, 'effective_from' => $from]);
             } else {

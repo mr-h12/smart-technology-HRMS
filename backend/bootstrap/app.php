@@ -132,7 +132,7 @@ return Application::configure(basePath: dirname(__DIR__))
         ));
 
         $exceptions->render(fn (ClientRequestReused $e, Request $request) => ApiEnvelope::error(
-            $request, 409, 'client_request_reused', __('errors.client_request_reused'),
+            $request, 409, 'client_request_reused', __('errors.'.$e->messageKey),
         ));
 
         $exceptions->render(fn (EmployeeHasOpenItems $e, Request $request) => ApiEnvelope::error(

@@ -6,7 +6,7 @@ import { toast } from 'sonner'
 import { Alert } from '@/components/common/Alert'
 import { DataList } from '@/components/common/DataList'
 import { PageHeader } from '@/components/common/PageHeader'
-import { asciiDigits, cairoToday, ErrorBanner, type Errs, localName, TextField, toErrs, useCairoTime, useMoney } from '@/components/form'
+import { cairoToday, ErrorBanner, type Errs, localName, TextField, toErrs, useCairoTime, useMoney } from '@/components/form'
 import { Button } from '@/components/ui/button'
 import { Card } from '@/components/ui/card'
 import { Dialog, DialogBody, DialogContent, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog'
@@ -21,7 +21,7 @@ const LIST = '/fare-requests?per_page=100'
 
 /**
  * `/fare-requests`: HR approves each site manager's transport request at the amount asked or a revised one, from a date (today by
- * default), or rejects it with a reason the manager reads (`fare.manage`; owner, 2026-11-20). `?request=` opens one (the bell).
+ * default), or rejects it with a reason the manager reads (`fare.manage`; owner, 2026-11-19). `?request=` opens one (the bell).
  */
 export function FareRequestsPage() {
   const { t, i18n } = useTranslation()
@@ -80,7 +80,7 @@ function DecideDialog({ r, close }: { r: FareRequest; close: () => void }) {
   const [refusing, setRefusing] = useState(false)
   const [reason, setReason] = useState('')
   const set = (k: string, v: string) => {
-    setForm((f) => ({ ...f, [k]: asciiDigits(v) }))
+    setForm((f) => ({ ...f, [k]: v }))   // TextField's Input already makes the digits ASCII
     setInvalid({})
   }
   // a 409 (decided meanwhile) also reloads the list, so the stale row goes away
@@ -94,7 +94,7 @@ function DecideDialog({ r, close }: { r: FareRequest; close: () => void }) {
         ? { version: r.version, effective_from: form.effective_from, ...(amount !== plainAmount(r.requested_amount) && { amount }) }
         : { version: r.version, reason: reason.trim() }
       await send(`/fare-requests/${r.id}/${action}`, { body }, ['/fare-requests', '/team-fares', '/fares'])
-      toast.success(t(`fareRequest.review.${action === 'approve' ? 'approved' : 'refused'}`, { name: r.employee.name_ar }))
+      toast.success(t(`fareRequest.review.${action === 'approve' ? 'approved' : 'refused'}`, { name: localName(r.employee, i18n.language) }))
       close()
     } catch (e) {
       setErr(e)

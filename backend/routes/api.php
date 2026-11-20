@@ -137,13 +137,12 @@ Route::middleware('auth')->group(function (): void {
     });
 
     Route::get('team-fares', [FareController::class, 'team'])->middleware('permission:employee.view');
-    Route::get('team-fares/site', [FareRequestController::class, 'site'])->middleware('permission:employee.view');
+    Route::get('team-fares/site', [FareRequestController::class, 'site'])->middleware('permission:fare.request');
     Route::prefix('fare-requests')->controller(FareRequestController::class)->whereUuid('fareRequest')->group(function (): void {
         Route::get('/', 'index')->middleware('permission:fare.manage');
         Route::post('/', 'store')->middleware('permission:fare.request');
         Route::get('mine', 'mine')->middleware('permission:fare.request');
         Route::get('mine/{fareRequest}', 'mineOne')->middleware('permission:fare.request');
-        Route::get('{fareRequest}', 'show')->middleware('permission:fare.manage');
         Route::post('{fareRequest}/approve', 'approve')->middleware('permission:fare.manage');
         Route::post('{fareRequest}/refuse', 'refuse')->middleware('permission:fare.manage');
     });

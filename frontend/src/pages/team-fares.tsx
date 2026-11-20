@@ -44,7 +44,7 @@ export function TeamFaresPage() {
   const path = !allowed || (!pick && !edit && can('fare.request')) ? null : pick ? (lead ? `/team-fares?manager_id=${lead}` : null) : '/team-fares'
   const { data, err, loading } = useApi<TeamFares>(path)
   if (!allowed) return <NotFoundPage />
-  // a site manager who can ask HR for changes works one site at a time (owner, 2026-11-20); HR keeps the whole team per manager
+  // a site manager who can ask HR for changes works one site at a time (owner, 2026-11-19); HR keeps the whole team per manager
   if (!pick && !edit && can('fare.request')) return <SiteFaresView />
   return (
     <div className="space-y-4">

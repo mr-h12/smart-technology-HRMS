@@ -8,7 +8,7 @@ import { DataList } from '@/components/common/DataList'
 import { EmptyState } from '@/components/common/EmptyState'
 import { PageHeader } from '@/components/common/PageHeader'
 import { StatusBadge } from '@/components/common/StatusBadge'
-import { asciiDigits, ErrorBanner, type Errs, localName, TextField, toErrs, useCairoTime, useMoney } from '@/components/form'
+import { ErrorBanner, type Errs, localName, TextField, toErrs, useCairoTime, useMoney } from '@/components/form'
 import { TableSkeleton } from '@/components/layout/PageSkeleton'
 import { Badge, type BadgeVariant } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
@@ -60,19 +60,20 @@ const chipCls = 'min-h-tap rounded-full border bg-card px-3 text-[13px] font-med
 const newId = () => crypto.randomUUID()
 
 /**
- * The site manager's «مواصلات الموقع» (owner, 2026-11-20): one of their sites at a time, everyone of their team there with the fare
+ * The site manager's «مواصلات الموقع» (owner, 2026-11-19): one of their sites at a time, everyone of their team there with the fare
  * that applies at it, a change request per row, and their requests with HR's decision. `?site=` keeps the site, `?request=` opens one.
  */
 export function SiteFaresView() {
   const { t } = useTranslation()
   const [params, setParams] = useSearchParams()
   const picked = params.get('site')
-  // the first answer names the manager's sites; with no ?site= it is the team's first site
-  const first = useApi<{ sites: Ref[] }>(picked ? null : '/team-fares')
-  const siteId = picked ?? first.data?.sites[0]?.id ?? null
+  // the manager's sites always load, so a stale ?site= (a site HR took away, an old link) still leaves the chips to pick from (review of #76)
+  const first = useApi<{ sites: Ref[] }>('/team-fares')
+  const own = first.data?.sites
+  const siteId = picked && (!own || own.some((s) => s.id === picked)) ? picked : own?.[0]?.id ?? null
   const { data, err, loading } = useApi<SiteFares>(siteId ? `/team-fares/site?site_id=${siteId}` : null, { keep: true })
   const [asking, setAsking] = useState<SiteFareRow>()
-  const sites = data?.sites ?? first.data?.sites ?? []
+  const sites = own ?? data?.sites ?? []
   const pick = (id: string) => setParams((p) => (p.set('site', id), p.delete('request'), p), { replace: true })
   return (
     <div className="space-y-4">
@@ -170,7 +171,7 @@ function RequestDialog({ row, site, close }: { row: SiteFareRow; site: Ref; clos
   const [err, setErr] = useState<unknown>()
   const [busy, setBusy] = useState(false)
   const set = (k: string, v: string) => {
-    setForm((f) => ({ ...f, [k]: k === 'amount' ? asciiDigits(v) : v }))
+    setForm((f) => ({ ...f, [k]: v }))   // TextField's Input already makes the amount's digits ASCII
     setInvalid({})
   }
   const pending = err instanceof ApiError && err.code === 'fare_request_pending' ? (err.body.pending as Pending | undefined) : undefined

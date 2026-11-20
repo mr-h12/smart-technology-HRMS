@@ -52,8 +52,7 @@
     "logs": "System logs",
     "payroll": "Payroll",
     "attendanceRequests": "Attendance requests",
-    "fareRequests": "Transport requests",
-    "myFareRequests": "My transport requests"
+    "fareRequests": "Transport requests"
   },
   "toggle": {
     "language": "Language",
@@ -1502,7 +1501,7 @@
   },
   "fareRequest": {
     "siteTitle": "Site transport",
-    "siteSubtitle": "Pick a site to see the transport allowance of everyone working with you there, and ask HR to change anyone's.",
+    "siteSubtitle": "Pick a site to see the daily fare of everyone working with you there, and ask HR to change anyone's.",
     "sites": "Your sites",
     "empty": "No one from your team is at this site today.",
     "unset": "Not set",
@@ -1513,11 +1512,11 @@
     "requestFor": "Request a transport change for {{name}}",
     "viewPending": "View request",
     "dialogTitle": "Transport change request · {{name}} · {{site}}",
-    "current": "Current allowance",
+    "current": "Current fare",
     "amount": "Requested daily amount",
     "reason": "Reason",
     "badAmount": "Enter a valid amount (zero or more, up to 6 decimals).",
-    "keepsCurrent": "The current allowance stays in effect until HR approves.",
+    "keepsCurrent": "The current fare stays in effect until HR approves.",
     "send": "Send request",
     "sent": "The transport request for {{name}} was sent to HR.",
     "alreadyPending": "This employee already has a request at this site waiting for HR ({{amount}}).",
@@ -1550,7 +1549,7 @@
     "detail": "Transport request",
     "review": {
       "page": "Transport requests",
-      "description": "Site managers' requests to change an employee's transport allowance at a site. Approve the requested amount or revise it, or reject with a reason.",
+      "description": "Site managers' requests to change an employee's daily fare at a site. Approve the requested amount or revise it, or reject with a reason.",
       "list": "Pending transport requests",
       "empty": "No transport requests are pending.",
       "more": "Showing {{shown}} of {{total}} requests.",
@@ -1563,7 +1562,7 @@
       "refuseReason": "Reason for rejecting (the site manager reads it)",
       "refuseYes": "Confirm rejection",
       "back": "Back",
-      "approved": "The transport allowance of {{name}} was approved.",
+      "approved": "The fare of {{name}} was approved.",
       "refused": "The transport request of {{name}} was rejected."
     },
     "reasonRequired": "Enter the reason for the request."

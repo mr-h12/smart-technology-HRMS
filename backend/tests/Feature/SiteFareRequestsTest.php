@@ -18,7 +18,7 @@ use Tests\TestCase;
 
 /**
  * The site manager's transport fare screen for one site and their change requests; HR approves (as asked or revised) or refuses with a
- * reason; the fare in force changes only on approval (owner, 2026-11-20).
+ * reason; the fare in force changes only on approval (owner, 2026-11-19).
  */
 class SiteFareRequestsTest extends TestCase
 {
@@ -124,7 +124,8 @@ class SiteFareRequestsTest extends TestCase
         $this->getJson('/api/v1/fare-requests')->assertOk()->assertJsonCount(1, 'data')->assertJsonPath('data.0.requested_by.id', $this->m->id)
             ->assertJsonPath('data.0.employee.id', $worker)->assertJsonPath('data.0.site.name_ar', 'Site-1');
         $this->assertSame(1, DB::table('notifications')->where(['user_id' => $this->hr->id, 'type' => 'fare_requested', 'ref' => $req['id']])->count());
-        $this->assertStringNotContainsString('42', (string) DB::table('notifications')->where('type', 'fare_requested')->value('data'));   // no amount (§9)
+        $data = json_decode((string) DB::table('notifications')->where('type', 'fare_requested')->value('data'), true);
+        $this->assertEqualsCanonicalizing(['employee_id', 'request_id', 'site_name_ar', 'site_name_en'], array_keys($data));   // no amount (§9)
 
         $this->postJson("/api/v1/fare-requests/{$req['id']}/approve", ['version' => 1, 'effective_from' => '2026-11-21'])->assertOk()
             ->assertJsonPath('data.outcome', 'approved')->assertJsonPath('data.approved_amount', '42.750000')->assertJsonPath('data.effective_from', '2026-11-21')
@@ -184,7 +185,8 @@ class SiteFareRequestsTest extends TestCase
         $this->actingAs($this->m, 'api');
         $key = (string) Str::uuid7();
         $first = $this->ask($worker, ['client_request_id' => $key])->assertCreated()->json('data.id');
-        $this->ask($worker, ['client_request_id' => $key, 'amount' => '99'])->assertCreated()->assertJsonPath('data.id', $first)->assertJsonPath('data.requested_amount', '40.000000');
+        $this->ask($worker, ['client_request_id' => $key, 'amount' => '40.00'])->assertCreated()->assertJsonPath('data.id', $first);   // the same amount, written another way
+        $this->ask($worker, ['client_request_id' => $key, 'amount' => '99'])->assertStatus(409)->assertJsonPath('error.code', 'client_request_reused');   // a correction is never answered as saved
         $this->ask($worker, ['amount' => '41'])->assertStatus(409)->assertJsonPath('error.code', 'fare_request_pending')
             ->assertJsonPath('error.pending.id', $first)->assertJsonPath('error.pending.mine', true);
         $this->ask($worker, ['site_id' => $this->s2])->assertStatus(404);              // not on Site-2's list today
@@ -227,7 +229,7 @@ class SiteFareRequestsTest extends TestCase
         $id = $this->ask($mine)->assertCreated()->json('data.id');
         $this->getJson('/api/v1/fare-requests')->assertForbidden();                     // HR's list
         $this->postJson("/api/v1/fare-requests/{$id}/approve", ['version' => 1])->assertForbidden();
-        $this->getJson("/api/v1/fare-requests/{$id}")->assertForbidden();
+        $this->getJson("/api/v1/fare-requests/{$id}")->assertNotFound();   // no such route: HR reads its queue (review of #76)
 
         $this->actingAs($this->other, 'api');
         $this->getJson("/api/v1/fare-requests/mine/{$id}")->assertNotFound();
@@ -236,7 +238,65 @@ class SiteFareRequestsTest extends TestCase
 
         $this->actingAs($this->hr, 'api');
         $this->postJson('/api/v1/fare-requests', ['employee_id' => $mine, 'site_id' => $this->s1, 'amount' => '1', 'reason' => 'x'])->assertForbidden();   // HR sets fares directly
-        $this->getJson("/api/v1/team-fares/site?site_id={$this->s1}")->assertStatus(422);                                                                      // HR names the manager
-        $this->getJson("/api/v1/team-fares/site?site_id={$this->s1}&manager_id={$this->m->id}")->assertOk()->assertJsonCount(1, 'data.rows');
+        $this->getJson("/api/v1/team-fares/site?site_id={$this->s1}")->assertForbidden();   // the per-site view is the site manager's (fare.request)
+        $this->signIn('ceo');
+        $this->getJson("/api/v1/team-fares/site?site_id={$this->s1}")->assertForbidden();
+        $this->actingAs($this->m, 'api');
+        $this->postJson("/api/v1/fare-requests/{$id}/refuse", ['version' => 1, 'reason' => 'x'])->assertForbidden();   // only HR decides
+    }
+
+    public function test_approval_is_refused_when_a_later_override_would_take_over_again(): void
+    {
+        $worker = $this->worker('permanent_worker', $this->s1);
+        EmployeeFareOverride::create(['employee_id' => $worker, 'site_id' => $this->s1, 'effective_from' => '2026-12-01', 'amount' => '50']);   // scheduled
+        $this->actingAs($this->m, 'api');
+        $id = $this->ask($worker, ['amount' => '60'])->assertCreated()->json('data.id');
+
+        $this->actingAs($this->hr, 'api');
+        $this->withHeader('Accept-Language', 'ar')->postJson("/api/v1/fare-requests/{$id}/approve", ['version' => 1])->assertStatus(422)
+            ->assertJsonPath('error.details.0.field', 'effective_from')
+            ->assertJsonPath('error.details.0.message', __('errors.fare_later_override', ['date' => '2026-12-01'], 'ar'));
+        $this->assertSame('pending', DB::table('fare_change_requests')->where('id', $id)->value('status'));
+        $this->assertSame(1, EmployeeFareOverride::where('employee_id', $worker)->count());
+        $this->postJson("/api/v1/fare-requests/{$id}/approve", ['version' => 1, 'effective_from' => '2026-12-01'])->assertOk();   // on that date: it replaces it
+        $this->assertSame('60.000000', (string) EmployeeFareOverride::where(['employee_id' => $worker, 'effective_from' => '2026-12-01'])->value('amount'));
+    }
+
+    public function test_approval_into_a_locked_period_is_refused_and_rolls_back_the_decision(): void
+    {
+        $laborer = $this->worker('day_laborer', $this->s1);
+        $this->actingAs($this->m, 'api');
+        $id = $this->ask($laborer)->assertCreated()->json('data.id');
+
+        $this->actingAs($this->hr, 'api');
+        $this->leaveTypes();
+        $this->postJson('/api/v1/attendance/locks', ['group' => 'day_laborer', 'period_start' => '2026-11-01', 'confirm_missing' => true])->assertCreated();
+        $this->postJson("/api/v1/fare-requests/{$id}/approve", ['version' => 1, 'effective_from' => '2026-11-10'])->assertStatus(422)
+            ->assertJsonPath('error.details.0.field', 'effective_from');
+        $this->assertSame(['pending', 1], [DB::table('fare_change_requests')->where('id', $id)->value('status'), (int) DB::table('fare_change_requests')->where('id', $id)->value('version')]);
+        $this->assertSame(0, EmployeeFareOverride::where('employee_id', $laborer)->count());
+        $this->assertSame(0, DB::table('notifications')->where('type', 'fare_approved')->count());
+    }
+
+    public function test_a_pending_row_the_screen_did_not_know_of_still_refuses_a_second_request(): void
+    {
+        $worker = $this->worker('permanent_worker', $this->s1);
+        DB::table('fare_change_requests')->insert(['id' => (string) Str::uuid7(), 'employee_id' => $worker, 'site_id' => $this->s1, 'requested_amount' => '10',
+            'reason' => 'x', 'status' => 'pending', 'version' => 1, 'created_by' => $this->other->id, 'created_at' => now(), 'updated_at' => now()]);
+        $this->actingAs($this->m, 'api');
+        $this->ask($worker)->assertStatus(409)->assertJsonPath('error.code', 'fare_request_pending')->assertJsonPath('error.pending.mine', false);
+    }
+
+    public function test_a_replay_tells_hr_when_the_first_send_did_not(): void
+    {
+        $worker = $this->worker('permanent_worker', $this->s1);
+        $this->actingAs($this->m, 'api');
+        $key = (string) Str::uuid7();
+        $id = $this->ask($worker, ['client_request_id' => $key])->assertCreated()->json('data.id');
+        DB::table('notifications')->where('type', 'fare_requested')->delete();   // as if the first send died after its commit
+        $this->ask($worker, ['client_request_id' => $key])->assertCreated()->assertJsonPath('data.id', $id);
+        $this->assertSame(1, DB::table('notifications')->where(['type' => 'fare_requested', 'ref' => $id])->count());
+        $this->ask($worker, ['client_request_id' => $key])->assertCreated();
+        $this->assertSame(1, DB::table('notifications')->where(['type' => 'fare_requested', 'ref' => $id])->count());   // once
     }
 }

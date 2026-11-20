@@ -52,8 +52,7 @@
     "logs": "سجلات النظام",
     "payroll": "المرتبات",
     "attendanceRequests": "طلبات الحضور",
-    "fareRequests": "طلبات المواصلات",
-    "myFareRequests": "طلبات مواصلاتي"
+    "fareRequests": "طلبات المواصلات"
   },
   "toggle": {
     "language": "اللغة",
