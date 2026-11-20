@@ -13,7 +13,8 @@ use RuntimeException;
  */
 final class ClientRequestReused extends RuntimeException
 {
-    public function __construct()
+    /** @param  string  $messageKey  the errors.* key the refusal reads: the new laborer's by default, the transport request's for a fare */
+    public function __construct(public readonly string $messageKey = 'client_request_reused')
     {
         parent::__construct('A client request id was reused with a different payload');
     }

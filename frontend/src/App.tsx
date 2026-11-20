@@ -20,6 +20,7 @@ const SiteDayPage = page(() => import('@/pages/site-day'), 'SiteDayPage')
 const WageProposalsPage = page(() => import('@/pages/wage-proposals'), 'WageProposalsPage')
 const TeamFaresPage = page(() => import('@/pages/team-fares'), 'TeamFaresPage')
 const MyWageProposalsPage = page(() => import('@/pages/my-wage-proposals'), 'MyWageProposalsPage')
+const FareRequestsPage = page(() => import('@/pages/fare-requests'), 'FareRequestsPage')
 const PayrollPage = page(() => import('@/pages/payroll'), 'PayrollPage')
 const IssuedFormsPage = page(() => import('@/pages/hr-forms'), 'IssuedFormsPage')
 const SignaturePage = page(() => import('@/pages/hr-forms'), 'SignaturePage')
@@ -55,6 +56,7 @@ export function AppRoutes() {
         <Route path="hr-forms" element={nav('/hr-forms', <IssuedFormsPage />)} />
         <Route path="my-signature" element={nav('/my-signature', <SignaturePage />)} />
         <Route path="team-fares" element={<TeamFaresPage />} />
+        <Route path="fare-requests" element={nav('/fare-requests', <FareRequestsPage />)} />
         <Route path="payroll" element={nav('/payroll', <PayrollPage />)} />
         <Route path="settings" element={nav('/settings', <SettingsPage />)} />
         {/* old links, kept for one release */}
