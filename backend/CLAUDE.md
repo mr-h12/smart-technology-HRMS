@@ -9,7 +9,7 @@ docker compose exec app php artisan migrate
 docker compose exec app php artisan test               # PHPUnit 12 on PostgreSQL (hrms_test); needs docs/ mounted read-only at /var/www/docs (compose does it)
 docker compose exec app vendor/bin/pint --test         # lint (drop --test to fix)
 docker compose exec app vendor/bin/phpstan analyse     # larastan level 8
-docker compose exec app vendor/bin/deptrac analyse --config-file=deptrac.layers.yaml
+docker compose exec app composer deptrac               # layer rules; also fails on a file deptrac cannot parse
 ```
 
 `nginx` serves the API on `127.0.0.1:${APP_PORT:-8000}` and hands PHP to `app` (php-fpm, pool in `docker/php/zzz-pool.conf`); `curl http://127.0.0.1:8000/api/v1/health`.
