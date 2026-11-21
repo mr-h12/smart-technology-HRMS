@@ -58,11 +58,15 @@ final class LeaveRequests
     /**
      * The counted dates and what they do to the year's balance. $ownerId (own scope) must reach the employee today and on every counted date.
      *
-     * @return array{dates: list<string>, days: int, balance: ?array<string, ?int>, keep: int, unpaid: int, remaining_after: ?int}
+     * @return array{dates: list<string>, days: int, balance?: ?array<string, ?int>, keep?: int, unpaid?: int, remaining_after?: ?int} own scope: dates and days only
      */
     public function preview(string $employeeId, LeaveKind $kind, string $from, string $to, ?string $ownerId): array
     {
         $dates = $this->check($employeeId, $from, $to, $ownerId);
+        if ($ownerId !== null) {
+            // A site manager sees the counted days only: balances, the unpaid split and what remains are HR's (owner, 2026-11-20).
+            return ['dates' => $dates, 'days' => count($dates)];
+        }
         $balance = $this->balances->forEmployee($employeeId, (int) substr($from, 0, 4), $dates)['balance'];
 
         return ['dates' => $dates, 'days' => count($dates), 'balance' => $balance, ...LeaveBalance::split($kind, count($dates), $balance)];
@@ -131,7 +135,10 @@ final class LeaveRequests
             throw new ModelNotFoundException;
         }
 
-        return $this->detail($request);
+        $detail = $this->detail($request);
+
+        // A site manager reads the status, dates and HR's reason, never the balance the approval preview carries (owner, 2026-11-20).
+        return $ownerId === null ? $detail : [...$detail, 'approval' => null];
     }
 
     /**
