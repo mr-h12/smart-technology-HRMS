@@ -185,6 +185,12 @@ class LeaveRequestsTest extends TestCase
         $this->preview($e, '2026-11-04', 'tomorrow')->assertStatus(422)->assertJsonPath('error.code', 'validation_failed');
     }
 
+    public function test_an_empty_request_names_its_fields_in_arabic(): void
+    {
+        $this->withHeader('Accept-Language', 'ar')->postJson('/api/v1/leave/requests', ['kind' => 'annual'])->assertStatus(422)
+            ->assertJsonFragment(['حقل الموظف مطلوب.'])->assertJsonFragment(['حقل من تاريخ مطلوب.'])->assertJsonFragment(['حقل إلى تاريخ مطلوب.']);
+    }
+
     public function test_a_note_over_360_characters_is_refused_at_submit(): void
     {
         $e = $this->employee('engineer', '2020-01-01');

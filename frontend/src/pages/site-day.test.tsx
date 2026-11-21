@@ -380,6 +380,34 @@ test('«إضافة عامل يومية» finds one laborer by code or full name,
   expect(search.mock.calls.every(([u]) => new URL(String(u), 'http://x').searchParams.get('search') !== 'سعي')).toBe(true)   // typing settles before it asks
 })
 
+test('«إضافة عامل يومية» takes the code, wage and phone typed in Arabic digits', async () => {
+  const create = vi.fn((_url: string, _init?: RequestInit) => json(201, { data: { id: 'n1', code: 77, name_ar: 'سعيد' } }))
+  const search = vi.fn((url: string) => json(200, {
+    data: new URL(url, 'http://x').searchParams.get('search') === '12'
+      ? { match: { id: 'f1', code: 12, name_ar: 'سعيد علي', name_en: null, site: null, here: false, can_add: true }, ambiguous: false }
+      : { match: null, ambiguous: false },
+  }))
+  routes([S1], { s1: S1_ROWS }, { 'GET /api/v1/attendance/site-day/laborers': search, 'POST /api/v1/attendance/site-day/laborers': create })
+  render()
+  await enter()
+  await user.click(await screen.findByRole('button', { name: 'إضافة عامل يومية' }))
+  const dialog = await screen.findByRole('dialog')
+  const box = within(dialog).getByRole('textbox', { name: /الرقم الوظيفي أو الاسم الكامل/ })
+
+  await user.type(box, '١٢')
+  expect(await within(dialog).findByText('سعيد علي')).toBeInTheDocument()   // searched as code 12, not as a name
+
+  await user.clear(box)
+  await user.type(box, 'سعيد')
+  await within(dialog).findByText('لا يوجد عامل يومية بهذا الرقم أو الاسم الكامل.')
+  await user.type(within(dialog).getByRole('textbox', { name: 'الأجر اليومي المقترح' }), '٣٥٠٫٥')
+  await user.type(within(dialog).getByRole('textbox', { name: 'رقم الموبايل (اختياري)' }), '٠١٠١٢٣٤٥٦٧٨')
+  await user.click(within(dialog).getByRole('button', { name: 'ذكر' }))
+  await user.click(within(dialog).getByRole('button', { name: 'إضافة العامل الجديد' }))
+  await waitFor(() => expect(create).toHaveBeenCalledTimes(1))
+  expect(bodyOf(create)).toEqual({ site_id: 's1', name_ar: 'سعيد', gender: 'male', daily_wage: '350.5', phone: '01012345678' })
+})
+
 test('without the crew permissions there is no add or remove', async () => {
   routes([S1], { s1: [row('x', 'Laborer-X', 'day_laborer', 'workers')] })
   render('/site-day', ['attendance.record.own', 'site.view.own'])

@@ -1,7 +1,7 @@
 import { UserPlus } from 'lucide-react'
 import { useState } from 'react'
 import { useTranslation } from 'react-i18next'
-import { ErrorBanner, localName, type Row, toErrs } from '@/components/form'
+import { asciiDigits, ErrorBanner, localName, type Row, toErrs } from '@/components/form'
 import { Button } from '@/components/ui/button'
 import { Dialog, DialogBody, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { Input } from '@/components/ui/input'
@@ -88,7 +88,7 @@ export function AddLaborer({ siteId, siteName, canAdd, canPropose, onDone }: { s
         <DialogBody className="grid gap-3">
           <label className="grid gap-1 text-sm font-medium">
             {t('siteDay.laborerCodeOrName')}
-            <Input value={q} onChange={(e) => setQ(e.target.value)} autoComplete="off" className="min-h-11" aria-invalid={!!errs.name_ar || undefined} />
+            <Input value={q} onChange={(e) => setQ(asciiDigits(e.target.value))} autoComplete="off" className="min-h-11" aria-invalid={!!errs.name_ar || undefined} />
             <span className="text-[13px] font-normal text-muted-foreground">{t('siteDay.searchHint')}</span>
           </label>
           {search && <section aria-label={t('siteDay.matches')} aria-live="polite" className="grid gap-2">{result}</section>}
@@ -108,12 +108,12 @@ export function AddLaborer({ siteId, siteName, canAdd, canPropose, onDone }: { s
               </fieldset>
               <label className="grid gap-1 text-sm font-medium">
                 {t('siteDay.proposedWage')}
-                <Input value={wage} onChange={(e) => setWage(e.target.value)} inputMode="decimal" dir="ltr" className="min-h-11 rtl:text-right" aria-invalid={!!errs.daily_wage || undefined} />
+                <Input value={wage} onChange={(e) => setWage(asciiDigits(e.target.value))} inputMode="decimal" dir="ltr" className="min-h-11 rtl:text-right" aria-invalid={!!errs.daily_wage || undefined} />
                 {errs.daily_wage && <span className="text-[13px] text-destructive">{errs.daily_wage}</span>}
               </label>
               <label className="grid gap-1 text-sm font-medium">
                 {t('siteDay.mobile')}
-                <Input value={phone} onChange={(e) => setPhone(e.target.value)} inputMode="numeric" autoComplete="tel" maxLength={11} dir="ltr" className="min-h-11 rtl:text-right" aria-invalid={!!errs.phone || undefined} />
+                <Input value={phone} onChange={(e) => setPhone(asciiDigits(e.target.value))} inputMode="numeric" autoComplete="tel" maxLength={11} dir="ltr" className="min-h-11 rtl:text-right" aria-invalid={!!errs.phone || undefined} />
                 {errs.phone && <span className="text-[13px] text-destructive">{errs.phone}</span>}
               </label>
               <p className="text-[13px] text-muted-foreground">{t('siteDay.wageNeedsHr')}</p>
