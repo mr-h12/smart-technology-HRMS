@@ -14,7 +14,7 @@ return new class extends Migration
     public function up(): void
     {
         $collisions = DB::select('select '.self::KEY.' k, count(*) from employees where deleted_at is null and fingerprint_name is not null group by 1 having count(*) > 1');
-        $this->refuse($collisions, 'These fingerprint names are held by more than one employee once letter case and spaces are ignored');
+        $this->refuseCollisions($collisions, 'These fingerprint names are held by more than one employee once letter case and spaces are ignored');
 
         DB::statement('alter table employees drop constraint employees_fingerprint_name_unique');
         DB::statement('create unique index employees_fingerprint_key_unique on employees (('.self::KEY.')) where deleted_at is null and fingerprint_name is not null');
@@ -24,14 +24,14 @@ return new class extends Migration
     {
         // The new rule lets a new employee take a soft-deleted employee's name; the old constraint, over every row, refuses that.
         $collisions = DB::select('select fingerprint_name k, count(*) from employees where fingerprint_name is not null group by 1 having count(*) > 1');
-        $this->refuse($collisions, 'These fingerprint names are held by more than one employee, soft-deleted ones included');
+        $this->refuseCollisions($collisions, 'These fingerprint names are held by more than one employee, soft-deleted ones included');
 
         DB::statement('drop index employees_fingerprint_key_unique');
         DB::statement('alter table employees add constraint employees_fingerprint_name_unique unique (fingerprint_name)');
     }
 
     /** @param  array<object{k: string, count: int}>  $collisions  changes no row: HR fixes those employees and tries again */
-    private function refuse(array $collisions, string $what): void
+    private function refuseCollisions(array $collisions, string $what): void
     {
         if ($collisions === []) {
             return;

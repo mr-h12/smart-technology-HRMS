@@ -113,14 +113,14 @@ class FingerprintNameTest extends TestCase
     {
         $this->make('NadimFares');
 
-        $this->postJson('/api/v1/employees', $this->payload('nadimfares'))->assertStatus(422)->assertJsonPath('error.details.0.field', 'fingerprint_name')->assertJsonPath('error.details.0.message', __('validation.unique', ['attribute' => __('validation.attributes.fingerprint_name')]));
+        $this->assertTaken('nadimfares');
     }
 
     public function test_another_employee_cannot_take_the_name_with_a_space(): void
     {
         $this->make('NadimFares');
 
-        $this->postJson('/api/v1/employees', $this->payload('Nadim Fares'))->assertStatus(422)->assertJsonPath('error.details.0.field', 'fingerprint_name')->assertJsonPath('error.details.0.message', __('validation.unique', ['attribute' => __('validation.attributes.fingerprint_name')]));
+        $this->assertTaken('Nadim Fares');
     }
 
     public function test_the_employee_may_change_the_case_of_their_own_name(): void
@@ -142,7 +142,7 @@ class FingerprintNameTest extends TestCase
     {
         $this->archive($this->make('NadimFares'));
 
-        $this->postJson('/api/v1/employees', $this->payload('NadimFares'))->assertStatus(422)->assertJsonPath('error.details.0.field', 'fingerprint_name')->assertJsonPath('error.details.0.message', __('validation.unique', ['attribute' => __('validation.attributes.fingerprint_name')]));
+        $this->assertTaken('NadimFares');
     }
 
     public function test_a_no_break_space_name_is_accepted_beside_an_ordinary_space_one(): void
@@ -158,6 +158,14 @@ class FingerprintNameTest extends TestCase
 
         $this->expectException(UniqueConstraintViolationException::class);
         DB::table('employees')->insert(['id' => (string) Str::uuid7(), 'code' => 999, 'name_ar' => 'موظف', 'gender' => 'male', 'fingerprint_name' => 'nadim fares']);
+    }
+
+    /** A new employee with $fingerprintName is refused with the unique message on that field. */
+    private function assertTaken(string $fingerprintName): void
+    {
+        $this->postJson('/api/v1/employees', $this->payload($fingerprintName))->assertStatus(422)
+            ->assertJsonPath('error.details.0.field', 'fingerprint_name')
+            ->assertJsonPath('error.details.0.message', __('validation.unique', ['attribute' => __('validation.attributes.fingerprint_name')]));
     }
 
     /** @return array<string, mixed> */
