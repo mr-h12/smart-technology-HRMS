@@ -1,5 +1,7 @@
 # جداول الصياغة لنماذج الموارد البشرية (للاعتماد من المالك)
 
+**اعتماد المالك، 2026-11-16 (البوابة 3.0، «اعتمد التوصيات»):** اعتُمدت كل البنود كما اقتُرحت: تصحيحات الإملاء العشرة في طلب الإجازة والستة في شهادة الخبرة، وكل صفوف المذكر والمؤنث (٢ + ٨) ومنها «اسم الموظفة/» بحسب الجنس، والسؤال ٣ (يبقى ج٤ «الموظف الذي ينوب» بالمذكر دائمًا)، والمدة داخل القوسين بعربية صحيحة («(يومين)»، «(3 أيام)»)؛ وتبقى بنود «غير متأكدين» كما كتبتها الشركة («مرضي»، «ينوب العمل»، «المسئولين / مسئولية» وغيرها).
+
 > English preface: wording tables for the PDF rebuild (Step 1, task 1b), for the owner to approve before any layout code.
 > Sources: `docs/templates/طلب اجازة.pdf` (read from the page image, cross-checked with `pdftotext`) and `docs/templates/شهاده خبرة.docx` (`word/document.xml`, paragraphs P1-P8); current templates in `backend/resources/views/pdf/`.
 

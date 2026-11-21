@@ -83,7 +83,8 @@ final class RenderPdf implements ShouldQueue
 
     private function html(stdClass $export): string
     {
-        if ((int) $export->template_version !== 1) {
+        $type = PdfType::tryFrom((string) $export->form_type) ?? throw new RuntimeException('Unknown form template.');
+        if ((int) $export->template_version !== $type->templateVersion()) {
             throw new RuntimeException('Unknown form template.');
         }
         $snapshot = json_decode((string) $export->snapshot, true, flags: JSON_THROW_ON_ERROR);
@@ -96,7 +97,6 @@ final class RenderPdf implements ShouldQueue
             }
             $signature = FilePdfAssets::dataUrl((string) $image->mime_type, $bytes);
         }
-        $type = PdfType::tryFrom((string) $export->form_type) ?? throw new RuntimeException('Unknown form template.');
         [$view, $data] = PdfExports::document($type)->view($snapshot);
 
         return view($view, [
@@ -104,6 +104,9 @@ final class RenderPdf implements ShouldQueue
             'feminine' => ($snapshot['gender'] ?? null) === 'female',
             'font' => FilePdfAssets::asset('fonts/ibm-plex-sans-arabic-arabic-600-normal.woff2', 'font/woff2'),
             'boldFont' => FilePdfAssets::asset('fonts/ibm-plex-sans-arabic-arabic-700-normal.woff2', 'font/woff2'),
+            'markaziArabic' => FilePdfAssets::asset('fonts/markazi-text-arabic-700-normal.woff2', 'font/woff2'),
+            'markaziLatin' => FilePdfAssets::asset('fonts/markazi-text-latin-700-normal.woff2', 'font/woff2'),
+            'carlito' => FilePdfAssets::asset('fonts/Carlito-Bold.ttf', 'font/ttf'),
             ...$data,
         ])->render();
     }

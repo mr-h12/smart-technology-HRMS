@@ -191,6 +191,13 @@ class LeaveRequestsTest extends TestCase
             ->assertJsonFragment(['حقل الموظف مطلوب.'])->assertJsonFragment(['حقل من تاريخ مطلوب.'])->assertJsonFragment(['حقل إلى تاريخ مطلوب.']);
     }
 
+    public function test_a_note_over_360_characters_is_refused_at_submit(): void
+    {
+        $e = $this->employee('engineer', '2020-01-01');
+        $this->submit($e, '2026-11-04', '2026-11-05', 'annual', str_repeat('ب', 361))->assertStatus(422)->assertJsonPath('error.details.0.field', 'note');
+        $this->submit($e, '2026-11-04', '2026-11-05', 'annual', str_repeat('ب', 360))->assertCreated();
+    }
+
     public function test_a_managers_request_is_pending_and_notifies_each_hr_user_once(): void
     {
         $e = $this->employee('engineer', '2020-01-01');

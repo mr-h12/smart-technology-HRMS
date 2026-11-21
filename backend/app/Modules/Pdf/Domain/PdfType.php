@@ -28,6 +28,15 @@ enum PdfType: string
         return $this === self::AdvanceRequest;
     }
 
+    /** The layout new rows of this type are made with. */
+    public function templateVersion(): int
+    {
+        return match ($this) {
+            self::LeaveRequest, self::ExperienceCertificate => 2,
+            self::AdvanceRequest, self::OvertimeRequest => 1,
+        };
+    }
+
     public function fileName(int $serial, string $stage): string
     {
         return str_replace('_', '-', $this->value)."-{$serial}-{$stage}.pdf";

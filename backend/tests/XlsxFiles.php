@@ -9,6 +9,7 @@ use OpenSpout\Common\Entity\Cell\EmptyCell;
 use OpenSpout\Common\Entity\Cell\NumericCell;
 use OpenSpout\Common\Entity\Cell\StringCell;
 use OpenSpout\Common\Entity\Row;
+use OpenSpout\Common\Entity\Style\Style;
 use OpenSpout\Reader\XLSX\Reader;
 use OpenSpout\Writer\XLSX\Writer;
 use Symfony\Component\HttpFoundation\BinaryFileResponse;
@@ -20,6 +21,76 @@ use ZipArchive;
  */
 trait XlsxFiles
 {
+    /**
+     * The fingerprint device's export in miniature (fingerprint design spec, "The file" and "Test workbook"). Two sheets overlap on
+     * 2026-09-29: SaraNabil's earlier row is a prefix of her later one, HadiSalem's two rows each hold a punch the other lacks. Also a
+     * double tap (HadiSalem, 09-27), a one-punch day under IN (SaraNabil, 09-28, on a row with no "More" cell) and a third name, MonaAdel.
+     * A row is [date Y-m-d, device user id, fingerprint name, times H:i:s, has a "More" cell].
+     */
+    public const FINGERPRINT_SHEETS = [
+        'Sheet1' => [
+            ['2026-09-27', 7, 'SaraNabil', ['08:55:10', '17:02:30'], true],
+            ['2026-09-27', 11, 'HadiSalem', ['08:59:01', '08:59:03', '17:30:00'], true],
+            ['2026-09-28', 7, 'SaraNabil', ['16:45:00'], false],
+            ['2026-09-29', 7, 'SaraNabil', ['09:20:00'], true],
+            ['2026-09-29', 11, 'HadiSalem', ['08:50:00'], true],
+        ],
+        'Page 2' => [
+            ['2026-09-29', 7, 'SaraNabil', ['09:20:00', '17:10:00'], true],
+            ['2026-09-29', 11, 'HadiSalem', ['12:00:00', '17:05:00'], true],
+            ['2026-09-30', 12, 'MonaAdel', ['09:01:00', '17:00:00'], true],
+        ],
+    ];
+
+    public const FINGERPRINT_HEADER = ['Date', 'ID Number', 'Name', 'IN', 'OUT', 'IN', 'OUT', 'IN', 'OUT', 'More'];
+
+    /**
+     * Writes FINGERPRINT_SHEETS (or $sheets in its shape) as the device does: A an Excel date serial (format 14), B a number, C text,
+     * D–I day fractions (format 21), J the text "More" linking to a LAN page (a documentation address). A Cell in a row passes through,
+     * for a malformed cell. $headers gives a sheet another row 1; the sheets named in $hidden are hidden. Returns the temp path.
+     *
+     * @param  array<string, list<array{0: string|Cell, 1: int|string|Cell, 2: string|Cell, 3: list<string|Cell>, 4: bool}>>|null  $sheets
+     * @param  array<string, list<string>>  $headers
+     * @param  list<string>  $hidden
+     */
+    protected function fingerprintFile(?array $sheets = null, array $headers = [], array $hidden = []): string
+    {
+        $date = new Style()->withFormat('mm-dd-yy');
+        $time = new Style()->withFormat('h:mm:ss');
+        $cell = fn (mixed $v): Cell => $v instanceof Cell ? $v : Cell::fromValue($v);
+        $path = $this->temp();
+        $writer = new Writer;
+        $writer->openToFile($path);
+        $first = true;
+        foreach ($sheets ?? self::FINGERPRINT_SHEETS as $name => $rows) {
+            ($first ? $writer->getCurrentSheet() : $writer->addNewSheetAndMakeItCurrent())->setName($name)
+                ->setIsVisible(! in_array($name, $hidden, true));
+            $first = false;
+            $writer->addRow(Row::fromValues($headers[$name] ?? self::FINGERPRINT_HEADER));
+            foreach ($rows as [$day, $id, $who, $times, $more]) {
+                $cells = [
+                    is_string($day) ? new NumericCell((new \DateTimeImmutable('1899-12-30'))->diff(new \DateTimeImmutable($day))->days, $date) : $day,
+                    $cell($id),
+                    $cell($who),
+                ];
+                foreach (array_pad($times, 6, null) as $t) {
+                    $cells[] = match (true) {
+                        $t === null => new EmptyCell(null),
+                        is_string($t) => new NumericCell((strtotime("1970-01-01 {$t} UTC") ?: 0) / 86400, $time),
+                        default => $t,
+                    };
+                }
+                if ($more) {
+                    $cells[] = new StringCell('More')->withHyperlink('http://192.0.2.10/punch?id='.(is_int($id) ? $id : 0));
+                }
+                $writer->addRow(new Row($cells));
+            }
+        }
+        $writer->close();
+
+        return $path;
+    }
+
     /** The downloaded file's bytes, kept for the XML checks. */
     private string $xlsx = '';
 
