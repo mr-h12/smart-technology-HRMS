@@ -10,27 +10,27 @@ use PHPUnit\Framework\TestCase;
 /** The cases of issue #68 (FP-3), shift 09:00 to 17:00 unless a case names another. */
 class OfficePunchesTest extends TestCase
 {
-    public function test_one_early_punch_is_a_check_in(): void
+    public function test_one_early_punch_is_an_in_time(): void
     {
         $this->assertDay(['08:53:25'], '08:53', null, [PunchFlag::MissingPunch], 1);
     }
 
-    public function test_one_late_punch_is_a_check_out(): void
+    public function test_one_late_punch_is_an_out_time(): void
     {
         $this->assertDay(['17:05:00'], null, '17:05', [PunchFlag::MissingPunch], 1);
     }
 
-    public function test_one_punch_before_the_shift_end_is_an_early_check_out(): void
+    public function test_one_punch_before_the_shift_end_is_an_early_out_time(): void
     {
         $this->assertDay(['16:30:10'], null, '16:30', [PunchFlag::MissingPunch, PunchFlag::EarlyLeave], 1);
     }
 
-    public function test_one_punch_halfway_is_a_check_out(): void
+    public function test_one_punch_halfway_is_an_out_time(): void
     {
         $this->assertDay(['13:00:00'], null, '13:00', [PunchFlag::MissingPunch, PunchFlag::EarlyLeave], 1);
     }
 
-    public function test_an_arrival_double_tap_is_one_check_in(): void
+    public function test_an_arrival_double_tap_is_one_in_time(): void
     {
         $this->assertDay(['08:53:25', '08:53:26'], '08:53', null, [PunchFlag::MissingPunch], 2);
     }
