@@ -327,6 +327,10 @@ final class DayCrew
                     if ($from === null) {
                         throw ValidationException::withMessages(['effective_from' => __('validation.required', ['attribute' => __('validation.attributes.effective_from')])]);
                     }
+                    // still a day laborer, employed, on HR's date: a type change or a termination since the proposal refuses it
+                    if ($this->laborer((string) $employee->id, $from) === null) {
+                        throw ValidationException::withMessages(['effective_from' => __('errors.not_a_day_laborer_on_date')]);
+                    }
                     $this->employees->addPayChange((string) $employee->id, ['effective_from' => $from, 'daily_wage' => $approved]);
                 }
             } elseif ($approve) {

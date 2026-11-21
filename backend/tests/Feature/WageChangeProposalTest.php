@@ -151,6 +151,29 @@ class WageChangeProposalTest extends TestCase
         $this->assertSame('2026-10-16', (string) DB::table('employee_wage_proposals')->where('id', $p)->value('effective_from'));
     }
 
+    public function test_approval_and_refusal_are_audited_and_so_is_the_pay_row(): void
+    {
+        $p = $this->proposed();
+        $this->postJson("/api/v1/employees/wage-proposals/{$p}/approve", ['version' => 1, 'effective_from' => '2026-10-16'])->assertOk();
+        $pay = (string) DB::table('employee_pay_changes')->where(['employee_id' => $this->laborer, 'effective_from' => '2026-10-16'])->value('id');
+        $this->assertTrue(DB::table('audit_log')->where(['entity_id' => $p, 'event' => 'UPDATED'])->where('new_values->status', 'approved')->exists());
+        $this->assertTrue(DB::table('audit_log')->where('entity_id', $pay)->exists());
+
+        $q = $this->proposed();
+        $this->postJson("/api/v1/employees/wage-proposals/{$q}/refuse", ['version' => 1, 'reason' => 'ليس الآن'])->assertOk();
+        $this->assertTrue(DB::table('audit_log')->where(['entity_id' => $q, 'event' => 'UPDATED'])->where('new_values->status', 'refused')->exists());
+    }
+
+    public function test_approval_is_refused_when_the_laborer_left_before_the_date(): void
+    {
+        $p = $this->proposed();
+        DB::table('employees')->where('id', $this->laborer)->update(['termination_date' => '2026-10-20']);
+
+        $this->postJson("/api/v1/employees/wage-proposals/{$p}/approve", ['version' => 1, 'effective_from' => '2026-10-22'])->assertStatus(422)
+            ->assertJsonPath('error.details.0.field', 'effective_from')->assertJsonPath('error.details.0.message', __('errors.not_a_day_laborer_on_date'));
+        $this->assertSame('pending', DB::table('employee_wage_proposals')->where('id', $p)->value('status'));
+    }
+
     public function test_hr_may_approve_a_revised_wage(): void
     {
         $p = $this->proposed();

@@ -35,7 +35,7 @@ final class WageProposalController
             // a wage change only, where it is required: the day HR's approved wage applies from (a new laborer's is the hire date)
             'effective_from' => ['nullable', 'date_format:Y-m-d'],
         ]);
-        $this->crew->decide($proposal, (int) $q['version'], true, $q['daily_wage'] ?? null, $this->hr($request), self::today(), null, $q['effective_from'] ?? null);
+        $this->crew->decide($proposal, (int) $q['version'], true, $q['daily_wage'] ?? null, $this->actor($request), self::today(), null, $q['effective_from'] ?? null);
 
         return ApiEnvelope::single($request, ['id' => $proposal, 'status' => WageProposalStatus::Approved->value]);
     }
@@ -50,7 +50,7 @@ final class WageProposalController
             ['version' => ['required', 'integer', 'min:1'], 'reason' => ['required', 'string', 'max:500']],
             ['reason.required' => __('errors.refusal_reason_required')],
         );
-        $this->crew->decide($proposal, (int) $q['version'], false, null, $this->hr($request), self::today(), $q['reason']);
+        $this->crew->decide($proposal, (int) $q['version'], false, null, $this->actor($request), self::today(), $q['reason']);
 
         return ApiEnvelope::single($request, ['id' => $proposal, 'status' => WageProposalStatus::Refused->value]);
     }
@@ -69,7 +69,7 @@ final class WageProposalController
             'reason' => ['nullable', 'string', 'max:500'],
             'client_request_id' => ['nullable', 'uuid'],
         ]);
-        $made = $this->crew->proposeWage($employee, $q['daily_wage'], $q['reason'] ?? null, $q['client_request_id'] ?? null, $this->hr($request), self::today());
+        $made = $this->crew->proposeWage($employee, $q['daily_wage'], $q['reason'] ?? null, $q['client_request_id'] ?? null, $this->actor($request), self::today());
 
         return ApiEnvelope::single($request, ['id' => $made['id'], 'status' => $made['status']])->setStatusCode($made['replayed'] ? 200 : 201);
     }
@@ -78,7 +78,7 @@ final class WageProposalController
     public function mine(Request $request): JsonResponse
     {
         $q = $request->validate(['per_page' => ['sometimes', 'integer', 'min:1', 'max:100'], 'page' => ['sometimes', 'integer', 'min:1']]);
-        $page = $this->crew->mine($this->hr($request), (int) ($q['per_page'] ?? 20), (int) ($q['page'] ?? 1));
+        $page = $this->crew->mine($this->actor($request), (int) ($q['per_page'] ?? 20), (int) ($q['page'] ?? 1));
 
         return ApiEnvelope::collection($request, $page['data'], $page['pagination']);
     }
@@ -86,11 +86,11 @@ final class WageProposalController
     /** One of the site manager's own proposals; another manager's id is a 404. */
     public function mineOne(Request $request, string $proposal): JsonResponse
     {
-        return ApiEnvelope::single($request, $this->crew->mineOne($this->hr($request), $proposal));
+        return ApiEnvelope::single($request, $this->crew->mineOne($this->actor($request), $proposal));
     }
 
     /** The signed-in user: HR deciding, or the site manager proposing or reading their own proposals. */
-    private function hr(Request $request): string
+    private function actor(Request $request): string
     {
         return (string) $request->user()?->getAuthIdentifier();
     }

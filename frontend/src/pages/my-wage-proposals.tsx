@@ -13,6 +13,7 @@ import { Card } from '@/components/ui/card'
 import { Dialog, DialogBody, DialogContent, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { Input, Textarea } from '@/components/ui/input'
 import { useAuth } from '@/lib/auth'
+import { WAGE_PATTERN } from '@/lib/day-sheet'
 import { useApi, useList, useSave } from '@/lib/query'
 import { newRequestId } from './site-day-add'
 
@@ -40,8 +41,6 @@ export type MyProposal = MyProposalRow & {
 
 const STATUS: Record<MyProposal['status'], BadgeVariant> = { pending: 'warning', approved: 'success', refused: 'danger' }
 const MINE = '/employees/wage-proposals/mine'
-// the server's rule: a positive amount with up to 6 decimals
-const WAGE = /^\d{1,12}(\.\d{1,6})?$/
 
 /**
  * `/my-wage-proposals`: the daily wages this site manager proposed, for the day laborers they added and since #79 for laborers who
@@ -159,7 +158,7 @@ function ProposeWageDialog({ close }: { close: () => void }) {
     const wage = form.daily_wage.trim()
     const bad: Errs = {}
     if (!picked) bad.employee = t('wages.change.pick')
-    if (!WAGE.test(wage) || Number(wage) <= 0) bad.daily_wage = t('wages.badWage')
+    if (!WAGE_PATTERN.test(wage) || Number(wage) <= 0) bad.daily_wage = t('wages.badWage')
     setInvalid(bad)
     if (!picked || Object.keys(bad).length) return
     setBusy(true)

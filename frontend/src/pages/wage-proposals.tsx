@@ -12,7 +12,7 @@ import { Card } from '@/components/ui/card'
 import { Textarea } from '@/components/ui/input'
 import { Dialog, DialogBody, DialogContent, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { ApiError } from '@/lib/api'
-import { plainAmount } from '@/lib/day-sheet'
+import { plainAmount, WAGE_PATTERN } from '@/lib/day-sheet'
 import { useList, useSave } from '@/lib/query'
 
 /**
@@ -34,8 +34,6 @@ export type WageProposal = {
 
 // Pending proposals are few (one per new laborer until HR decides), so one page holds them all; more than this shows a notice.
 const LIST = '/employees/wage-proposals?per_page=100'
-// the server's rule: a positive amount with up to 6 decimals
-const WAGE = /^\d{1,12}(\.\d{1,6})?$/
 
 /** `/wage-proposals`: HR approves or refuses each wage a site manager proposed (`employee.approve_wage.all`). `?proposal=` opens one (the bell). */
 export function WageProposalsPage() {
@@ -114,7 +112,7 @@ function DecideDialog({ p, close }: { p: WageProposal; close: () => void }) {
     if (action === 'approve') {
       const bad: Errs = {}
       const wage = form.daily_wage.trim()
-      if (!WAGE.test(wage) || Number(wage) <= 0) bad.daily_wage = t('wages.badWage')
+      if (!WAGE_PATTERN.test(wage) || Number(wage) <= 0) bad.daily_wage = t('wages.badWage')
       if (change && !form.effective_from) bad.effective_from = t('wages.change.pickDate')
       setInvalid(bad)
       if (Object.keys(bad).length) return

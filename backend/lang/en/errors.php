@@ -68,5 +68,6 @@ return [
     ],
     'refusal_reason_required' => 'Enter the reason for refusing.',
     'not_a_day_laborer' => 'This employee is not a day laborer today, so no daily wage can be proposed for them.',
+    'not_a_day_laborer_on_date' => 'This employee is no longer a day laborer on this date, or left before it. Choose another date or refuse the proposal.',
     'wage_proposal_pending' => 'This laborer already has a proposed wage waiting for HR. Wait for the decision before proposing another.',
 ];
