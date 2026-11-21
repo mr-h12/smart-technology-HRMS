@@ -67,11 +67,15 @@ Route::middleware('auth')->group(function (): void {
 
     Route::prefix('employees/wage-proposals')->controller(WageProposalController::class)->whereUuid('proposal')->group(function (): void {
         Route::get('/', 'index')->middleware('permission:employee.approve_wage');
-        Route::get('mine', 'mine')->middleware('permission:employee.propose_laborer');
-        Route::get('mine/{proposal}', 'mineOne')->middleware('permission:employee.propose_laborer');
+        Route::get('mine', 'mine')->middleware('permission:employee.propose_laborer,employee.propose_wage');
+        Route::get('mine/{proposal}', 'mineOne')->middleware('permission:employee.propose_laborer,employee.propose_wage');
         Route::post('{proposal}/approve', 'approve')->middleware('permission:employee.approve_wage');
         Route::post('{proposal}/refuse', 'refuse')->middleware('permission:employee.approve_wage');
     });
+
+    // #79: a site manager's new daily wage for an existing day laborer in their reach today.
+    Route::post('employees/{employee}/wage-proposals', [WageProposalController::class, 'propose'])->whereUuid('employee')
+        ->middleware(['permission:employee.propose_wage', 'employee.scope']);
 
     Route::prefix('employees')->controller(EmployeeController::class)->group(function (): void {
         Route::get('/', 'index')->middleware('permission:employee.view');

@@ -11,7 +11,10 @@ use App\Support\Http\ApiEnvelope;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 
-/** HR's review of the daily wages site managers proposed for the day laborers they added (`employee.approve_wage.all`). */
+/**
+ * HR's review of the daily wages site managers proposed (`employee.approve_wage.all`): for the day laborers they added, and since #79
+ * for existing day laborers (`employee.propose_wage.own`).
+ */
 final class WageProposalController
 {
     public function __construct(private readonly DayCrew $crew) {}
@@ -29,8 +32,10 @@ final class WageProposalController
         $q = $request->validate([
             'version' => ['required', 'integer', 'min:1'],
             'daily_wage' => ['nullable', 'string', EmployeeRules::MONEY, EmployeeRules::POSITIVE],
+            // a wage change only, where it is required: the day HR's approved wage applies from (a new laborer's is the hire date)
+            'effective_from' => ['nullable', 'date_format:Y-m-d'],
         ]);
-        $this->crew->decide($proposal, (int) $q['version'], true, $q['daily_wage'] ?? null, $this->hr($request), self::today());
+        $this->crew->decide($proposal, (int) $q['version'], true, $q['daily_wage'] ?? null, $this->hr($request), self::today(), null, $q['effective_from'] ?? null);
 
         return ApiEnvelope::single($request, ['id' => $proposal, 'status' => WageProposalStatus::Approved->value]);
     }
@@ -50,7 +55,26 @@ final class WageProposalController
         return ApiEnvelope::single($request, ['id' => $proposal, 'status' => WageProposalStatus::Refused->value]);
     }
 
-    /** The site manager's own proposals and their outcome (`employee.propose_laborer`); never anyone else's. */
+    /**
+     * A site manager's new daily wage for a day laborer in their reach today (`employee.propose_wage`, `employee.scope`; #79), with an
+     * optional reason HR reads. 201, or 200 with the first answer when the form's `client_request_id` was already used.
+     */
+    public function propose(Request $request, string $employee): JsonResponse
+    {
+        if (is_string($reason = $request->input('reason'))) {
+            $request->merge(['reason' => trim($reason) === '' ? null : trim($reason)]);
+        }
+        $q = $request->validate([
+            'daily_wage' => ['required', 'string', EmployeeRules::MONEY, EmployeeRules::POSITIVE],
+            'reason' => ['nullable', 'string', 'max:500'],
+            'client_request_id' => ['nullable', 'uuid'],
+        ]);
+        $made = $this->crew->proposeWage($employee, $q['daily_wage'], $q['reason'] ?? null, $q['client_request_id'] ?? null, $this->hr($request), self::today());
+
+        return ApiEnvelope::single($request, ['id' => $made['id'], 'status' => $made['status']])->setStatusCode($made['replayed'] ? 200 : 201);
+    }
+
+    /** The site manager's own proposals and their outcome (`employee.propose_laborer` or `employee.propose_wage`); never anyone else's. */
     public function mine(Request $request): JsonResponse
     {
         $q = $request->validate(['per_page' => ['sometimes', 'integer', 'min:1', 'max:100'], 'page' => ['sometimes', 'integer', 'min:1']]);
@@ -65,13 +89,13 @@ final class WageProposalController
         return ApiEnvelope::single($request, $this->crew->mineOne($this->hr($request), $proposal));
     }
 
-    /** The signed-in user: HR deciding, or the site manager reading their own proposals. */
+    /** The signed-in user: HR deciding, or the site manager proposing or reading their own proposals. */
     private function hr(Request $request): string
     {
         return (string) $request->user()?->getAuthIdentifier();
     }
 
-    /** Cairo's date: a refused laborer's last day */
+    /** Cairo's date: a refused laborer's last day, and the day a wage change is proposed on */
     private static function today(): string
     {
         return now('Africa/Cairo')->toDateString();

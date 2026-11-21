@@ -67,4 +67,6 @@ return [
         'national_id_hr' => 'This national ID is already recorded. Contact HR.',
     ],
     'refusal_reason_required' => 'Enter the reason for refusing.',
+    'not_a_day_laborer' => 'This employee is not a day laborer today, so no daily wage can be proposed for them.',
+    'wage_proposal_pending' => 'This laborer already has a proposed wage waiting for HR. Wait for the decision before proposing another.',
 ];

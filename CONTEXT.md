@@ -17,7 +17,7 @@ Office staff, engineers and permanent workers together: everyone paid a monthly 
 _Avoid_: permanent employees, مثبتين (alone; it is ambiguous)
 
 **Site manager** (مدير الموقع):
-An account holder who covers one or more sites and records attendance and absence for the people they reach on a date: the workers whose home site is one of their sites, and the engineers assigned to them. Office staff are in no site manager's reach. A site manager never sees or sets wages; HR owns them. Exception (owner, 2026-11-19): a site manager proposes a daily wage for a new day laborer they add, and sees that proposal's outcome only when they open it (the wage HR approved, or HR's required reason for refusing); their list of proposals carries no figure (Youssef, 2026-11-19). A site manager never reaches their own employee record: HR records their attendance, leave and requests like anyone else's (owner, 2026-11-12).
+An account holder who covers one or more sites and records attendance and absence for the people they reach on a date: the workers whose home site is one of their sites, and the engineers assigned to them. Office staff are in no site manager's reach. A site manager never sees or sets wages; HR owns them. Exception (owner, 2026-11-19): a site manager proposes a daily wage for a new day laborer they add, or a new daily wage for a day laborer they reach (Youssef, 2026-11-19, #79), and sees that proposal's outcome only when they open it (the wage HR approved, or HR's required reason for refusing); their list of proposals carries no figure (Youssef, 2026-11-19). A site manager never reaches their own employee record: HR records their attendance, leave and requests like anyone else's (owner, 2026-11-12).
 _Avoid_: team lead, مسؤول التيم (chosen 2026-11-03, dropped 2026-11-04), supervisor; manager or مدير alone only where the site is obvious
 
 **Fingerprint name**:
@@ -58,7 +58,7 @@ A new day laborer a site manager adds to today's crew, with a three-part name, g
 _Avoid_: temporary worker, new hire
 
 **Proposed wage** (أجر مقترح):
-The daily wage a site manager types for a proposed laborer. A request, never a pay rate: HR sets the wage when approving it. The site manager never sees a stored wage. Exception (owner, 2026-11-19): a site manager proposes a daily wage for a new day laborer they add, and sees that proposal's outcome only when they open it (the wage HR approved, or HR's required reason for refusing); their list of proposals carries no figure (Youssef, 2026-11-19).
+The daily wage a site manager types for a proposed laborer, or the new daily wage they propose for a day laborer they reach (a wage change, with an optional reason HR reads). A request, never a pay rate: HR sets the wage when approving it. A wage change applies from the date HR picks on approval, which may be past but not inside a locked period and not on a date that already has a pay row; refusing it changes nothing on the laborer. One proposal per laborer waits at a time. The site manager never sees a stored wage. Exception (owner, 2026-11-19): a site manager proposes a daily wage for a new day laborer they add, or a new daily wage for a day laborer they reach (Youssef, 2026-11-19, #79), and sees that proposal's outcome only when they open it (the wage HR approved, or HR's required reason for refusing); their list of proposals carries no figure (Youssef, 2026-11-19).
 _Avoid_: wage, rate
 
 **Leave day-type**:
