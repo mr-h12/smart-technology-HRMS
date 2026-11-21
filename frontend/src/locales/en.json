@@ -1090,7 +1090,8 @@
     "departureOnly": "Past the window: enter the departure only; HR is told",
     "openDays": {
       "title": "No departure on an earlier day ({{count}}); complete it before today"
-    }
+    },
+    "draftsDropped": "These rows can no longer be changed, so your unsaved changes on them were dropped: {{names}}. Check their day as it is saved now."
   },
   "leave": {
     "balance": "Leave balance",

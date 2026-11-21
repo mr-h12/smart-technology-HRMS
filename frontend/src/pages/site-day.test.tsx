@@ -7,8 +7,10 @@ import { SiteDayPage } from './site-day'
 
 const user = userEvent.setup()
 afterEach(() => {
+  vi.useRealTimers()
   vi.unstubAllGlobals()
   localStorage.clear()
+  sessionStorage.clear()
 })
 
 const MANAGER = ['attendance.record.own', 'site.view.own', 'employee.crew.own', 'employee.propose_laborer.own']
@@ -243,6 +245,38 @@ test('with one assigned site it is preselected: one tap continues', async () => 
   expect(within(await screen.findByRole('list', { name: 'المواقع التي ستعمل عليها' })).getByRole('checkbox', { name: 'Site-1' })).toHaveAttribute('aria-checked', 'true')
 })
 
+test('a reload or link with ?site= reopens that site with the last working list, not the picker', async () => {
+  localStorage.setItem('hrms.siteDay.sites', '["s1","s2"]')
+  routes([S1, S2], { s1: S1_ROWS, s2: [row('w3', 'Worker-3', 'day_laborer', 'workers')] })
+  render('/site-day?site=s2')
+  expect(await screen.findByRole('heading', { level: 1, name: 'Site-2' })).toBeInTheDocument()
+  expect(screen.queryByRole('list', { name: 'المواقع التي ستعمل عليها' })).toBeNull()
+  expect(within(screen.getByRole('navigation', { name: 'الموقع' })).getByRole('button', { name: /Site-1/ })).toBeInTheDocument()
+})
+
+test('a ?site= that is not one of the manager\'s sites opens the picker', async () => {
+  routes([S1], { s1: S1_ROWS })
+  render('/site-day?site=gone')
+  expect(await screen.findByRole('list', { name: 'المواقع التي ستعمل عليها' })).toBeInTheDocument()
+})
+
+test('unsaved changes survive leaving the page and coming back, and saving clears them', async () => {
+  vi.useFakeTimers({ toFake: ['Date'] })
+  vi.setSystemTime(new Date('2026-10-22T09:00:00Z'))   // the fixture's day: older drafts are dropped on restore
+  const { post } = routes([S1], { s1: S1_ROWS })
+  const first = render()
+  await enter()
+  await user.click(within(await screen.findByRole('group', { name: 'Engineer-1' })).getByRole('button', { name: 'غياب' }))
+  first.unmount() // another screen from the menu, or back
+
+  render('/site-day?site=s1')
+  expect(within(await screen.findByRole('group', { name: 'Engineer-1' })).getByRole('button', { name: 'غياب' })).toHaveAttribute('aria-pressed', 'true')
+  await user.click(screen.getByRole('button', { name: 'حفظ اليوم' }))
+  await waitFor(() => expect(post).toHaveBeenCalledTimes(1))
+  expect(bodyOf(post).rows).toEqual([expect.objectContaining({ employee_id: 'e1', site_id: 'leave-absent' })])
+  await waitFor(() => expect(sessionStorage.length).toBe(0))
+})
+
 test('an empty site still offers «إضافة عامل يومية», with the bulk actions off', async () => {
   routes([S1], { s1: [] })
   render()
@@ -397,7 +431,6 @@ test('an engineer at another site shows that site', async () => {
     ],
   })
   render('/site-day?site=s1')
-  await enter(['Site-1'])
   expect(within(await screen.findByRole('group', { name: 'Engineer-1' })).getByText('في موقع: Site-2')).toBeInTheDocument()
   expect(within(group('Engineer-1')).getByRole('button', { name: 'حاضر' })).toHaveAttribute('aria-pressed', 'false')
   expect(within(group('Engineer-2')).getByText('في موقع آخر')).toBeInTheDocument()
@@ -411,7 +444,6 @@ test('request-only leave is never offered; a day already stored with it shows it
     row('w3', 'Worker-3', 'day_laborer', 'workers', { state: 'stored', version: 1, site_id: 'leave-unpaid', leave_code: 'unpaid' }),
   ] })
   render('/site-day?site=s1')
-  await enter()
   const list = await screen.findByRole('list', { name: 'العاملون بالموقع' })
   for (const [name, leave] of [['Worker-1', 'إجازة اعتيادية'], ['Worker-2', 'إجازة عارضة'], ['Worker-3', 'إجازة بدون أجر']]) {
     const g = within(list).getByRole('group', { name })
@@ -462,7 +494,6 @@ test('an earlier day without a departure: the banner names it, the row is locked
     row('e2', 'Engineer-2', 'engineer', 'engineers', {}, { can_edit: false, why_not: 'open_day', open_date: '2026-10-20', open_site_id: null }),
   ] })
   render('/site-day?site=s1')
-  await enter(['Site-1'])
   const banner = await screen.findByText(/بلا انصراف في يوم سابق \(2\)/)
   const alert = banner.closest('[role="alert"], [role="status"], div')!
   expect(within(alert as HTMLElement).getByText(/Engineer-2/)).toBeInTheDocument()
@@ -534,7 +565,6 @@ test('a note is typed on the row and saved with it', async () => {
 test('a day stored at another of the manager\'s sites takes no note here, so the save never sends that site', async () => {
   routes([S1, S2], { s1: [row('e1', 'Engineer-1', 'engineer', 'engineers', { state: 'stored', version: 1, site_id: 's2', in_time: '09:00' })] })
   render('/site-day?site=s1')
-  await enter(['Site-1'])
   const g = await screen.findByRole('group', { name: 'Engineer-1' })
   expect(within(g).getByText('في موقع: Site-2')).toBeInTheDocument()
   expect(screen.queryByRole('button', { name: /إضافة ملاحظة|ملاحظة:/ })).toBeNull()
@@ -548,4 +578,52 @@ test('a long note shows on one line, cut short, so the card keeps its width', as
   const label = await screen.findByText(`ملاحظة: ${long}`)
   expect(label).toHaveClass('truncate')
   expect(label.closest('button')).toHaveClass('max-w-full')
+})
+
+const DRAFTS = 'hrms.siteDay.drafts.u1'   // me() is user u1
+const storeDraft = (at: string, id: string, draft: object) => sessionStorage.setItem(DRAFTS, JSON.stringify({ [at]: { [id]: draft } }))
+
+test('a restored draft is sent with the version it was made against, so a newer save meanwhile is a 409, not overwritten (review of #73)', async () => {
+  vi.useFakeTimers({ toFake: ['Date'] })
+  vi.setSystemTime(new Date('2026-10-22T09:00:00Z'))
+  storeDraft('s1|2026-10-22', 'w1', { site_id: 's1', in_time: '08:00', out_time: null, version: 1 })
+  const newer = [{ ...S1_ROWS[0], day: { ...S1_ROWS[0].day, version: 2, out_time: '17:00' } }, S1_ROWS[1], S1_ROWS[2]]
+  const { post } = routes([S1], { s1: newer })
+  render('/site-day?site=s1')
+  await user.click(await screen.findByRole('button', { name: 'حفظ اليوم' }))
+  await waitFor(() => expect(post).toHaveBeenCalledTimes(1))
+  expect(bodyOf(post).rows).toEqual([expect.objectContaining({ employee_id: 'w1', version: 1, out_time: null })])
+})
+
+test('a restored draft on a row that became read-only is dropped and named, and the other rows still save (review of #73)', async () => {
+  vi.useFakeTimers({ toFake: ['Date'] })
+  vi.setSystemTime(new Date('2026-10-22T09:00:00Z'))
+  storeDraft('s1|2026-10-22', 'w2', { site_id: 'leave-sick', in_time: null, out_time: null, version: 1 })
+  const rows = [S1_ROWS[0], { ...S1_ROWS[1], can_edit: false, why_not: 'hr_day' }, S1_ROWS[2]]
+  const { post } = routes([S1], { s1: rows })
+  render('/site-day?site=s1')
+  expect(await screen.findByText(/لم يعد بالإمكان تعديل هذه الصفوف/)).toHaveTextContent('Worker-2')
+  await waitFor(() => expect(JSON.parse(sessionStorage.getItem(DRAFTS) ?? '{}')['s1|2026-10-22']?.w2).toBeUndefined())
+  await user.click(within(screen.getByRole('group', { name: 'Engineer-1' })).getByRole('button', { name: 'حاضر' }))
+  await user.click(screen.getByRole('button', { name: 'حفظ اليوم' }))
+  await waitFor(() => expect(post).toHaveBeenCalledTimes(1))
+  expect(bodyOf(post).rows.map((r: { employee_id: string }) => r.employee_id)).toEqual(['e1'])
+})
+
+test('drafts of days older than yesterday are not restored, so an old day never keeps the tab unsaved', async () => {
+  vi.useFakeTimers({ toFake: ['Date'] })
+  vi.setSystemTime(new Date('2026-10-22T09:00:00Z'))
+  sessionStorage.setItem(DRAFTS, JSON.stringify({ 's1|2026-10-01': { w1: { site_id: 's1', in_time: '08:00', out_time: null } }, 's1|2026-10-21': { w1: { site_id: 's1', in_time: '08:00', out_time: null } } }))
+  routes([S1], { s1: S1_ROWS })
+  render('/site-day?site=s1')
+  await screen.findByRole('group', { name: 'Engineer-1' })
+  await waitFor(() => expect(Object.keys(JSON.parse(sessionStorage.getItem(DRAFTS) ?? '{}'))).toEqual(['s1|2026-10-21']))
+})
+
+test('a ?site= that is not the manager\'s opens the picker even with a remembered working list (review of #73)', async () => {
+  localStorage.setItem('hrms.siteDay.sites', JSON.stringify(['s1']))
+  routes([S1], { s1: S1_ROWS })
+  render('/site-day?site=s9')
+  expect(await screen.findByRole('list', { name: 'المواقع التي ستعمل عليها' })).toBeInTheDocument()
+  expect(screen.queryByRole('group', { name: 'Engineer-1' })).toBeNull()
 })

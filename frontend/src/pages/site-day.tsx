@@ -5,7 +5,7 @@ import { useTranslation } from 'react-i18next'
 import { useSearchParams } from 'react-router-dom'
 import { Alert } from '@/components/common/Alert'
 import { EmptyState } from '@/components/common/EmptyState'
-import { ErrorBanner, intlLocale, isHhmm, localName, type Row, stopAtMissingPeriod } from '@/components/form'
+import { cairoToday, ErrorBanner, intlLocale, isHhmm, localName, type Row, stopAtMissingPeriod } from '@/components/form'
 import { TableSkeleton } from '@/components/layout/PageSkeleton'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -40,6 +40,41 @@ const writeWorking = (ids: string[]) => {
   }
 }
 
+/**
+ * Unsaved changes for this tab, per user: they survive leaving the page (another screen, back, reload) and are gone when the tab
+ * closes, which `beforeunload` still warns about. Saving or «تحميل الأحدث» clears them as before.
+ */
+const draftsKey = (userId: string) => `hrms.siteDay.drafts.${userId}`
+const isDrafts = (v: unknown): v is Drafts =>
+  typeof v === 'object' && v !== null && Object.values(v).every((d) => typeof d === 'object' && d !== null && 'site_id' in d && 'in_time' in d && 'out_time' in d)
+/** Cairo's yesterday: past it only an open day's departure can still be saved, and the open-day banner leads there. */
+const yesterday = () => {
+  const d = new Date(`${cairoToday()}T00:00:00Z`)
+  d.setUTCDate(d.getUTCDate() - 1)
+  return d.toISOString().slice(0, 10)
+}
+/** The stored drafts, without days older than yesterday, so an old day never keeps the tab "unsaved" (review of #73). */
+const readDrafts = (userId: string): Record<string, Drafts> => {
+  try {
+    const v: unknown = JSON.parse(sessionStorage.getItem(draftsKey(userId)) ?? '{}')
+    const since = yesterday()
+    return typeof v === 'object' && v !== null
+      ? Object.fromEntries(Object.entries(v).filter((e): e is [string, Drafts] => isDrafts(e[1]) && (e[0].split('|')[1] ?? '') >= since))
+      : {}
+  } catch {
+    return {}
+  }
+}
+const writeDrafts = (userId: string, all: Record<string, Drafts>) => {
+  try {
+    const kept = Object.fromEntries(Object.entries(all).filter(([, d]) => Object.keys(d).length > 0))
+    if (Object.keys(kept).length) sessionStorage.setItem(draftsKey(userId), JSON.stringify(kept))
+    else sessionStorage.removeItem(draftsKey(userId))
+  } catch {
+    // storage blocked: changes live only while the page is open, as before
+  }
+}
+
 const omit = (d: Drafts, ...ids: string[]): Drafts => Object.fromEntries(Object.entries(d).filter(([k]) => !ids.includes(k)))
 
 /**
@@ -51,17 +86,23 @@ const omit = (d: Drafts, ...ids: string[]): Drafts => Object.fromEntries(Object.
 export function SiteDayPage() {
   const { t, i18n } = useTranslation()
   const lang = i18n.language
-  const { can } = useAuth()
+  const { can, me } = useAuth()
+  const userId = me?.id ?? ''
   const allowed = can('attendance.record')
   const [params, setParams] = useSearchParams()
   const { data: mine = [], err: sitesErr, loading: sitesLoading } = useApi<Row[]>(allowed ? MY_SITES : null)
-  const [working, setWorking] = useState<string[] | null>(null) // null: the picker is open
+  // null: the picker is open. A link or reload with `?site=` reopens that site with the last working list, skipping the picker.
+  const [working, setWorking] = useState<string[] | null>(() => {
+    const open = params.get('site')
+    return open ? [...new Set([...readWorking(), open])] : null
+  })
   const chosen = working === null ? [] : mine.filter((s) => working.includes(s.id))
-  const site = chosen.find((s) => s.id === params.get('site')) ?? chosen[0]
+  // only the URL's own site: one that is not (or no longer) the manager's opens the picker, never another site silently (review of #73)
+  const site = chosen.find((s) => s.id === params.get('site'))
   const date = params.get('date')
   const path = allowed && site ? dayPath(site.id, date) : null
   const { data, err, loading, reload } = useApi<SiteDay>(path)
-  const [all, setAll] = useState<Record<string, Drafts>>({})
+  const [all, setAll] = useState<Record<string, Drafts>>(() => (userId ? readDrafts(userId) : {}))
   const [filter, setFilter] = useState('')
   const [saveErr, setSaveErr] = useState<unknown>()
   const [savingKey, setSavingKey] = useState<string | null>(null)
@@ -72,6 +113,24 @@ export function SiteDayPage() {
   const qc = useQueryClient()
   const siteId: string = site?.id ?? ''
   const dirty = Object.values(all).some((d) => Object.keys(d).length > 0)
+  // the names whose restored drafts were dropped because their row is gone or read-only now (HR's day, a closed window)
+  const [dropped, setDropped] = useState<{ at: string; names: string[] }>({ at: '', names: [] })
+  useEffect(() => {
+    if (!data) return
+    const at = `${data.site.id}|${data.date}`
+    const mineHere = all[at]
+    if (!mineHere) return
+    const byId = new Map(data.rows.map((r) => [r.employee.id, r]))
+    const gone = Object.keys(mineHere).filter((id) => { const r = byId.get(id); return !r || !r.can_edit })
+    const same = Object.keys(mineHere).filter((id) => { const r = byId.get(id); return r && r.can_edit && !changed(r, mineHere[id]) })
+    if (!gone.length && !same.length) return
+    setAll((a) => ({ ...a, [at]: omit(a[at] ?? {}, ...gone, ...same) }))
+    const names = gone.flatMap((id) => { const r = byId.get(id); return r ? [localName(r.employee as Row, lang)] : [] })
+    if (gone.length) setDropped({ at, names })
+  }, [data]) // once per answer for the open day; reading `all` here must not rerun it on every keystroke
+  useEffect(() => {
+    if (userId) writeDrafts(userId, all)
+  }, [userId, all])
   useEffect(() => {
     if (!dirty) return
     const warn = (e: BeforeUnloadEvent) => e.preventDefault()
@@ -95,7 +154,8 @@ export function SiteDayPage() {
   if (sitesErr) return <div className="mx-auto w-full max-w-3xl"><ErrorBanner err={sitesErr} shown={[]} /></div>
   if (sitesLoading) return <div className="mx-auto w-full max-w-3xl"><TableSkeleton rows={4} /></div>
   if (!mine.length) return <div className="mx-auto w-full max-w-3xl"><EmptyState icon={MapPinOff} title={t('siteDay.noSites')} /></div>
-  if (working === null) {
+  // the picker also opens when the URL's site is not (or no longer) one of the manager's
+  if (working === null || !site) {
     const assigned = mine.map((s) => s.id)
     const previous = readWorking().filter((id) => assigned.includes(id))
     return (
@@ -114,7 +174,9 @@ export function SiteDayPage() {
   const locked = savingKey !== null && savingKey === key
   const setDrafts = (d: Drafts) => {
     if (locked) return
-    setAll((a) => ({ ...a, [key]: d }))
+    // each new draft keeps the version of the day it was made against (review of #73)
+    const stamped = Object.fromEntries(Object.entries(d).map(([id, x]) => [id, x.version !== undefined ? x : { ...x, version: rows.find((r) => r.employee.id === id)?.day.version ?? null }]))
+    setAll((a) => ({ ...a, [key]: stamped }))
     setSavedKey(null)
     setSaveErr(undefined)
   }
@@ -250,6 +312,10 @@ export function SiteDayPage() {
           <Search className="pointer-events-none absolute start-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" aria-hidden />
           <Input type="search" value={filter} onChange={(e) => setFilter(e.target.value)} placeholder={t('siteDay.find')} aria-label={t('siteDay.find')} className="min-h-11 ps-9" />
         </div>
+      )}
+      {/* drafts restored for rows that are gone or read-only now are dropped, and named, never sent (review of #73) */}
+      {dropped.at === key && dropped.names.length > 0 && (
+        <Alert tone="warning">{t('siteDay.draftsDropped', { names: new Intl.ListFormat(intlLocale(lang)).format(dropped.names) })}</Alert>
       )}
       {saveErr !== undefined && (saveErr instanceof ApiError && saveErr.status === 409 ? (
         <Alert tone="danger">
