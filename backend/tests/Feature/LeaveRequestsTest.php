@@ -191,6 +191,12 @@ class LeaveRequestsTest extends TestCase
             ->assertJsonFragment(['حقل الموظف مطلوب.'])->assertJsonFragment(['حقل من تاريخ مطلوب.'])->assertJsonFragment(['حقل إلى تاريخ مطلوب.']);
     }
 
+    public function test_an_empty_request_names_its_fields_in_english(): void
+    {
+        $this->withHeader('Accept-Language', 'en')->postJson('/api/v1/leave/requests', ['kind' => 'annual'])->assertStatus(422)
+            ->assertJsonFragment(['The Employee field is required.'])->assertJsonFragment(['The From date field is required.'])->assertJsonFragment(['The To date field is required.']);
+    }
+
     public function test_a_note_over_360_characters_is_refused_at_submit(): void
     {
         $e = $this->employee('engineer', '2020-01-01');
