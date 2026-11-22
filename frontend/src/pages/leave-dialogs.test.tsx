@@ -193,6 +193,19 @@ test('clicking an option picks it; editing the text again clears the pick and re
   expect(screen.queryByText(/4 أيام محسوبة/)).toBeNull()
 })
 
+test('deleting from a pick clears the field instead of searching the half-edited name', async () => {
+  const field = filing()
+  await user.click(field)
+  await user.click(await screen.findByRole('option', { name: 'سعيد حسن (202)' }))
+  await user.keyboard('{End}{Backspace}')
+  expect(field).toHaveValue('')
+  expect(screen.getByRole('listbox')).toBeInTheDocument()
+  await user.keyboard('{End}')
+  await user.type(field, 'سا', { skipClick: true })
+  await waitFor(() => expect(searches()).toContain('سا'))
+  expect(searches()).not.toContain('سعيد حسن (202')
+})
+
 test('Escape closes the open list first, and a second Escape closes the dialog', async () => {
   mockFetch({ [EMPLOYEES]: () => json(200, { data: [sami], meta: { pagination: { ...pagination, total: 1 } } }) })
   const onOpenChange = vi.fn()
@@ -217,6 +230,13 @@ test('the list says when nothing matches, and shows a loading line before the fi
   release()
   expect(await within(screen.getByRole('listbox')).findByText('لا توجد نتائج')).toBeInTheDocument()
   expect(within(screen.getByRole('listbox')).queryByRole('option')).toBeNull()
+})
+
+test('a failed employee search says so instead of «no results»', async () => {
+  mockFetch({ [EMPLOYEES]: () => json(500, { error: { code: 'server_error', message: 'تعذّر تحميل الموظفين.' } }) })
+  renderWithAuth(<RequestDialog open onOpenChange={vi.fn()} />, ['leave.request.own'])
+  expect(await screen.findByRole('alert')).toHaveTextContent('تعذّر تحميل الموظفين.')
+  expect(screen.queryByText('لا توجد نتائج')).toBeNull()
 })
 
 test('a refused employee shows its error under the field', async () => {

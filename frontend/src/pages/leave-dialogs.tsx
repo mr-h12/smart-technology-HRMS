@@ -101,7 +101,7 @@ function EmployeeCombobox({ name, label, values, set, errs }: FormApi & { name: 
   const search = useDebounced(text, 250)
   // while a pick is shown the text is its label, not a search
   const [picked, setPicked] = useState<Row>()
-  const { rows, loading } = useList(`/employees?${new URLSearchParams({ per_page: '20', ...(search && !picked && { search }) })}`)
+  const { rows, loading, err } = useList(`/employees?${new URLSearchParams({ per_page: '20', ...(search && !picked && { search }) })}`)
   const labelOf = (r: Row) => `${localName(r, i18n.language)} (${r.code})`
   // Radix closes the dialog on an Escape it hears on the document (capture phase); the window hears it first
   useEffect(() => {
@@ -120,15 +120,21 @@ function EmployeeCombobox({ name, label, values, set, errs }: FormApi & { name: 
     set(name, r.id)
     setOpen(false)
   }
-  const type = (v: string) => {
-    setText(v)
+  const onType = (v: string) => {
+    // letters typed after a pick search on their own, not the label they were added to (Backspace and Delete clear a pick in onKeyDown)
+    const label = picked && labelOf(picked)
+    setText(label && v.startsWith(label) ? v.slice(label.length) : v)
     setPicked(undefined)
     setActive(-1)
     setOpen(true)
     if (values[name]) set(name, '')
   }
-  const keys = (e: React.KeyboardEvent) => {
-    if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
+  const onKeys = (e: React.KeyboardEvent) => {
+    if (picked && (e.key === 'Backspace' || e.key === 'Delete')) {
+      // a half-deleted label would search for nothing; deleting from a pick starts the search again
+      e.preventDefault()
+      onType('')
+    } else if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
       e.preventDefault()
       setOpen(true)
       if (rows.length) setActive((i) => (e.key === 'ArrowDown' ? Math.min(i + 1, rows.length - 1) : Math.max(i - 1, 0)))
@@ -136,6 +142,11 @@ function EmployeeCombobox({ name, label, values, set, errs }: FormApi & { name: 
       e.preventDefault()
       pick(rows[active])
     }
+  }
+  // typing over a pick replaces it
+  const openList = (el: HTMLInputElement) => {
+    setOpen(true)
+    if (picked) el.select()
   }
   const optionId = (i: number) => `${listId}-${i}`
   return (
@@ -157,21 +168,16 @@ function EmployeeCombobox({ name, label, values, set, errs }: FormApi & { name: 
               placeholder={t('leave.search')}
               className="ps-9"
               value={text}
-              onChange={(e) => type(e.target.value)}
-              // typing over a pick replaces it
-              onFocus={(e) => {
-                setOpen(true)
-                if (picked) e.target.select()
-              }}
-              onClick={(e) => {
-                setOpen(true)
-                if (picked) e.currentTarget.select()
-              }}
+              onChange={(e) => onType(e.target.value)}
+              onFocus={(e) => openList(e.currentTarget)}
+              onClick={(e) => openList(e.currentTarget)}
               onBlur={() => setOpen(false)}
-              onKeyDown={keys}
+              onKeyDown={onKeys}
             />
           </div>
-          {open && (
+          {open && err ? (
+            <ErrorBanner err={err} shown={[]} />
+          ) : open && (
             <ul id={listId} role="listbox" aria-label={label} className="max-h-64 overflow-y-auto rounded-md border bg-card py-1 text-sm">
               {loading ? (
                 <li className="flex min-h-tap items-center px-3 text-muted-foreground">{t('leave.request.loading')}</li>
