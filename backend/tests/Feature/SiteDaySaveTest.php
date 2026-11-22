@@ -300,63 +300,15 @@ class SiteDaySaveTest extends TestCase
         $this->assertArrayNotHasKey('office2026-10-01', $groups->all());                                   // nothing to report there
     }
 
-    public function test_previous_is_the_latest_day_in_the_week_before_skipping_fridays_and_holidays(): void
+    public function test_a_site_day_row_carries_no_previous_day(): void
     {
+        // «زي امبارح» was removed (2026-11-19): the screen no longer copies an earlier day, so the API sends none
         $this->actingAs($this->m, 'api');
+        $this->cairo('2026-10-21 09:00');
+        $this->save($this->s1, [$this->work($this->w1, '08:10', '16:00')], '2026-10-21')->assertOk();
         $this->cairo('2026-10-22 09:00');
-        $this->save($this->s1, [$this->work($this->w1, '08:10', '16:00'), ['employee_id' => $this->l1, 'site_id' => $this->leave['sick']]])->assertOk();
-        $this->cairo('2026-10-24 09:00');
-        $this->actingAs($this->makeUser('hr'), 'api');
-        $this->putDay($this->w1, '2026-10-23', ['site_id' => $this->leave['friday']])->assertOk();      // a Friday leave is skipped
-        $this->actingAs($this->m, 'api');
-        $rows = collect($this->getJson("/api/v1/attendance/site-day?site_id={$this->s1}")->assertOk()->json('data.rows'))->keyBy('employee.id');
-        $this->assertSame(['date' => '2026-10-22', 'site_id' => $this->s1, 'leave_code' => null, 'in_time' => '08:10', 'out_time' => '16:00'], $rows[$this->w1]['previous']);
-        $this->assertSame('sick', $rows[$this->l1]['previous']['leave_code']);
-        $this->assertNull($rows[$this->e1]['previous']);
-    }
-
-    public function test_previous_skips_an_official_holiday(): void
-    {
-        $this->actingAs($this->m, 'api');
-        $this->cairo('2026-10-20 09:00');
-        $this->save($this->s1, [$this->work($this->w1, '08:10', '16:00')], '2026-10-20')->assertOk();
-        $this->cairo('2026-10-22 09:00');
-        $this->holiday('2026-10-21');
-        $this->actingAs($this->makeUser('hr'), 'api');
-        $this->putDay($this->w1, '2026-10-21', ['site_id' => $this->leave['official_holiday']])->assertOk();
-        $this->actingAs($this->m, 'api');
-        $this->assertSame('2026-10-20', $this->row($this->s1, $this->w1)['previous']['date']);
-    }
-
-    public function test_previous_looks_back_seven_days_and_no_further(): void
-    {
-        $this->actingAs($this->makeUser('hr'), 'api');
-        $this->putDay($this->w1, '2026-10-15', ['site_id' => $this->s1, 'in_time' => '08:00', 'out_time' => '16:00'])->assertOk();   // D-7
-        $this->putDay($this->l1, '2026-10-14', ['site_id' => $this->s1, 'in_time' => '08:00', 'out_time' => '16:00'])->assertOk();   // D-8
-        $this->actingAs($this->m, 'api');
-        $this->assertSame('2026-10-15', $this->row($this->s1, $this->w1)['previous']['date']);
-        $this->assertNull($this->row($this->s1, $this->l1)['previous']);
-    }
-
-    public function test_previous_shows_only_days_at_the_managers_sites_or_on_a_leave_day_type(): void
-    {
-        // Worker-3 worked at another manager's Site-3 until HR moved them to Site-1 today: Site-1's manager never sees that week.
-        $s3 = $this->workSite('Site-3');
-        $this->managerOf($s3);
-        $this->homeSite($w3 = $this->employee('permanent_worker'), $s3, '2026-10-01');
-        $this->actingAs($this->makeUser('hr'), 'api');
-        $this->putDay($w3, '2026-10-20', ['site_id' => $s3, 'in_time' => '08:00', 'out_time' => '16:00'])->assertOk();
-        $this->putDay($w3, '2026-10-21', ['site_id' => $s3, 'in_time' => '08:00', 'out_time' => '16:00'])->assertOk();
-        $this->putDay($this->w1, '2026-10-21', ['site_id' => $this->leave['annual']])->assertOk();      // request-only leave: nothing to copy
-        $this->homeSite($w3, $this->s1, '2026-10-22');
-        $this->actingAs($this->m, 'api');
-        $this->assertNull($this->row($this->s1, $w3)['previous']);
-        $this->assertNull($this->row($this->s1, $this->w1)['previous']);
-
-        $this->actingAs($this->makeUser('hr'), 'api');
-        $this->putDay($w3, '2026-10-19', ['site_id' => $this->leave['sick']])->assertOk();             // a leave day-type shows wherever they were
-        $this->actingAs($this->m, 'api');
-        $this->assertSame(['2026-10-19', 'sick'], [$this->row($this->s1, $w3)['previous']['date'], $this->row($this->s1, $w3)['previous']['leave_code']]);
+        $this->assertArrayNotHasKey('previous', $this->row($this->s1, $this->w1));
+        $this->assertStringNotContainsString('"previous"', (string) $this->getJson("/api/v1/attendance/site-day?site_id={$this->s1}")->assertOk()->getContent());
     }
 
     public function test_an_unchanged_arrival_keeps_its_late_minutes_and_an_unsent_note_stays(): void
