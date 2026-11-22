@@ -129,6 +129,23 @@ class ImportMasterDataTest extends TestCase
     }
 
     #[Test]
+    public function a_fingerprint_name_repeated_in_another_case_and_spacing_is_a_row_error(): void
+    {
+        $before = $this->counts();
+        $sheets = $this->valid();
+        $sheets['employees'][0]['fingerprint_name'] = 'NadimFares';    // row 2
+        $sheets['employees'][1]['fingerprint_name'] = 'nadim fares';   // row 3, the same name to the fingerprint device
+
+        [$code, $out] = $this->import($this->workbook($sheets), ['--commit' => true]);
+
+        $this->assertNotSame(0, $code);
+        $this->assertStringContainsString('employees row 3 fingerprint_name', $out);
+        $this->assertStringContainsString(__('validation.distinct', ['attribute' => 'fingerprint_name']), $out);
+        $this->assertSame(1, preg_match_all('/^\s*\w+ row \d+ /m', $out), $out);
+        $this->assertSame($before, $this->counts());
+    }
+
+    #[Test]
     public function a_database_refusal_is_a_row_error_without_cell_values(): void
     {
         $before = $this->counts();
