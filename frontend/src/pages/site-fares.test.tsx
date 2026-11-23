@@ -141,3 +141,55 @@ test('a manager without fare.request keeps the read-only team view', async () =>
   expect(await screen.findByRole('heading', { level: 1, name: 'مواصلات التيم' })).toBeInTheDocument()
   expect(urls('/team-fares/site')).toEqual([])
 })
+
+const V4 = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/
+
+test('with crypto.randomUUID missing (plain HTTP, old phones) the request dialog opens and sends a v4 form id (review of #76, 2026-11-22)', async () => {
+  const post = vi.fn((_u: string, _i?: RequestInit) => json(201, { data: {} }))
+  base({ 'POST /api/v1/fare-requests': post })
+  const real = globalThis.crypto
+  vi.stubGlobal('crypto', { getRandomValues: (a: Uint8Array<ArrayBuffer>) => real.getRandomValues(a) })
+  renderWithAuth(<TeamFaresPage />, MANAGER)
+  await user.click(await screen.findByRole('button', { name: 'طلب تعديل مواصلات م. كريم فتحي' }))
+  const dialog = await screen.findByRole('dialog')
+  await user.type(within(dialog).getByLabelText('المبلغ اليومي المطلوب'), '50')
+  await user.type(within(dialog).getByLabelText('سبب الطلب'), 'سكن أبعد')
+  await user.click(within(dialog).getByRole('button', { name: 'إرسال الطلب' }))
+  await waitFor(() => expect(post).toHaveBeenCalledOnce())
+  expect(body(post).client_request_id).toMatch(V4)
+})
+
+test('while the next site loads the previous site\'s table is not shown, so no request can open on it (review of #76, 2026-11-22)', async () => {
+  let release: (r: Response) => void = () => {}
+  base({
+    'GET /api/v1/team-fares/site': (url: string) => new URL(url, 'http://x').searchParams.get('site_id') === 's2'
+      ? new Promise<Response>((r) => { release = r }) as unknown as Response
+      : site(url),
+  })
+  renderWithAuth(<TeamFaresPage />, MANAGER)
+  await screen.findByText('محمود عبد الله')
+  await user.click(within(screen.getByRole('group', { name: 'مواقعك' })).getByRole('button', { name: 'برج العرب' }))
+  await waitFor(() => expect(urls('site_id=s2')).toHaveLength(1))
+  expect(screen.queryByText('محمود عبد الله')).toBeNull()                                     // site A's rows are gone while B loads
+  expect(screen.queryByRole('button', { name: 'طلب تعديل مواصلات م. كريم فتحي' })).toBeNull()
+  release(site('/x?site_id=s2'))
+  expect(await screen.findByText('حسن علي')).toBeInTheDocument()
+})
+
+test('a request keeps the site it was opened on, and is refused when the page moves to another site under it (review of #76, 2026-11-22)', async () => {
+  let sites = [S1, S2]
+  const post = vi.fn((_u: string, _i?: RequestInit) => json(201, { data: {} }))
+  base({ 'GET /api/v1/team-fares': () => json(200, { data: { sites, rows: [] } }), 'POST /api/v1/fare-requests': post })
+  renderWithAuth(<TeamFaresPage />, MANAGER)
+  await user.click(await screen.findByRole('button', { name: 'طلب تعديل مواصلات م. كريم فتحي' }))
+  expect(await screen.findByRole('dialog', { name: 'طلب تعديل مواصلات · م. كريم فتحي · العامرية' })).toBeInTheDocument()
+  sites = [S2]                                                                                  // HR took site A away; the page falls back to B
+  await queryClient.invalidateQueries()
+  await waitFor(() => expect(urls('site_id=s2').length).toBeGreaterThan(0))
+  const dialog = screen.getByRole('dialog', { name: 'طلب تعديل مواصلات · م. كريم فتحي · العامرية' })   // still site A
+  await user.type(within(dialog).getByLabelText('المبلغ اليومي المطلوب'), '50')
+  await user.type(within(dialog).getByLabelText('سبب الطلب'), 'سكن أبعد')
+  expect(within(dialog).getByText('تغيّر الموقع المعروض في الصفحة. أغلق هذه النافذة وافتح الطلب من الموقع الصحيح.')).toBeInTheDocument()
+  expect(within(dialog).getByRole('button', { name: 'إرسال الطلب' })).toBeDisabled()
+  expect(post).not.toHaveBeenCalled()
+})

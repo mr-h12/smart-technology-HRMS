@@ -17,6 +17,7 @@ import { Dialog, DialogBody, DialogContent, DialogFooter, DialogHeader, DialogTi
 import { Textarea } from '@/components/ui/input'
 import { ApiError } from '@/lib/api'
 import { useApi, useList, useSave } from '@/lib/query'
+import { newRequestId } from './site-day-add'
 
 type Ref = { id: string; name: string }
 type Pending = { id: string; requested_amount: string; created_at: string | null; mine: boolean }
@@ -57,7 +58,6 @@ export const OUTCOME: Record<FareRequest['outcome'], BadgeVariant> = { pending: 
 // the server's rule (SiteRules::MONEY): zero or more, up to 12 digits and 6 decimals
 export const AMOUNT = /^\d{1,12}(\.\d{1,6})?$/
 const chipCls = 'min-h-tap rounded-full border bg-card px-3 text-[13px] font-medium text-muted-foreground transition-colors outline-none hover:bg-muted focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-solid focus-visible:outline-ring aria-pressed:border-primary aria-pressed:bg-primary/10 aria-pressed:text-primary'
-const newId = () => crypto.randomUUID()
 
 /**
  * The site manager's «مواصلات الموقع» (owner, 2026-11-19): one of their sites at a time, everyone of their team there with the fare
@@ -72,7 +72,8 @@ export function SiteFaresView() {
   const own = first.data?.sites
   const siteId = picked && (!own || own.some((s) => s.id === picked)) ? picked : own?.[0]?.id ?? null
   const { data, err, loading } = useApi<SiteFares>(siteId ? `/team-fares/site?site_id=${siteId}` : null, { keep: true })
-  const [asking, setAsking] = useState<SiteFareRow>()
+  // the request carries the site it was opened on, never the one the page shows later (review of #76, 2026-11-22)
+  const [asking, setAsking] = useState<{ row: SiteFareRow; site: Ref }>()
   const sites = own ?? data?.sites ?? []
   const pick = (id: string) => setParams((p) => (p.set('site', id), p.delete('request'), p), { replace: true })
   return (
@@ -90,14 +91,14 @@ export function SiteFaresView() {
       <ErrorBanner err={first.err ?? err} shown={[]} />
       {siteId === null ? (
         first.loading ? <TableSkeleton /> : !first.err && <EmptyState icon={Bus} title={t('teamFare.empty')} />
-      ) : loading || !data ? (
+      ) : loading || !data || data.site.id !== siteId ? (   // another site's answer kept while this one loads is not shown
         !err && <TableSkeleton />
       ) : !data.rows.length ? (
         <EmptyState icon={Bus} title={t('fareRequest.empty')} />
       ) : (
-        <SiteTable view={data} ask={setAsking} />
+        <SiteTable view={data} ask={(row) => setAsking({ row, site: data.site })} />
       )}
-      {asking && data && <RequestDialog row={asking} site={data.site} close={() => setAsking(undefined)} />}
+      {asking && <RequestDialog row={asking.row} site={asking.site} moved={asking.site.id !== siteId} close={() => setAsking(undefined)} />}
       <MyRequests />
     </div>
   )
@@ -159,14 +160,17 @@ function SiteTable({ view, ask }: { view: SiteFares; ask: (r: SiteFareRow) => vo
   )
 }
 
-/** The request: the fare now, the amount asked (any digits) and why. The form id stays until a success, so a retry adds nothing. */
-function RequestDialog({ row, site, close }: { row: SiteFareRow; site: Ref; close: () => void }) {
+/**
+ * The request: the fare now, the amount asked (any digits) and why. The form id stays until a success, so a retry adds nothing.
+ * `moved`: the page now shows another site than the one this request was opened on, so it is not sent.
+ */
+function RequestDialog({ row, site, moved, close }: { row: SiteFareRow; site: Ref; moved: boolean; close: () => void }) {
   const { t } = useTranslation()
   const money = useMoney()
   const send = useSave()
   const [, setParams] = useSearchParams()
   const [form, setForm] = useState({ amount: '', reason: '' })
-  const [requestId] = useState(newId)
+  const [requestId] = useState(newRequestId)
   const [invalid, setInvalid] = useState<Errs>({})
   const [err, setErr] = useState<unknown>()
   const [busy, setBusy] = useState(false)
@@ -181,7 +185,7 @@ function RequestDialog({ row, site, close }: { row: SiteFareRow; site: Ref; clos
     if (!AMOUNT.test(amount)) bad.amount = t('fareRequest.badAmount')
     if (!form.reason.trim()) bad.reason = t('fareRequest.reasonRequired')
     setInvalid(bad)
-    if (Object.keys(bad).length) return
+    if (Object.keys(bad).length || moved) return
     setBusy(true)
     setErr(undefined)
     try {
@@ -202,6 +206,7 @@ function RequestDialog({ row, site, close }: { row: SiteFareRow; site: Ref; clos
           <DialogTitle>{t('fareRequest.dialogTitle', { name: row.name, site: site.name })}</DialogTitle>
         </DialogHeader>
         <DialogBody className="grid gap-4">
+          {moved && <Alert tone="warning">{t('fareRequest.siteChanged')}</Alert>}
           {pending ? (
             <Alert tone="info">
               {t('fareRequest.alreadyPending', { amount: money(pending.requested_amount) })}{' '}
@@ -227,7 +232,7 @@ function RequestDialog({ row, site, close }: { row: SiteFareRow; site: Ref; clos
           <p className="text-[13px] text-muted-foreground">{t('fareRequest.keepsCurrent')}</p>
         </DialogBody>
         <DialogFooter>
-          <Button type="button" disabled={busy || !!pending} onClick={() => void submit()}>{t('fareRequest.send')}</Button>
+          <Button type="button" disabled={busy || !!pending || moved} onClick={() => void submit()}>{t('fareRequest.send')}</Button>
         </DialogFooter>
       </DialogContent>
     </Dialog>

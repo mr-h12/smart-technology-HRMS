@@ -1517,6 +1517,7 @@
     "reason": "Reason",
     "badAmount": "Enter a valid amount (zero or more, up to 6 decimals).",
     "keepsCurrent": "The current fare stays in effect until HR approves.",
+    "siteChanged": "The page now shows another site. Close this and open the request from the right site.",
     "send": "Send request",
     "sent": "The transport request for {{name}} was sent to HR.",
     "alreadyPending": "This employee already has a request at this site waiting for HR ({{amount}}).",
