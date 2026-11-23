@@ -247,12 +247,13 @@ final class MasterDataImport
             }
             foreach (self::DISTINCT as $col) {
                 $value = $c[$col] ?? null;
-                if ($value !== null && isset($seen[$col][$value])) {
+                $key = $col === 'fingerprint_name' && $value !== null ? EmployeeRules::fingerprintKey($value) : $value;   // as the device's names match (FP-2)
+                if ($key !== null && isset($seen[$col][$key])) {
                     $this->error('employees', $row, $col, __('validation.distinct', ['attribute' => $col]));
                     $ok = false;
                     $c[$col] = null;   // reported once: the unique rule must not repeat it
-                } elseif ($value !== null) {
-                    $seen[$col][$value] = true;
+                } elseif ($key !== null) {
+                    $seen[$col][$key] = true;
                 }
             }
             $data = [

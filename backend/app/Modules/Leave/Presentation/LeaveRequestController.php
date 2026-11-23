@@ -47,7 +47,7 @@ final class LeaveRequestController
     public function store(Request $request): JsonResponse
     {
         /** @var array{employee_id: string, kind: string, from_date: string, to_date: string, note?: ?string} $v */
-        $v = $request->validate([...self::range(), 'note' => ['nullable', 'string', 'max:1000']]);
+        $v = $request->validate([...self::range(), 'note' => ['nullable', 'string', 'max:'.LeaveRequests::NOTE_MAX]]);
         $user = $request->user() ?? throw new AuthenticationException;
 
         return ApiEnvelope::single($request, $this->requests->submit($v, (string) $user->getAuthIdentifier(), RequestScope::ownerId($request)), 201);

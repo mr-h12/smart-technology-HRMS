@@ -18,8 +18,6 @@ export type SiteDayRow = {
   open_date: string | null
   /** where this site manager can complete that day; null when only HR can (HR's day, or not theirs) */
   open_site_id: string | null
-  /** the day «زي امبارح» copies: the latest day in the 7 before at this site manager's sites or on a leave day-type, Fridays, Saturdays and holidays skipped (P10) */
-  previous?: { date: string; site_id: string | null; leave_code: string | null; in_time: string | null; out_time: string | null } | null
 }
 
 /** One exact path per site and date, so the site tabs, the page and an open day's link share one cache entry. */
@@ -95,25 +93,6 @@ export function changed(r: SiteDayRow, d: Draft | undefined): boolean {
   const s = stored(r)
   return !s || s.site_id !== d.site_id || s.in_time !== d.in_time || s.out_time !== d.out_time || noteChanged(r, d) || d.advance_request !== undefined
 }
-
-/**
- * «زي امبارح»: every editable person with nothing recorded today copies their previous day. A work day at this site becomes present
- * here from that day's arrival (the departure stays empty until the evening); absent, sick, rest and other stay that leave type;
- * anything else (a work day at another site, annual, casual, unpaid, or no previous day) stays empty.
- */
-export function likeYesterday(rows: SiteDayRow[], drafts: Drafts, siteId: string, leave: LeaveDayTypes): Drafts {
-  const next = { ...drafts }
-  for (const r of rows) {
-    const p = r.previous
-    if (!r.can_edit || r.day.state !== 'missing' || drafts[r.employee.id] || !p) continue
-    if (p.leave_code === null && p.site_id === siteId) next[r.employee.id] = { site_id: siteId, in_time: p.in_time ?? r.shift.start, out_time: null }
-    else if (p.leave_code && p.leave_code in leave) next[r.employee.id] = { site_id: leave[p.leave_code as keyof LeaveDayTypes]!, in_time: null, out_time: null }
-  }
-  return next
-}
-
-export const likeYesterdayCount = (rows: SiteDayRow[], drafts: Drafts, siteId: string, leave: LeaveDayTypes) =>
-  Object.keys(likeYesterday(rows, drafts, siteId, leave)).length - Object.keys(drafts).length
 
 /** What is still open on the screen: people with nothing recorded, and present people with no departure. Leave days count as recorded. */
 export function counts(rows: SiteDayRow[], drafts: Drafts, siteId: string) {

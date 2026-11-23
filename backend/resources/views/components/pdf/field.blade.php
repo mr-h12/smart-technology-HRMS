@@ -1,0 +1,2 @@
+@props(['at', 'label', 'value', 'dots'])
+<p class="slot v" style="--at: {{ $at }}pt"><span><span class="w">{{ $label }}</span>@if (filled($value)) <bdi>{{ $value }}</bdi></span><span class="fill">&#8203;<span>{{ str_repeat('.', 5) }}</span>{{ str_repeat('.', (int) ceil($at / 4.4)) }}</span>@else<x-pdf.dots class="w" :count="$dots" /></span>@endif</p>

@@ -15,6 +15,11 @@ final class ArabicFormDateTest extends TestCase
         self::assertSame(['weekday' => 'الخميس', 'date' => '05/11/2026'], ArabicFormDate::format('2026-11-05'));
     }
 
+    public function test_spaced_returns_the_weekday_and_the_day_month_year(): void
+    {
+        self::assertSame(['weekday' => 'الاثنين', 'date' => '23 / 11 / 2026'], ArabicFormDate::spaced('2026-11-23'));
+    }
+
     public function test_negative_balance_keeps_its_sign_and_magnitude(): void
     {
         self::assertSame('-1 يوم', ArabicServiceDuration::days(-1));
