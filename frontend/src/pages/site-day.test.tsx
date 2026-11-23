@@ -664,6 +664,37 @@ test('«شخص آخر بنفس الاسم» holds for its name only: a new match
   expect(create).not.toHaveBeenCalled()
 })
 
+test('«شخص آخر» pressed on X while the next name loads does not confirm Z, a match the manager never saw (review of #72, 2026-11-22)', async () => {
+  let release: (r: Response) => void = () => {}
+  const match = (id: string, name: string, code: number) => ({ id, code, name_ar: name, name_en: null, site: null, here: false, can_add: false })
+  const search = vi.fn((url: string) => {
+    const q = new URL(url, 'http://x').searchParams.get('search')
+    if (q === 'محمد أحمد علي') return json(200, { data: { match: match('X', 'محمد أحمد علي', 101), ambiguous: false } })
+    return new Promise<Response>((resolve) => { release = resolve }) as unknown as Response   // the second name's search is held
+  })
+  const create = vi.fn((_url: string, _init?: RequestInit) => json(201, { data: { id: 'n1', code: 9, name_ar: 'x', proposal_id: 'p1' } }))
+  routes([S1], { s1: S1_ROWS }, { 'GET /api/v1/attendance/site-day/laborers': search, 'POST /api/v1/attendance/site-day/laborers': create })
+  render()
+  await enter()
+  await user.click(await screen.findByRole('button', { name: 'إضافة عامل يومية' }))
+  const dialog = await screen.findByRole('dialog')
+  const box = within(dialog).getByRole('textbox', { name: /الرقم الوظيفي أو الاسم الكامل/ })
+  await user.type(box, 'محمد أحمد علي')
+  expect(await within(dialog).findByText('#101')).toBeInTheDocument()                        // X's card
+  await user.clear(box)
+  await user.type(box, 'محمد أحمد حسن')
+  await waitFor(() => expect(search.mock.calls.some(([u]) => new URL(String(u), 'http://x').searchParams.get('search') === 'محمد أحمد حسن')).toBe(true))
+  expect(within(dialog).getByText('#101')).toBeInTheDocument()                               // X still shown while Z's search is in flight
+  await user.click(within(dialog).getByRole('button', { name: 'شخص آخر بنفس الاسم: إضافة عامل جديد' }))
+
+  release(json(200, { data: { match: match('Z', 'محمد أحمد حسن', 202), ambiguous: false } }))
+  expect(await within(dialog).findByText('#202')).toBeInTheDocument()                        // Z's card arrives
+  // the page asks again, for Z, and shows no new-laborer form until the manager answers
+  expect(await within(dialog).findByRole('button', { name: 'شخص آخر بنفس الاسم: إضافة عامل جديد' })).toBeInTheDocument()
+  expect(within(dialog).queryByRole('region', { name: 'عامل جديد' })).toBeNull()
+  expect(create).not.toHaveBeenCalled()
+})
+
 test('typing more of a name keeps the new-laborer form in place while the next search loads (no flash, Youssef 2026-11-19)', async () => {
   let release: (r: Response) => void = () => {}
   const search = vi.fn((url: string) => {
