@@ -7,6 +7,8 @@ namespace App\Modules\Employees\Application;
 use App\Modules\Employees\Domain\EmployeeType;
 use App\Modules\Employees\Domain\Gender;
 use App\Modules\Employees\Domain\PayMethod;
+use App\Modules\Employees\Infrastructure\Eloquent\Employee;
+use Closure;
 use Illuminate\Validation\Rule;
 
 /** The employee validation rules, shared by the API and the master-data importer so both accept exactly the same input. */
@@ -28,6 +30,20 @@ final class EmployeeRules
 
     /** At least three words, as a site manager's new day laborer needs (owner, 2026-11-19); the caller trims and collapses spaces first. */
     public const THREE_PART_NAME = 'regex:/^\S+( \S+){2,}$/uD';
+
+    /**
+     * A fingerprint name as the database compares it: the six ASCII whitespace characters removed, then lower-cased (FP-2).
+     * The source of truth for uniqueness; the expression index of normalise_fingerprint_name_unique holds the same text.
+     */
+    public const FINGERPRINT_KEY_SQL = <<<'SQL'
+        lower(regexp_replace(fingerprint_name, '[ \t\n\r\f\v]+', '', 'g'))
+        SQL;
+
+    /** FINGERPRINT_KEY_SQL in PHP. PCRE's \v would also match the byte 0x85 inside UTF-8 letters, so the vertical tab is \x0B. */
+    public static function fingerprintKey(string $name): string
+    {
+        return mb_strtolower((string) preg_replace('/[ \t\n\r\f\x0B]+/', '', $name));
+    }
 
     /** @return array<string, array<mixed>> */
     public static function store(): array
@@ -62,7 +78,7 @@ final class EmployeeRules
         return [
             'name_ar' => $r(['required', 'string']),
             'name_en' => ['nullable', 'string'],
-            'fingerprint_name' => ['nullable', 'string', $unique('fingerprint_name')],
+            'fingerprint_name' => ['nullable', 'string', self::uniqueFingerprintName($id)],
             'gender' => $r(['required', Rule::enum(Gender::class)]),
             'national_id' => ['nullable', 'digits:14', $unique('national_id')],
             'insurance_no' => ['nullable', 'string'],
@@ -79,5 +95,19 @@ final class EmployeeRules
             'hr_notes' => ['nullable', 'string'],
             'crm_user_id' => ['nullable', 'uuid'],
         ];
+    }
+
+    /** No other employee not soft-deleted (archived ones included) holds the same fingerprintKey(). */
+    private static function uniqueFingerprintName(?string $id): Closure
+    {
+        return function (string $attribute, mixed $value, Closure $fail) use ($id): void {
+            $taken = is_string($value) && Employee::query()
+                ->whereRaw(self::FINGERPRINT_KEY_SQL.' = ?', [self::fingerprintKey($value)])
+                ->when($id !== null, fn ($q) => $q->whereKeyNot($id))
+                ->exists();
+            if ($taken) {
+                $fail('validation.unique')->translate();
+            }
+        };
     }
 }

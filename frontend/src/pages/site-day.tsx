@@ -12,7 +12,7 @@ import { Input } from '@/components/ui/input'
 import { ApiError } from '@/lib/api'
 import { useAuth } from '@/lib/auth'
 import { queryKey, useApi, useSave } from '@/lib/query'
-import { changed, checkOutAll, checkOutCount, counts, current, dayPath, type Drafts, likeYesterday, likeYesterdayCount, markAllCount, markAllPresent, openDays, saveBody, type SiteDay, type SiteDayRow } from '@/lib/site-day'
+import { changed, checkOutAll, checkOutCount, counts, current, dayPath, type Drafts, markAllCount, markAllPresent, openDays, saveBody, type SiteDay, type SiteDayRow } from '@/lib/site-day'
 import { cn } from '@/lib/utils'
 import { NotFoundPage } from './pages'
 import { AddLaborer } from './site-day-add'
@@ -185,7 +185,6 @@ export function SiteDayPage() {
   const engineers = shown.filter((r) => r.section === 'engineers')
   const markN = locked ? 0 : markAllCount(rows, drafts, siteId)
   const outN = locked ? 0 : checkOutCount(rows, drafts, siteId)
-  const likeN = locked || !day ? 0 : likeYesterdayCount(rows, drafts, siteId, day.leave_day_types)
   const siteName = site ? localName(day?.site ?? site, lang) : ''
   const crewTools = isToday && (can('employee.crew') || can('employee.propose_laborer'))
   const person = (r: SiteDayRow, removable: boolean) => (
@@ -240,9 +239,6 @@ export function SiteDayPage() {
             <div className="flex flex-wrap gap-2" role="group" aria-label={t('siteDay.bulk', { site: siteName })}>
               <Button type="button" className="min-h-11" disabled={!markN} onClick={() => setDrafts(markAllPresent(rows, drafts, siteId))}>
                 {t('siteDay.markAll', { count: markN })}
-              </Button>
-              <Button type="button" variant="outline" className="min-h-11" disabled={!likeN} onClick={() => setDrafts(likeYesterday(rows, drafts, siteId, day.leave_day_types))}>
-                {t('siteDay.likeYesterday', { count: likeN })}
               </Button>
               <Button type="button" variant="outline" className="min-h-11" disabled={!outN} onClick={() => setDrafts(checkOutAll(rows, drafts, siteId))}>
                 {t('siteDay.checkOutAll', { count: outN })}

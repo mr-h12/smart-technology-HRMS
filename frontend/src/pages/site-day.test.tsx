@@ -574,30 +574,14 @@ test('past the window an open day takes only its departure', async () => {
   expect(bodyOf(post).rows).toEqual([{ employee_id: 'e1', version: 1, site_id: 's1', in_time: '08:10', out_time: '16:00' }])
 })
 
-test('«زي امبارح» fills only the empty rows from yesterday, and one save sends them', async () => {
-  const prev = (p = {}) => ({ previous: { date: '2026-10-21', site_id: 's1', leave_code: null, in_time: '08:10', out_time: '16:00', ...p } })
-  const { post } = routes([S1], {
-    s1: [
-      row('a', 'Laborer-A', 'day_laborer', 'workers', {}, prev()),
-      row('b', 'Laborer-B', 'day_laborer', 'workers', {}, prev({ site_id: 'leave-sick', leave_code: 'sick', in_time: null, out_time: null })),
-      row('c', 'Laborer-C', 'day_laborer', 'workers', {}, prev({ site_id: 'leave-annual', leave_code: 'annual', in_time: null, out_time: null })),
-      row('d', 'Laborer-D', 'day_laborer', 'workers', { state: 'stored', version: 1, site_id: 's1', in_time: '09:00' }, prev()),
-    ],
-  })
+test('the bulk actions are «حضور الكل» and «انصراف الكل» only: «زي امبارح» was removed', async () => {
+  routes([S1], { s1: S1_ROWS })
   render()
   await enter()
-  await user.click(await screen.findByRole('button', { name: 'زي امبارح (2)' }))
-  expect(within(group('Laborer-A')).getByRole('textbox', { name: 'حضور Laborer-A' })).toHaveValue('8:10')
-  expect(within(group('Laborer-A')).getByRole('textbox', { name: 'انصراف Laborer-A' })).toHaveValue('')
-  expect(within(group('Laborer-B')).getByRole('button', { name: 'مرضي' })).toHaveAttribute('aria-pressed', 'true')
-  expect(group('Laborer-C').querySelector('[aria-pressed="true"]')).toBeNull()
-  expect(post).not.toHaveBeenCalled()
-  await user.click(screen.getByRole('button', { name: 'حفظ اليوم' }))
-  await waitFor(() => expect(post).toHaveBeenCalledTimes(1))
-  expect(bodyOf(post).rows).toEqual([
-    { employee_id: 'a', version: null, site_id: 's1', in_time: '08:10', out_time: null },
-    { employee_id: 'b', version: null, site_id: 'leave-sick', in_time: null, out_time: null },
-  ])
+  const bulk = await screen.findByRole('group', { name: /Site-1/ })
+  expect(within(bulk).queryByRole('button', { name: /زي امبارح/ })).toBeNull()
+  expect(within(bulk).getByRole('button', { name: /حضور الكل/ })).toBeInTheDocument()
+  expect(within(bulk).getByRole('button', { name: /انصراف الكل/ })).toBeInTheDocument()
 })
 
 test('a note is typed on the row and saved with it', async () => {
@@ -677,6 +661,37 @@ test('«شخص آخر بنفس الاسم» holds for its name only: a new match
   await user.type(box, 'محمد أحمد حسن')                                                // another name, another existing laborer
   expect(await within(dialog).findByRole('button', { name: 'شخص آخر بنفس الاسم: إضافة عامل جديد' })).toBeInTheDocument()
   await waitFor(() => expect(within(dialog).queryByRole('region', { name: 'عامل جديد' })).toBeNull())
+  expect(create).not.toHaveBeenCalled()
+})
+
+test('«شخص آخر» pressed on X while the next name loads does not confirm Z, a match the manager never saw (review of #72, 2026-11-22)', async () => {
+  let release: (r: Response) => void = () => {}
+  const match = (id: string, name: string, code: number) => ({ id, code, name_ar: name, name_en: null, site: null, here: false, can_add: false })
+  const search = vi.fn((url: string) => {
+    const q = new URL(url, 'http://x').searchParams.get('search')
+    if (q === 'محمد أحمد علي') return json(200, { data: { match: match('X', 'محمد أحمد علي', 101), ambiguous: false } })
+    return new Promise<Response>((resolve) => { release = resolve }) as unknown as Response   // the second name's search is held
+  })
+  const create = vi.fn((_url: string, _init?: RequestInit) => json(201, { data: { id: 'n1', code: 9, name_ar: 'x', proposal_id: 'p1' } }))
+  routes([S1], { s1: S1_ROWS }, { 'GET /api/v1/attendance/site-day/laborers': search, 'POST /api/v1/attendance/site-day/laborers': create })
+  render()
+  await enter()
+  await user.click(await screen.findByRole('button', { name: 'إضافة عامل يومية' }))
+  const dialog = await screen.findByRole('dialog')
+  const box = within(dialog).getByRole('textbox', { name: /الرقم الوظيفي أو الاسم الكامل/ })
+  await user.type(box, 'محمد أحمد علي')
+  expect(await within(dialog).findByText('#101')).toBeInTheDocument()                        // X's card
+  await user.clear(box)
+  await user.type(box, 'محمد أحمد حسن')
+  await waitFor(() => expect(search.mock.calls.some(([u]) => new URL(String(u), 'http://x').searchParams.get('search') === 'محمد أحمد حسن')).toBe(true))
+  expect(within(dialog).getByText('#101')).toBeInTheDocument()                               // X still shown while Z's search is in flight
+  await user.click(within(dialog).getByRole('button', { name: 'شخص آخر بنفس الاسم: إضافة عامل جديد' }))
+
+  release(json(200, { data: { match: match('Z', 'محمد أحمد حسن', 202), ambiguous: false } }))
+  expect(await within(dialog).findByText('#202')).toBeInTheDocument()                        // Z's card arrives
+  // the page asks again, for Z, and shows no new-laborer form until the manager answers
+  expect(await within(dialog).findByRole('button', { name: 'شخص آخر بنفس الاسم: إضافة عامل جديد' })).toBeInTheDocument()
+  expect(within(dialog).queryByRole('region', { name: 'عامل جديد' })).toBeNull()
   expect(create).not.toHaveBeenCalled()
 })
 
