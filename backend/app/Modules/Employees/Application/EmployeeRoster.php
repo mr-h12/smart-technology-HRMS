@@ -14,6 +14,7 @@ use App\Modules\Employees\Infrastructure\Eloquent\EmployeeTypeChange;
 use App\Support\Http\Paginates;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Support\Facades\DB;
 
 /**
  * Read model of live employees with their dated types and shifts, so other modules never query Employees' tables.
@@ -22,7 +23,7 @@ use Illuminate\Database\Eloquent\Model;
  * pays: list<{effective_from, salary: ?string, raise: string, insured_basic: ?string, daily_wage: ?string}> (as stored: a row may hold another type's fields; callers pick theirs),
  * sites: list<{site_id, effective_from}>, crew: list<{date, site_id: ?string}>}.
  * Every method returning a set of employees leaves archived ones out (owner, 2026-11-11) unless the caller asks with withArchived();
- * the by-id reads (find, findMany, names) and hiredBetween are unchanged.
+ * the by-id reads (find, findMany, names), byFingerprintNames and hiredBetween are unchanged.
  */
 final class EmployeeRoster
 {
@@ -197,6 +198,33 @@ final class EmployeeRoster
         $rows = [];
         foreach (Employee::with(self::RELATIONS)->whereKey($ids)->get() as $e) {
             $rows[(string) $e->id] = $this->row($e);
+        }
+
+        return $rows;
+    }
+
+    /**
+     * The employees whose fingerprint name matches each of $names by EmployeeRules::fingerprintKey(), archived ones included (FP-2).
+     * One query for the employees plus one per eager-loaded relation, whatever the number of names.
+     *
+     * @param  list<string>  $names
+     * @return array<string, array<string, mixed>> keyed by each name exactly as given, each value the row find() returns; a name with no employee is left out
+     */
+    public function byFingerprintNames(array $names): array
+    {
+        if ($names === []) {
+            return [];
+        }
+        $keys = array_map(EmployeeRules::fingerprintKey(...), $names);
+        $byKey = [];
+        foreach (Employee::with(self::RELATIONS)->whereIn(DB::raw(EmployeeRules::FINGERPRINT_KEY_SQL), array_values(array_unique($keys)))->get() as $e) {
+            $byKey[EmployeeRules::fingerprintKey((string) $e->fingerprint_name)] = $this->row($e);
+        }
+        $rows = [];
+        foreach ($names as $i => $name) {
+            if (isset($byKey[$keys[$i]])) {
+                $rows[$name] = $byKey[$keys[$i]];
+            }
         }
 
         return $rows;

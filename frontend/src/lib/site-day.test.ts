@@ -1,5 +1,5 @@
 import { expect, test } from 'vitest'
-import { arrivalDiff, changed, likeYesterday, likeYesterdayCount, checkOutAll, checkOutCount, counts, departureDiff, markAllCount, markAllPresent, saveBody, type SiteDayRow } from './site-day'
+import { arrivalDiff, changed, checkOutAll, checkOutCount, counts, departureDiff, markAllCount, markAllPresent, saveBody, type SiteDayRow } from './site-day'
 
 const S = 's1'
 const row = (id: string, day: Partial<SiteDayRow['day']> = {}, extra: Partial<SiteDayRow> = {}): SiteDayRow => ({
@@ -88,26 +88,6 @@ test('the arrival difference and the late count', () => {
   expect(arrivalDiff('08:50', '09:00')).toBe(-10)
   const r = row('l', { state: 'stored', version: 1, site_id: S, in_time: '09:20' }, { shift: { start: '09:00', end: '16:00' } })
   expect(counts([r], {}, S).late).toBe(1)
-})
-
-test('«زي امبارح» copies yesterday into empty rows only: work here as present from its arrival, the manager\'s leave types as they were', () => {
-  const leave = { absent: 'leave-absent', sick: 'leave-sick', rest: 'leave-rest', other: 'leave-other' }
-  const prev = (p: Partial<NonNullable<SiteDayRow['previous']>>) => ({ previous: { date: '2026-10-21', site_id: 's9', leave_code: null, in_time: '08:10', out_time: '16:00', ...p } })
-  const worked = row('worked', {}, prev({ site_id: S }))
-  const elsewhere = row('elsewhere', {}, prev({}))
-  const sick = row('sick', {}, prev({ site_id: 'leave-sick', leave_code: 'sick', in_time: null, out_time: null }))
-  const annual = row('annual', {}, prev({ site_id: 'leave-annual', leave_code: 'annual', in_time: null, out_time: null }))
-  const none = row('none')
-  const typed = row('typed', {}, prev({}))
-  const drafts = { typed: { site_id: S, in_time: '09:00', out_time: null } }
-  const next = likeYesterday([worked, elsewhere, sick, annual, none, typed, absent], drafts, S, leave)
-  expect(next.worked).toEqual({ site_id: S, in_time: '08:10', out_time: null })
-  expect(next.sick).toEqual({ site_id: 'leave-sick', in_time: null, out_time: null })
-  expect(next).not.toHaveProperty('elsewhere') // a work day at another site is not drafted as present here
-  expect(next).not.toHaveProperty('annual')
-  expect(next).not.toHaveProperty('none')
-  expect(next.typed).toBe(drafts.typed)
-  expect(likeYesterdayCount([worked, elsewhere, sick, annual, none, typed], drafts, S, leave)).toBe(2)
 })
 
 test('a typed note is sent only when it differs from the stored one', () => {
