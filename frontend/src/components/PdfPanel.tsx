@@ -45,10 +45,11 @@ export const PDF_TYPES: Record<PdfType, { title: string; ownScope: boolean; hint
     title: 'hrForms.leaveRequest',
     ownScope: false,
     fields: [
-      jobTitle,
-      { name: 'notification_method', label: 'hrForms.notificationMethod', kind: 'text', max: 160 },
-      { name: 'manager_opinion', label: 'hrForms.managerOpinion', kind: 'textarea', max: 360 },
-      { name: 'substitute', label: 'hrForms.substitute', kind: 'text', max: 160 },
+      // The leave form's printable limits: longer values cannot hold its one page.
+      { ...jobTitle, max: 60 },
+      { name: 'notification_method', label: 'hrForms.notificationMethod', kind: 'text', max: 60 },
+      { name: 'manager_opinion', label: 'hrForms.managerOpinion', kind: 'textarea', max: 130 },
+      { name: 'substitute', label: 'hrForms.substitute', kind: 'text', max: 60 },
     ],
   },
   advance_request: {

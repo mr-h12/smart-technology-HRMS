@@ -1087,7 +1087,6 @@
     "lateCount": "Late: {{count}}",
     "openDay": "Open {{date}} and enter the departure",
     "backToToday": "Back to today",
-    "likeYesterday": "Like yesterday ({{count}})",
     "addNote": "Add a note",
     "noteShown": "Note: {{note}}",
     "noteOf": "Note for {{name}}",
