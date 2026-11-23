@@ -1090,7 +1090,8 @@
     "openDays": {
       "title": "No departure on an earlier day ({{count}}); complete it before today"
     },
-    "draftsDropped": "These rows can no longer be changed, so your unsaved changes on them were dropped: {{names}}. Check their day as it is saved now."
+    "draftsDropped": "These rows can no longer be changed, so your unsaved changes on them were dropped: {{names}}. Check their day as it is saved now.",
+    "draftsTrimmed": "Only the departure can be recorded for these now, so the departure you typed stays and your other unsaved changes on them were dropped: {{names}}."
   },
   "leave": {
     "balance": "Leave balance",

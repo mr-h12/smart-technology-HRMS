@@ -35,7 +35,8 @@ export const MORE = ['rest', 'other'] as const
 
 /** What the screen holds for one person before «حفظ اليوم»: the site (a work site or a leave type), the two times, and a note when typed (undefined: untouched). */
 /** `version`: the day's version the draft was made against, sent with it, so a stale draft (restored after a reload) gets a 409, never overwrites. */
-export type Draft = { site_id: string | null; in_time: string | null; out_time: string | null; note?: string | null; advance_request?: string | null; version?: number | null }
+/** `version` is the day's version the draft was made against; `name` is the person's, kept so a dropped draft can be named once its row is gone. */
+export type Draft = { site_id: string | null; in_time: string | null; out_time: string | null; note?: string | null; advance_request?: string | null; version?: number | null; name?: string }
 export type Drafts = Record<string, Draft>
 
 /** The people whose earlier field day still has no departure: the banner above the list names them. */

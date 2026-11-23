@@ -2,6 +2,7 @@ import { screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { useLocation } from 'react-router-dom'
 import { afterEach, expect, test, vi } from 'vitest'
+import { queryClient } from '@/lib/query'
 import { json, mockFetch, pagination, renderWithAuth } from '@/test-utils'
 import { SiteDayPage } from './site-day'
 
@@ -592,6 +593,52 @@ test('a restored draft on a row that became read-only is dropped and named, and 
   await user.click(screen.getByRole('button', { name: 'حفظ اليوم' }))
   await waitFor(() => expect(post).toHaveBeenCalledTimes(1))
   expect(bodyOf(post).rows.map((r: { employee_id: string }) => r.employee_id)).toEqual(['e1'])
+})
+
+test('a status pressed on a restored draft keeps the version the draft was made against, so the save is a 409, not an overwrite (review of #73, 2026-11-22)', async () => {
+  vi.useFakeTimers({ toFake: ['Date'] })
+  vi.setSystemTime(new Date('2026-10-22T09:00:00Z'))
+  storeDraft('s1|2026-10-22', 'w1', { site_id: 'leave-absent', in_time: null, out_time: null, version: 1 })
+  const newer = [{ ...S1_ROWS[0], day: { ...S1_ROWS[0].day, version: 2, out_time: '17:00' } }, S1_ROWS[1], S1_ROWS[2]]   // saved meanwhile
+  const { post } = routes([S1], { s1: newer })
+  render('/site-day?site=s1')
+  await user.click(within(await screen.findByRole('group', { name: 'Worker-1' })).getByRole('button', { name: 'مرضي' }))
+  await user.click(screen.getByRole('button', { name: 'حفظ اليوم' }))
+  await waitFor(() => expect(post).toHaveBeenCalledTimes(1))
+  expect(bodyOf(post).rows).toEqual([expect.objectContaining({ employee_id: 'w1', version: 1, site_id: 'leave-sick' })])
+})
+
+test('a restored draft on a row that now takes only its departure keeps the departure, drops the rest and says so (review of #73, 2026-11-22)', async () => {
+  vi.useFakeTimers({ toFake: ['Date'] })
+  vi.setSystemTime(new Date('2026-10-22T09:00:00Z'))
+  sessionStorage.setItem(DRAFTS, JSON.stringify({ 's1|2026-10-22': {
+    w1: { site_id: 's1', in_time: '07:30', out_time: '16:00', note: 'x', version: 1 },   // arrival and note changed, departure typed
+    w2: { site_id: 'leave-absent', in_time: null, out_time: null, version: 1 },           // only a status: nothing left to keep
+  } }))
+  const open = { state: 'stored', version: 1, site_id: 's1', in_time: '08:00' }
+  const rows = [row('w1', 'Worker-1', 'day_laborer', 'workers', open, { departure_only: true }), row('w2', 'Worker-2', 'permanent_worker', 'workers', open, { departure_only: true }), S1_ROWS[2]]
+  const { post } = routes([S1], { s1: rows })
+  render('/site-day?site=s1')
+  const notice = await screen.findByText(/يمكن الآن تسجيل الانصراف فقط/)
+  expect(notice).toHaveTextContent('Worker-1')
+  expect(notice).toHaveTextContent('Worker-2')
+  await user.click(screen.getByRole('button', { name: 'حفظ اليوم' }))
+  await waitFor(() => expect(post).toHaveBeenCalledTimes(1))
+  expect(bodyOf(post).rows).toEqual([{ employee_id: 'w1', version: 1, site_id: 's1', in_time: '08:00', out_time: '16:00' }])
+})
+
+test('a draft is named when it is made, so one whose person left the day is named when it is dropped (review of #73, 2026-11-22)', async () => {
+  vi.useFakeTimers({ toFake: ['Date'] })
+  vi.setSystemTime(new Date('2026-10-22T09:00:00Z'))
+  routes([S1], { s1: S1_ROWS })
+  const { unmount } = render('/site-day?site=s1')
+  await user.click(within(await screen.findByRole('group', { name: 'Engineer-1' })).getByRole('button', { name: 'حاضر' }))
+  await waitFor(() => expect(JSON.parse(sessionStorage.getItem(DRAFTS) ?? '{}')['s1|2026-10-22']?.e1?.name).toBe('Engineer-1'))
+  unmount()
+  queryClient.clear()                                                                     // a reload: nothing cached
+  routes([S1], { s1: S1_ROWS.slice(0, 2) })                                               // Engineer-1 is no longer on this site's day
+  render('/site-day?site=s1')
+  expect(await screen.findByText(/لم يعد بالإمكان تعديل هذه الصفوف/)).toHaveTextContent('Engineer-1')
 })
 
 test('drafts of days older than yesterday are not restored, so an old day never keeps the tab unsaved', async () => {

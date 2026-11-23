@@ -12,7 +12,7 @@ import { Input } from '@/components/ui/input'
 import { ApiError } from '@/lib/api'
 import { useAuth } from '@/lib/auth'
 import { queryKey, useApi, useSave } from '@/lib/query'
-import { changed, checkOutAll, checkOutCount, counts, current, dayPath, type Drafts, markAllCount, markAllPresent, openDays, saveBody, type SiteDay, type SiteDayRow } from '@/lib/site-day'
+import { changed, checkOutAll, checkOutCount, counts, current, dayPath, type Draft, type Drafts, markAllCount, markAllPresent, openDays, saveBody, type SiteDay, type SiteDayRow } from '@/lib/site-day'
 import { cn } from '@/lib/utils'
 import { NotFoundPage } from './pages'
 import { AddLaborer } from './site-day-add'
@@ -113,8 +113,9 @@ export function SiteDayPage() {
   const qc = useQueryClient()
   const siteId: string = site?.id ?? ''
   const dirty = Object.values(all).some((d) => Object.keys(d).length > 0)
-  // the names whose restored drafts were dropped because their row is gone or read-only now (HR's day, a closed window)
-  const [dropped, setDropped] = useState<{ at: string; names: string[] }>({ at: '', names: [] })
+  // the names whose restored drafts were dropped because their row is gone or read-only now (HR's day, a closed window), and those
+  // cut down to their departure because the row now takes only that (past the manager's window with an open day)
+  const [dropped, setDropped] = useState<{ at: string; names: string[]; trimmed: string[] }>({ at: '', names: [], trimmed: [] })
   useEffect(() => {
     if (!data) return
     const at = `${data.site.id}|${data.date}`
@@ -122,11 +123,20 @@ export function SiteDayPage() {
     if (!mineHere) return
     const byId = new Map(data.rows.map((r) => [r.employee.id, r]))
     const gone = Object.keys(mineHere).filter((id) => { const r = byId.get(id); return !r || !r.can_edit })
-    const same = Object.keys(mineHere).filter((id) => { const r = byId.get(id); return r && r.can_edit && !changed(r, mineHere[id]) })
-    if (!gone.length && !same.length) return
-    setAll((a) => ({ ...a, [at]: omit(a[at] ?? {}, ...gone, ...same) }))
-    const names = gone.flatMap((id) => { const r = byId.get(id); return r ? [localName(r.employee as Row, lang)] : [] })
-    if (gone.length) setDropped({ at, names })
+    // a departure-only row keeps only the departure typed on it; the rest of the draft is dropped (review of #73, 2026-11-22)
+    const cut: Drafts = {}
+    for (const [id, d] of Object.entries(mineHere)) {
+      const r = byId.get(id)
+      if (!r || !r.can_edit || !r.departure_only) continue
+      const kept: Draft = { site_id: r.day.site_id, in_time: r.day.in_time, out_time: d.out_time, version: d.version, name: d.name }
+      if (d.site_id !== kept.site_id || d.in_time !== kept.in_time || d.note !== undefined || d.advance_request !== undefined) cut[id] = kept
+    }
+    const next = (id: string) => cut[id] ?? mineHere[id]
+    const same = Object.keys(mineHere).filter((id) => { const r = byId.get(id); return r && r.can_edit && !changed(r, next(id)) })
+    if (!gone.length && !same.length && !Object.keys(cut).length) return
+    setAll((a) => ({ ...a, [at]: omit({ ...(a[at] ?? {}), ...cut }, ...gone, ...same) }))
+    const nameOf = (id: string) => { const r = byId.get(id); return r ? [localName(r.employee as Row, lang)] : mineHere[id].name ? [mineHere[id].name] : [] }
+    if (gone.length || Object.keys(cut).length) setDropped({ at, names: gone.flatMap(nameOf), trimmed: Object.keys(cut).flatMap(nameOf) })
   }, [data]) // once per answer for the open day; reading `all` here must not rerun it on every keystroke
   useEffect(() => {
     if (userId) writeDrafts(userId, all)
@@ -174,8 +184,15 @@ export function SiteDayPage() {
   const locked = savingKey !== null && savingKey === key
   const setDrafts = (d: Drafts) => {
     if (locked) return
-    // each new draft keeps the version of the day it was made against (review of #73)
-    const stamped = Object.fromEntries(Object.entries(d).map(([id, x]) => [id, x.version !== undefined ? x : { ...x, version: rows.find((r) => r.employee.id === id)?.day.version ?? null }]))
+    // each draft keeps the version of the day it was first made against, also when a status press builds it anew, and the person's
+    // name, so it can be named if it is dropped once their row is gone (reviews of #73, 2026-11-19 and 2026-11-22)
+    const stamped = Object.fromEntries(Object.entries(d).map(([id, x]): [string, Draft] => {
+      if (x.version !== undefined && x.name !== undefined) return [id, x]
+      const was = drafts[id]
+      const r = rows.find((row) => row.employee.id === id)
+      const version = x.version !== undefined ? x.version : was?.version !== undefined ? was.version : (r?.day.version ?? null)
+      return [id, { ...x, version, name: x.name ?? was?.name ?? (r ? localName(r.employee as Row, lang) : undefined) }]
+    }))
     setAll((a) => ({ ...a, [key]: stamped }))
     setSavedKey(null)
     setSaveErr(undefined)
@@ -312,6 +329,9 @@ export function SiteDayPage() {
       {/* drafts restored for rows that are gone or read-only now are dropped, and named, never sent (review of #73) */}
       {dropped.at === key && dropped.names.length > 0 && (
         <Alert tone="warning">{t('siteDay.draftsDropped', { names: new Intl.ListFormat(intlLocale(lang)).format(dropped.names) })}</Alert>
+      )}
+      {dropped.at === key && dropped.trimmed.length > 0 && (
+        <Alert tone="warning">{t('siteDay.draftsTrimmed', { names: new Intl.ListFormat(intlLocale(lang)).format(dropped.trimmed) })}</Alert>
       )}
       {saveErr !== undefined && (saveErr instanceof ApiError && saveErr.status === 409 ? (
         <Alert tone="danger">
