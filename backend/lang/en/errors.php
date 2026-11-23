@@ -5,6 +5,8 @@ declare(strict_types=1);
 return [
     'certificate_signature_required' => 'Upload your signature before approving the experience certificate.',
     'certificate_employee_data' => 'Complete the employee details required for the experience certificate.',
+    'leave_form_value_too_long' => ':attribute is longer than the leave form can print (:max characters at most). Shorten it in the record, then generate the form.',
+    'leave_form_note_too_long' => 'The request\'s note is longer than the leave form can print (:max characters at most). A filed request\'s note cannot be changed, so this request\'s form cannot be generated.',
     'signature_pixels' => 'The signature image must not exceed four million pixels.',
     'signature_type' => 'The signature image must be a PNG or JPG.',
     'validation_failed' => 'The given data was invalid.',

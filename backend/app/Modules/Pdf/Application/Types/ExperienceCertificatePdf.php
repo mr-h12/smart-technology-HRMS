@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Modules\Pdf\Application\Types;
 
 use App\Modules\Employees\Application\EmployeeService;
+use App\Modules\Pdf\Domain\ValueSize;
 use App\Modules\Pdf\Infrastructure\FilePdfAssets;
 use App\Support\Localization\ArabicFormDate;
 use App\Support\Localization\ArabicServiceDuration;
@@ -18,11 +19,17 @@ use stdClass;
 
 final class ExperienceCertificatePdf implements PdfDocument
 {
+    /** The record limits of the three values; they pick the size step. */
+    public const LIMITS = ['name_ar' => 255, 'department' => 255, 'job_title' => 160];
+
+    /** The fullest value's share of its limit, up to; the value size in pt; the body's line spacing in the Word file's terms. */
+    public const SIZES = [[0.25, 15, 2.0], [0.6, 13, 1.75], [1.0, 11, 1.5]];
+
     public function __construct(private readonly EmployeeService $employees) {}
 
     public function rules(): array
     {
-        return ['job_title' => ['required', 'string', 'max:160']];
+        return ['job_title' => ['required', 'string', 'max:'.self::LIMITS['job_title']]];
     }
 
     public function normalise(array $fields): array
@@ -58,17 +65,19 @@ final class ExperienceCertificatePdf implements PdfDocument
         $issued = Carbon::parse($snapshot['issued_on'], 'Africa/Cairo');
         $start = Carbon::parse($snapshot['hire_date'], 'Africa/Cairo');
         $end = $snapshot['termination_date'] === null ? $issued : Carbon::parse($snapshot['termination_date'], 'Africa/Cairo');
-        $service = ArabicServiceDuration::format($start->diff($end));
+        $lengths = array_map(fn (string $key): int => mb_strlen((string) $snapshot[$key]), array_combine(array_keys(self::LIMITS), array_keys(self::LIMITS)));
+        $step = ValueSize::byShare($lengths, self::LIMITS, self::SIZES);
+        [, $size, $spacing] = $step;
 
         return ['pdf.experience-certificate', [
             'title' => 'شهادة خبرة',
-            'footer' => FilePdfAssets::asset('letterhead/certificate-footer.jpg', 'image/jpeg'),
             'letterhead' => FilePdfAssets::asset('letterhead/certificate-letterhead.png', 'image/png'),
             'logo' => FilePdfAssets::asset('letterhead/logo.png', 'image/png'),
-            'issuedOn' => ArabicFormDate::format($snapshot['issued_on']),
-            'service' => $service === '' ? 'أقل من يوم' : $service,
-            // A snapshot made while HR could still edit the praise prints it ('' = none); the view prints the standard one otherwise.
-            'praise' => $snapshot['praise'] ?? null,
+            'footer' => FilePdfAssets::asset('letterhead/certificate-footer.jpg', 'image/jpeg'),
+            'issuedOn' => ArabicFormDate::spaced($snapshot['issued_on']),
+            'service' => ArabicServiceDuration::format($start->diff($end)),
+            'valueSize' => $size,
+            'lineSpacing' => $spacing,
         ]];
     }
 
