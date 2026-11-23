@@ -204,6 +204,23 @@ class WageChangeProposalTest extends TestCase
         $this->assertSame('pending', DB::table('employee_wage_proposals')->where('id', $p)->value('status'));
     }
 
+    /** A later pay row would take over again from its date and cut the approved wage short (Youssef, 2026-11-22, review of #86). */
+    public function test_an_approval_before_a_later_pay_row_is_refused_naming_the_last_later_date(): void
+    {
+        $this->postJson("/api/v1/employees/{$this->laborer}/pay-changes", ['effective_from' => '2026-12-01', 'daily_wage' => '350'])->assertSuccessful();
+        $this->postJson("/api/v1/employees/{$this->laborer}/pay-changes", ['effective_from' => '2026-12-15', 'daily_wage' => '360'])->assertSuccessful();
+        $p = $this->proposed();
+
+        $this->postJson("/api/v1/employees/wage-proposals/{$p}/approve", ['version' => 1, 'effective_from' => '2026-10-22'])->assertStatus(422)
+            ->assertJsonPath('error.details.0.field', 'effective_from')
+            ->assertJsonPath('error.details.0.message', __('errors.later_pay_change', ['date' => '2026-12-15']));
+
+        $this->assertSame('pending', DB::table('employee_wage_proposals')->where('id', $p)->value('status'));
+        $this->assertSame(3, DB::table('employee_pay_changes')->where('employee_id', $this->laborer)->whereNull('deleted_at')->count());
+        // a date after the last later row is approved
+        $this->postJson("/api/v1/employees/wage-proposals/{$p}/approve", ['version' => 1, 'effective_from' => '2026-12-16'])->assertOk();
+    }
+
     public function test_refusing_keeps_the_laborer_employed_on_the_same_site_at_the_same_wage(): void
     {
         $p = $this->proposed();

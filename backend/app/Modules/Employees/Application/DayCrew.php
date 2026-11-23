@@ -331,6 +331,12 @@ final class DayCrew
                     if ($this->laborer((string) $employee->id, $from) === null) {
                         throw ValidationException::withMessages(['effective_from' => __('errors.not_a_day_laborer_on_date')]);
                     }
+                    // a later pay row would take over again from its date and cut this wage short: name the last one, so one retry is
+                    // enough (Youssef, 2026-11-22, review of #86; the same rule as a fare's later override)
+                    $later = $employee->payChanges()->where('effective_from', '>', $from)->max('effective_from');
+                    if ($later !== null) {
+                        throw ValidationException::withMessages(['effective_from' => __('errors.later_pay_change', ['date' => (string) $later])]);
+                    }
                     $this->employees->addPayChange((string) $employee->id, ['effective_from' => $from, 'daily_wage' => $approved]);
                 }
             } elseif ($approve) {
