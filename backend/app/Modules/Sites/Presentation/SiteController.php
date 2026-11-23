@@ -75,7 +75,8 @@ final class SiteController
     {
         $data = $request->validate([
             'manager_ids' => ['present', 'array'],
-            'manager_ids.*' => ['uuid', Rule::in($this->sites->managerCandidateIds())],
+            // the site's current holders too: one deactivated or moved to another role is cleared by this save, never a refusal (review of #75)
+            'manager_ids.*' => ['uuid', Rule::in([...$this->sites->managerCandidateIds(), ...$this->sites->managerIdsOf($site)])],
         ]);
 
         return ApiEnvelope::single($request, $this->sites->setManagers($site, $data['manager_ids']));
