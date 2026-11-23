@@ -42,6 +42,9 @@ final class LeaveRequests
     /** Calendar days from from_date to to_date inclusive (plan, Global Constraints: a code limit, not a setting). */
     public const MAX_RANGE_DAYS = 60;
 
+    /** The note prints as the leave form's reason; longer cannot hold the form's one page. */
+    public const NOTE_MAX = 360;
+
     public function __construct(
         private readonly EmployeeRoster $roster,
         private readonly LeaveDays $days,

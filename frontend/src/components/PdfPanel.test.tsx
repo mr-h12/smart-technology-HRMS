@@ -27,7 +27,7 @@ const sent = (fn: ReturnType<typeof vi.fn>, call = 0) => JSON.parse(String((fn.m
 // The spec's registry table (design §2): name, required, max length (0 = none).
 const SPEC: Record<PdfType, [string, boolean, number][]> = {
   experience_certificate: [['job_title', true, 160]],
-  leave_request: [['job_title', true, 160], ['notification_method', false, 160], ['manager_opinion', false, 360], ['substitute', false, 160]],
+  leave_request: [['job_title', true, 60], ['notification_method', false, 60], ['manager_opinion', false, 130], ['substitute', false, 60]],
   advance_request: [['job_title', true, 160], ['reason', true, 300], ['repayment_method', true, 0], ['previous_advance', false, 0], ['finance_remarks', false, 300]],
   overtime_request: [['job_title', true, 160], ['reason', true, 300]],
 }
