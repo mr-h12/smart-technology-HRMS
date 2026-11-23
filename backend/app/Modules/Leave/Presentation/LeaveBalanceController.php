@@ -64,7 +64,7 @@ final class LeaveBalanceController
     }
 
     /**
-     * Balances are HR's: a site manager (own scope) reads no one's, their own included (owner, 2026-11-20). They still file leave and
+     * Balances are HR's: a site manager (own scope) reads no one's, their own included (owner, 2026-11-19). They still file leave and
      * read each request's status through leave.view.own.
      */
     private static function refuseOwnScope(Request $request): void

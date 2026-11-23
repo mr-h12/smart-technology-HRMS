@@ -529,7 +529,7 @@ class SiteManagerAccountTest extends TestCase
         ];
         $this->assertSame(array_fill_keys(array_keys($lists), [$worker]), $lists);
         $this->assertSame(1, $this->getJson('/api/v1/employees/summary')->assertOk()->json('data.permanent_worker'));
-        $this->getJson('/api/v1/leave/balances')->assertForbidden();   // balances are HR's (owner, 2026-11-20)
+        $this->getJson('/api/v1/leave/balances')->assertForbidden();   // balances are HR's (owner, 2026-11-19)
         $this->getJson("/api/v1/employees/{$worker}/leave")->assertForbidden();
         $this->getJson("/api/v1/employees/{$self}/leave")->assertNotFound();   // never their own record
     }

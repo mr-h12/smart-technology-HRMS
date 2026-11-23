@@ -59,7 +59,7 @@ export function LeavePage() {
   // the navigation whose request dialog was closed: every new link to a request, the same one again included, opens it
   const [closed, setClosed] = useState<string>()
   const request = params.get('request')
-  // balances are HR's: a site manager (own scope) files leave and reads each request's status only (owner, 2026-11-20)
+  // balances are HR's: a site manager (own scope) files leave and reads each request's status only (owner, 2026-11-19)
   const balances = can('leave.view.all')
   const tab = balances && params.get('tab') === 'balances' && !request ? 'balances' : 'requests'
   const thisYear = Number(cairoToday().slice(0, 4))

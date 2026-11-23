@@ -549,7 +549,7 @@ test.each([
   expect(within(outer).getByRole('button', { name: 'إلغاء الطلب' })).toBeEnabled()
 })
 
-test('a site manager\'s preview has the counted days only: no balance after and no unpaid warning (owner, 2026-11-20)', async () => {
+test('a site manager\'s preview has the counted days only: no balance after and no unpaid warning (owner, 2026-11-19)', async () => {
   mockFetch({ [PREVIEW]: () => json(200, { data: { dates: ['2026-11-10', '2026-11-11', '2026-11-12', '2026-11-15'], days: 4 } }) })
   renderWithAuth(<RequestDialog open onOpenChange={vi.fn()} employee={sami} />, ['leave.request.own', 'leave.view.own'])
   dates('2026-11-10', '2026-11-15')

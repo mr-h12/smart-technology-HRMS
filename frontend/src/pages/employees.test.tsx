@@ -1160,7 +1160,7 @@ test('the experience certificate opens to HR forms at All only, and an archived 
   expect(await screen.findByRole('button', { name: 'إنشاء' })).toBeEnabled()
 })
 
-test('a site manager opens an engineer with no Leave tab: balances are HR\'s (owner, 2026-11-20)', async () => {
+test('a site manager opens an engineer with no Leave tab: balances are HR\'s (owner, 2026-11-19)', async () => {
   mockFetch({ 'GET /api/v1/employees/e1': () => json(200, { data: { ...emp, current_type: 'engineer', current_site: null, site_assignments: [] } }), 'GET /api/v1/residences': residences })
   const { unmount } = renderWithAuth(<EmployeeDetailRoute id="e1" tab="leave" />, ['employee.view.own', 'leave.view.own', 'leave.request.own'], { router: false })
   expect(await screen.findByRole('tab', { name: 'البيانات' })).toHaveAttribute('aria-selected', 'true')

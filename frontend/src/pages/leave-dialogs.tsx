@@ -22,7 +22,7 @@ export const STATUS: Record<string, BadgeVariant> = { pending: 'warning', escala
 const KINDS = ['annual', 'casual', 'sick', 'unpaid'] as const
 
 /** `GET /leave/requests/preview`: the server's count and split; the dialog shows these numbers and computes none. */
-// a site manager's preview has the days only: the balance, what remains and the unpaid split are HR's (owner, 2026-11-20)
+// a site manager's preview has the days only: the balance, what remains and the unpaid split are HR's (owner, 2026-11-19)
 type Preview = { days: number; unpaid?: number; remaining_after?: number | null }
 
 const FIELDS = ['employee_id', 'kind', 'from_date', 'to_date', 'note']

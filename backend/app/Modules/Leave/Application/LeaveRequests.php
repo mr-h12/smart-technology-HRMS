@@ -64,7 +64,7 @@ final class LeaveRequests
     {
         $dates = $this->check($employeeId, $from, $to, $ownerId);
         if ($ownerId !== null) {
-            // A site manager sees the counted days only: balances, the unpaid split and what remains are HR's (owner, 2026-11-20).
+            // A site manager sees the counted days only: balances, the unpaid split and what remains are HR's (owner, 2026-11-19).
             return ['dates' => $dates, 'days' => count($dates)];
         }
         $balance = $this->balances->forEmployee($employeeId, (int) substr($from, 0, 4), $dates)['balance'];
@@ -137,8 +137,14 @@ final class LeaveRequests
 
         $detail = $this->detail($request);
 
-        // A site manager reads the status, dates and HR's reason, never the balance the approval preview carries (owner, 2026-11-20).
-        return $ownerId === null ? $detail : [...$detail, 'approval' => null];
+        // A site manager reads the status, dates and HR's reason, never the balance the approval preview carries (owner, 2026-11-19).
+        // The reason is theirs only on a refusal or a cancellation: an escalated request, also once approved, holds HR's note to the CEO
+        // in decision_reason (Youssef, 2026-11-19, review of #74).
+        if ($ownerId === null) {
+            return $detail;
+        }
+
+        return [...$detail, 'approval' => null, ...(in_array(LeaveStatus::from((string) $request->status), [LeaveStatus::Refused, LeaveStatus::Cancelled], true) ? [] : ['decision_reason' => null])];
     }
 
     /**

@@ -132,7 +132,7 @@ class LeaveBalancesTest extends TestCase
         $manager = $this->makeUser('manager');
         app(EmployeeService::class)->assignManager($mine, ['manager_id' => $manager->id, 'effective_from' => '2026-01-01']);
 
-        $this->actingAs($manager, 'api');   // balances are HR's (owner, 2026-11-20)
+        $this->actingAs($manager, 'api');   // balances are HR's (owner, 2026-11-19)
         $this->balance($mine)->assertForbidden();
         $this->balance($other)->assertNotFound();   // out of reach stays a 404, so it confirms nothing
     }
