@@ -40,18 +40,19 @@ export function AddLaborer({ siteId, siteName, canAdd, canPropose, onDone }: { s
   const [wage, setWage] = useState('')
   const [phone, setPhone] = useState('')
   const [nid, setNid] = useState('')
-  // «شخص آخر بنفس الاسم» holds for the name it was chosen for only: a new name that matches someone asks again (review of #72)
-  const [differentFrom, setDifferentFrom] = useState<string | null>(null)
+  // «شخص آخر بنفس الاسم» holds for the name and the answer on screen when it was pressed: a new name, or a new answer for the same
+  // name (the search below keeps the last answer while the next loads), asks again (reviews of #72, 2026-11-19 and 2026-11-22)
+  const [differentFrom, setDifferentFrom] = useState<{ search: string; matchId: string | null; ambiguous: boolean } | null>(null)
   const [requestId, setRequestId] = useState(newRequestId)
   const [err, setErr] = useState<unknown>()
   const [busy, setBusy] = useState(false)
   // Arabic and Persian digits made ASCII here, so «١٢» is a code for byCode, the three-part check and the request alike
   const search = useDebounced(asciiDigits(q).trim().replace(/\s+/g, ' '), 300)
-  const different = differentFrom !== null && differentFrom === search
   const byCode = /^\d+$/.test(search)
   // keep: the last answer stays while the next search loads, so the form below does not unmount and jump under the finger (Youssef, 2026-11-19)
   const { data: found, loading } = useApi<Found>(open && search ? `/attendance/site-day/laborers?${new URLSearchParams({ site_id: siteId, search })}` : null, { keep: true })
   const m = found?.match ?? null
+  const different = differentFrom?.search === search && differentFrom.matchId === (m?.id ?? null) && differentFrom.ambiguous === !!found?.ambiguous
   const reset = () => {
     setQ('')
     setGender('')
@@ -125,7 +126,7 @@ export function AddLaborer({ siteId, siteName, canAdd, canPropose, onDone }: { s
           </label>
           {search && <section aria-label={t('siteDay.matches')} aria-live="polite" className="grid gap-2">{result}</section>}
           {offerDifferent && (
-            <Button type="button" variant="outline" className="min-h-11" onClick={() => { setDifferentFrom(search); setErr(undefined) }}>{t('siteDay.differentPerson')}</Button>
+            <Button type="button" variant="outline" className="min-h-11" onClick={() => { setDifferentFrom({ search, matchId: m?.id ?? null, ambiguous: !!found?.ambiguous }); setErr(undefined) }}>{t('siteDay.differentPerson')}</Button>
           )}
           {showNew && (
             <section aria-label={t('siteDay.newLaborer')} className="grid gap-3 rounded-lg border border-dashed p-3">

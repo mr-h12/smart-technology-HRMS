@@ -8,20 +8,29 @@ use DateInterval;
 
 final class ArabicServiceDuration
 {
+    /** 3 to 10 in words before a feminine noun (سنوات); a masculine noun (أشهر، أيام) adds «ة». */
+    private const NUMBERS = [3 => 'ثلاث', 4 => 'أربع', 5 => 'خمس', 6 => 'ست', 7 => 'سبع', 8 => 'ثماني', 9 => 'تسع', 10 => 'عشر'];
+
+    /** Whole years and months in words after «تجاوزت» (the accusative); the days only under a month, at least one. */
     public static function format(DateInterval $duration): string
     {
-        $parts = [
-            self::part($duration->y, 'سنة واحدة', 'سنتان', 'سنوات', 'سنة'),
-            self::months($duration->m),
-            self::days($duration->d),
-        ];
+        $parts = array_filter([
+            self::words($duration->y, 'سنة واحدة', 'سنتين', '', 'سنوات', 'سنة'),
+            $duration->m === 11 ? 'أحد عشر شهرًا' : self::words($duration->m, 'شهرًا واحدًا', 'شهرين', 'ة', 'أشهر', 'شهرًا'),
+        ]);
 
-        return implode(' و', array_filter($parts));
+        return $parts === [] ? self::words(max($duration->d, 1), 'يومًا واحدًا', 'يومين', 'ة', 'أيام', 'يومًا') : implode(' و', $parts);
     }
 
-    private static function months(int $count): string
+    private static function words(int $count, string $one, string $two, string $gender, string $plural, string $many): string
     {
-        return self::part($count, 'شهر واحد', 'شهران', 'أشهر', 'شهرًا');
+        return match (true) {
+            $count === 0 => '',
+            $count === 1 => $one,
+            $count === 2 => $two,
+            isset(self::NUMBERS[$count]) => self::NUMBERS[$count].$gender.' '.$plural,
+            default => "{$count} {$many}",
+        };
     }
 
     public static function days(int $count): string

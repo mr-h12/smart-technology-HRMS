@@ -113,6 +113,7 @@ Smart Technology runs HR and payroll today on 6 hand-built Excel workbooks (anal
    - مفردات مرتب (payslip; delivered in Release 2)
    - **Status (owner, 2026-11-13):** four PDFs are rebuilt now: experience certificate, leave request, advance request and overtime request. The job offer, late permission, early-leave request, resignation, warning, mobile-line receipt and end-of-service forms, and the mission and departure permits (إذن مأمورية، إذن انصراف) merged in PR #61, are postponed: deleted from the code and rebuilt with their own modules. Clearance and the payslip stay unbuilt. See «HR form PDFs: owner decisions of 2026-11-13».
    - **Status (2026-11-15):** Step 2 of the rebuild (one working method in the UI, `docs/superpowers/specs/2026-11-14-uniform-hr-pdfs-step-2-design.md`) is built: one PDF panel in every place, the site manager's advance copy without the salary, and the HR page «النماذج الصادرة»; it awaits the owner's Gate 2.
+   - **Status (2026-11-19):** Step 3 of the rebuild (the leave request and the experience certificate in the company layout, `docs/superpowers/specs/2026-11-18-uniform-hr-pdfs-step-3-restart-design.md`) is built on branch `claude/pdf-step-3-restart-4b9d0f`. The owner approved both gates on 2026-11-19 (3.1-R the leave request, 3.2-R the experience certificate). The PR awaits review and the owner's approval of Step 3 before the merge.
 3. **HR communication center**:
    - Message types: congratulation, condolence, alert, warning, PDF.
    - Recipient: manager or employee.
