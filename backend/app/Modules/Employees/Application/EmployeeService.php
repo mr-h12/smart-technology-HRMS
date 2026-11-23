@@ -124,7 +124,7 @@ final class EmployeeService
         $pay = $this->payRow($data);
         $this->assertPay($type, $pay);
 
-        $id = DB::transaction(function () use ($data, $type, $pay): string {
+        $id = self::fingerprintNameRace(fn () => DB::transaction(function () use ($data, $type, $pay): string {
             $code = EmployeeCodes::issueNext();
 
             $employee = Employee::create([...Arr::except($data, ['type', ...self::PAY_FIELDS]), 'code' => $code]);
@@ -132,7 +132,7 @@ final class EmployeeService
             $employee->payChanges()->create($pay);
 
             return (string) $employee->getKey();
-        });
+        }));
 
         return $this->show($id);
     }
@@ -195,7 +195,7 @@ final class EmployeeService
      */
     public function update(string $id, array $data): array
     {
-        DB::transaction(function () use ($id, $data): void {
+        self::fingerprintNameRace(fn () => DB::transaction(function () use ($id, $data): void {
             $employee = Employee::findOrFail($id);
             $archived = Employee::isArchived($employee->termination_date);
             $employee->fill($data);
@@ -216,9 +216,29 @@ final class EmployeeService
             if ($employee->wasChanged('termination_date')) {
                 $this->deactivateArchivedAccounts($id);
             }
-        });
+        }));
 
         return $this->show($id);
+    }
+
+    /**
+     * Two saves of one fingerprint name can both pass the rule; the index then refuses the second. That is the rule's own 422 on
+     * the field, not a 500 (#88, item 2).
+     *
+     * @template T
+     *
+     * @param  callable(): T  $save
+     * @return T
+     */
+    private static function fingerprintNameRace(callable $save): mixed
+    {
+        try {
+            return $save();
+        } catch (UniqueConstraintViolationException $e) {
+            throw str_contains($e->getMessage(), 'employees_fingerprint_key_unique')
+                ? ValidationException::withMessages(['fingerprint_name' => __('validation.unique', ['attribute' => __('validation.attributes.fingerprint_name')])])
+                : $e;
+        }
     }
 
     /**
