@@ -11,7 +11,7 @@ Owner of the touched files: Youssef (Sites & rates, `routes/api.php`, `App.tsx`,
   - sets the residence × site amount (the dialog's «لكل اللي ساكنين في … وبيشتغلوا في …» option);
   - sets a per-worker override (the dialog's default «للعامل ده بس»).
   Settings → Fares stays HR's flat list of every residence × site amount, with who set it. It is shown to `site.view.all` (HR, CEO); team leads read fares on `/team-fares` only.
-- **Team lead** (role `manager`) sees the same page read-only, for their own team and sites only: no edit button, no residence button. They never see or set wages.
+- **Team lead** (role `manager`) sees the same page read-only, for their own team and sites only: no edit button, no residence button. *(Superseded for the manager on 2026-11-19: a site manager now works one site at a time on «مواصلات الموقع» and asks HR for a fare change per employee; HR's page is unchanged. See the Fare change request decision in `docs/hrms-module-plan.md`.)* They never see or set wages.
 - **CEO** has no team-fares page (the only team-lead list, `/sites/manager-candidates`, needs `site.assign_manager`); the CEO reads every residence × site amount on Settings → Fares, as before.
 - **Fix kept from option A**: `GET /fares` returns a manager only their own sites' rows.
 - Nobody is notified of a fare write; the audit log holds every write.

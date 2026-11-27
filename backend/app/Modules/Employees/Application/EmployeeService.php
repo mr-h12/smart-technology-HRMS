@@ -44,8 +44,12 @@ final class EmployeeService
 
     private const PAY_FIELDS = ['effective_from', 'salary', 'raise', 'insured_basic', 'daily_wage', 'shift_start', 'shift_end'];
 
-    /** Coding standard §9: kept out of own-scoped (manager-facing) responses. */
-    private const SENSITIVE = ['national_id', 'insurance_no', 'bank_account', 'hr_notes'];
+    /**
+     * Everything an own-scoped caller (a site manager) receives about an employee they reach (owner, 2026-11-19): name, phone, address,
+     * department, residence and, on the profile, the current site, plus the id and the employee code that identify them. Anything not
+     * listed (type, gender, dates, pay, national ID, insurance, bank, HR notes, history, documents) never leaves the server for them.
+     */
+    private const MANAGER_FIELDS = ['id', 'code', 'name_ar', 'name_en', 'phone', 'address', 'department', 'residence_id'];
 
     public function __construct(
         private readonly AuthorizeAction $authorize,
@@ -61,7 +65,8 @@ final class EmployeeService
     {
         $query = $this->visibleTo($ownerId, $filters['archived'] ?? false)->select('employees.*')->selectRaw(Employee::TYPE_ON.' as current_type', [self::today()])->orderBy('code');
 
-        if (isset($filters['type'])) {
+        // A site manager never sees types, so they cannot filter by one either (it would tell them each employee's type).
+        if (isset($filters['type']) && $ownerId === null) {
             $query->whereRaw(Employee::TYPE_ON.' = ?', [self::today(), $filters['type']]);
         }
 
@@ -98,7 +103,8 @@ final class EmployeeService
             ->groupBy('type')->pluck('n', 'type');
         $byType = array_map(fn (EmployeeType $t) => (int) ($counts[$t->value] ?? 0), array_column(EmployeeType::cases(), null, 'value'));
 
-        return ['total' => (int) $counts->sum(), ...$byType];
+        // a site manager reads the total only: the per-type tiles are HR's (review of #72; the list and profile hide types too)
+        return $ownerId === null ? ['total' => (int) $counts->sum(), ...$byType] : ['total' => (int) $counts->sum()];
     }
 
     /**
@@ -124,7 +130,7 @@ final class EmployeeService
         $pay = $this->payRow($data);
         $this->assertPay($type, $pay);
 
-        $id = DB::transaction(function () use ($data, $type, $pay): string {
+        $id = self::fingerprintNameRace(fn () => DB::transaction(function () use ($data, $type, $pay): string {
             $code = EmployeeCodes::issueNext();
 
             $employee = Employee::create([...Arr::except($data, ['type', ...self::PAY_FIELDS]), 'code' => $code]);
@@ -132,17 +138,20 @@ final class EmployeeService
             $employee->payChanges()->create($pay);
 
             return (string) $employee->getKey();
-        });
+        }));
 
         return $this->show($id);
     }
 
     /**
-     * @param  string|null  $ownerId  set for own-scoped callers: pay and sensitive identity fields are left out
+     * @param  string|null  $ownerId  set for own-scoped callers (a site manager): managerView() only
      * @return array<string, mixed> documents carry their file fields when seesFiles()
      */
     public function show(string $id, ?string $ownerId = null): array
     {
+        if ($ownerId !== null) {
+            return $this->managerView(Employee::with(['siteAssignments.site', 'documents.uploader'])->findOrFail($id));
+        }
         $e = Employee::with(['typeChanges', 'payChanges', 'documents.uploader', 'managerAssignments.manager', 'siteAssignments.site'])->findOrFail($id);
         $types = $e->typeChanges->sortBy('effective_from')->values()->map(fn ($t) => $this->row($t))->all();
         $pays = $e->payChanges->sortBy('effective_from')->values()->map(fn ($p) => $this->row($p))->all();
@@ -162,15 +171,15 @@ final class EmployeeService
         $today = self::today();
         $manager = EffectiveDated::at($managers, $today);
         $site = EffectiveDated::at($sites, $today);
-        $full = $ownerId === null;
         $kinds = array_flip(array_column(DocumentKind::cases(), 'value'));
         $files = $this->seesFiles($id);
 
         return [
-            ...$this->summary($e, $full),
+            ...$this->summary($e, true),
             'archived' => Employee::isArchived($e->termination_date),
             'current_type' => EffectiveDated::at($types, $today)['type'] ?? null,
-            ...($full ? ['current_pay' => EffectiveDated::at($pays, $today), 'pay_changes' => $pays] : []),
+            'current_pay' => EffectiveDated::at($pays, $today),
+            'pay_changes' => $pays,
             'type_changes' => $types,
             'current_manager' => $manager === null ? null : ['id' => $manager['manager_id'], 'name' => $manager['manager_name']],
             'manager_assignments' => $managers,
@@ -195,7 +204,7 @@ final class EmployeeService
      */
     public function update(string $id, array $data): array
     {
-        DB::transaction(function () use ($id, $data): void {
+        self::fingerprintNameRace(fn () => DB::transaction(function () use ($id, $data): void {
             $employee = Employee::findOrFail($id);
             $archived = Employee::isArchived($employee->termination_date);
             $employee->fill($data);
@@ -216,9 +225,29 @@ final class EmployeeService
             if ($employee->wasChanged('termination_date')) {
                 $this->deactivateArchivedAccounts($id);
             }
-        });
+        }));
 
         return $this->show($id);
+    }
+
+    /**
+     * Two saves of one fingerprint name can both pass the rule; the index then refuses the second. That is the rule's own 422 on
+     * the field, not a 500 (#88, item 2).
+     *
+     * @template T
+     *
+     * @param  callable(): T  $save
+     * @return T
+     */
+    private static function fingerprintNameRace(callable $save): mixed
+    {
+        try {
+            return $save();
+        } catch (UniqueConstraintViolationException $e) {
+            throw str_contains($e->getMessage(), 'employees_fingerprint_key_unique')
+                ? ValidationException::withMessages(['fingerprint_name' => __('validation.unique', ['attribute' => __('validation.attributes.fingerprint_name')])])
+                : $e;
+        }
     }
 
     /**
@@ -642,10 +671,37 @@ final class EmployeeService
         return $pay;
     }
 
-    /** @return array<string, mixed> */
+    /** @return array<string, mixed> a list row: everything but history for HR, MANAGER_FIELDS only for a site manager */
     private function summary(Employee $e, bool $full): array
     {
-        return Arr::except($e->toArray(), [...self::HIDDEN, 'type_changes', 'pay_changes', 'documents', 'manager_assignments', 'site_assignments', ...($full ? [] : self::SENSITIVE)]);
+        return $full
+            ? Arr::except($e->toArray(), [...self::HIDDEN, 'type_changes', 'pay_changes', 'documents', 'manager_assignments', 'site_assignments'])
+            : Arr::only($e->toArray(), self::MANAGER_FIELDS);
+    }
+
+    /**
+     * A site manager's profile of an employee they reach: MANAGER_FIELDS and today's site. Documents only for a manager the Developer
+     * granted `employee_document.view.own` (D2), with their files; without that grant, nothing about documents at all.
+     *
+     * @return array<string, mixed>
+     */
+    private function managerView(Employee $e): array
+    {
+        $files = $this->seesFiles((string) $e->id);
+        $kinds = array_flip(array_column(DocumentKind::cases(), 'value'));
+        $sites = $e->siteAssignments->map(fn (EmployeeSiteAssignment $s) => [
+            'site_id' => $s->site_id, 'site_name_ar' => $s->site?->name_ar, 'site_name_en' => $s->site?->name_en, 'effective_from' => $s->effective_from,
+        ])->all();
+        $site = EffectiveDated::at($sites, self::today());
+
+        return [
+            ...Arr::only($e->toArray(), self::MANAGER_FIELDS),
+            'current_site' => $site === null ? null : ['id' => $site['site_id'], 'name_ar' => $site['site_name_ar'], 'name_en' => $site['site_name_en']],
+            ...($files ? ['documents' => $e->documents->sortBy([
+                fn (EmployeeDocument $a, EmployeeDocument $b) => $kinds[$a->kind] <=> $kinds[$b->kind],
+                ['id', 'desc'],
+            ])->values()->map(fn (EmployeeDocument $d) => EmployeeDocuments::row($d, true))->all()] : []),
+        ];
     }
 
     /** @return array<string, mixed> */

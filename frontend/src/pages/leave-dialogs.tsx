@@ -1,15 +1,15 @@
-import { useState } from 'react'
+import { useEffect, useId, useRef, useState } from 'react'
+import { Search } from 'lucide-react'
 import { Trans, useTranslation } from 'react-i18next'
 import { toast } from 'sonner'
 import { Alert } from '@/components/common/Alert'
-import { SearchInput } from '@/components/common/Filters'
 import { PdfPanel } from '@/components/PdfPanel'
 import { StatusBadge } from '@/components/common/StatusBadge'
 import { type Controlled, Dates, ErrorBanner, Field, type FormApi, FormDialog, localName, ltrDates, type Row, SelectField, TextField, useCairoTime } from '@/components/form'
 import type { BadgeVariant } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Dialog, DialogBody, DialogContent, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog'
-import { Textarea } from '@/components/ui/input'
+import { Input, Textarea } from '@/components/ui/input'
 import { Skeleton } from '@/components/ui/misc'
 import { useDebounced } from '@/hooks/useDebounced'
 import { useAuth } from '@/lib/auth'
@@ -27,7 +27,7 @@ type Preview = { days: number; unpaid?: number; remaining_after?: number | null 
 
 const FIELDS = ['employee_id', 'kind', 'from_date', 'to_date', 'note']
 
-/** Filing a leave request. `employee` fixes and hides the employee (the employee page); without it a picker searches the employees in reach. */
+/** Filing a leave request. `employee` fixes and hides the employee (the employee page); without it one field searches the employees in reach. */
 export function RequestDialog({ open, onOpenChange, employee }: Required<Controlled> & { employee?: Row }) {
   const { t } = useTranslation()
   const send = useSave()
@@ -49,7 +49,7 @@ export function RequestDialog({ open, onOpenChange, employee }: Required<Control
     >
       {(f) => (
         <>
-          {!employee && <EmployeePicker {...f} />}
+          {!employee && <EmployeeCombobox name="employee_id" label={t('employee.employee')} {...f} />}
           <SelectField name="kind" label={t('leave.request.kind')} options={KINDS.map((k) => [k, t(`attendance.leaveName.${k}`)])} {...f} />
           <div className="grid gap-4 sm:grid-cols-2">
             <TextField name="from_date" label={t('leave.request.from')} type="date" {...f} />
@@ -87,24 +87,125 @@ function PreviewLine({ values: v }: { values: Row }) {
   )
 }
 
-/** A search box over `GET /employees` (the server keeps a site manager to the employees in reach) and a select of the matches. */
-function EmployeePicker({ values, set, errs }: FormApi) {
+/**
+ * One field over `GET /employees` (the server keeps a site manager to the employees in reach and reads Arabic digits): focusing
+ * it opens the list inline under it, typing searches, and a pick sets `name` to the employee's id. A combobox per the WAI-ARIA
+ * pattern: the arrow keys move the highlight, Enter picks, and Escape closes the list before the dialog.
+ */
+function EmployeeCombobox({ name, label, values, set, errs }: FormApi & { name: string; label: string }) {
   const { t, i18n } = useTranslation()
-  const [q, setQ] = useState('')
-  const search = useDebounced(q, 250)
-  const { rows } = useList(`/employees?${new URLSearchParams({ per_page: '20', ...(search && { search }) })}`)
-  // the chosen employee stays an option when a later search no longer matches it
+  const [text, setText] = useState('')
+  const [open, setOpen] = useState(false)
+  const [active, setActive] = useState(-1)
+  const input = useRef<HTMLInputElement>(null)
+  const listId = useId()
+  const search = useDebounced(text, 250)
+  // while a pick is shown the text is its label, not a search
   const [picked, setPicked] = useState<Row>()
-  const options = picked && !rows.some((r) => r.id === picked.id) ? [picked, ...rows] : rows
-  const pick = (k: string, id: string) => {
-    set(k, id)
-    setPicked(options.find((r) => r.id === id))
+  const { rows, loading, err } = useList(`/employees?${new URLSearchParams({ per_page: '20', ...(search && !picked && { search }) })}`)
+  const labelOf = (r: Row) => `${localName(r, i18n.language)} (${r.code})`
+  // Radix closes the dialog on an Escape it hears on the document (capture phase); the window hears it first
+  useEffect(() => {
+    if (!open) return
+    const close = (e: KeyboardEvent) => {
+      if (e.key !== 'Escape' || e.target !== input.current) return
+      e.stopPropagation()
+      setOpen(false)
+    }
+    window.addEventListener('keydown', close, { capture: true })
+    return () => window.removeEventListener('keydown', close, { capture: true })
+  }, [open])
+  const pick = (r: Row) => {
+    setPicked(r)
+    setText(labelOf(r))
+    set(name, r.id)
+    setOpen(false)
   }
+  const onType = (v: string) => {
+    // letters typed after a pick search on their own, not the label they were added to (Backspace and Delete clear a pick in onKeyDown)
+    const label = picked && labelOf(picked)
+    setText(label && v.startsWith(label) ? v.slice(label.length) : v)
+    setPicked(undefined)
+    setActive(-1)
+    setOpen(true)
+    if (values[name]) set(name, '')
+  }
+  const onKeys = (e: React.KeyboardEvent) => {
+    if (picked && (e.key === 'Backspace' || e.key === 'Delete')) {
+      // a half-deleted label would search for nothing; deleting from a pick starts the search again
+      e.preventDefault()
+      onType('')
+    } else if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
+      e.preventDefault()
+      setOpen(true)
+      if (rows.length) setActive((i) => (e.key === 'ArrowDown' ? Math.min(i + 1, rows.length - 1) : Math.max(i - 1, 0)))
+    } else if (e.key === 'Enter' && open && rows[active]) {
+      e.preventDefault()
+      pick(rows[active])
+    }
+  }
+  // typing over a pick replaces it
+  const openList = (el: HTMLInputElement) => {
+    setOpen(true)
+    if (picked) el.select()
+  }
+  const optionId = (i: number) => `${listId}-${i}`
   return (
-    <div className="grid gap-2">
-      <SearchInput value={q} onChange={setQ} placeholder={t('leave.search')} className="sm:w-full" />
-      <SelectField name="employee_id" label={t('employee.employee')} blank={t('leave.request.pick')} options={options.map((r) => [r.id, `${localName(r, i18n.language)} (${r.code})`])} values={values} set={pick} errs={errs} />
-    </div>
+    <Field name={name} label={label} errs={errs}>
+      {(p) => (
+        <div className="grid gap-1">
+          <div className="relative">
+            <Search className="pointer-events-none absolute top-1/2 start-3 size-4 -translate-y-1/2 text-muted-foreground" />
+            <Input
+              {...p}
+              ref={input}
+              role="combobox"
+              aria-expanded={open}
+              aria-controls={listId}
+              aria-autocomplete="list"
+              aria-activedescendant={open && rows[active] ? optionId(active) : undefined}
+              autoComplete="off"
+              enterKeyHint="search"
+              placeholder={t('leave.search')}
+              className="ps-9"
+              value={text}
+              onChange={(e) => onType(e.target.value)}
+              onFocus={(e) => openList(e.currentTarget)}
+              onClick={(e) => openList(e.currentTarget)}
+              onBlur={() => setOpen(false)}
+              onKeyDown={onKeys}
+            />
+          </div>
+          {open && err ? (
+            <ErrorBanner err={err} shown={[]} />
+          ) : open && (
+            <ul id={listId} role="listbox" aria-label={label} className="max-h-64 overflow-y-auto rounded-md border bg-card py-1 text-sm">
+              {loading ? (
+                <li className="flex min-h-tap items-center px-3 text-muted-foreground">{t('leave.request.loading')}</li>
+              ) : rows.length === 0 ? (
+                <li className="flex min-h-tap items-center px-3 text-muted-foreground">{t('common.noResults')}</li>
+              ) : (
+                rows.map((r, i) => (
+                  <li
+                    key={r.id}
+                    id={optionId(i)}
+                    role="option"
+                    aria-selected={values[name] === r.id}
+                    // keeps focus in the field, so the list does not close before the click lands
+                    onMouseDown={(e) => e.preventDefault()}
+                    onClick={() => pick(r)}
+                    onMouseMove={() => setActive(i)}
+                    className={cn('flex min-h-tap cursor-pointer items-center px-3', i === active && 'bg-accent text-accent-foreground', values[name] === r.id && 'font-medium')}
+                  >
+                    {localName(r, i18n.language)} (<bdi dir="ltr">{r.code}</bdi>)
+                  </li>
+                ))
+              )}
+            </ul>
+          )}
+        </div>
+      )}
+    </Field>
   )
 }
 

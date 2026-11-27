@@ -124,3 +124,6 @@ export function statusOf(r: SheetRow, office: boolean): 'missing' | 'present' | 
   if (d.leave_code !== null) return 'leave'
   return office && (r.hints.late_minutes ?? 0) > 0 ? 'late' : 'present'
 }
+
+/** A daily wage as the server takes it (EmployeeRules::MONEY): up to 12 digits and 6 decimals; the caller also checks it is above 0. */
+export const WAGE_PATTERN = /^\d{1,12}(\.\d{1,6})?$/

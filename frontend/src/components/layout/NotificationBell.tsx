@@ -21,17 +21,32 @@ type LeaveRequested = Base & { type: 'leave_requested'; data: RequestData; emplo
 type LeaveEscalated = Base & { type: 'leave_escalated'; data: RequestData; employee: Named }
 type LeaveDecided = Base & { type: 'leave_decided'; data: RequestData & { status: 'approved' | 'refused' }; employee: Named }
 type LeaveCancelled = Base & { type: 'leave_cancelled'; data: RequestData; employee: Named }
-type WageProposed = Base & { type: 'wage_proposed'; data: { employee_id: string; daily_wage: string; site_name_ar: string; site_name_en: string | null }; employee: Named }
+// no amount since 2026-11-19 (an older notification may still carry daily_wage; it is never shown)
+type WageProposed = Base & { type: 'wage_proposed'; data: { employee_id: string; site_name_ar: string; site_name_en: string | null }; employee: Named }
+type WageDecided = Base & { type: 'wage_approved' | 'wage_refused'; data: { employee_id: string; proposal_id: string }; employee: Named }
+// a site manager's transport request (HR) and HR's decision on it (the manager); ids and the site's name only, never an amount
+type FareRequested = Base & { type: 'fare_requested'; data: { employee_id: string; request_id: string; site_name_ar: string; site_name_en: string | null }; employee: Named }
+type FareDecided = Base & { type: 'fare_approved' | 'fare_refused'; data: { employee_id: string; request_id: string }; employee: Named }
 type PastEdit = Base & { type: 'attendance_past_edit'; data: { employee_id: string; date: string; out_time: string; site_name_ar: string; site_name_en: string | null; group: string; period_start: string }; employee: Named }
 type AttendanceRequestCreated = Base & { type: 'attendance_request_created'; data: { request_id: string; kind: string; status: string; site_id: string } }
 type AttendanceRequestDecided = Base & { type: 'attendance_request_decided'; data: AttendanceRequestCreated['data'] }
-type Notification = AttendanceRequestCreated | AttendanceRequestDecided | MissingDays | LeaveAnniversary | LeaveRequested | LeaveEscalated | LeaveDecided | LeaveCancelled | WageProposed | PastEdit
+type Notification = AttendanceRequestCreated | AttendanceRequestDecided | MissingDays | LeaveAnniversary | LeaveRequested | LeaveEscalated | LeaveDecided | LeaveCancelled | WageProposed | WageDecided | FareRequested | FareDecided | PastEdit
 
 /** One clickable line: what it says, the muted line under it, and where it opens (null: it only marks the notification read). */
 type Line = { key: string; text: ReactNode; detail: string; to: string | null }
 /** A notification with a `title` is a group of lines under that title; without one it is a single line. */
 type View = { title?: string; lines: Line[] }
 type Ctx = { t: TFunction; lang: string }
+
+/** HR's decision on a wage the site manager proposed: it opens that request. */
+const wageDecided = (key: string, n: WageDecided, ctx: Ctx): View => ({
+  lines: [{ key: n.id, text: named(key, n.employee, ctx), detail: ctx.t('notifications.wageDecidedDetail'), to: `/my-wage-proposals?proposal=${n.data.proposal_id}` }],
+})
+
+/** HR's decision on a transport request: it opens that request on the site manager's transport screen. */
+const fareDecided = (key: string, n: FareDecided, ctx: Ctx): View => ({
+  lines: [{ key: n.id, text: named(key, n.employee, ctx), detail: ctx.t('notifications.fareDecidedDetail'), to: `/team-fares?request=${n.data.request_id}` }],
+})
 
 /** A line about one leave request: `key` names the text, the detail is its kind and dates, and it opens the request. */
 const requestLine = (key: string, n: LeaveRequested | LeaveEscalated | LeaveDecided | LeaveCancelled, ctx: Ctx): View => ({
@@ -80,10 +95,23 @@ const VIEWS: { [K in Notification['type']]: (n: Extract<Notification, { type: K 
     lines: [{
       key: n.id,
       text: named('notifications.wageProposed', n.employee, ctx),
-      detail: ctx.t('notifications.wageProposed.detail', { amount: n.data.daily_wage, site: ctx.lang === 'en' ? n.data.site_name_en || n.data.site_name_ar : n.data.site_name_ar }),
+      detail: ctx.lang === 'en' ? n.data.site_name_en || n.data.site_name_ar : n.data.site_name_ar,
       to: n.ref ? `/wage-proposals?proposal=${n.ref}` : '/wage-proposals',
     }],
   }),
+  // HR decided the proposing site manager's wage: the outcome (the approved wage or HR's reason) is on their request, never here
+  wage_approved: (n, ctx) => wageDecided('notifications.wageApproved', n, ctx),
+  wage_refused: (n, ctx) => wageDecided('notifications.wageRefused', n, ctx),
+  fare_requested: (n, ctx) => ({
+    lines: [{
+      key: n.id,
+      text: named('notifications.fareRequested', n.employee, ctx),
+      detail: ctx.lang === 'en' ? n.data.site_name_en || n.data.site_name_ar : n.data.site_name_ar,
+      to: `/fare-requests?request=${n.data.request_id}`,
+    }],
+  }),
+  fare_approved: (n, ctx) => fareDecided('notifications.fareApproved', n, ctx),
+  fare_refused: (n, ctx) => fareDecided('notifications.fareRefused', n, ctx),
   attendance_request_created: (n, { t }) => ({
     lines: [{
       key: n.id,
@@ -114,8 +142,10 @@ const VIEWS: { [K in Notification['type']]: (n: Extract<Notification, { type: K 
 }
 const view = (n: Notification, ctx: Ctx): View => {
   const v = (VIEWS[n.type] as (n: Notification, ctx: Ctx) => View)(n, ctx)
-  // about an employee the reader cannot name (deleted, archived, out of reach): their page or request would be a 404, so the line only marks it read
-  return 'employee' in n && n.employee === null && 'employee_id' in n.data ? { ...v, lines: v.lines.map((l) => ({ ...l, to: null })) } : v
+  // about an employee the reader cannot name (deleted, archived, out of reach): their page or request would be a 404, so the line only marks it read.
+  // A wage or transport decision opens the site manager's own request, which stays theirs even once the employee is out of reach.
+  const own = n.type === 'wage_approved' || n.type === 'wage_refused' || n.type === 'fare_approved' || n.type === 'fare_refused'
+  return !own && 'employee' in n && n.employee === null && 'employee_id' in n.data ? { ...v, lines: v.lines.map((l) => ({ ...l, to: null })) } : v
 }
 
 const PATH = '/notifications?per_page=10'

@@ -4,21 +4,29 @@ declare(strict_types=1);
 
 namespace App\Modules\Employees\Application;
 
+use App\Modules\Employees\Domain\ClientRequestReused;
 use App\Modules\Employees\Domain\EffectiveDated;
 use App\Modules\Employees\Domain\EmployeeType;
+use App\Modules\Employees\Domain\WageProposalKind;
 use App\Modules\Employees\Domain\WageProposalStatus;
 use App\Modules\Employees\Infrastructure\Eloquent\DayCrewChange;
 use App\Modules\Employees\Infrastructure\Eloquent\Employee;
 use App\Modules\Employees\Infrastructure\Eloquent\EmployeeSiteAssignment;
 use App\Modules\Employees\Infrastructure\Eloquent\EmployeeWageProposal;
+use App\Modules\Identity\Application\Rbac\PermissionHolders;
 use App\Modules\Identity\Infrastructure\Eloquent\User;
+use App\Modules\Notifications\Application\Notifier;
 use App\Modules\Sites\Application\SiteService;
 use App\Support\Database\ConcurrencyConflict;
 use App\Support\Http\Paginates;
+use App\Support\Money\Decimal;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\ModelNotFoundException;
 use Illuminate\Database\UniqueConstraintViolationException;
+use Illuminate\Support\Arr;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Validation\ValidationException;
 
 /**
  * The day-labor crew's writes (owner, 2026-11-04; PR #22 review). A day's crew is the day laborers whose site on that date is the
@@ -31,7 +39,23 @@ final class DayCrew
 {
     use Paginates;
 
-    public function __construct(private readonly SiteService $sites) {}
+    public function __construct(
+        private readonly SiteService $sites,
+        private readonly Notifier $notifier,
+        private readonly PermissionHolders $holders,
+        private readonly EmployeeService $employees,
+    ) {}
+
+    /**
+     * The site a proposal's laborer was added to: their first crew change, kept after a refusal took them off every crew (soft-deleted);
+     * and their home sites, for a wage change's site on the day it was proposed.
+     *
+     * @return array<int|string, \Closure|string>
+     */
+    private static function firstCrew(): array
+    {
+        return ['employee.crewChanges' => fn ($q) => $q->withTrashed(), 'employee.siteAssignments'];
+    }
 
     /**
      * The one day laborer employed on $date whose code is $search, or whose full name is (spaces collapsed, English case ignored):
@@ -134,22 +158,72 @@ final class DayCrew
      * A new day laborer, hired on $date and on $siteId's crew that day, with no home site and no pay row; $wage waits as a pending
      * proposal, and a null $wage makes none (the site workbook's blank proposed wage: HR sets the wage on the employee's page).
      *
+     * $clientRequestId is the site manager's form id: its unique index makes a second identical request fail inside this transaction,
+     * which then rolls back the employee too, and the caller replays the first answer (byClientRequest).
+     *
      * @param  array{name_ar: string, gender: string, phone?: ?string, national_id?: ?string, residence_id?: ?string}  $identity
      * @return ($wage is string ? array{id: string, code: int, name_ar: string, proposal_id: string} : array{id: string, code: int, name_ar: string, proposal_id: null})
      */
-    public function propose(array $identity, string $siteId, string $date, ?string $wage): array
+    public function propose(array $identity, string $siteId, string $date, ?string $wage, ?string $clientRequestId = null): array
     {
-        return DB::transaction(function () use ($identity, $siteId, $date, $wage): array {
+        return DB::transaction(function () use ($identity, $siteId, $date, $wage, $clientRequestId): array {
             $code = EmployeeCodes::issueNext();
             // The national ID and residence only when given, so a site manager's proposal audits the same row as before.
             $optional = array_filter(['national_id' => $identity['national_id'] ?? null, 'residence_id' => $identity['residence_id'] ?? null], fn (?string $v) => $v !== null);
             $employee = Employee::create(['name_ar' => $identity['name_ar'], 'gender' => $identity['gender'], 'phone' => $identity['phone'] ?? null, ...$optional, 'hire_date' => $date, 'code' => $code]);
             $employee->typeChanges()->create(['type' => EmployeeType::DayLaborer->value, 'effective_from' => $date]);
             $employee->crewChanges()->create(['date' => $date, 'site_id' => $siteId]);
-            $proposal = $wage === null ? null : EmployeeWageProposal::create(['employee_id' => $employee->id, 'daily_wage' => $wage, 'status' => WageProposalStatus::Pending]);
+            $proposal = $wage === null ? null : EmployeeWageProposal::create([
+                'employee_id' => $employee->id, 'daily_wage' => $wage, 'status' => WageProposalStatus::Pending,
+                ...($clientRequestId === null ? [] : ['client_request_id' => $clientRequestId]),
+            ]);
 
             return ['id' => (string) $employee->id, 'code' => $code, 'name_ar' => (string) $employee->name_ar, 'proposal_id' => $proposal === null ? null : (string) $proposal->id];
         });
+    }
+
+    /**
+     * A site manager's new daily wage for a day laborer who already exists (Youssef, 2026-11-19, #79): a pending wage-change proposal
+     * with their optional $reason, which HR approves from a date it picks or refuses. The route's employee.scope has already checked
+     * the laborer is in $managerId's reach today and not archived. HR hears at once, with no amount (§9).
+     *
+     * $clientRequestId makes a retry return the first answer (`replayed`); a reused id with another laborer or wage is a 409.
+     *
+     * @return array{id: string, status: string, replayed: bool}
+     */
+    public function proposeWage(string $employeeId, string $wage, ?string $reason, ?string $clientRequestId, string $managerId, string $today): array
+    {
+        if ($clientRequestId !== null && ($first = $this->wageByClientRequest($clientRequestId, $employeeId, $wage, $managerId)) !== null) {
+            return $first;
+        }
+        $laborer = $this->laborer($employeeId, $today);
+        if ($laborer === null) {
+            throw ValidationException::withMessages(['employee' => __('errors.not_a_day_laborer')]);
+        }
+        if (EmployeeWageProposal::where(['employee_id' => $employeeId, 'status' => WageProposalStatus::Pending])->exists()) {
+            throw ValidationException::withMessages(['employee' => __('errors.wage_proposal_pending')]);
+        }
+        try {
+            $p = DB::transaction(fn () => EmployeeWageProposal::create([
+                'employee_id' => $employeeId, 'daily_wage' => $wage, 'status' => WageProposalStatus::Pending, 'kind' => WageProposalKind::WageChange,
+                'reason' => $reason, ...($clientRequestId === null ? [] : ['client_request_id' => $clientRequestId]),
+            ]));
+        } catch (UniqueConstraintViolationException $e) {
+            // A concurrent request won: the same form (its id) replays, another proposal for the laborer is the pending refusal.
+            if ($clientRequestId !== null && str_contains($e->getMessage(), 'employee_wage_proposals_client_request')) {
+                return $this->wageByClientRequest($clientRequestId, $employeeId, $wage, $managerId) ?? throw $e;
+            }
+            throw str_contains($e->getMessage(), 'employee_wage_proposals_one_pending') ? ValidationException::withMessages(['employee' => __('errors.wage_proposal_pending')]) : $e;
+        }
+        $siteId = $this->siteOn($laborer, $today);
+        $site = $siteId === null ? null : $this->sites->names([$siteId])[$siteId] ?? null;
+        foreach ($this->holders->userIds('employee.approve_wage.all') as $id) {
+            $this->notifier->notifyOnce($id, 'wage_proposed', $today, [
+                'employee_id' => $employeeId, 'site_name_ar' => (string) ($site['name_ar'] ?? ''), 'site_name_en' => $site['name_en'] ?? null,
+            ], (string) $p->id);
+        }
+
+        return ['id' => (string) $p->id, 'status' => WageProposalStatus::Pending->value, 'replayed' => false];
     }
 
     /**
@@ -174,7 +248,7 @@ final class DayCrew
      */
     public function pending(int $perPage, int $page): array
     {
-        $list = $this->page(EmployeeWageProposal::with('employee.crewChanges')->where('status', WageProposalStatus::Pending)->orderBy('id'), $perPage, $page);
+        $list = $this->page(EmployeeWageProposal::with(['employee.crewChanges', 'employee.siteAssignments', 'employee.payChanges'])->where('status', WageProposalStatus::Pending)->orderBy('id'), $perPage, $page);
         // Named in one query each, not per row: the site the laborer was added to, and the site manager who proposed the wage.
         $sites = $this->sites->names(array_values(array_filter(array_column($list['data'], 'site_id'))));
         $users = User::withTrashed()->whereKey(array_filter(array_column($list['data'], 'proposed_by')))->pluck('name', 'id');
@@ -194,37 +268,80 @@ final class DayCrew
     {
         /** @var EmployeeWageProposal $m */
         $e = $m->employee;
-        // the crew the site manager added them to: the change on their first day
-        $first = $e?->crewChanges->sortBy('date')->first();
+        $change = $m->kind === WageProposalKind::WageChange;
 
         return [
             'id' => $m->id,
             'version' => $m->version,
+            'kind' => $m->kind->value,
             'daily_wage' => $m->daily_wage,
+            // a wage change: the daily wage in force today, beside the proposed one (HR only); a new laborer has none
+            'current_wage' => $change && $e !== null ? $this->wageOn($e, now('Africa/Cairo')->toDateString()) : null,
+            'reason' => $m->reason,
             'proposed_by' => $m->created_by,
             'created_at' => $m->created_at?->toIso8601String(),
-            'site_id' => $first?->site_id === null ? null : (string) $first->site_id,
-            'employee' => ['id' => $m->employee_id, 'code' => (int) $e?->code, 'name_ar' => (string) $e?->name_ar, 'name_en' => $e?->name_en, 'gender' => $e?->gender, 'phone' => $e?->phone, 'hire_date' => $e?->hire_date],
+            'site_id' => $this->proposalSite($m),
+            // HR only (employee.approve_wage.all): the national ID the site manager typed, if any
+            'employee' => ['id' => $m->employee_id, 'code' => (int) $e?->code, 'name_ar' => (string) $e?->name_ar, 'name_en' => $e?->name_en, 'gender' => $e?->gender, 'phone' => $e?->phone, 'national_id' => $e?->national_id, 'hire_date' => $e?->hire_date],
         ];
     }
 
     /**
-     * HR decides a proposal; a decided or changed proposal is a 409. Approving writes the pay row from the hire date, at HR's $wage or
-     * else the proposed one. Refusing ends the laborer on $today (or keeps an earlier end) and takes them off every crew from then, and
+     * HR decides a proposal; a decided or changed proposal is a 409. Approving a new laborer's wage writes the pay row from the hire date,
+     * at HR's $wage or else the proposed one; approving a wage change (#79) writes it from HR's $from through EmployeeService::addPayChange,
+     * which refuses a date in a locked period or one that already has a pay row. Refusing a wage change changes nothing on the laborer.
+     * Refusing a new laborer's wage ends the laborer on $today (or keeps an earlier end) and takes them off every crew from then, and
      * off any earlier day with nothing recorded (owner, 2026-11-05): they are on no list, in no search, on no crew and get no new day.
-     * Days already recorded stay; HR decides what to do with them. Audited.
+     * Days already recorded stay; HR decides what to do with them. A refusal carries HR's $reason, and an approval keeps the wage it
+     * approved (approved_wage), both for the proposing site manager's view of their request. Audited, with the actor and decided_at.
+     *
+     * @return array{proposed_by: ?string, employee_id: string} who to tell, and about whom
      */
-    public function decide(string $proposalId, int $version, bool $approve, ?string $wage, string $hrId, string $today): void
+    public function decide(string $proposalId, int $version, bool $approve, ?string $wage, string $hrId, string $today, ?string $reason = null, ?string $from = null): array
     {
-        DB::transaction(function () use ($proposalId, $version, $approve, $wage, $hrId, $today): void {
+        $decided = $this->decideInTransaction($proposalId, $version, $approve, $wage, $hrId, $today, $reason, $from);
+        // After the commit, so a rolled-back decision tells nobody. Ids only, never the wage or the reason (§9; owner, 2026-11-19): the
+        // site manager reads both on their request. notifyOnce keys on the proposal, so a retry adds nothing.
+        // Only a site manager's own proposal: HR's site-workbook import also proposes, inside HR's request, and its importer has no
+        // «مقترحات الأجور» to open (review of #72).
+        $proposer = $decided['kind'] === WageProposalKind::WageChange ? 'employee.propose_wage.own' : 'employee.propose_laborer.own';
+        if ($decided['proposed_by'] !== null && in_array($decided['proposed_by'], $this->holders->userIds($proposer), true)) {
+            $this->notifier->notifyOnce($decided['proposed_by'], $approve ? 'wage_approved' : 'wage_refused', $today, ['employee_id' => $decided['employee_id'], 'proposal_id' => $proposalId], $proposalId);
+        }
+
+        return $decided;
+    }
+
+    /** @return array{proposed_by: ?string, employee_id: string, kind: WageProposalKind} */
+    private function decideInTransaction(string $proposalId, int $version, bool $approve, ?string $wage, string $hrId, string $today, ?string $reason, ?string $from): array
+    {
+        return DB::transaction(function () use ($proposalId, $version, $approve, $wage, $hrId, $today, $reason, $from): array {
             $p = EmployeeWageProposal::lockForUpdate()->findOrFail($proposalId);
             if ($p->status !== WageProposalStatus::Pending || $p->version !== $version) {
                 throw new ConcurrencyConflict;
             }
             $employee = Employee::lockForUpdate()->findOrFail($p->employee_id);
-            if ($approve) {
+            $approved = $wage ?? (string) $p->daily_wage;
+            if ($p->kind === WageProposalKind::WageChange) {
+                if ($approve) {
+                    if ($from === null) {
+                        throw ValidationException::withMessages(['effective_from' => __('validation.required', ['attribute' => __('validation.attributes.effective_from')])]);
+                    }
+                    // still a day laborer, employed, on HR's date: a type change or a termination since the proposal refuses it
+                    if ($this->laborer((string) $employee->id, $from) === null) {
+                        throw ValidationException::withMessages(['effective_from' => __('errors.not_a_day_laborer_on_date')]);
+                    }
+                    // a later pay row would take over again from its date and cut this wage short: name the last one, so one retry is
+                    // enough (Youssef, 2026-11-22, review of #86; the same rule as a fare's later override)
+                    $later = $employee->payChanges()->where('effective_from', '>', $from)->max('effective_from');
+                    if ($later !== null) {
+                        throw ValidationException::withMessages(['effective_from' => __('errors.later_pay_change', ['date' => (string) $later])]);
+                    }
+                    $this->employees->addPayChange((string) $employee->id, ['effective_from' => $from, 'daily_wage' => $approved]);
+                }
+            } elseif ($approve) {
                 $from = (string) ($employee->hire_date ?? $p->created_at?->toDateString());
-                $employee->payChanges()->create(['effective_from' => $from, 'daily_wage' => $wage ?? (string) $p->daily_wage]);
+                $employee->payChanges()->create(['effective_from' => $from, 'daily_wage' => $approved]);
             } else {
                 // An earlier end HR already set stays; never before the hire date (PR #22 review).
                 $employee->termination_date = max((string) $employee->hire_date, min($today, (string) ($employee->termination_date ?? $today)));
@@ -234,9 +351,162 @@ final class DayCrew
                 DayCrewChange::where('employee_id', $employee->id)->where(fn (Builder $q) => $q->where('date', '>=', $today)->orWhereNotIn('date', $recorded))
                     ->get()->each(fn (DayCrewChange $c) => $c->delete());
             }
-            $p->fill(['status' => $approve ? WageProposalStatus::Approved : WageProposalStatus::Refused, 'decided_by' => $hrId, 'decided_at' => now(), 'version' => $version + 1]);
+            $p->fill([
+                'status' => $approve ? WageProposalStatus::Approved : WageProposalStatus::Refused, 'decided_by' => $hrId, 'decided_at' => now(), 'version' => $version + 1,
+                ...($approve ? ['approved_wage' => $approved] : ['refusal_reason' => $reason]),
+                ...($approve && $p->kind === WageProposalKind::WageChange ? ['effective_from' => $from] : []),
+            ]);
             $p->save();
+
+            return ['proposed_by' => $p->created_by, 'employee_id' => (string) $p->employee_id, 'kind' => $p->kind];
         });
+    }
+
+    /**
+     * The first answer to a site manager's "new day laborer" request with this form id, for a double tap or a retry; null when there is
+     * none yet. Another user's id is never replayed (a 404 for them). A replay is the same request: when its name, wage or phone differ
+     * from what was saved, it is refused (409 client_request_reused) instead of answering as if the correction was saved (review of #72).
+     *
+     * @param  array{name_ar?: string, daily_wage?: string, phone?: ?string}|null  $data  the replayed request
+     * @return array{id: string, code: int, name_ar: string, proposal_id: string}|null
+     */
+    public function byClientRequest(string $clientRequestId, string $managerId, ?array $data = null): ?array
+    {
+        $p = EmployeeWageProposal::with('employee')->where('client_request_id', $clientRequestId)->first();
+        if ($p === null) {
+            return null;
+        }
+        if ($p->created_by !== $managerId || $p->employee === null) {
+            throw new ModelNotFoundException;
+        }
+        if ($data !== null && (
+            (isset($data['name_ar']) && $data['name_ar'] !== (string) $p->employee->name_ar)
+            || (isset($data['daily_wage']) && bccomp(Decimal::of($data['daily_wage'], 'daily_wage'), Decimal::of((string) $p->daily_wage, 'daily_wage'), 6) !== 0)
+            || (array_key_exists('phone', $data) && ($data['phone'] ?? null) !== $p->employee->phone)
+        )) {
+            throw new ClientRequestReused;
+        }
+
+        return ['id' => (string) $p->employee_id, 'code' => (int) $p->employee->code, 'name_ar' => (string) $p->employee->name_ar, 'proposal_id' => (string) $p->id];
+    }
+
+    /** @return array{id: string, code: int, name_ar: string, name_en: ?string} what the crew search shows of an employee */
+    public function identityOf(string $employeeId): array
+    {
+        $e = Employee::withTrashed()->findOrFail($employeeId);
+
+        return ['id' => (string) $e->id, 'code' => (int) $e->code, 'name_ar' => (string) $e->name_ar, 'name_en' => $e->name_en];
+    }
+
+    /**
+     * The proposals $managerId made, newest first: each one's worker, status, the wage they proposed, and once decided, the wage HR
+     * approved or HR's reason for refusing (owner, 2026-11-19: the proposing manager sees the outcome of their own proposal only).
+     *
+     * @return array{data: list<array<string, mixed>>, pagination: array{page: int, per_page: int, total: int, total_pages: int, has_next_page: bool, has_previous_page: bool}}
+     */
+    public function mine(string $managerId, int $perPage, int $page): array
+    {
+        $p = EmployeeWageProposal::with(self::firstCrew())->where('created_by', $managerId)->orderByDesc('id')
+            ->paginate(min(max($perPage, 1), 100), ['*'], 'page', max($page, 1));
+
+        return [
+            // no figure in the list (Youssef, 2026-11-19): the amounts come with the opened request (mineOne), so the browser never holds them
+            'data' => $this->named(array_values($p->getCollection()->map(fn (EmployeeWageProposal $m) => Arr::except($this->outcome($m), ['proposed_wage', 'approved_wage', 'refusal_reason']))->all())),
+            'pagination' => [
+                'page' => $p->currentPage(), 'per_page' => $p->perPage(), 'total' => $p->total(), 'total_pages' => $p->lastPage(),
+                'has_next_page' => $p->hasMorePages(), 'has_previous_page' => $p->currentPage() > 1,
+            ],
+        ];
+    }
+
+    /** @return array<string, mixed> one of $managerId's proposals; 404 for anyone else's (an altered id never reaches it) */
+    public function mineOne(string $managerId, string $proposalId): array
+    {
+        $p = EmployeeWageProposal::with(self::firstCrew())->where('created_by', $managerId)->findOrFail($proposalId);
+
+        return $this->named([$this->outcome($p)])[0];
+    }
+
+    /** @return array<string, mixed> */
+    private function outcome(EmployeeWageProposal $p): array
+    {
+        $e = $p->employee;
+
+        return [
+            'id' => (string) $p->id,
+            'kind' => $p->kind->value,
+            'status' => $p->status->value,
+            'reason' => $p->reason,
+            'effective_from' => $p->status === WageProposalStatus::Approved ? $p->effective_from : null,
+            'proposed_wage' => (string) $p->daily_wage,
+            'approved_wage' => $p->status === WageProposalStatus::Approved ? $p->approved_wage : null,
+            'refusal_reason' => $p->status === WageProposalStatus::Refused ? $p->refusal_reason : null,
+            'created_at' => $p->created_at?->toIso8601String(),
+            'decided_at' => $p->decided_at?->toIso8601String(),
+            'site_id' => $this->proposalSite($p),
+            'employee' => ['id' => (string) $p->employee_id, 'code' => (int) $e?->code, 'name_ar' => (string) $e?->name_ar, 'name_en' => $e?->name_en],
+        ];
+    }
+
+    /**
+     * @param  list<array<string, mixed>>  $rows
+     * @return list<array<string, mixed>> each row's site named (one query), site_id dropped
+     */
+    private function named(array $rows): array
+    {
+        $sites = $this->sites->names(array_values(array_filter(array_column($rows, 'site_id'))));
+
+        return array_map(fn (array $r) => [...array_diff_key($r, ['site_id' => true]), 'site' => $r['site_id'] === null ? null : $sites[$r['site_id']] ?? null], $rows);
+    }
+
+    /**
+     * The site a proposal is shown at: a new laborer's first crew (the site they were added to), or a wage change's laborer's site on the
+     * day it was proposed. Needs the employee's crewChanges and siteAssignments loaded.
+     */
+    private function proposalSite(EmployeeWageProposal $p): ?string
+    {
+        $e = $p->employee;
+        if ($e === null) {
+            return null;
+        }
+        if ($p->kind === WageProposalKind::WageChange) {
+            return $this->siteOn($e, (string) $p->created_at?->setTimezone('Africa/Cairo')->toDateString());
+        }
+        $first = $e->crewChanges->sortBy('date')->first();
+
+        return $first?->site_id === null ? null : (string) $first->site_id;
+    }
+
+    /** The daily wage in force on $date, from the loaded payChanges. */
+    private function wageOn(Employee $e, string $date): ?string
+    {
+        $rows = $e->payChanges->map(fn ($c) => ['effective_from' => (string) $c->effective_from, 'daily_wage' => $c->daily_wage])->all();
+        $wage = EffectiveDated::at($rows, $date)['daily_wage'] ?? null;
+
+        return $wage === null ? null : (string) $wage;
+    }
+
+    /**
+     * The first answer to a site manager's wage-change form with this id, or null when there is none yet. Another manager's id is a 404;
+     * the same id for another laborer or another wage is a 409 (client_request_reused).
+     *
+     * @return array{id: string, status: string, replayed: bool}|null
+     */
+    private function wageByClientRequest(string $clientRequestId, string $employeeId, string $wage, string $managerId): ?array
+    {
+        $p = EmployeeWageProposal::where('client_request_id', $clientRequestId)->first();
+        if ($p === null) {
+            return null;
+        }
+        if ($p->created_by !== $managerId) {
+            throw new ModelNotFoundException;
+        }
+        if ($p->kind !== WageProposalKind::WageChange || $p->employee_id !== $employeeId
+            || bccomp(Decimal::of($wage, 'daily_wage'), Decimal::of((string) $p->daily_wage, 'daily_wage'), 6) !== 0) {
+            throw new ClientRequestReused;
+        }
+
+        return ['id' => (string) $p->id, 'status' => $p->status->value, 'replayed' => true];
     }
 
     private function laborer(string $employeeId, string $date): ?Employee

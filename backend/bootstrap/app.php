@@ -2,15 +2,18 @@
 
 use App\Http\Middleware\AddRequestId;
 use App\Http\Middleware\ForgetResolvedGuards;
+use App\Http\Middleware\NormalizeDigits;
 use App\Http\Middleware\RecordRequest;
 use App\Http\Middleware\SetLocaleFromRequest;
 use App\Modules\Attendance\Domain\AttendanceRefused;
 use App\Modules\Attendance\Presentation\AlertMissingDaysCommand;
 use App\Modules\Audit\Infrastructure\SystemLog;
 use App\Modules\Audit\Presentation\PruneLogsCommand;
+use App\Modules\Employees\Domain\ClientRequestReused;
 use App\Modules\Employees\Domain\EmployeeArchived;
 use App\Modules\Employees\Domain\EmployeeCodeTaken;
 use App\Modules\Employees\Domain\EmployeeHasOpenItems;
+use App\Modules\Employees\Domain\LaborerExists;
 use App\Modules\Employees\Presentation\EnsureEmployeeInScope;
 use App\Modules\Employees\Presentation\ImportMasterDataCommand;
 use App\Modules\Identity\Domain\Authentication\AuthenticationRefused;
@@ -21,6 +24,7 @@ use App\Modules\Leave\Domain\LeaveRefused;
 use App\Modules\Leave\Domain\NoLeaveBalance;
 use App\Modules\Leave\Presentation\AlertAnniversaryCommand;
 use App\Modules\Payroll\Presentation\Console\ExcelDifferencesCommand;
+use App\Modules\Sites\Domain\FareRequestPending;
 use App\Support\Database\ConcurrencyConflict;
 use App\Support\Http\ApiEnvelope;
 use Illuminate\Auth\AuthenticationException;
@@ -49,7 +53,8 @@ return Application::configure(basePath: dirname(__DIR__))
         // Outermost (prepended last): its duration covers every other middleware, and any refusal they render is logged.
         $middleware->prepend(RecordRequest::class);
         $middleware->append(ForgetResolvedGuards::class);
-        $middleware->api(prepend: [SetLocaleFromRequest::class]);
+        // Before any controller validates: numeric fields take Arabic and Persian digits.
+        $middleware->api(prepend: [SetLocaleFromRequest::class, NormalizeDigits::class]);
         // No login route to redirect to: an API guest gets the 401 envelope.
         $middleware->redirectGuestsTo(fn (Request $r) => $r->is('api/*') ? null : '/');
         $middleware->alias(['permission' => AuthorizePermission::class, 'employee.scope' => EnsureEmployeeInScope::class]);
@@ -113,7 +118,22 @@ return Application::configure(basePath: dirname(__DIR__))
             $request, $e->reason->status(), $e->reason->value, __('leave.refusal.'.$e->reason->value, $e->params), extra: $e->dates === [] ? [] : ['dates' => $e->dates],
         ));
 
-        $exceptions->dontReport([EmployeeCodeTaken::class, EmployeeArchived::class, EmployeeHasOpenItems::class]);
+        $exceptions->dontReport([EmployeeCodeTaken::class, EmployeeArchived::class, EmployeeHasOpenItems::class, LaborerExists::class, FareRequestPending::class, ClientRequestReused::class]);
+
+        // The message never names a national ID; `match` is the crew search's row, or null when HR is the contact.
+        $exceptions->render(fn (LaborerExists $e, Request $request) => ApiEnvelope::error(
+            $request, 409, 'laborer_exists', __('errors.laborer_exists.'.($e->match === null && ! $e->ambiguous && $e->reason === LaborerExists::NATIONAL_ID ? 'national_id_hr' : ($e->ambiguous ? 'name_ambiguous' : $e->reason))),
+            extra: ['reason' => $e->reason, 'match' => $e->match, 'ambiguous' => $e->ambiguous],
+        ));
+
+        // The waiting request goes with the refusal, so the screen opens it instead of sending a second one.
+        $exceptions->render(fn (FareRequestPending $e, Request $request) => ApiEnvelope::error(
+            $request, 409, 'fare_request_pending', __('errors.fare_request_pending'), extra: ['pending' => $e->pending],
+        ));
+
+        $exceptions->render(fn (ClientRequestReused $e, Request $request) => ApiEnvelope::error(
+            $request, 409, 'client_request_reused', __('errors.'.$e->messageKey),
+        ));
 
         $exceptions->render(fn (EmployeeHasOpenItems $e, Request $request) => ApiEnvelope::error(
             $request, 409, 'employee_has_open_items', __('errors.employee_has_open_items', ['count' => (string) count($e->items)]), extra: ['items' => $e->items],

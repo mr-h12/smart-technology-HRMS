@@ -47,10 +47,12 @@
     "siteDay": "Site attendance",
     "leave": "Leave",
     "wageProposals": "Proposed wages",
+    "myWageProposals": "Wage proposals",
     "teamFares": "Team transport",
     "logs": "System logs",
     "payroll": "Payroll",
-    "attendanceRequests": "Attendance requests"
+    "attendanceRequests": "Attendance requests",
+    "fareRequests": "Transport requests"
   },
   "toggle": {
     "language": "Language",
@@ -73,6 +75,7 @@
   "employee": {
     "add": "Add employee",
     "search": "Search name or ID",
+    "searchNameCode": "Search name or employee ID",
     "allTypes": "All types",
     "code": "Employee ID",
     "name_ar": "Name (Arabic)",
@@ -253,7 +256,7 @@
     "value": "Value",
     "addRule": "Add rule",
     "yes": "Yes",
-    "managers": "Site managers",
+    "managers": "Site manager",
     "addLeaveType": "Add leave type",
     "home": "Home site",
     "homeNone": "No home site",
@@ -262,7 +265,14 @@
     "returnsOn": "Returns to the previous site on",
     "homeHistory": "Home site history",
     "workers": "Workers",
-    "workersNone": "No workers are based at this site today."
+    "workersNone": "No workers are based at this site today.",
+    "oneManager": "A site has one manager only. To change the manager, pick the new one in their place.",
+    "conflicts": {
+      "title": "Sites with more than one manager",
+      "description": "A site has one manager only. Keep one manager for each of these sites and remove the others.",
+      "remove": "Remove {{name}}",
+      "removeFrom": "Remove {{name}} from {{site}}"
+    }
   },
   "residence": {
     "add": "Add residence"
@@ -917,8 +927,25 @@
     "deleteConfirm": "Delete the official holiday \"{{name}}\"?"
   },
   "wages": {
+    "mine": {
+      "page": "Wage proposals",
+      "description": "The daily wages you proposed for day laborers, new and existing, and HR's decision on each.",
+      "list": "Wage proposals",
+      "empty": "You have not proposed a wage yet.",
+      "request": "Daily wage request",
+      "approvedWage": "Approved wage",
+      "decidedAt": "Decided on",
+      "reason": "Reason for refusing",
+      "gone": "This request is not available.",
+      "loading": "Loading…",
+      "status": {
+        "pending": "Pending",
+        "approved": "Approved",
+        "refused": "Refused"
+      }
+    },
     "page": "Proposed wages",
-    "description": "A daily wage a site manager proposed for a day laborer they added. It is not paid until you approve it.",
+    "description": "A daily wage a site manager proposed: for a new day laborer they added, or a new wage for an existing one. It does not reach payroll before you approve it.",
     "list": "Proposed wages waiting",
     "empty": "No proposed wages are waiting",
     "more": "Showing the first {{shown}} of {{total}}. Approve or refuse some to see the rest.",
@@ -941,8 +968,31 @@
       "open": "Refuse",
       "back": "Back",
       "yes": "Confirm refusal",
+      "reason": "Reason for refusing (the site manager sees it)",
       "confirm": "The laborer ends today and leaves every crew. Their recorded days stay for you to decide: a wage for those days only, or cancel them.",
-      "done": "Refused the proposed wage for {{name}}"
+      "done": "Refused the proposed wage for {{name}}",
+      "confirmChange": "The laborer stays employed at their current wage; only the proposal is refused."
+    },
+    "kind": {
+      "label": "Kind",
+      "new_laborer": "New laborer's wage",
+      "wage_change": "Wage change"
+    },
+    "change": {
+      "open": "Propose a wage for an existing laborer",
+      "title": "Propose a wage for an existing laborer",
+      "search": "Search by code or name",
+      "results": "Search results",
+      "none": "Nobody with this code or name on your sites.",
+      "pick": "Choose the laborer first",
+      "other": "Change",
+      "reason": "Reason (optional, HR reads it)",
+      "send": "Send the proposal",
+      "done": "The proposed wage for {{name}} was sent to HR",
+      "yourReason": "Your reason",
+      "current": "Current wage",
+      "managerReason": "Site manager's reason",
+      "pickDate": "Choose the date the new wage applies from"
     }
   },
   "notifications": {
@@ -986,9 +1036,17 @@
     },
     "wageProposed": {
       "line": "Proposed daily wage for <name/> (<code/>)",
-      "unknown": "Proposed daily wage for a day laborer",
-      "detail": "{{amount}} · {{site}}"
+      "unknown": "Proposed daily wage for a day laborer"
     },
+    "wageApproved": {
+      "line": "The daily wage you proposed for <name/> (<code/>) was approved",
+      "unknown": "The daily wage you proposed was approved"
+    },
+    "wageRefused": {
+      "line": "The daily wage you proposed for <name/> (<code/>) was refused",
+      "unknown": "The daily wage you proposed was refused"
+    },
+    "wageDecidedDetail": "Open the request for the approved wage or the reason",
     "leaveCancelled": {
       "line": "Leave request for <name/> (<code/>) cancelled",
       "unknown": "A leave request was cancelled"
@@ -997,7 +1055,20 @@
       "line": "Departure of <name/> (<code/>) for {{date}}, after the window",
       "unknown": "A departure entered after the window for {{date}}",
       "detail": "{{time}} · {{site}}"
-    }
+    },
+    "fareRequested": {
+      "line": "Transport request for <name/> (<code/>)",
+      "unknown": "New transport request"
+    },
+    "fareApproved": {
+      "line": "Transport request for <name/> (<code/>) approved",
+      "unknown": "A transport request was approved"
+    },
+    "fareRefused": {
+      "line": "Transport request for <name/> (<code/>) rejected",
+      "unknown": "A transport request was rejected"
+    },
+    "fareDecidedDetail": "Open the request for the approved amount or the reason"
   },
   "time": {
     "am": "AM",
@@ -1014,6 +1085,12 @@
     "site": "Site",
     "today": "Today",
     "engineers": "Engineers",
+    "workers": "Workers",
+    "threePartName": "Enter at least a three-part name to add a new laborer.",
+    "nationalId": "National ID (optional)",
+    "nationalIdLength": "A national ID has 14 digits.",
+    "differentPerson": "Someone else with this name: add a new laborer",
+    "alreadyRecorded": "The laborer already recorded",
     "present": "Present",
     "absent": "Absent",
     "sick": "Sick",
@@ -1147,7 +1224,7 @@
     "request": {
       "open": "Request leave",
       "title": "Leave request",
-      "pick": "Choose the employee",
+      "loading": "Loading employees…",
       "kind": "Leave type",
       "from": "From",
       "to": "To",
@@ -1450,5 +1527,74 @@
     "invalidAmount": "Enter a positive advance amount with up to six decimal places.",
     "newNotification": "New attendance request",
     "advancePdf": "Advance form"
+  },
+  "fareRequest": {
+    "siteTitle": "Site transport",
+    "siteSubtitle": "Pick a site to see the daily fare of everyone working with you there, and ask HR to change anyone's.",
+    "sites": "Your sites",
+    "empty": "No one from your team is at this site today.",
+    "unset": "Not set",
+    "zero": "Zero (set)",
+    "pendingBadge": "Request pending: {{amount}}",
+    "pendingOther": "Pending request from another manager",
+    "request": "Request change",
+    "requestFor": "Request a transport change for {{name}}",
+    "viewPending": "View request",
+    "dialogTitle": "Transport change request · {{name}} · {{site}}",
+    "current": "Current fare",
+    "amount": "Requested daily amount",
+    "reason": "Reason",
+    "badAmount": "Enter a valid amount (zero or more, up to 6 decimals).",
+    "keepsCurrent": "The current fare stays in effect until HR approves.",
+    "siteChanged": "The page now shows another site. Close this and open the request from the right site.",
+    "send": "Send request",
+    "sent": "The transport request for {{name}} was sent to HR.",
+    "alreadyPending": "This employee already has a request at this site waiting for HR ({{amount}}).",
+    "mine": {
+      "title": "Transport requests",
+      "list": "Transport requests",
+      "empty": "You have not sent any transport requests yet.",
+      "gone": "This request is not available.",
+      "loading": "Loading…"
+    },
+    "outcome": {
+      "pending": "Pending",
+      "approved": "Approved as requested",
+      "revised": "Approved with a revised amount",
+      "refused": "Rejected"
+    },
+    "col": {
+      "employee": "Employee",
+      "site": "Site",
+      "requested": "Requested",
+      "approved": "Approved",
+      "current": "Before",
+      "askedAt": "Requested on",
+      "decidedAt": "Decided on",
+      "from": "Effective from",
+      "requestedBy": "Requested by",
+      "reason": "Reason",
+      "response": "HR's response"
+    },
+    "detail": "Transport request",
+    "review": {
+      "page": "Transport requests",
+      "description": "Site managers' requests to change an employee's daily fare at a site. Approve the requested amount or revise it, or reject with a reason.",
+      "list": "Pending transport requests",
+      "empty": "No transport requests are pending.",
+      "more": "Showing {{shown}} of {{total}} requests.",
+      "gone": "This request is no longer pending.",
+      "title": "Decide the transport request",
+      "approvedAmount": "Approved amount",
+      "from": "Effective from",
+      "approve": "Approve",
+      "refuse": "Reject",
+      "refuseReason": "Reason for rejecting (the site manager reads it)",
+      "refuseYes": "Confirm rejection",
+      "back": "Back",
+      "approved": "The fare of {{name}} was approved.",
+      "refused": "The transport request of {{name}} was rejected."
+    },
+    "reasonRequired": "Enter the reason for the request."
   }
 }

@@ -7,7 +7,7 @@ import { Dialog, DialogBody, DialogContent, DialogDescription, DialogFooter, Dia
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { ApiError, type OpenItem } from '@/lib/api'
-import { cn, FOCUS } from '@/lib/utils'
+import { asciiDigits, cn, FOCUS } from '@/lib/utils'
 
 export type Row = Record<string, any> // eslint-disable-line @typescript-eslint/no-explicit-any
 export type Errs = Record<string, string>
@@ -132,9 +132,7 @@ export function Field({ name, id = name, label, errs, children }: { name: string
   )
 }
 
-/** Arabic-Indic / Eastern Arabic digits and the Arabic decimal separator to ASCII, so typed amounts validate. */
-export const asciiDigits = (v: string) =>
-  v.replace(/[٠-٩۰-۹]/g, (c) => String(c.charCodeAt(0) - (c < '۰' ? 0x660 : 0x6f0))).replace(/٫/g, '.')
+export { asciiDigits }
 
 /** `type="time"` renders the 12-hour `TimeInput`; its value stays "HH:MM" (24-hour). */
 export function TextField({ name, label, values, set, errs, ns = '', ...rest }: { name: string; label: string; values: Row; set: (k: string, v: string) => void; errs: Errs; ns?: string } & Omit<React.ComponentProps<'input'>, 'form'>) {
@@ -144,7 +142,7 @@ export function TextField({ name, label, values, set, errs, ns = '', ...rest }: 
         rest.type === 'time' ? (
           <TimeInput {...p} label={label} disabled={rest.disabled} value={values[name] ?? ''} onChange={(v) => set(name, v)} />
         ) : (
-          <Input {...p} {...rest} value={values[name] ?? ''} onChange={(e) => set(name, rest.inputMode === 'decimal' || rest.inputMode === 'numeric' ? asciiDigits(e.target.value) : e.target.value)} />
+          <Input {...p} {...rest} value={values[name] ?? ''} onChange={(e) => set(name, e.target.value)} />
         )
       }
     </Field>
