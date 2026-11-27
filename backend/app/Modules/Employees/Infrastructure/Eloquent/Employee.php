@@ -6,6 +6,7 @@ namespace App\Modules\Employees\Infrastructure\Eloquent;
 
 use App\Modules\Audit\Infrastructure\Audited;
 use App\Support\Database\HasStandardColumns;
+use App\Support\Text\Digits;
 use Illuminate\Database\Eloquent\Attributes\Scope;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Model;
@@ -28,11 +29,6 @@ class Employee extends Model
         then (select c.site_id from day_crew_changes c where c.employee_id = employees.id and c.deleted_at is null and c.date = ?::date)
         else (select s.site_id from employee_site_assignments s where s.employee_id = employees.id and s.deleted_at is null and s.effective_from <= ?::date order by s.effective_from desc limit 1) end)';
 
-    private const DIGITS = [
-        '٠' => '0', '١' => '1', '٢' => '2', '٣' => '3', '٤' => '4', '٥' => '5', '٦' => '6', '٧' => '7', '٨' => '8', '٩' => '9',
-        '۰' => '0', '۱' => '1', '۲' => '2', '۳' => '3', '۴' => '4', '۵' => '5', '۶' => '6', '۷' => '7', '۸' => '8', '۹' => '9',
-    ];
-
     protected $guarded = [];
 
     /**
@@ -44,7 +40,7 @@ class Employee extends Model
     #[Scope]
     protected function matching(Builder $query, string $search, bool $nationalId = false): void
     {
-        $search = strtr($search, self::DIGITS);
+        $search = Digits::ascii($search);
         $like = '%'.addcslashes($search, '%_\\').'%';
         // Every arm must be indexable or Postgres scans the table: trigram indexes for the text, the code's unique index for a number.
         $query->where(fn (Builder $q) => $q
