@@ -28,7 +28,7 @@ class SiteManagerRoleMigrationTest extends TestCase
     {
         $this->assertSame(['slug' => 'manager', 'name' => 'Site manager', 'name_ar' => 'مدير الموقع'], $this->role());
         $this->assertSame(1, DB::table('roles')->where('slug', 'manager')->count());
-        $this->assertSame(9, DB::table('role_permissions')->join('roles', 'roles.id', '=', 'role_permissions.role_id')->where('roles.slug', 'manager')->count());
+        $this->assertSame(11, DB::table('role_permissions')->join('roles', 'roles.id', '=', 'role_permissions.role_id')->where('roles.slug', 'manager')->count());
     }
 
     public function test_down_restores_the_old_name_and_both_directions_are_audited(): void

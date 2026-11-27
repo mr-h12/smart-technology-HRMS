@@ -18,3 +18,10 @@ export function cn(...inputs: ClassValue[]) {
 export const FOCUS = 'focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring'
 /** A weekly-off or holiday day on the strip and the grid: bg-muted/50 would vanish on the grid's bg-muted head row. */
 export const OFF = 'bg-muted-foreground/10'
+
+/**
+ * Arabic-Indic (٠–٩) and Persian (۰–۹) digits and the Arabic decimal separator «٫» to ASCII, so typed amounts, codes, phones and
+ * national IDs validate. Text in, text out: leading zeros stay and money never becomes a float. The API's NormalizeDigits does the same.
+ */
+export const asciiDigits = (v: string) =>
+  v.replace(/[٠-٩۰-۹]/g, (c) => String(c.charCodeAt(0) - (c < '۰' ? 0x660 : 0x6f0))).replace(/٫/g, '.')

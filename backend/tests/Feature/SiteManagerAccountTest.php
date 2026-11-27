@@ -280,8 +280,8 @@ class SiteManagerAccountTest extends TestCase
 
     public function test_hr_changes_the_sites_and_adds_engineers_later(): void
     {
-        [$s1, $s2, $s3] = [$this->workSite('Site-1'), $this->workSite('Site-2'), $this->workSite('Site-3')];
-        $other = $this->managerOf($s1);
+        [$s1, $s2, $s3, $s4] = [$this->workSite('Site-1'), $this->workSite('Site-2'), $this->workSite('Site-3'), $this->workSite('Site-4')];
+        $other = $this->managerOf($s4);
         $self = $this->employee('office');
         $engineer = $this->employee('engineer');
         $userId = (string) $this->make($self, $this->body(['site_ids' => [$s1, $s2], 'engineer_ids' => [$engineer], 'effective_from' => '2026-08-01']))
@@ -292,7 +292,8 @@ class SiteManagerAccountTest extends TestCase
             ->assertOk()->assertJsonPath('data.site_manager.engineer_ids', [$engineer]);
         $this->assertEqualsCanonicalizing([$s2, $s3], $res->json('data.site_manager.site_ids'));
         $this->assertEqualsCanonicalizing([$s1, $s3], DB::table('audit_log')->where('event', 'SITE_MANAGERS_UPDATED')->whereNotIn('id', $audited)->pluck('entity_id')->all());
-        $this->assertSame([$other->id], DB::table('manager_sites')->where('site_id', $s1)->pluck('manager_id')->all());
+        $this->assertSame([], DB::table('manager_sites')->where('site_id', $s1)->pluck('manager_id')->all());
+        $this->assertSame([$other->id], DB::table('manager_sites')->where('site_id', $s4)->pluck('manager_id')->all());
         $this->assertSame(1, DB::table('employee_manager_assignments')->where('employee_id', $engineer)->count());
 
         $this->edit($this->employee('engineer'), ['site_ids' => [$s1]])->assertNotFound();
@@ -336,6 +337,21 @@ class SiteManagerAccountTest extends TestCase
     }
 
     /** @return list<array<string, mixed>> the new_values of the account's USER_DEACTIVATED audit rows */
+    public function test_a_site_that_has_a_manager_takes_no_second_one_from_the_employee_file(): void
+    {
+        [$s1, $s2] = [$this->workSite('Site-1'), $this->workSite('Site-2')];
+        $current = $this->managerOf($s1);
+        $self = $this->employee('office');
+        $this->assertRefused($this->make($self, $this->body(['site_ids' => [$s2, $s1]])), 'site_ids', 'site_has_manager', ['site' => 'Site-1', 'name' => $current->name]);
+        $this->assertNull($this->linkOf($self));                                            // nothing saved, Site-2 included
+        $this->assertSame(0, DB::table('manager_sites')->where('site_id', $s2)->count());
+        $this->assertSame([$current->id], DB::table('manager_sites')->where('site_id', $s1)->pluck('manager_id')->all());
+
+        $this->putJson("/api/v1/sites/$s1/managers", ['manager_ids' => []])->assertOk();    // HR removes the current manager first
+        $this->make($self, $this->body(['site_ids' => [$s2, $s1]]))->assertCreated();
+        $this->assertCount(1, DB::table('manager_sites')->where('site_id', $s1)->pluck('manager_id'));
+    }
+
     private function deactivations(string $userId): array
     {
         return DB::table('audit_log')->where(['event' => 'USER_DEACTIVATED', 'entity_id' => $userId])->pluck('new_values')
@@ -524,12 +540,14 @@ class SiteManagerAccountTest extends TestCase
         $lists = [
             'employees' => $this->getJson('/api/v1/employees')->assertOk()->json('data.*.id'),
             'leave requests' => $this->getJson('/api/v1/leave/requests')->assertOk()->json('data.*.employee.id'),
-            'leave balances' => $this->getJson('/api/v1/leave/balances')->assertOk()->json('data.*.id'),
             'team fares' => $this->getJson('/api/v1/team-fares')->assertOk()->json('data.rows.*.employee_id'),
             'notifications' => array_values(array_filter($this->getJson('/api/v1/notifications')->assertOk()->json('data.*.employee.id'))),
         ];
         $this->assertSame(array_fill_keys(array_keys($lists), [$worker]), $lists);
-        $this->assertSame(1, $this->getJson('/api/v1/employees/summary')->assertOk()->json('data.permanent_worker'));
+        $this->assertSame(1, $this->getJson('/api/v1/employees/summary')->assertOk()->json('data.total'));
+        $this->getJson('/api/v1/leave/balances')->assertForbidden();   // balances are HR's (owner, 2026-11-19)
+        $this->getJson("/api/v1/employees/{$worker}/leave")->assertForbidden();
+        $this->getJson("/api/v1/employees/{$self}/leave")->assertNotFound();   // never their own record
     }
 
     public function test_crew_search_never_finds_the_site_managers_own_record(): void

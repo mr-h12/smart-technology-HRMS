@@ -15,7 +15,7 @@ use Illuminate\Validation\Rule;
  */
 final class SiteRules
 {
-    private const MONEY = ['regex:/^\d{1,12}(\.\d{1,6})?$/D'];
+    public const MONEY = ['regex:/^\d{1,12}(\.\d{1,6})?$/D'];
 
     /** @return array<string, array<mixed>> */
     public static function site(bool $patch, ?string $id = null): array

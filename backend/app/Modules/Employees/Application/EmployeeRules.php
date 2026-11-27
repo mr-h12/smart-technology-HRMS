@@ -28,6 +28,9 @@ final class EmployeeRules
     /** An Egyptian mobile number, kept as text so its leading 0 survives (owner, 2026-11-03). */
     public const MOBILE = 'regex:/^01[0125]\d{8}$/D';
 
+    /** At least three words, as a site manager's new day laborer needs (owner, 2026-11-19); the caller trims and collapses spaces first. */
+    public const THREE_PART_NAME = 'regex:/^\S+( \S+){2,}$/uD';
+
     /**
      * A fingerprint name as the database compares it: the six ASCII whitespace characters removed, then lower-cased (FP-2).
      * The source of truth for uniqueness; the expression index of normalise_fingerprint_name_unique holds the same text.

@@ -178,16 +178,16 @@ test('while viewing as an account a banner names it, and Return swaps back to th
 })
 
 const ALL_NAV = ['employee.view.all', 'attendance.view.all', 'attendance.record.all', 'leave.view.all', 'employee.approve_wage.all', 'fare.manage.all']
-test('the HR group lists employees, attendance, site day, leave, wage proposals, then team fares; Settings follows', async () => {
+test('the HR group lists employees, attendance, site day, leave, wage proposals, team fares, then transport requests; Settings follows', async () => {
   signedIn(ALL_NAV)
   renderApp('/employees')
   const nav = await screen.findByRole('navigation', { name: 'القائمة الرئيسية' })
   await within(nav).findByRole('link', { name: 'الموظفون' })
-  expect(within(nav).getAllByRole('link').map((a) => a.getAttribute('href'))).toEqual(['/employees', '/attendance', '/site-day', '/leave', '/wage-proposals', '/team-fares', '/settings'])
+  expect(within(nav).getAllByRole('link').map((a) => a.getAttribute('href'))).toEqual(['/employees', '/attendance', '/site-day', '/leave', '/wage-proposals', '/team-fares', '/fare-requests', '/settings'])
 })
 
 const MANAGER = ['employee.view.own', 'site.view.own', 'attendance.record.own', 'leave.view.own', 'leave.request.own', 'employee.crew.own', 'employee.propose_laborer.own']
-test.each(['/settings', '/wage-proposals', '/console/accounts', '/console/roles', '/console/audit', '/console/logs', '/employees/new'])('a site manager opening %s by URL sees the not-found page', async (path) => {
+test.each(['/settings', '/wage-proposals', '/fare-requests', '/console/accounts', '/console/roles', '/console/audit', '/console/logs', '/employees/new'])('a site manager opening %s by URL sees the not-found page', async (path) => {
   signedIn(MANAGER)
   renderApp(path)
   expect(await screen.findByRole('heading', { name: 'الصفحة غير موجودة' })).toBeInTheDocument()

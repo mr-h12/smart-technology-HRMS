@@ -44,10 +44,11 @@ test('assigning a manager posts the chosen user and date', async () => {
   expect(await screen.findByText('خالد')).toBeInTheDocument()
 })
 
-test('without the permission there is no assign button', async () => {
+test('without the permission there is no assign button, and a site manager reads no manager line', async () => {
   mockFetch({ 'GET /api/v1/employees/e1': () => json(200, { data: { ...emp, current_manager: null } }), 'GET /api/v1/residences': residences })
   renderWithAuth(<EmployeeDetailRoute id="e1" />, ['employee.view.own'], { router: false })
-  expect(await screen.findByText('بدون مدير')).toBeInTheDocument()
+  expect(await screen.findByRole('heading', { level: 1 })).toBeInTheDocument()
+  expect(screen.queryByText('بدون مدير')).toBeNull()   // the server sends a site manager no manager assignment (owner, 2026-11-19)
   expect(screen.queryByRole('button', { name: 'تعيين مدير' })).toBeNull()
 })
 
@@ -617,16 +618,22 @@ test('a residences load failure shows the banner', async () => {
 const scoped = { id: 'e1', name_ar: 'أحمد', gender: 'male', phone: '0100', pay_method: 'cash', current_type: 'office', type_changes: [], documents: [], current_manager: null, manager_assignments: [] }
 const sensitive = ['الرقم القومي', 'الرقم التأميني', 'ملاحظات الموارد البشرية', 'الحساب البنكي', 'طريقة صرف المرتب']
 
-test('a record without the sensitive fields hides them, the pay section and the pay history', async () => {
-  mockFetch({ 'GET /api/v1/residences': residences, 'GET /api/v1/employees/e1': () => json(200, { data: scoped }) })
+test('a site manager reads only name, phone, address, department, residence and site, as text, with no other tab', async () => {
+  const mine = { id: 'e1', code: 12, name_ar: 'أحمد محمود علي', name_en: null, phone: '01012345678', address: 'عنوان تجريبي', department: 'قسم تجريبي', residence_id: 'r1', current_site: { id: 's1', name_ar: 'موقع أ', name_en: null } }
+  mockFetch({ 'GET /api/v1/residences': residences, 'GET /api/v1/employees/e1': () => json(200, { data: mine }) })
   const { unmount } = renderWithAuth(<EmployeeDetailRoute id="e1" />, ['employee.view.own'], { router: false })
-  expect(await screen.findByLabelText('رقم الهاتف')).toBeDisabled()
-  for (const label of sensitive) expect(screen.queryByLabelText(label)).toBeNull()
-  expect(screen.queryByText('البيانات المالية')).toBeNull()
+  const panel = await screen.findByRole('tabpanel')
+  for (const [label, value] of [['رقم الهاتف', '01012345678'], ['العنوان', 'عنوان تجريبي'], ['القسم', 'قسم تجريبي'], ['محل الإقامة', 'العجمي'], ['الموقع الأساسي', 'موقع أ']]) {
+    await waitFor(() => expect(within(panel).getByText(label).nextElementSibling).toHaveTextContent(value))   // the residence names arrive after
+  }
+  expect(within(panel).queryByRole('textbox')).toBeNull()                                 // nothing looks editable
+  expect(within(panel).queryByRole('combobox')).toBeNull()
+  for (const label of [...sensitive, 'النوع', 'تاريخ التعيين', 'اسم البصمة']) expect(screen.queryByLabelText(label)).toBeNull()
+  expect(screen.getAllByRole('tab').map((tb) => tb.textContent?.trim())).toEqual(['البيانات'])
   unmount()
   renderWithAuth(<EmployeeDetailRoute id="e1" tab="history" />, ['employee.view.own'], { router: false })
-  expect(await screen.findByText('سجل تغييرات نوع الموظف')).toBeInTheDocument()
-  expect(screen.queryByText('سجل تغييرات الأجر')).toBeNull()
+  expect(await screen.findByRole('tabpanel')).toHaveTextContent('عنوان تجريبي')            // ?tab=history falls back to the profile
+  expect(screen.queryByText('سجل تغييرات نوع الموظف')).toBeNull()
 })
 
 test('view-only users with the data see pay read-only', async () => {
@@ -680,7 +687,10 @@ test('the archive switch shows only with employee.view.all, and ?view=archived w
   await screen.findByRole('row', { name: /أحمد علي/ })
   expect(screen.queryByRole('group', { name: 'عرض الموظفين' })).toBeNull()
   expect(list.mock.calls.map(([u]) => String(u)).filter((u) => u.includes('per_page=12')).every((u) => !u.includes('archived'))).toBe(true)
-  expect(screen.getByRole('columnheader', { name: 'الحالة' })).toBeInTheDocument()
+  // a site manager's list: name, code, phone and department; no status or type (owner, 2026-11-19)
+  expect(screen.queryByRole('columnheader', { name: 'الحالة' })).toBeNull()
+  expect(screen.queryByRole('columnheader', { name: 'النوع' })).toBeNull()
+  expect(screen.getByRole('columnheader', { name: 'رقم الهاتف' })).toBeInTheDocument()
 })
 
 test('an active employee with a future termination date shows when they leave; the others show Active', async () => {
@@ -900,19 +910,17 @@ test('editing the ID after a taken-ID answer clears the holder banner and the sw
   expect(within(dialog).getByRole('button', { name: 'حفظ' })).toBeInTheDocument()
 })
 
-test('a site manager gets no office option in the type filter and no office tile', async () => {
+test('a site manager gets no type filter, only the total tile, and a search that offers no national ID', async () => {
   mockFetch({
     'GET /api/v1/employees': () => json(200, { data: [], meta: { pagination } }),
     'GET /api/v1/employees/summary': () => json(200, { data: { total: 4, engineer: 1, permanent_worker: 2, day_laborer: 1 } }),
   })
   renderWithAuth(<EmployeesPage />, ['employee.view.own'])
-  const filter = await screen.findByRole('combobox', { name: 'نوع الموظف' })
-  expect(within(filter).getAllByRole('option').map((o) => o.getAttribute('value'))).toEqual(['', 'engineer', 'permanent_worker', 'day_laborer'])
-  expect(screen.getByRole('group', { name: 'المهندسون' })).toBeInTheDocument()
-  const tiles = screen.getByRole('group', { name: 'إجمالي الموظفين' }).parentElement!
-  expect(tiles.children).toHaveLength(4)
-  expect(tiles).toHaveClass('xl:grid-cols-4')
-  expect(screen.queryByRole('group', { name: 'موظفو الشركة' })).toBeNull()
+  const tiles = (await screen.findByRole('group', { name: 'إجمالي الموظفين' })).parentElement!
+  expect(tiles.children).toHaveLength(1)
+  expect(screen.queryByRole('combobox', { name: 'نوع الموظف' })).toBeNull()
+  expect(screen.queryByRole('group', { name: 'المهندسون' })).toBeNull()
+  expect(screen.getByPlaceholderText('بحث بالاسم أو الرقم الوظيفي')).toBeInTheDocument()
 })
 
 test('HR keeps the office option and tile', async () => {
@@ -1158,4 +1166,15 @@ test('the experience certificate opens to HR forms at All only, and an archived 
   renderWithAuth(<EmployeeDetailRoute id="e1" tab="documents" />, ['employee.view.all', 'hr_forms.view.all', 'hr_forms.generate.all'], { router: false })
   expect(await screen.findByRole('heading', { name: 'شهادة خبرة' })).toBeInTheDocument()
   expect(await screen.findByRole('button', { name: 'إنشاء' })).toBeEnabled()
+})
+
+test('a site manager opens an engineer with no Leave tab: balances are HR\'s (owner, 2026-11-19)', async () => {
+  mockFetch({ 'GET /api/v1/employees/e1': () => json(200, { data: { ...emp, current_type: 'engineer', current_site: null, site_assignments: [] } }), 'GET /api/v1/residences': residences })
+  const { unmount } = renderWithAuth(<EmployeeDetailRoute id="e1" tab="leave" />, ['employee.view.own', 'leave.view.own', 'leave.request.own'], { router: false })
+  expect(await screen.findByRole('tab', { name: 'البيانات' })).toHaveAttribute('aria-selected', 'true')
+  expect(screen.queryByRole('tab', { name: 'الإجازات' })).toBeNull()
+  expect(vi.mocked(fetch).mock.calls.some(([u]) => String(u).includes('/e1/leave'))).toBe(false)
+  unmount()
+  renderWithAuth(<EmployeeDetailRoute id="e1" tab="leave" />, ['employee.view.all', 'leave.view.all'], { router: false })
+  expect(await screen.findByRole('tab', { name: 'الإجازات' })).toHaveAttribute('aria-selected', 'true')
 })

@@ -14,6 +14,7 @@ use App\Modules\Sites\Infrastructure\Eloquent\Residence;
 use App\Modules\Sites\Infrastructure\Eloquent\Site;
 use App\Support\Http\Paginates;
 use Illuminate\Database\Eloquent\Builder;
+use Illuminate\Database\Eloquent\ModelNotFoundException;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\ValidationException;
 
@@ -206,6 +207,39 @@ final class FareService
         })->all();
 
         return ['sites' => $sites, 'rows' => array_values($rows)];   // Collection::all() is not a list to PHPStan
+    }
+
+    /**
+     * One of the manager's sites on a date: every employee of their team at it, with the fare that applies there (team()'s rules):
+     * workers whose site that day is this one, by override, else residence x site; and every engineer of the team, by their override at
+     * this site only (engineers never take the default). `amount` null is a fare never set; "0.000000" is one set to zero.
+     * A site that is not one of the manager's live sites is a 404, so an altered id reads nothing.
+     *
+     * @return array{sites: list<array{id: string, name: string}>, site: array{id: string, name: string}, rows: list<array{employee_id: string, code: int, name: string, type: string, residence: ?array{id: string, name: string}, amount: ?string, source: string, default_amount: ?string}>}
+     */
+    public function siteTeam(string $managerId, string $siteId, string $date): array
+    {
+        $team = $this->team($managerId, $date);
+        $site = collect($team['sites'])->firstWhere('id', $siteId) ?? throw (new ModelNotFoundException)->setModel(Site::class, [$siteId]);
+        $rows = [];
+        foreach ($team['rows'] as $r) {
+            $engineer = $r['type'] === EmployeeType::Engineer->value;
+            if (! $engineer && ($r['site']['id'] ?? null) !== $siteId) {
+                continue;
+            }
+            $override = null;
+            foreach ($engineer ? $r['overrides'] : [] as $o) {
+                $override = $o['site_id'] === $siteId ? $o['amount'] : $override;
+            }
+            $rows[] = [
+                'employee_id' => $r['employee_id'], 'code' => $r['code'], 'name' => $r['name'], 'type' => $r['type'], 'residence' => $r['residence'],
+                'amount' => $engineer ? $override : $r['amount'],
+                'source' => $engineer ? ($override === null ? 'none' : 'override') : $r['source'],
+                'default_amount' => $engineer ? null : $r['default_amount'],
+            ];
+        }
+
+        return ['sites' => $team['sites'], 'site' => $site, 'rows' => $rows];
     }
 
     /**

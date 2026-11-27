@@ -302,8 +302,8 @@ class EmployeeDocumentsTest extends TestCase
         [$manager, $emp] = $this->managed();
         $id = $this->upload($emp, ['note' => 'سري'])->assertCreated()->json('data.id');
         $this->actingAs($manager, 'api');
-        $res = $this->getJson("/api/v1/employees/$emp")->assertOk();
-        $this->assertSame(['id', 'kind', 'expires_at'], array_keys($res->json('data.documents.0')));
+        // without employee_document.view, a site manager reads nothing about documents (owner, 2026-11-19)
+        $res = $this->getJson("/api/v1/employees/$emp")->assertOk()->assertJsonMissingPath('data.documents');
         $this->assertStringNotContainsString('سري', (string) $res->getContent());
         $this->fileOf($emp, $id)->assertStatus(403)->assertJsonPath('error.code', 'permission_denied');
     }

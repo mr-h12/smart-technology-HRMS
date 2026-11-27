@@ -20,7 +20,7 @@ import { Dialog, DialogBody, DialogContent, DialogFooter, DialogHeader, DialogTi
 import { Textarea } from '@/components/ui/input'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
-import { accountLabel, cairoToday, ErrorBanner, Field, type Errs, FormDialog, type FormApi, formatTime, ltrDates, type Row, SelectField, stopAtMissingPeriod, TextField, toErrs, useForm, useMoney } from '@/components/form'
+import { accountLabel, cairoToday, ErrorBanner, Field, type Errs, FormDialog, type FormApi, formatTime, localName, ltrDates, type Row, SelectField, stopAtMissingPeriod, TextField, toErrs, useForm, useMoney } from '@/components/form'
 import { useDebounced } from '@/hooks/useDebounced'
 import { ApiError } from '@/lib/api'
 import { useAuth } from '@/lib/auth'
@@ -107,7 +107,8 @@ export function EmployeesPage() {
   const open = (id: string, i: number) => navigate(`/employees/${id}`, { state: { list: `/employees?${new URLSearchParams(filters)}`, pos: (page - 1) * PAGE + i, total } })
   const notes = rows.some((r) => 'hr_notes' in r) // the server sends notes only to the viewers allowed to read them
   const types = TYPES.filter((v) => office || v !== 'office')
-  const stats = STATS.filter(([k]) => office || k !== 'office')
+  // a site manager reads only name, phone, address, department, residence and site (owner, 2026-11-19): no counts by type either
+  const stats = office ? STATS : STATS.filter(([k]) => k === 'total')
 
   return (
     <div className="space-y-6">
@@ -126,7 +127,7 @@ export function EmployeesPage() {
         }
       />
 
-      <div className={cn('grid grid-cols-2 gap-3', stats.length === 5 ? 'sm:grid-cols-3 xl:grid-cols-5' : 'xl:grid-cols-4')}>
+      <div className={cn('grid grid-cols-2 gap-3', stats.length === 5 ? 'sm:grid-cols-3 xl:grid-cols-5' : stats.length === 1 ? 'sm:grid-cols-3' : 'xl:grid-cols-4')}>
         {stats.map(([k, icon, tone]) => (
           <MiniStat key={k} label={t(`employee.stat.${k}`)} value={counts?.[k] ?? '—'} icon={icon} tone={tone} />
         ))}
@@ -135,8 +136,8 @@ export function EmployeesPage() {
       <Card className="overflow-hidden">
         <div className="space-y-3 border-b p-4">
           <div className="flex flex-col gap-3 xl:flex-row xl:items-center">
-            <SearchInput value={q} onChange={(v) => { setQ(v); filter({ q: v }) }} placeholder={t('employee.search')} className="sm:w-full sm:max-w-md" />
-            <FilterSelect value={type} onChange={(v) => filter({ type: v })} label={t('employee.type')} allLabel={t('employee.allTypes')} options={types.map((v) => [v, t(`enum.type.${v}`)])} />
+            <SearchInput value={q} onChange={(v) => { setQ(v); filter({ q: v }) }} placeholder={t(office ? 'employee.search' : 'employee.searchNameCode')} className="sm:w-full sm:max-w-md" />
+            {office && <FilterSelect value={type} onChange={(v) => filter({ type: v })} label={t('employee.type')} allLabel={t('employee.allTypes')} options={types.map((v) => [v, t(`enum.type.${v}`)])} />}
             {office && (
               <SegmentedControl
                 label={t('employee.archive.view')}
@@ -166,11 +167,11 @@ export function EmployeesPage() {
               <TableRow>
                 <TableHead>{t('employee.employee')}</TableHead>
                 <TableHead className="hidden sm:table-cell">{t('employee.code')}</TableHead>
-                <TableHead className="hidden sm:table-cell">{t('employee.type')}</TableHead>
+                {office ? <TableHead className="hidden sm:table-cell">{t('employee.type')}</TableHead> : <TableHead>{t('employee.phone')}</TableHead>}
                 <TableHead className="hidden md:table-cell">{t('employee.department')}</TableHead>
-                <TableHead className="hidden xl:table-cell">{t('employee.hire_date')}</TableHead>
+                {office && <TableHead className="hidden xl:table-cell">{t('employee.hire_date')}</TableHead>}
                 {notes && <TableHead className="hidden md:table-cell">{t('employee.hr_notes')}</TableHead>}
-                <TableHead>{t(archive ? 'employee.termination_date' : 'employee.status')}</TableHead>
+                {office && <TableHead>{t(archive ? 'employee.termination_date' : 'employee.status')}</TableHead>}
               </TableRow>
             </TableHeader>
             <TableBody>
@@ -197,13 +198,15 @@ export function EmployeesPage() {
                       </div>
                     </TableCell>
                     <TableCell className="hidden font-mono text-xs text-muted-foreground sm:table-cell">{e.code}</TableCell>
-                    <TableCell className="hidden sm:table-cell">{badge || '—'}</TableCell>
+                    {office ? <TableCell className="hidden sm:table-cell">{badge || '—'}</TableCell> : <TableCell><bdi dir="ltr">{e.phone ?? '—'}</bdi></TableCell>}
                     <TableCell className="hidden md:table-cell">{e.department ?? '—'}</TableCell>
-                    <TableCell className="hidden text-muted-foreground xl:table-cell">{e.hire_date ?? '—'}</TableCell>
+                    {office && <TableCell className="hidden text-muted-foreground xl:table-cell">{e.hire_date ?? '—'}</TableCell>}
                     {notes && <TableCell className="hidden md:table-cell">{e.hr_notes ? <NoteCell note={e.hr_notes} /> : '—'}</TableCell>}
-                    <TableCell>
-                      {archive ? e.termination_date : <StatusBadge variant={leaving ? 'neutral' : 'success'} label={leaving ? ltrDates(t('employee.leavesOn', { date: e.termination_date })) : t('status.active')} />}
-                    </TableCell>
+                    {office && (
+                      <TableCell>
+                        {archive ? e.termination_date : <StatusBadge variant={leaving ? 'neutral' : 'success'} label={leaving ? ltrDates(t('employee.leavesOn', { date: e.termination_date })) : t('status.active')} />}
+                      </TableCell>
+                    )}
                   </TableRow>
                 )
               })}
@@ -345,6 +348,8 @@ function EmployeeForm({ emp, loadErr }: { emp?: Row; loadErr?: unknown }) {
   // the server decides it (termination date before today in Cairo): the page then only reads, bar Reactivate and the leaving details
   const archived = emp?.archived === true
   const editable = can(id ? 'employee.edit' : 'employee.create') && !archived
+  // a site manager's profile: only name, phone, address, department, residence and site come from the server (owner, 2026-11-19)
+  const scoped = !!emp && !can('employee.view.all') && !can('employee.edit')
 
   async function save(ev: React.FormEvent<HTMLFormElement>) {
     ev.preventDefault()
@@ -385,7 +390,7 @@ function EmployeeForm({ emp, loadErr }: { emp?: Row; loadErr?: unknown }) {
             <TextField name="fingerprint_name" label={t('employee.fingerprint_name')} {...f} />
             <SelectField name="gender" label={t('employee.gender')} options={GENDERS.map((v) => [v, t(`enum.gender.${v}`)])} {...f} />
             {has('national_id') && <TextField name="national_id" label={t('employee.national_id')} inputMode="numeric" {...f} />}
-            {has('insurance_no') && <TextField name="insurance_no" label={t('employee.insurance_no')} {...f} />}
+            {has('insurance_no') && <TextField name="insurance_no" label={t('employee.insurance_no')} inputMode="numeric" dir="ltr" {...f} />}
             <TextField name="phone" label={t('employee.phone')} inputMode="numeric" autoComplete="tel" maxLength={11} {...f} />
             <TextField name="address" label={t('employee.address')} {...f} />
           </>
@@ -437,7 +442,10 @@ function EmployeeForm({ emp, loadErr }: { emp?: Row; loadErr?: unknown }) {
 
   const worker = WORKERS.includes(emp.current_type)
   const sited = SITED.includes(emp.current_type)
-  const tabs = TABS.filter(([v]) => (v !== 'manager' || !worker) && (v !== 'site' || sited) && (v !== 'leave' || (can('leave.view') && emp.current_type !== 'day_laborer')) && (v !== 'documents' || can('employee_document.view') || canUsePdf(can, 'view', 'experience_certificate')) && (v !== 'attendance' || can('attendance.view')))
+  const tabs = scoped
+    // no type, history or manager reaches a site manager: the profile, and documents only with the Developer's grant (D2)
+    ? TABS.filter(([v]) => v === 'profile' || (v === 'documents' && can('employee_document.view')))
+    : TABS.filter(([v]) => (v !== 'manager' || !worker) && (v !== 'site' || sited) && (v !== 'leave' || (can('leave.view.all') && emp.current_type !== 'day_laborer')) && (v !== 'documents' || can('employee_document.view') || canUsePdf(can, 'view', 'experience_certificate')) && (v !== 'attendance' || can('attendance.view')))
   const tab = tabs.some(([v]) => v === params.get('tab')) ? params.get('tab')! : 'profile'
   return (
     <div className="mx-auto max-w-5xl space-y-6">
@@ -459,13 +467,13 @@ function EmployeeForm({ emp, loadErr }: { emp?: Row; loadErr?: unknown }) {
         </div>
         {emp.current_type && <Badge variant="info" className="self-start sm:self-center">{t(`enum.type.${emp.current_type}`)}</Badge>}
         <dl className="grid gap-1 text-sm">
-          {sited && (
+          {(sited || scoped) && (
             <div className="flex gap-2">
               <dt className="text-muted-foreground">{t('site.home')}</dt>
               <dd>{emp.current_site?.name_ar ?? t('site.homeNone')}</dd>
             </div>
           )}
-          {!worker && (
+          {!worker && !scoped && (
             <div className="flex gap-2">
               <dt className="text-muted-foreground">{t('manager.title')}</dt>
               <dd>{emp.current_manager?.name ?? t('manager.none')}</dd>
@@ -514,7 +522,7 @@ function EmployeeForm({ emp, loadErr }: { emp?: Row; loadErr?: unknown }) {
         {/* Only the active panel is mounted: a hidden panel stays labelled by its trigger, so «المدير» would also name the manager panel. */}
         <TabsContent key={tab} value={tab}>
           {{
-            profile,
+            profile: scoped ? <ScopedProfile emp={emp} residences={residences} /> : profile,
             manager: <ManagerHistory emp={emp} />,
             site: <SiteHistory emp={emp} />,
             history: <History emp={emp} readOnly={archived} />,
@@ -531,6 +539,41 @@ function EmployeeForm({ emp, loadErr }: { emp?: Row; loadErr?: unknown }) {
         </TabsContent>
       </Tabs>
     </div>
+  )
+}
+
+/**
+ * What a site manager reads about an employee they reach (owner, 2026-11-19): labels and values, never boxes that look editable. The
+ * server sends nothing else; the residence is named from the residences list.
+ */
+function ScopedProfile({ emp, residences }: { emp: Row; residences: Row[] }) {
+  const { t, i18n } = useTranslation()
+  const residence = residences.find((r) => r.id === emp.residence_id)
+  const items: [string, React.ReactNode][] = [
+    ['employee.name_ar', emp.name_ar],
+    ['employee.name_en', emp.name_en],
+    ['employee.phone', emp.phone && <bdi dir="ltr">{emp.phone}</bdi>],
+    ['employee.address', emp.address],
+    ['employee.department', emp.department],
+    ['employee.residence', residence && localName(residence, i18n.language)],
+    ['site.home', emp.current_site && localName(emp.current_site, i18n.language)],
+  ]
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle>{t('employee.identity')}</CardTitle>
+      </CardHeader>
+      <CardContent>
+        <dl className="grid gap-x-6 gap-y-4 text-sm sm:grid-cols-2">
+          {items.map(([k, v]) => (
+            <div key={k}>
+              <dt className="text-muted-foreground">{t(k)}</dt>
+              <dd className="mt-0.5 font-medium">{v || '—'}</dd>
+            </div>
+          ))}
+        </dl>
+      </CardContent>
+    </Card>
   )
 }
 
