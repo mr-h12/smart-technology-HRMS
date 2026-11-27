@@ -112,6 +112,7 @@ Route::middleware('auth')->group(function (): void {
         Route::get('/', 'index')->middleware('permission:site.view');
         Route::post('/', 'store')->middleware('permission:site.manage');
         Route::get('manager-candidates', 'managerCandidates')->middleware('permission:site.assign_manager');
+        Route::get('manager-conflicts', 'managerConflicts')->middleware('permission:site.assign_manager');
         Route::middleware([])->whereUuid('site')->group(function (): void {
             Route::get('{site}', 'show')->middleware('permission:site.view');
             Route::patch('{site}', 'update')->middleware('permission:site.manage');

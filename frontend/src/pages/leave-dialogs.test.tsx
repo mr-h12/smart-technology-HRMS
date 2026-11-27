@@ -124,26 +124,127 @@ test('with the employee fixed there is no employee picker', async () => {
   expect(screen.queryByLabelText('الموظف')).toBeNull()
 })
 
-test('the employee picker searches the employees in reach and offers day laborers too (the preview refuses them)', async () => {
-  const worker = { id: 'e2', code: 202, name_ar: 'سعيد حسن', name_en: null, current_type: 'day_laborer' }
-  const post = vi.fn(() => json(201, { data: { id: 'r1' } }))
-  mockFetch({
-    'GET /api/v1/employees': () => json(200, { data: [sami, worker], meta: { pagination: { ...pagination, total: 2 } } }),
-    [PREVIEW]: preview(),
-    'POST /api/v1/leave/requests': post,
-  })
+const worker = { id: 'e2', code: 202, name_ar: 'سعيد حسن', name_en: null, current_type: 'day_laborer' }
+const EMPLOYEES = 'GET /api/v1/employees'
+const searches = () => vi.mocked(fetch).mock.calls.map(([u]) => new URL(String(u), 'http://x')).filter((u) => u.pathname === '/api/v1/employees').map((u) => u.searchParams.get('search'))
+const filing = (rows: object[] = [sami, worker], extra: object = {}) => {
+  mockFetch({ [EMPLOYEES]: () => json(200, { data: rows, meta: { pagination: { ...pagination, total: rows.length } } }), [PREVIEW]: preview(), ...extra })
   renderWithAuth(<RequestDialog open onOpenChange={vi.fn()} />, ['leave.request.own', 'employee.view.own'])
-  await user.type(screen.getByRole('textbox', { name: 'بحث بالاسم أو الرقم الوظيفي' }), 'سا')
-  await waitFor(() => expect(vi.mocked(fetch).mock.calls.some(([u]) => new URL(String(u), 'http://x').searchParams.get('search') === 'سا')).toBe(true))
-  const picker = screen.getByLabelText('الموظف')
-  await waitFor(() => expect(within(picker).getByRole('option', { name: 'سامي فؤاد (101)' })).toBeInTheDocument())
-  expect(within(picker).getByRole('option', { name: 'سعيد حسن (202)' })).toBeInTheDocument()
-  await user.selectOptions(picker, 'e1')
+  return screen.getByRole('combobox', { name: 'الموظف' })
+}
+
+test('one employee field replaces the search box and the select, and opening the dialog opens its list', () => {
+  const field = filing()
+  expect(field).toHaveFocus()
+  expect(field).toHaveAttribute('aria-expanded', 'true')
+  expect(field).toHaveAttribute('aria-autocomplete', 'list')
+  expect(field).toHaveAttribute('placeholder', 'بحث بالاسم أو الرقم الوظيفي')
+  expect(screen.queryByRole('textbox', { name: 'بحث بالاسم أو الرقم الوظيفي' })).toBeNull()
+  expect(document.querySelector('select[name="employee_id"]')).toBeNull()
+})
+
+test('focusing the field opens the list of the employees in reach, and typing searches the server', async () => {
+  const field = filing()
+  await user.tab()
+  expect(field).toHaveAttribute('aria-expanded', 'false')
+  await user.tab({ shift: true })
+  expect(field).toHaveFocus()
+  expect(field).toHaveAttribute('aria-expanded', 'true')
+  const list = screen.getByRole('listbox')
+  expect(field).toHaveAttribute('aria-controls', list.id)
+  expect(await within(list).findByRole('option', { name: 'سامي فؤاد (101)' })).toBeInTheDocument()
+  expect(within(list).getByRole('option', { name: 'سعيد حسن (202)' })).toBeInTheDocument()
+  expect(within(list).getByText('101')).toHaveAttribute('dir', 'ltr')
+  await user.type(field, '١٢')
+  await waitFor(() => expect(searches()).toContain('١٢'))
+})
+
+test('the arrow keys move through the options and Enter picks one, which the preview and the request use', async () => {
+  const post = vi.fn(() => json(201, { data: { id: 'r1' } }))
+  const field = filing([sami, worker], { 'POST /api/v1/leave/requests': post })
+  await user.click(field)
+  await screen.findByRole('option', { name: 'سعيد حسن (202)' })
+  await user.keyboard('{ArrowDown}{ArrowDown}')
+  expect(field).toHaveAttribute('aria-activedescendant', screen.getByRole('option', { name: 'سعيد حسن (202)' }).id)
+  await user.keyboard('{ArrowUp}')
+  expect(field).toHaveAttribute('aria-activedescendant', screen.getByRole('option', { name: 'سامي فؤاد (101)' }).id)
+  await user.keyboard('{Enter}')
+  expect(field).toHaveValue('سامي فؤاد (101)')
+  expect(field).toHaveAttribute('aria-expanded', 'false')
+  expect(screen.queryByRole('listbox')).toBeNull()
   dates('2026-11-10', '2026-11-15')
   await screen.findByText(/4 أيام محسوبة/)
   expect(previewQuery().get('employee_id')).toBe('e1')
   await user.click(screen.getByRole('button', { name: 'إرسال الطلب' }))
   await waitFor(() => expect(post).toHaveBeenCalled())
+  expect(bodyOf(post).employee_id).toBe('e1')
+})
+
+test('clicking an option picks it; editing the text again clears the pick and reopens the list', async () => {
+  const field = filing()
+  await user.click(field)
+  await user.click(await screen.findByRole('option', { name: 'سعيد حسن (202)' }))
+  expect(field).toHaveValue('سعيد حسن (202)')
+  dates('2026-11-10', '2026-11-15')
+  await screen.findByText(/4 أيام محسوبة/)
+  await user.type(field, 'سا')
+  expect(field).toHaveValue('سا')
+  expect(screen.getByRole('listbox')).toBeInTheDocument()
+  expect(screen.queryByText(/4 أيام محسوبة/)).toBeNull()
+})
+
+test('deleting from a pick clears the field instead of searching the half-edited name', async () => {
+  const field = filing()
+  await user.click(field)
+  await user.click(await screen.findByRole('option', { name: 'سعيد حسن (202)' }))
+  await user.keyboard('{End}{Backspace}')
+  expect(field).toHaveValue('')
+  expect(screen.getByRole('listbox')).toBeInTheDocument()
+  await user.keyboard('{End}')
+  await user.type(field, 'سا', { skipClick: true })
+  await waitFor(() => expect(searches()).toContain('سا'))
+  expect(searches()).not.toContain('سعيد حسن (202')
+})
+
+test('Escape closes the open list first, and a second Escape closes the dialog', async () => {
+  mockFetch({ [EMPLOYEES]: () => json(200, { data: [sami], meta: { pagination: { ...pagination, total: 1 } } }) })
+  const onOpenChange = vi.fn()
+  renderWithAuth(<RequestDialog open onOpenChange={onOpenChange} />, ['leave.request.own'])
+  const field = screen.getByRole('combobox', { name: 'الموظف' })
+  await user.click(field)
+  await screen.findByRole('option', { name: 'سامي فؤاد (101)' })
+  await user.keyboard('{Escape}')
+  expect(screen.queryByRole('listbox')).toBeNull()
+  expect(onOpenChange).not.toHaveBeenCalled()
+  await user.keyboard('{Escape}')
+  expect(onOpenChange).toHaveBeenCalledWith(false)
+})
+
+test('the list says when nothing matches, and shows a loading line before the first answer', async () => {
+  let release!: () => void
+  const later = new Promise<void>((r) => (release = r))
+  mockFetch({ [EMPLOYEES]: (() => later.then(() => json(200, { data: [], meta: { pagination: { ...pagination, total: 0 } } }))) as never })
+  renderWithAuth(<RequestDialog open onOpenChange={vi.fn()} />, ['leave.request.own'])
+  await user.click(screen.getByRole('combobox', { name: 'الموظف' }))
+  expect(within(screen.getByRole('listbox')).getByText('جارٍ تحميل الموظفين…')).toBeInTheDocument()
+  release()
+  expect(await within(screen.getByRole('listbox')).findByText('لا توجد نتائج')).toBeInTheDocument()
+  expect(within(screen.getByRole('listbox')).queryByRole('option')).toBeNull()
+})
+
+test('a failed employee search says so instead of «no results»', async () => {
+  mockFetch({ [EMPLOYEES]: () => json(500, { error: { code: 'server_error', message: 'تعذّر تحميل الموظفين.' } }) })
+  renderWithAuth(<RequestDialog open onOpenChange={vi.fn()} />, ['leave.request.own'])
+  expect(await screen.findByRole('alert')).toHaveTextContent('تعذّر تحميل الموظفين.')
+  expect(screen.queryByText('لا توجد نتائج')).toBeNull()
+})
+
+test('a refused employee shows its error under the field', async () => {
+  const field = filing([sami], { 'POST /api/v1/leave/requests': () => json(422, { error: { code: 'validation_failed', message: 'x', details: [{ field: 'employee_id', message: 'حقل الموظف مطلوب.' }] } }) })
+  await user.click(screen.getByRole('button', { name: 'إرسال الطلب' }))
+  expect(await screen.findByText('حقل الموظف مطلوب.')).toBeInTheDocument()
+  expect(field).toHaveAttribute('aria-invalid', 'true')
+  expect(field).toHaveAccessibleDescription('حقل الموظف مطلوب.')
 })
 
 test('nothing is previewed until employee, from and to are all set', async () => {

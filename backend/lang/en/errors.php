@@ -47,6 +47,8 @@ return [
     'already_site_manager' => 'This employee already has a site manager account.',
     'fare_request_pending' => 'This employee already has a transport request at this site waiting for HR.',
     'fare_request_reason_required' => 'Enter the reason for the request.',
+    'site_one_manager' => 'The site «:site» can have one manager only. Choose one manager.',
+    'site_has_manager' => 'The site «:site» already has a manager: :name. A second manager cannot be assigned; HR must remove the current manager first.',
     'client_request_reused' => 'This laborer was already saved with the first details, and the change was not saved. Close the dialog and check them in the list; to change their details, contact HR.',
     'fare_request_reused' => 'This request was already sent with the first amount, and the change was not saved. Close the dialog and check it under «Transport requests».',
     'fare_later_override' => 'A fare for this employee at this site starts on :date and would take over again from then. Pick a date on or after :date.',
