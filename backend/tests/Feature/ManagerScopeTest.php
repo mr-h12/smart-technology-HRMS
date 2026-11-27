@@ -146,7 +146,9 @@ class ManagerScopeTest extends TestCase
         $this->putJson("/api/v1/sites/$site/managers", ['manager_ids' => [$hr->id]])->assertStatus(422)->assertJsonPath('error.details.0.field', 'manager_ids.0');
         $this->putJson("/api/v1/sites/$site/managers", ['manager_ids' => [$gone->id]])->assertStatus(422);
         $this->putJson("/api/v1/sites/$site/managers", ['manager_ids' => [$everywhere->id]])->assertStatus(422);
-        $this->putJson("/api/v1/sites/$site/managers", ['manager_ids' => [$lead->id, $other->id]])->assertOk()->assertJsonCount(2, 'data.managers');
+        $this->putJson("/api/v1/sites/$site/managers", ['manager_ids' => [$lead->id, $other->id]])->assertStatus(422)   // one manager per site
+            ->assertJsonPath('error.details.0.message', __('errors.site_one_manager', ['site' => 'سموحة']));
+        $this->putJson("/api/v1/sites/$site/managers", ['manager_ids' => [$lead->id]])->assertOk()->assertJsonCount(1, 'data.managers');
 
         $this->actingAs($lead, 'api');
         $this->getJson('/api/v1/sites/manager-candidates')->assertStatus(403);

@@ -23,6 +23,7 @@ use App\Modules\Pdf\Presentation\PdfController;
 use App\Modules\Pdf\Presentation\SignatureController;
 use App\Modules\Settings\Presentation\SettingController;
 use App\Modules\Sites\Presentation\FareController;
+use App\Modules\Sites\Presentation\FareRequestController;
 use App\Modules\Sites\Presentation\ResidenceController;
 use App\Modules\Sites\Presentation\SiteController;
 use App\Support\Http\ApiEnvelope;
@@ -115,6 +116,7 @@ Route::middleware('auth')->group(function (): void {
         Route::get('/', 'index')->middleware('permission:site.view');
         Route::post('/', 'store')->middleware('permission:site.manage');
         Route::get('manager-candidates', 'managerCandidates')->middleware('permission:site.assign_manager');
+        Route::get('manager-conflicts', 'managerConflicts')->middleware('permission:site.assign_manager');
         Route::middleware([])->whereUuid('site')->group(function (): void {
             Route::get('{site}', 'show')->middleware('permission:site.view');
             Route::patch('{site}', 'update')->middleware('permission:site.manage');
@@ -140,6 +142,15 @@ Route::middleware('auth')->group(function (): void {
     });
 
     Route::get('team-fares', [FareController::class, 'team'])->middleware('permission:employee.view');
+    Route::get('team-fares/site', [FareRequestController::class, 'site'])->middleware('permission:fare.request');
+    Route::prefix('fare-requests')->controller(FareRequestController::class)->whereUuid('fareRequest')->group(function (): void {
+        Route::get('/', 'index')->middleware('permission:fare.manage');
+        Route::post('/', 'store')->middleware('permission:fare.request');
+        Route::get('mine', 'mine')->middleware('permission:fare.request');
+        Route::get('mine/{fareRequest}', 'mineOne')->middleware('permission:fare.request');
+        Route::post('{fareRequest}/approve', 'approve')->middleware('permission:fare.manage');
+        Route::post('{fareRequest}/refuse', 'refuse')->middleware('permission:fare.manage');
+    });
 
     Route::prefix('attendance')->controller(AttendanceController::class)->group(function (): void {
         Route::get('period', 'period')->middleware('permission:attendance.view');

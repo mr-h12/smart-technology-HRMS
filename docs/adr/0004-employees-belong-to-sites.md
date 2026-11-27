@@ -6,7 +6,7 @@ CLAUDE.md first said every employee has exactly one manager at a time. On 2026-1
 - **Engineers float between their manager's sites.** An engineer keeps a dated manager (`employee_manager_assignments`) and can be recorded at any site of that manager, with no HR move.
 - **Reach on date D:** the workers whose home site on D is one of the manager's sites (`manager_sites`), plus the engineers assigned to the manager on D.
 - **Write guard:** every manager write checks that the day's site is one of the manager's sites, and for a worker that it is also the worker's home site on that date.
-- **A site may have more than one manager.** Both see its people; the per-day `version` makes the second save of the same day reload instead of overwriting.
+- ~~**A site may have more than one manager.** Both see its people; the per-day `version` makes the second save of the same day reload instead of overwriting.~~ **Superseded 2026-11-19 (owner, client Q19): a site has one manager.** Adding a second manager is refused (`site_has_manager`); sites that had several before the rule are listed for HR (`GET /sites/manager-conflicts`), who removes the extra ones. A manager may still manage several sites. The per-day `version` stays as the guard for two saves of the same day.
 - **Office staff are in no manager's reach.** They keep a dated department manager for reference only; HR enters their attendance, leave and requests.
 
 ## Considered Options

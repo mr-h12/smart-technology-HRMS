@@ -203,7 +203,8 @@ function ManagersForm({ siteId, managerIds, users, loadErr, onDone }: { siteId: 
   const [ticked, setTicked] = useState(() => new Set(managerIds))
   const [err, setErr] = useState<unknown>()
   const [busy, setBusy] = useState(false)
-  const toggle = (id: string, on: boolean) => setTicked((s) => { const n = new Set(s); if (on) n.add(id); else n.delete(id); return n })
+  // One manager per site (owner, 2026-11-19): ticking an account makes it the site's manager in place of the others; unticking removes it.
+  const toggle = (id: string, on: boolean) => setTicked((s) => { if (on) return new Set([id]); const n = new Set(s); n.delete(id); return n })
   function save() {
     setBusy(true)
     setErr(undefined)
@@ -214,6 +215,7 @@ function ManagersForm({ siteId, managerIds, users, loadErr, onDone }: { siteId: 
   return (
     <>
       <DialogBody className="grid gap-1">
+        <p className="pb-1 text-sm text-muted-foreground">{t('site.oneManager')}</p>
         <ErrorBanner err={loadErr} shown={[]} />
         <ErrorBanner err={err} shown={[]} />
         {users.map((u) => (
@@ -336,7 +338,67 @@ function SiteList({ kind }: { kind: 'work' | 'leave' }) {
   )
 }
 
-export const SitesTab = () => <SiteList kind="work" />
+/**
+ * The sites that still have more than one manager, from before the one-manager rule (owner, 2026-11-19): HR keeps one and
+ * removes the others here. Hidden when there are none or the user cannot assign managers.
+ */
+function ManagerConflicts() {
+  const { t } = useTranslation()
+  const send = useSave()
+  const { data, err } = useApi<ConflictSite[]>('/sites/manager-conflicts')
+  const [busy, setBusy] = useState<string>()
+  const [saveErr, setSaveErr] = useState<unknown>()
+  if (!err && !data?.length) return null
+  function remove(site: ConflictSite, managerId: string) {
+    setBusy(`${site.id}:${managerId}`)
+    setSaveErr(undefined)
+    send(`/sites/${site.id}/managers`, { method: 'PUT', body: { manager_ids: site.managers.filter((m) => m.id !== managerId).map((m) => m.id) } })
+      .catch(setSaveErr)
+      .finally(() => setBusy(undefined))
+  }
+  return (
+    <Card role="region" aria-label={t('site.conflicts.title')} className="border-warning-border bg-warning-bg">
+      <CardHeader>
+        <CardTitle className="text-base">{t('site.conflicts.title')}</CardTitle>
+        <CardDescription>{t('site.conflicts.description')}</CardDescription>
+      </CardHeader>
+      <div className="grid gap-3 px-6 pb-6">
+        <ErrorBanner err={err} shown={[]} />
+        <ErrorBanner err={saveErr} shown={[]} />
+        {data?.map((site) => (
+          <div key={site.id} className="rounded-md border p-3">
+            <div className="font-medium">{site.name_ar}</div>
+            <ul className="mt-2 divide-y">
+              {site.managers.map((m) => (
+                <li key={m.id} className="flex min-h-11 flex-wrap items-center justify-between gap-2 py-1 text-sm">
+                  <span className="flex min-w-0 flex-col items-start">
+                    {m.name}
+                    <span dir="ltr" className="text-[13px] break-all text-muted-foreground">{m.email}</span>
+                  </span>
+                  <Button type="button" variant="outline" size="sm" disabled={busy !== undefined} aria-label={t('site.conflicts.removeFrom', { name: m.name, site: site.name_ar })} onClick={() => remove(site, m.id)}>
+                    {t('site.conflicts.remove', { name: m.name })}
+                  </Button>
+                </li>
+              ))}
+            </ul>
+          </div>
+        ))}
+      </div>
+    </Card>
+  )
+}
+
+type ConflictSite = { id: string; name_ar: string; name_en: string | null; managers: { id: string; name: string; email: string }[] }
+
+export function SitesTab() {
+  const { can } = useAuth()
+  return (
+    <div className="grid gap-4">
+      {can('site.assign_manager') && <ManagerConflicts />}
+      <SiteList kind="work" />
+    </div>
+  )
+}
 export const LeaveTypesTab = () => <SiteList kind="leave" />
 
 export function ResidenceDialog({ residence, onDone, ...dialog }: { residence?: Row; onDone?: (saved: Row) => void } & Controlled) {

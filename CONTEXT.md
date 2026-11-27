@@ -17,7 +17,7 @@ Office staff, engineers and permanent workers together: everyone paid a monthly 
 _Avoid_: permanent employees, مثبتين (alone; it is ambiguous)
 
 **Site manager** (مدير الموقع):
-An account holder who covers one or more sites and records attendance and absence for the people they reach on a date: the workers whose home site is one of their sites, and the engineers assigned to them. Office staff are in no site manager's reach. A site manager never sees or sets wages; HR owns them. Exception (owner, 2026-11-19): a site manager proposes a daily wage for a new day laborer they add, or a new daily wage for a day laborer they reach (Youssef, 2026-11-19, #79), and sees that proposal's outcome only when they open it (the wage HR approved, or HR's required reason for refusing); their list of proposals carries no figure (Youssef, 2026-11-19). A site manager never reaches their own employee record: HR records their attendance, leave and requests like anyone else's (owner, 2026-11-12).
+An account holder who covers one or more sites (a site has one site manager; a manager may cover several sites, owner, 2026-11-19) and records attendance and absence for the people they reach on a date: the workers whose home site is one of their sites, and the engineers assigned to them. Office staff are in no site manager's reach. A site manager never sees or sets wages; HR owns them. Exception (owner, 2026-11-19): a site manager proposes a daily wage for a new day laborer they add, or a new daily wage for a day laborer they reach (Youssef, 2026-11-19, #79), and sees that proposal's outcome only when they open it (the wage HR approved, or HR's required reason for refusing); their list of proposals carries no figure (Youssef, 2026-11-19). A site manager never reaches their own employee record: HR records their attendance, leave and requests like anyone else's (owner, 2026-11-12).
 _Avoid_: team lead, مسؤول التيم (chosen 2026-11-03, dropped 2026-11-04), supervisor; manager or مدير alone only where the site is obvious
 
 **Fingerprint name**:
@@ -154,8 +154,12 @@ _Avoid_: bonus, extra
 
 **Fare** (المواصلات):
 The transport amount paid for travelling from a residence to a site, full or half.
-HR sets every fare; the team lead reads their own team's. The residence × site amount is the **default**; a per-worker **override** wins over it. Engineers get a fare only by override; a day laborer with no fare gets 0.
+HR sets every fare; the site manager reads their own team's and may ask HR to change one (a **Fare change request**, 2026-11-19). The residence × site amount is the **default**; a per-worker **override** wins over it. Engineers get a fare only by override; a day laborer with no fare gets 0.
 _Avoid_: الأجرة; transport allowance (for office tower trips, see Tower transport)
+
+**Fare change request** (طلب مواصلات):
+A site manager's request that HR set one employee's daily fare at one of their sites: the amount asked and a reason. It waits for HR, one at a time per employee and site; the fare in force holds until HR approves it as asked or at a revised amount from a date HR picks, or rejects it with a reason (owner, 2026-11-19).
+_Avoid_: fare edit (the manager never sets a fare)
 
 **Tower transport** (بدل انتقالات البرج):
 An office employee's allowance of a quarter day's pay per tower day.

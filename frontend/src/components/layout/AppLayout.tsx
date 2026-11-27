@@ -54,6 +54,7 @@ export const NAV: { group: string; items: { path: string; key: string; icon: Luc
       { path: '/hr-forms', key: 'hrForms.issued', icon: ScrollText, abilities: ['hr_forms.view.all'] },
       { path: '/my-signature', key: 'hrForms.signature', icon: UserCog, abilities: ['hr_signatures.manage'] },
       { path: '/team-fares', key: 'nav.teamFares', icon: Bus, abilities: ['fare.manage', 'employee.view.own'] },
+      { path: '/fare-requests', key: 'nav.fareRequests', icon: Bus, abilities: ['fare.manage'] },
       { path: '/payroll', key: 'nav.payroll', icon: Banknote, abilities: ['payroll.view'] },
     ],
   },

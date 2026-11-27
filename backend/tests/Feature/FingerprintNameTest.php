@@ -160,6 +160,27 @@ class FingerprintNameTest extends TestCase
         DB::table('employees')->insert(['id' => (string) Str::uuid7(), 'code' => 999, 'name_ar' => 'موظف', 'gender' => 'male', 'fingerprint_name' => 'nadim fares']);
     }
 
+    /** Two saves that both pass the rule, the second refused by the index: a 422 on the field, never a 500 (#88, item 2). */
+    public function test_a_save_that_loses_the_race_for_a_name_is_a_422_on_the_field(): void
+    {
+        $other = $this->make('Ahmed Ali');
+        $edited = $this->make('Omar Saad');
+        // Another HR tab saves «SARA NABIL» on $other after this save's rule ran, just before its insert or update.
+        $race = fn () => DB::table('employees')->where('id', $other)->update(['fingerprint_name' => 'SARA NABIL']);
+        Employee::creating($race);
+        Employee::updating($race);
+
+        $message = __('validation.unique', ['attribute' => __('validation.attributes.fingerprint_name')]);
+        $errors = DB::table('error_log')->count();   // written outside the test's transaction, so earlier tests' rows may be there
+        $this->postJson('/api/v1/employees', $this->payload('Sara Nabil'))->assertStatus(422)
+            ->assertJsonPath('error.details.0.field', 'fingerprint_name')->assertJsonPath('error.details.0.message', $message);
+        DB::table('employees')->where('id', $other)->update(['fingerprint_name' => 'Ahmed Ali']);
+        $this->patchJson("/api/v1/employees/{$edited}", ['fingerprint_name' => 'Sara Nabil'])->assertStatus(422)
+            ->assertJsonPath('error.details.0.field', 'fingerprint_name')->assertJsonPath('error.details.0.message', $message);
+        $this->assertSame('Omar Saad', DB::table('employees')->where('id', $edited)->value('fingerprint_name'));
+        $this->assertSame($errors, DB::table('error_log')->count());
+    }
+
     /** A new employee with $fingerprintName is refused with the unique message on that field. */
     private function assertTaken(string $fingerprintName): void
     {

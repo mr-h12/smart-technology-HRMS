@@ -21,8 +21,8 @@ class RbacTest extends TestCase
     {
         $grants = fn (string $slug) => Role::where('slug', $slug)->firstOrFail()->permissions
             ->map(fn ($p) => "{$p->resource}.{$p->action}.{$p->scope}")->sort()->values()->all();
-        $this->assertSame(51, Permission::count());
-        $this->assertSame(['attendance.record.own', 'employee.crew.own', 'employee.propose_laborer.own', 'employee.propose_wage.own', 'employee.view.own', 'hr_forms.generate.own', 'hr_forms.view.own', 'leave.request.own', 'leave.view.own', 'site.view.own'], $grants('manager'));
+        $this->assertSame(52, Permission::count());
+        $this->assertSame(['attendance.record.own', 'employee.crew.own', 'employee.propose_laborer.own', 'employee.propose_wage.own', 'employee.view.own', 'fare.request.own', 'hr_forms.generate.own', 'hr_forms.view.own', 'leave.request.own', 'leave.view.own', 'site.view.own'], $grants('manager'));
         $this->assertSame(['attendance.view.all', 'audit_log.view.all', 'employee.view.all', 'employee_document.view.all', 'hr_forms.approve.all', 'hr_forms.approve_leave_request.all', 'hr_forms.view.all', 'hr_signatures.manage.own', 'leave.decide_escalated.all', 'leave.view.all', 'payroll.view.all', 'setting.view.all', 'site.view.all'], $grants('ceo'));
         $this->assertCount(33, $grants('hr'));
         foreach (['attendance.view.all', 'attendance.edit.all', 'attendance.lock.all', 'attendance_request.decide.all', 'holiday.manage.all', 'employee.assign_site.all', 'employee.approve_wage.all', 'employee.edit_code.all', 'employee_document.view.all', 'employee_document.edit.all', 'fare.manage.all', 'leave.view.all', 'leave.request.all', 'leave.decide.all', 'leave.adjust.all', 'payroll.view.all', 'payroll.manage.all'] as $name) {
