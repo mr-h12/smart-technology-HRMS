@@ -120,3 +120,27 @@ test('a link to a proposal that is no longer waiting says so', async () => {
   expect(await screen.findByText(/لم يعد منتظراً/)).toBeInTheDocument()
   expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
 })
+
+test('a wage change shows the current wage and the manager\'s reason, needs a date, and sends it (#79)', async () => {
+  const change = proposal({ kind: 'wage_change', daily_wage: '420.000000', current_wage: '330.000000', reason: 'يعمل منذ سنة' })
+  mockFetch({ [LIST]: list([change]), 'POST /api/v1/employees/wage-proposals/p1/approve': () => json(200, { data: { id: 'p1', status: 'approved' } }) })
+  render('/wage-proposals?proposal=p1')
+  const dialog = await screen.findByRole('dialog')
+  expect(dialog).toHaveTextContent('تعديل أجر')
+  expect(dialog).toHaveTextContent('330.00')
+  expect(dialog).toHaveTextContent('يعمل منذ سنة')
+  await user.click(within(dialog).getByRole('button', { name: 'اعتماد' }))
+  expect(dialog).toHaveTextContent('اختر تاريخ سريان الأجر الجديد')
+  await user.type(within(dialog).getByLabelText('يسري من'), '2026-11-16')
+  await user.click(within(dialog).getByRole('button', { name: 'اعتماد' }))
+  await waitFor(() => expect(bodyOf('/approve')).toEqual({ version: 1, effective_from: '2026-11-16' }))
+})
+
+test('refusing a wage change says the laborer keeps their job and wage', async () => {
+  mockFetch({ [LIST]: list([proposal({ kind: 'wage_change', current_wage: '330.000000' })]) })
+  render('/wage-proposals?proposal=p1')
+  const dialog = await screen.findByRole('dialog')
+  await user.click(within(dialog).getByRole('button', { name: 'رفض' }))
+  expect(dialog).toHaveTextContent('يبقى العامل في عمله وعلى أجره الحالي')
+  expect(dialog).not.toHaveTextContent('ينتهي العامل اليوم')
+})

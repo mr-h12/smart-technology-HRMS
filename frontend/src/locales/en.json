@@ -929,7 +929,7 @@
   "wages": {
     "mine": {
       "page": "Wage proposals",
-      "description": "The daily wages you proposed for new day laborers, and HR's decision on each.",
+      "description": "The daily wages you proposed for day laborers, new and existing, and HR's decision on each.",
       "list": "Wage proposals",
       "empty": "You have not proposed a wage yet.",
       "request": "Daily wage request",
@@ -945,7 +945,7 @@
       }
     },
     "page": "Proposed wages",
-    "description": "A daily wage a site manager proposed for a day laborer they added. It is not paid until you approve it.",
+    "description": "A daily wage a site manager proposed: for a new day laborer they added, or a new wage for an existing one. It does not reach payroll before you approve it.",
     "list": "Proposed wages waiting",
     "empty": "No proposed wages are waiting",
     "more": "Showing the first {{shown}} of {{total}}. Approve or refuse some to see the rest.",
@@ -970,7 +970,29 @@
       "yes": "Confirm refusal",
       "reason": "Reason for refusing (the site manager sees it)",
       "confirm": "The laborer ends today and leaves every crew. Their recorded days stay for you to decide: a wage for those days only, or cancel them.",
-      "done": "Refused the proposed wage for {{name}}"
+      "done": "Refused the proposed wage for {{name}}",
+      "confirmChange": "The laborer stays employed at their current wage; only the proposal is refused."
+    },
+    "kind": {
+      "label": "Kind",
+      "new_laborer": "New laborer's wage",
+      "wage_change": "Wage change"
+    },
+    "change": {
+      "open": "Propose a wage for an existing laborer",
+      "title": "Propose a wage for an existing laborer",
+      "search": "Search by code or name",
+      "results": "Search results",
+      "none": "Nobody with this code or name on your sites.",
+      "pick": "Choose the laborer first",
+      "other": "Change",
+      "reason": "Reason (optional, HR reads it)",
+      "send": "Send the proposal",
+      "done": "The proposed wage for {{name}} was sent to HR",
+      "yourReason": "Your reason",
+      "current": "Current wage",
+      "managerReason": "Site manager's reason",
+      "pickDate": "Choose the date the new wage applies from"
     }
   },
   "notifications": {
