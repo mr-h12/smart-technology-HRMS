@@ -1181,7 +1181,7 @@
     "request": {
       "open": "Request leave",
       "title": "Leave request",
-      "pick": "Choose the employee",
+      "loading": "Loading employees…",
       "kind": "Leave type",
       "from": "From",
       "to": "To",
