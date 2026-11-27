@@ -338,3 +338,27 @@ test('wage notifications carry no amount: an old one with daily_wage never shows
   await user.click(screen.getByRole('menuitem', { name: /رُفض الأجر اليومي/ }))
   expect(screen.getByRole('status')).toHaveTextContent('/my-wage-proposals?proposal=p3')
 })
+
+test('transport notifications carry no amount: HR\'s opens the request to decide, the manager\'s opens their request even out of reach', async () => {
+  mockFetch({
+    'GET /api/v1/notifications': inbox([
+      { id: 'f1', type: 'fare_requested', date: '2026-11-20', ref: 'r1', read_at: null, data: { employee_id: 'e1', request_id: 'r1', site_name_ar: 'Site-1', site_name_en: null }, employee: ahmed },
+      { id: 'f2', type: 'fare_approved', date: '2026-11-20', ref: 'r2', read_at: null, data: { employee_id: 'e1', request_id: 'r2' }, employee: ahmed },
+      { id: 'f3', type: 'fare_refused', date: '2026-11-20', ref: 'r3', read_at: null, data: { employee_id: 'e1', request_id: 'r3' }, employee: null },
+    ]),
+    'PATCH /api/v1/notifications/f1/read': () => json(200, { data: {} }),
+    'PATCH /api/v1/notifications/f3/read': () => json(200, { data: {} }),
+  })
+  const { unmount } = renderWithAuth(<><NotificationBell /><Where /></>, [])
+  await user.click(await screen.findByRole('button', { name: /فتح الإشعارات/ }))
+  const items = (await screen.findAllByRole('menuitem')).map((i) => i.textContent ?? '')
+  expect(items.some((i) => i.includes('طلب مواصلات لـ أحمد علي (1042)') && i.includes('Site-1'))).toBe(true)
+  expect(items.some((i) => i.includes('اعتُمد طلب مواصلات أحمد علي (1042)'))).toBe(true)
+  await user.click(screen.getByRole('menuitem', { name: /رُفض طلب مواصلات/ }))
+  expect(screen.getByRole('status')).toHaveTextContent('/team-fares?request=r3')
+  unmount()
+  renderWithAuth(<><NotificationBell /><Where /></>, [])
+  await user.click(await screen.findByRole('button', { name: /فتح الإشعارات/ }))
+  await user.click(await screen.findByRole('menuitem', { name: /طلب مواصلات لـ/ }))
+  expect(screen.getByRole('status')).toHaveTextContent('/fare-requests?request=r1')
+})
