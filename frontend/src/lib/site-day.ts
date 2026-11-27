@@ -34,7 +34,9 @@ export type Mark = (typeof MARKS)[number]
 export const MORE = ['rest', 'other'] as const
 
 /** What the screen holds for one person before «حفظ اليوم»: the site (a work site or a leave type), the two times, and a note when typed (undefined: untouched). */
-export type Draft = { site_id: string | null; in_time: string | null; out_time: string | null; note?: string | null; advance_request?: string | null }
+/** `version`: the day's version the draft was made against, sent with it, so a stale draft (restored after a reload) gets a 409, never overwrites. */
+/** `version` is the day's version the draft was made against; `name` is the person's, kept so a dropped draft can be named once its row is gone. */
+export type Draft = { site_id: string | null; in_time: string | null; out_time: string | null; note?: string | null; advance_request?: string | null; version?: number | null; name?: string }
 export type Drafts = Record<string, Draft>
 
 /** The people whose earlier field day still has no departure: the banner above the list names them. */
@@ -123,7 +125,7 @@ export function saveBody(siteId: string, date: string, rows: SiteDayRow[], draft
       const d = drafts[r.employee.id]!
       const work = d.site_id === siteId
       return {
-        employee_id: r.employee.id, version: r.day.version, site_id: d.site_id, in_time: work ? d.in_time : null, out_time: work ? d.out_time : null,
+        employee_id: r.employee.id, version: d.version !== undefined ? d.version : r.day.version, site_id: d.site_id, in_time: work ? d.in_time : null, out_time: work ? d.out_time : null,
         ...(work && d.advance_request !== undefined && { advance_request: d.advance_request }),
         ...(noteChanged(r, d) && { note: d.note || null }),
       }

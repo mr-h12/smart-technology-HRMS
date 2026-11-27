@@ -112,6 +112,15 @@ class EmployeesApiTest extends TestCase
         $this->getJson('/api/v1/employees?search=99999999999')->assertOk()->assertJsonCount(0, 'data');
     }
 
+    public function test_search_reads_arabic_and_persian_digits(): void
+    {
+        $this->make();
+        $this->make(['national_id' => '29801011234567']);
+        $this->getJson('/api/v1/employees?search='.urlencode('٢'))->assertJsonCount(1, 'data')->assertJsonPath('data.0.code', 2);
+        $this->getJson('/api/v1/employees?search='.urlencode('۲'))->assertJsonCount(1, 'data')->assertJsonPath('data.0.code', 2);
+        $this->getJson('/api/v1/employees?search='.urlencode('٢٩٨٠١٠١١٢٣٤٥٦٧'))->assertJsonCount(1, 'data')->assertJsonPath('data.0.code', 2);
+    }
+
     public function test_show_ignores_future_pay_change_and_returns_decimal_strings(): void
     {
         $id = $this->make();

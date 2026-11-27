@@ -6,6 +6,7 @@ namespace App\Modules\Employees\Infrastructure\Eloquent;
 
 use App\Modules\Audit\Infrastructure\Audited;
 use App\Support\Database\HasStandardColumns;
+use App\Support\Text\Digits;
 use Illuminate\Database\Eloquent\Attributes\Scope;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Model;
@@ -32,12 +33,14 @@ class Employee extends Model
 
     /**
      * Either name contains $search, or the code equals it when it is a number; $nationalId adds the national id (HR only).
+     * Arabic-Indic and Persian digits read as ASCII, as an Arabic phone keyboard types them.
      *
      * @param  Builder<self>  $query
      */
     #[Scope]
     protected function matching(Builder $query, string $search, bool $nationalId = false): void
     {
+        $search = Digits::ascii($search);
         $like = '%'.addcslashes($search, '%_\\').'%';
         // Every arm must be indexable or Postgres scans the table: trigram indexes for the text, the code's unique index for a number.
         $query->where(fn (Builder $q) => $q
