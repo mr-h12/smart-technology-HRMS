@@ -67,6 +67,8 @@ Route::middleware('auth')->group(function (): void {
 
     Route::prefix('employees/wage-proposals')->controller(WageProposalController::class)->whereUuid('proposal')->group(function (): void {
         Route::get('/', 'index')->middleware('permission:employee.approve_wage');
+        Route::get('mine', 'mine')->middleware('permission:employee.propose_laborer');
+        Route::get('mine/{proposal}', 'mineOne')->middleware('permission:employee.propose_laborer');
         Route::post('{proposal}/approve', 'approve')->middleware('permission:employee.approve_wage');
         Route::post('{proposal}/refuse', 'refuse')->middleware('permission:employee.approve_wage');
     });

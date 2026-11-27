@@ -47,6 +47,7 @@ return [
     'already_site_manager' => 'This employee already has a site manager account.',
     'site_one_manager' => 'The site «:site» can have one manager only. Choose one manager.',
     'site_has_manager' => 'The site «:site» already has a manager: :name. A second manager cannot be assigned; HR must remove the current manager first.',
+    'client_request_reused' => 'This laborer was already saved with the first details, and the change was not saved. Close the dialog and check them in the list; to change their details, contact HR.',
     'site_manager_role' => 'The site manager role cannot be chosen: exactly one role must see only its own sites. Ask the developer to review the roles.',
     'not_site_manager_account' => 'This account is not an active site manager account.',
     'account_linked' => 'This account is already linked to another employee.',
@@ -62,4 +63,12 @@ return [
     'advance_paper_date_future' => 'The paper decision date cannot be after today in Cairo.',
     'advance_paper_date_before_request' => 'The paper decision date cannot be before the request date.',
     'advance_paper_date_pending' => 'Enter the paper decision date when approving or refusing the advance.',
+    'name_three_parts' => 'Enter at least a three-part name: three words, such as “Mohamed Ahmed Ali”.',
+    'laborer_exists' => [
+        'name' => 'A day laborer with this full name is already recorded. Add them if it is the same person, or confirm it is someone else.',
+        'name_ambiguous' => 'More than one day laborer has this full name. Search by employee ID to choose, or confirm it is someone else.',
+        'national_id' => 'This national ID already belongs to one of your workers.',
+        'national_id_hr' => 'This national ID is already recorded. Contact HR.',
+    ],
+    'refusal_reason_required' => 'Enter the reason for refusing.',
 ];

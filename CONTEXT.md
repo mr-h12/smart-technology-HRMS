@@ -17,7 +17,7 @@ Office staff, engineers and permanent workers together: everyone paid a monthly 
 _Avoid_: permanent employees, مثبتين (alone; it is ambiguous)
 
 **Site manager** (مدير الموقع):
-An account holder who covers one or more sites (a site has one site manager; a manager may cover several sites, owner, 2026-11-19) and records attendance and absence for the people they reach on a date: the workers whose home site is one of their sites, and the engineers assigned to them. Office staff are in no site manager's reach. A site manager never sees or sets wages; HR owns them. A site manager never reaches their own employee record: HR records their attendance, leave and requests like anyone else's (owner, 2026-11-12).
+An account holder who covers one or more sites (a site has one site manager; a manager may cover several sites, owner, 2026-11-19) and records attendance and absence for the people they reach on a date: the workers whose home site is one of their sites, and the engineers assigned to them. Office staff are in no site manager's reach. A site manager never sees or sets wages; HR owns them. Exception (owner, 2026-11-19): a site manager proposes a daily wage for a new day laborer they add, and sees that proposal's outcome only when they open it (the wage HR approved, or HR's required reason for refusing); their list of proposals carries no figure (Youssef, 2026-11-19). A site manager never reaches their own employee record: HR records their attendance, leave and requests like anyone else's (owner, 2026-11-12).
 _Avoid_: team lead, مسؤول التيم (chosen 2026-11-03, dropped 2026-11-04), supervisor; manager or مدير alone only where the site is obvious
 
 **Fingerprint name**:
@@ -54,11 +54,11 @@ The day laborers on a site's list for one date: those whose home site it is, cha
 _Avoid_: team, gang, roster (that is the whole list, workers and engineers)
 
 **Proposed laborer** (عامل مقترح):
-A new day laborer a site manager adds to today's crew, with their name, gender, optional mobile and a proposed wage. HR's site workbook can also create one, with a national ID, an optional mobile, residence and proposed wage, and gender male until HR changes it (the owner's default, 2026-11-12); with no proposed wage HR sets the wage on the employee's page. They have no home site and no pay row until HR approves the wage; if HR refuses it, they end on that day and leave every crew, and the days already recorded wait for HR.
+A new day laborer a site manager adds to today's crew, with a three-part name, gender, an optional 14-digit national ID, optional mobile and a proposed wage (owner, 2026-11-19); a name or national ID someone already has shows that person first. HR's site workbook can also create one, with a national ID, an optional mobile, residence and proposed wage, and gender male until HR changes it (the owner's default, 2026-11-12); with no proposed wage HR sets the wage on the employee's page. They have no home site and no pay row until HR approves the wage; if HR refuses it, they end on that day and leave every crew, and the days already recorded wait for HR.
 _Avoid_: temporary worker, new hire
 
 **Proposed wage** (أجر مقترح):
-The daily wage a site manager types for a proposed laborer. A request, never a pay rate: HR sets the wage when approving it. The site manager never sees a stored wage.
+The daily wage a site manager types for a proposed laborer. A request, never a pay rate: HR sets the wage when approving it. The site manager never sees a stored wage. Exception (owner, 2026-11-19): a site manager proposes a daily wage for a new day laborer they add, and sees that proposal's outcome only when they open it (the wage HR approved, or HR's required reason for refusing); their list of proposals carries no figure (Youssef, 2026-11-19).
 _Avoid_: wage, rate
 
 **Leave day-type**:

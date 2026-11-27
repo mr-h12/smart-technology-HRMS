@@ -35,14 +35,37 @@ final class WageProposalController
         return ApiEnvelope::single($request, ['id' => $proposal, 'status' => WageProposalStatus::Approved->value]);
     }
 
+    /** HR's reason is required (owner, 2026-11-19); the proposing site manager reads it on their request. */
     public function refuse(Request $request, string $proposal): JsonResponse
     {
-        $q = $request->validate(['version' => ['required', 'integer', 'min:1']]);
-        $this->crew->decide($proposal, (int) $q['version'], false, null, $this->hr($request), self::today());
+        if (is_string($reason = $request->input('reason'))) {
+            $request->merge(['reason' => trim($reason)]);
+        }
+        $q = $request->validate(
+            ['version' => ['required', 'integer', 'min:1'], 'reason' => ['required', 'string', 'max:500']],
+            ['reason.required' => __('errors.refusal_reason_required')],
+        );
+        $this->crew->decide($proposal, (int) $q['version'], false, null, $this->hr($request), self::today(), $q['reason']);
 
         return ApiEnvelope::single($request, ['id' => $proposal, 'status' => WageProposalStatus::Refused->value]);
     }
 
+    /** The site manager's own proposals and their outcome (`employee.propose_laborer`); never anyone else's. */
+    public function mine(Request $request): JsonResponse
+    {
+        $q = $request->validate(['per_page' => ['sometimes', 'integer', 'min:1', 'max:100'], 'page' => ['sometimes', 'integer', 'min:1']]);
+        $page = $this->crew->mine($this->hr($request), (int) ($q['per_page'] ?? 20), (int) ($q['page'] ?? 1));
+
+        return ApiEnvelope::collection($request, $page['data'], $page['pagination']);
+    }
+
+    /** One of the site manager's own proposals; another manager's id is a 404. */
+    public function mineOne(Request $request, string $proposal): JsonResponse
+    {
+        return ApiEnvelope::single($request, $this->crew->mineOne($this->hr($request), $proposal));
+    }
+
+    /** The signed-in user: HR deciding, or the site manager reading their own proposals. */
     private function hr(Request $request): string
     {
         return (string) $request->user()?->getAuthIdentifier();

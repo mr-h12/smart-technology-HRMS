@@ -545,7 +545,7 @@ class SiteManagerAccountTest extends TestCase
             'notifications' => array_values(array_filter($this->getJson('/api/v1/notifications')->assertOk()->json('data.*.employee.id'))),
         ];
         $this->assertSame(array_fill_keys(array_keys($lists), [$worker]), $lists);
-        $this->assertSame(1, $this->getJson('/api/v1/employees/summary')->assertOk()->json('data.permanent_worker'));
+        $this->assertSame(1, $this->getJson('/api/v1/employees/summary')->assertOk()->json('data.total'));
     }
 
     public function test_crew_search_never_finds_the_site_managers_own_record(): void
