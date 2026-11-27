@@ -308,14 +308,14 @@ test('a row opens its request, keeps the list filters, and closing keeps the row
   expect(await screen.findByRole('dialog', { name: 'تفاصيل طلب الإجازة' })).toBeInTheDocument()
 })
 
-test('without leave.view at all scope the type filter has no office option', async () => {
-  mockFetch({ [BALANCES]: () => balances() })
-  const { unmount } = renderWithAuth(page, ['leave.view.own'], { path: '/leave?tab=balances' })
-  await screen.findByText('سامي فؤاد')
-  const options = () => within(screen.getByRole('combobox', { name: 'نوع الموظف' })).getAllByRole('option').map((o) => o.getAttribute('value'))
-  expect(options()).toEqual(['', 'engineer', 'permanent_worker'])
+test('a site manager (leave.view.own) has no Balances tab, and ?tab=balances opens Requests', async () => {
+  mockFetch({ [BALANCES]: () => balances(), 'GET /api/v1/leave/requests': () => json(200, { data: [], meta: { pagination: { ...pagination, total: 0 } } }) })
+  const { unmount } = renderWithAuth(page, ['leave.view.own', 'leave.request.own'], { path: '/leave?tab=balances' })
+  expect(await screen.findByRole('tab', { name: /الطلبات/ })).toHaveAttribute('aria-selected', 'true')
+  expect(screen.queryByRole('tab', { name: /الأرصدة/ })).toBeNull()
+  expect(vi.mocked(fetch).mock.calls.some(([u]) => String(u).includes('/leave/balances'))).toBe(false)
   unmount()
   render()
   await screen.findByText('سامي فؤاد')
-  expect(options()).toEqual(['', 'office', 'engineer', 'permanent_worker'])
+  expect(within(screen.getByRole('combobox', { name: 'نوع الموظف' })).getAllByRole('option').map((o) => o.getAttribute('value'))).toEqual(['', 'office', 'engineer', 'permanent_worker'])
 })

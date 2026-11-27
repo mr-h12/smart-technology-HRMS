@@ -445,7 +445,7 @@ function EmployeeForm({ emp, loadErr }: { emp?: Row; loadErr?: unknown }) {
   const tabs = scoped
     // no type, history or manager reaches a site manager: the profile, and documents only with the Developer's grant (D2)
     ? TABS.filter(([v]) => v === 'profile' || (v === 'documents' && can('employee_document.view')))
-    : TABS.filter(([v]) => (v !== 'manager' || !worker) && (v !== 'site' || sited) && (v !== 'leave' || (can('leave.view') && emp.current_type !== 'day_laborer')) && (v !== 'documents' || can('employee_document.view') || canUsePdf(can, 'view', 'experience_certificate')) && (v !== 'attendance' || can('attendance.view')))
+    : TABS.filter(([v]) => (v !== 'manager' || !worker) && (v !== 'site' || sited) && (v !== 'leave' || (can('leave.view.all') && emp.current_type !== 'day_laborer')) && (v !== 'documents' || can('employee_document.view') || canUsePdf(can, 'view', 'experience_certificate')) && (v !== 'attendance' || can('attendance.view')))
   const tab = tabs.some(([v]) => v === params.get('tab')) ? params.get('tab')! : 'profile'
   return (
     <div className="mx-auto max-w-5xl space-y-6">

@@ -54,6 +54,22 @@ final class SiteDay
 
     private const DAY = ['state', 'version', 'site_id', 'leave_code', 'in_time', 'out_time', 'note'];
 
+    /**
+     * The day as a site manager reads it. A day an approved leave request wrote (annual, casual, unpaid) shows no day-type: the request's
+     * kind on the first days and unpaid on the rest would give back the remaining balance, and the site id maps back to the code through
+     * the leave sites (Youssef, 2026-11-19, review of #74). The row stays read-only (`hr_day`) and counts as away.
+     *
+     * @param  array<string, mixed>  $day
+     * @return array<string, mixed>
+     */
+    private static function shownDay(array $day): array
+    {
+        $shown = array_intersect_key($day, array_flip(self::DAY));
+        $code = is_string($day['leave_code'] ?? null) ? LeaveCode::tryFrom($day['leave_code']) : null;
+
+        return $code?->needsRequest() ? [...$shown, 'leave_code' => null, 'site_id' => null] : $shown;
+    }
+
     public function __construct(
         private readonly EmployeeRoster $roster,
         private readonly EffectiveDays $days,
@@ -112,7 +128,7 @@ final class SiteDay
                     'employee' => ['id' => $e['id'], 'code' => $e['code'], 'name_ar' => $e['name_ar'], 'name_en' => $e['name_en'], 'type' => $type],
                     'section' => $section,
                     'shift' => EffectiveDays::fieldShift($e, $date, $settings),
-                    'day' => array_intersect_key($day, array_flip(self::DAY)),
+                    'day' => self::shownDay($day),
                     'can_edit' => $whyNot === null,
                     'why_not' => $whyNot,
                     'departure_only' => $whyNot === null && $departureOnly,
