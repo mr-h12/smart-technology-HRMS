@@ -255,7 +255,7 @@
     "value": "Value",
     "addRule": "Add rule",
     "yes": "Yes",
-    "managers": "Site managers",
+    "managers": "Site manager",
     "addLeaveType": "Add leave type",
     "home": "Home site",
     "homeNone": "No home site",
@@ -264,7 +264,14 @@
     "returnsOn": "Returns to the previous site on",
     "homeHistory": "Home site history",
     "workers": "Workers",
-    "workersNone": "No workers are based at this site today."
+    "workersNone": "No workers are based at this site today.",
+    "oneManager": "A site has one manager only. To change the manager, pick the new one in their place.",
+    "conflicts": {
+      "title": "Sites with more than one manager",
+      "description": "A site has one manager only. Keep one manager for each of these sites and remove the others.",
+      "remove": "Remove {{name}}",
+      "removeFrom": "Remove {{name}} from {{site}}"
+    }
   },
   "residence": {
     "add": "Add residence"

@@ -120,20 +120,60 @@ final class SiteService
     }
 
     /**
+     * One manager per site (owner, 2026-11-19, client Q19): adding a manager to a site that has another one is refused, so HR removes
+     * the current manager first. Removing is always allowed, which is how HR clears a site that still has several (managerConflicts()).
+     *
      * @param  list<string>  $managerIds
      * @return array<string, mixed>
      */
     public function setManagers(string $id, array $managerIds): array
     {
         DB::transaction(function () use ($id, $managerIds): void {
-            $site = Site::lockForUpdate()->findOrFail($id);
-            $old = $site->managers()->pluck('users.id')->sort()->values()->all();
-            $site->managers()->sync($managerIds);
-            $new = collect($managerIds)->unique()->sort()->values()->all();
-            AuditLog::record(IdentityAuditEvents::SITE_MANAGERS_UPDATED, 'sites', $id, ['manager_ids' => $old], ['manager_ids' => $new]);
+            $this->applyManagers(Site::lockForUpdate()->findOrFail($id), $managerIds, 'manager_ids');
         });
 
         return $this->show($id);
+    }
+
+    /**
+     * The sites that still have more than one manager, from before the one-manager rule, for HR to resolve by removing all but one.
+     * Only current manager candidates count: an account deactivated or moved to another role since is no manager (review of #75).
+     *
+     * @return list<array{id: string, name_ar: string, name_en: ?string, managers: list<array{id: string, name: string, email: string}>}>
+     */
+    public function managerConflicts(): array
+    {
+        $candidates = $this->managerCandidateIds();
+        $ids = DB::table('manager_sites')->whereIn('manager_id', $candidates)->groupBy('site_id')->havingRaw('count(*) > 1')->pluck('site_id');
+
+        return array_values(Site::with(['managers' => fn ($q) => $q->whereIn('users.id', $candidates)->orderBy('name')->orderBy('email')])->whereKey($ids)->orderBy('name_ar')->get()
+            ->map(fn (Site $s) => [
+                'id' => (string) $s->id, 'name_ar' => $s->name_ar, 'name_en' => $s->name_en,
+                'managers' => array_values($s->managers->map(fn (User $u) => ['id' => (string) $u->id, 'name' => $u->name, 'email' => $u->email])->all()),
+            ])->all());
+    }
+
+    /**
+     * An account that is no longer a manager candidate (deactivated, or moved to a role without site.view.own) is no manager here: it
+     * neither counts toward the one-manager rule nor stays in the sync, so this save clears its row; the audit's `old` still names it
+     * (review of #75, 2026-11-22).
+     *
+     * @param  list<string>  $managerIds
+     */
+    private function applyManagers(Site $site, array $managerIds, string $field): void
+    {
+        $candidates = $this->managerCandidateIds();
+        $was = array_values($site->managers()->pluck('users.id')->map(fn (mixed $id) => (string) $id)->sort()->values()->all());
+        $old = array_values(array_intersect($was, $candidates));
+        $new = array_values(collect($managerIds)->map(fn (mixed $id) => (string) $id)->unique()->intersect($candidates)->sort()->values()->all());
+        if (array_diff($new, $old) !== [] && count($new) > 1) {
+            $others = array_values(array_diff($new, array_diff($new, $old)));
+            throw ValidationException::withMessages([$field => $others === []
+                ? __('errors.site_one_manager', ['site' => $site->name_ar])
+                : __('errors.site_has_manager', ['site' => $site->name_ar, 'name' => User::whereKey($others)->orderBy('name')->pluck('name')->implode('، ')])]);
+        }
+        $site->managers()->sync($new);
+        AuditLog::record(IdentityAuditEvents::SITE_MANAGERS_UPDATED, 'sites', (string) $site->id, ['manager_ids' => $was], ['manager_ids' => $new]);
     }
 
     /**
@@ -169,8 +209,8 @@ final class SiteService
     }
 
     /**
-     * Makes $siteIds the sites $managerId manages. Each added or removed site goes through setManagers, which keeps its other
-     * managers and audits it; the changed sites are locked in id order first, so two calls cannot deadlock. A deleted site is left as is.
+     * Makes $siteIds the sites $managerId manages. Each added or removed site goes through applyManagers, which refuses a site
+     * that has another manager (one manager per site) and audits it; the changed sites are locked in id order first, so two calls cannot deadlock. A deleted site is left as is.
      *
      * @param  list<string>  $siteIds
      */
@@ -181,11 +221,17 @@ final class SiteService
             $changed = array_values(array_unique([...array_diff($siteIds, $current), ...array_diff($current, $siteIds)]));
             foreach (Site::whereKey($changed)->orderBy('id')->lockForUpdate()->get() as $site) {
                 $managers = array_values($site->managers()->pluck('users.id')->map(fn (mixed $id) => (string) $id)->all());
-                $this->setManagers((string) $site->id, in_array((string) $site->id, $siteIds, true)
+                $this->applyManagers($site, in_array((string) $site->id, $siteIds, true)
                     ? [...$managers, $managerId]
-                    : array_values(array_diff($managers, [$managerId])));
+                    : array_values(array_diff($managers, [$managerId])), 'site_ids');
             }
         });
+    }
+
+    /** @return list<string> the accounts on the site's manager list, whether or not they are still manager candidates */
+    public function managerIdsOf(string $siteId): array
+    {
+        return array_values(DB::table('manager_sites')->where('site_id', $siteId)->pluck('manager_id')->map(fn ($id) => (string) $id)->all());
     }
 
     /** @return list<string> the sites the user manages (P1: undated, so the current set on any date) */
