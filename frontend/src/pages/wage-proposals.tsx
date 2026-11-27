@@ -9,7 +9,9 @@ import { PageHeader } from '@/components/common/PageHeader'
 import { asciiDigits, ErrorBanner, type Errs, localName, ltrDates, TextField, toErrs, useCairoTime, useMoney } from '@/components/form'
 import { Button } from '@/components/ui/button'
 import { Card } from '@/components/ui/card'
+import { Textarea } from '@/components/ui/input'
 import { Dialog, DialogBody, DialogContent, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog'
+import { ApiError } from '@/lib/api'
 import { plainAmount } from '@/lib/day-sheet'
 import { useList, useSave } from '@/lib/query'
 
@@ -21,7 +23,7 @@ export type WageProposal = {
   created_at: string
   site: { id: string; name_ar: string; name_en: string | null } | null
   proposed_by: { id: string; name: string | null } | null
-  employee: { id: string; code: number; name_ar: string; name_en: string | null; phone: string | null; hire_date: string | null }
+  employee: { id: string; code: number; name_ar: string; name_en: string | null; phone: string | null; national_id?: string | null; hire_date: string | null }
 }
 
 // Pending proposals are few (one per new laborer until HR decides), so one page holds them all; more than this shows a notice.
@@ -79,8 +81,8 @@ export function WageProposalsPage() {
 }
 
 /**
- * One proposal: HR approves at the proposed wage or their own (the pay row starts on the hire date), or refuses it, which ends the
- * laborer that day and takes them off every crew (owner, 2026-11-05).
+ * One proposal: HR approves at the proposed wage or their own (the pay row starts on the hire date), or refuses it with a reason the
+ * proposing site manager reads, which ends the laborer that day and takes them off every crew (owner, 2026-11-05; reason 2026-11-19).
  */
 function DecideDialog({ p, close }: { p: WageProposal; close: () => void }) {
   const { t, i18n } = useTranslation()
@@ -92,6 +94,7 @@ function DecideDialog({ p, close }: { p: WageProposal; close: () => void }) {
   const [err, setErr] = useState<unknown>()
   const [busy, setBusy] = useState(false)
   const [refusing, setRefusing] = useState(false)
+  const [reason, setReason] = useState('')
   const set = (k: string, v: string) => {
     setForm((f) => ({ ...f, [k]: asciiDigits(v) }))
     setInvalid({})
@@ -111,13 +114,14 @@ function DecideDialog({ p, close }: { p: WageProposal; close: () => void }) {
       const wage = form.daily_wage.trim()
       const body = action === 'approve'
         ? { version: p.version, ...(wage !== plainAmount(p.daily_wage) && { daily_wage: wage }) }
-        : { version: p.version }
+        : { version: p.version, reason: reason.trim() }
       await send(`/employees/wage-proposals/${p.id}/${action}`, { body }, ['/employees'])
       toast.success(t(`wages.${action}.done`, { name: p.employee.name_ar }))
       close()
     } catch (e) {
       setErr(e)
-      setRefusing(false)
+      // a 422 (no reason) keeps the refusal open; anything else goes back to the choice
+      if (!(e instanceof ApiError && e.status === 422)) setRefusing(false)
     } finally {
       setBusy(false)
     }
@@ -131,7 +135,7 @@ function DecideDialog({ p, close }: { p: WageProposal; close: () => void }) {
           <DialogTitle>{t('wages.decide.title')}</DialogTitle>
         </DialogHeader>
         <DialogBody className="grid gap-4">
-          <ErrorBanner err={err} shown={['daily_wage']} />
+          <ErrorBanner err={err} shown={['daily_wage', 'reason']} />
           <dl className="grid gap-x-6 gap-y-3 text-sm sm:grid-cols-2">
             <Item label={t('employee.employee')}>{localName(p.employee, i18n.language)} (<bdi dir="ltr">{p.employee.code}</bdi>)</Item>
             <Item label={t('wages.site')}>{p.site ? localName(p.site, i18n.language) : '—'}</Item>
@@ -140,15 +144,23 @@ function DecideDialog({ p, close }: { p: WageProposal; close: () => void }) {
             <Item label={t('wages.proposed')}>{money(p.daily_wage)}</Item>
             <Item label={t('wages.from')}>{p.employee.hire_date ? ltrDates(p.employee.hire_date) : '—'}</Item>
             {p.employee.phone && <Item label={t('employee.phone')}><bdi dir="ltr">{p.employee.phone}</bdi></Item>}
+            {p.employee.national_id && <Item label={t('employee.national_id')}><bdi dir="ltr">{p.employee.national_id}</bdi></Item>}
           </dl>
           <TextField name="daily_wage" label={t('wages.approved')} values={form} set={set} errs={errs} inputMode="decimal" dir="ltr" disabled={busy || refusing} />
           {refusing && <Alert tone="warning">{t('wages.refuse.confirm')}</Alert>}
+          {refusing && (
+            <label className="grid gap-1.5 text-sm font-medium">
+              {t('wages.refuse.reason')}
+              <Textarea value={reason} onChange={(e) => setReason(e.target.value)} maxLength={500} disabled={busy} aria-invalid={!!errs.reason || undefined} />
+              {errs.reason && <span className="text-[13px] text-destructive">{errs.reason}</span>}
+            </label>
+          )}
         </DialogBody>
         <DialogFooter>
           {refusing ? (
             <>
               <Button type="button" variant="outline" disabled={busy} onClick={() => setRefusing(false)}>{t('wages.refuse.back')}</Button>
-              <Button type="button" variant="destructive" disabled={busy} onClick={() => void decide('refuse')}>{t('wages.refuse.yes')}</Button>
+              <Button type="button" variant="destructive" disabled={busy || !reason.trim()} onClick={() => void decide('refuse')}>{t('wages.refuse.yes')}</Button>
             </>
           ) : (
             <>

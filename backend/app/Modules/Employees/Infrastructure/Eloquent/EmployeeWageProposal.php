@@ -21,6 +21,10 @@ use Illuminate\Support\Carbon;
  * @property int $version
  * @property string|null $created_by the site manager who proposed it
  * @property Carbon|null $created_at
+ * @property Carbon|null $decided_at
+ * @property string|null $approved_wage the daily wage HR approved: the proposed one or HR's revision
+ * @property string|null $refusal_reason HR's reason, required on every refusal since 2026-11-19
+ * @property string|null $client_request_id the site manager's form id, so a retry never adds a second worker
  */
 class EmployeeWageProposal extends Model
 {

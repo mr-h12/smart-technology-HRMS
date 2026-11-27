@@ -84,7 +84,7 @@ test('HR can approve at another wage, typed with Arabic digits', async () => {
   expect(bodyOf('/p1/approve')).toEqual({ version: 1, daily_wage: '340' })
 })
 
-test('refusing asks once more, then sends the version', async () => {
+test('refusing asks once more and needs a reason, then sends the version and the reason', async () => {
   const refuse = vi.fn(() => json(200, { data: { id: 'p1', status: 'refused' } }))
   mockFetch({ [LIST]: list([proposal()]), 'POST /api/v1/employees/wage-proposals/p1/refuse': refuse })
   render('/wage-proposals?proposal=p1')
@@ -92,9 +92,14 @@ test('refusing asks once more, then sends the version', async () => {
   await user.click(within(dialog).getByRole('button', { name: 'رفض' }))
   expect(within(dialog).getByText(/ينتهي العامل اليوم ويخرج من كل طاقم/)).toBeInTheDocument()
   expect(refuse).not.toHaveBeenCalled()
-  await user.click(within(dialog).getByRole('button', { name: 'تأكيد الرفض' }))
+  const yes = within(dialog).getByRole('button', { name: 'تأكيد الرفض' })
+  expect(yes).toBeDisabled()                                                             // the reason is required (owner, 2026-11-19)
+  await user.type(within(dialog).getByRole('textbox', { name: 'سبب الرفض (يظهر لمدير الموقع)' }), '   ')
+  expect(yes).toBeDisabled()
+  await user.type(within(dialog).getByRole('textbox', { name: 'سبب الرفض (يظهر لمدير الموقع)' }), 'الأجر أعلى من المعتاد')
+  await user.click(yes)
   await waitFor(() => expect(refuse).toHaveBeenCalledOnce())
-  expect(bodyOf('/p1/refuse')).toEqual({ version: 1 })
+  expect(bodyOf('/p1/refuse')).toEqual({ version: 1, reason: 'الأجر أعلى من المعتاد' })
 })
 
 test('a proposal decided meanwhile shows the conflict and keeps the dialog open', async () => {

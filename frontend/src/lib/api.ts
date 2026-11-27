@@ -12,13 +12,16 @@ export class ApiError extends Error {
   dates: string[]
   /** The open items a refusal names (`error.items`); empty when it names none. */
   items: OpenItem[]
-  constructor(code: string, message: string, status: number, details: ApiErrorDetail[] = [], dates: string[] = [], items: OpenItem[] = []) {
+  /** The whole `error` object, for a refusal with fields of its own (e.g. `laborer_exists`'s match); empty when there was no body. */
+  body: Record<string, unknown>
+  constructor(code: string, message: string, status: number, details: ApiErrorDetail[] = [], dates: string[] = [], items: OpenItem[] = [], body: Record<string, unknown> = {}) {
     super(message)
     this.code = code
     this.status = status
     this.details = details
     this.dates = dates
     this.items = items
+    this.body = body
   }
 }
 
@@ -75,7 +78,7 @@ async function send(path: string, { method = 'GET', body, signal }: Options = {}
       onUnauthorized()
     }
     const e = json?.error
-    throw new ApiError(e?.code ?? 'unknown_error', e?.message ?? res.statusText, res.status, e?.details ?? [], e?.dates ?? [], e?.items ?? [])
+    throw new ApiError(e?.code ?? 'unknown_error', e?.message ?? res.statusText, res.status, e?.details ?? [], e?.dates ?? [], e?.items ?? [], e ?? {})
   }
   return res
 }

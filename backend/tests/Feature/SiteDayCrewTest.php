@@ -152,7 +152,7 @@ class SiteDayCrewTest extends TestCase
 
         $this->cairo('2026-10-24 10:00');                                                               // HR decides two days later
         $this->actingAs($this->makeUser('hr'), 'api');
-        $this->postJson("/api/v1/employees/wage-proposals/{$made['proposal_id']}/refuse", ['version' => 1])->assertOk()->assertJsonPath('data.status', 'refused');
+        $this->postJson("/api/v1/employees/wage-proposals/{$made['proposal_id']}/refuse", ['version' => 1, 'reason' => 'لا يوجد احتياج'])->assertOk()->assertJsonPath('data.status', 'refused');
         $this->assertSame('2026-10-24', (string) DB::table('employees')->where('id', $made['id'])->value('termination_date'));
         $this->assertSame(0, DB::table('employee_pay_changes')->where('employee_id', $made['id'])->count());
         $this->assertSame(1, DB::table('attendance_days')->where(['employee_id' => $made['id'], 'date' => '2026-10-22'])->whereNull('deleted_at')->count());   // HR decides on it
@@ -172,7 +172,7 @@ class SiteDayCrewTest extends TestCase
         $this->actingAs($this->m, 'api');
         $made = $this->propose()->assertCreated()->json('data');
         $this->actingAs($this->makeUser('hr'), 'api');
-        $this->postJson("/api/v1/employees/wage-proposals/{$made['proposal_id']}/refuse", ['version' => 1])->assertOk();
+        $this->postJson("/api/v1/employees/wage-proposals/{$made['proposal_id']}/refuse", ['version' => 1, 'reason' => 'لا يوجد احتياج'])->assertOk();
         $this->assertSame(0, DB::table('day_crew_changes')->where('employee_id', $made['id'])->whereNull('deleted_at')->count());
         $this->actingAs($this->m, 'api');
         $this->assertNotContains($made['id'], $this->roster($this->s1, '2026-10-22'));
@@ -187,8 +187,9 @@ class SiteDayCrewTest extends TestCase
         $n = DB::table('notifications')->where(['user_id' => $hr->id, 'type' => 'wage_proposed'])->first();
         $this->assertNotNull($n);
         $this->assertSame($made['proposal_id'], $n->ref);
-        $this->assertSame([$made['id'], '350', 'Site-1'], [json_decode($n->data, true)['employee_id'], json_decode($n->data, true)['daily_wage'], json_decode($n->data, true)['site_name_ar']]);
-        $this->propose(['name_ar' => 'عامل آخر', 'daily_wage' => '300'])->assertCreated();
+        // ids and the site only: no amount in a notification (owner, 2026-11-19)
+        $this->assertSame(['employee_id' => $made['id'], 'site_name_ar' => 'Site-1', 'site_name_en' => null], json_decode($n->data, true));
+        $this->propose(['name_ar' => 'عامل آخر ثان', 'daily_wage' => '300'])->assertCreated();
 
         $this->actingAs($hr, 'api');
         $this->getJson('/api/v1/employees/wage-proposals?per_page=1')->assertOk()
@@ -208,7 +209,7 @@ class SiteDayCrewTest extends TestCase
         $made = $this->propose()->assertCreated()->json('data');
 
         $this->actingAs($this->makeUser('hr'), 'api');
-        $this->postJson("/api/v1/employees/wage-proposals/{$made['proposal_id']}/refuse", ['version' => 1])->assertOk()->assertJsonPath('data.status', 'refused');
+        $this->postJson("/api/v1/employees/wage-proposals/{$made['proposal_id']}/refuse", ['version' => 1, 'reason' => 'لا يوجد احتياج'])->assertOk()->assertJsonPath('data.status', 'refused');
         $this->assertSame(0, DB::table('employee_pay_changes')->where('employee_id', $made['id'])->count());
         $this->getJson('/api/v1/employees/wage-proposals')->assertOk()->assertJsonCount(0, 'data');
         $this->postJson("/api/v1/employees/wage-proposals/{$made['proposal_id']}/approve", ['version' => 2])->assertStatus(409);   // decided
@@ -246,7 +247,7 @@ class SiteDayCrewTest extends TestCase
     /** @param  array<string, mixed>  $over */
     private function propose(array $over = []): TestResponse
     {
-        return $this->postJson('/api/v1/attendance/site-day/laborers', ['site_id' => $this->s1, 'name_ar' => 'عامل جديد', 'gender' => 'female', 'daily_wage' => '350', ...$over]);
+        return $this->postJson('/api/v1/attendance/site-day/laborers', ['site_id' => $this->s1, 'name_ar' => 'عامل جديد أول', 'gender' => 'female', 'daily_wage' => '350', ...$over]);
     }
 
     private function search(string $search): TestResponse
